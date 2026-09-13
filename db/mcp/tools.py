@@ -394,7 +394,7 @@ BOARD = {
 @tool("roster", "Every hero with role, subrole, health pool and portrait,"
       " plus the map pool with modes - the vocabulary the board tools accept.")
 def roster(ctx):
-    from ui.core import model
+    from ui.facts import model
     with ctx.connect() as cx:
         world = model.load(cx)
     heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
@@ -415,7 +415,7 @@ def roster(ctx):
       dict(BOARD, format={"type": "string", "enum": ["lines", "json"],
                           "description": "lines (default) or json"}))
 def facts_tool(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines"):
-    from ui.core import engine, model
+    from ui.facts import engine, model
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
@@ -437,7 +437,7 @@ def facts_tool(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines")
            pool={"type": "integer", "description": "candidates per role the"
                                                    " search keeps (default 6)"}))
 def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6):
-    from ui.core import model
+    from ui.facts import model
     from inference import engine
     with ctx.connect() as cx:
         world = model.load(cx)
@@ -453,7 +453,7 @@ def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6):
       " searching: the breakdown per strategy, constraint violations, and"
       " how it ranks against the optimum.", BOARD, ["blue"])
 def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
-    from ui.core import model
+    from ui.facts import model
     from inference import engine
     with ctx.connect() as cx:
         world = model.load(cx)
@@ -472,7 +472,7 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
                                                           " search keeps (default 6)"}))
 def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6):
-    from ui.core import model
+    from ui.facts import model
     from inference import engine
     with ctx.connect() as cx:
         world = model.load(cx)

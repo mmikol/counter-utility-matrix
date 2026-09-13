@@ -17,7 +17,7 @@ which the description says) and `map.known` tells a strategy which.
 import statistics
 from collections import Counter, OrderedDict
 
-from ui.core.model import ROLES, SQUISHY_POOL
+from ui.facts.model import ROLES, SQUISHY_POOL
 
 TEAM_SIZE = 6             # 6v6 Open Queue
 SIDED_MODES = ("Escort", "Hybrid")   # modes with an attacking and a defending side

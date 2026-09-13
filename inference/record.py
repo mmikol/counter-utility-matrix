@@ -21,9 +21,9 @@ from datetime import datetime, timezone
 from db import AUTHORED_DIR
 from db import psql
 from db.data.authored import AUTHORED
-from ui.core import engine as facts_engine
-from ui.core import model
-from ui.core.compute import TEAM_SIZE
+from ui.facts import engine as facts_engine
+from ui.facts import model
+from ui.facts.compute import TEAM_SIZE
 
 REC_DIR = os.path.join(AUTHORED_DIR, "recommendations")
 

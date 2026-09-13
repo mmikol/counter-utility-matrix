@@ -27,7 +27,7 @@ flowchart LR
         INF["INFERENCE<br/>recorded comps,<br/>outcomes"]
     end
 
-    subgraph USER["UI LAYER - ui/core/ + ui/board.py"]
+    subgraph USER["UI LAYER - ui/facts/ + ui/board.py"]
         WORLD["World<br/>the database in memory,<br/>per request"]
         FACTS["FactSet<br/>F1.. hero · map · meta ·<br/>team · matchup<br/>S1.. the playbook's record"]
         BOARD["the board<br/>map + red/blue rosters"]
@@ -53,7 +53,7 @@ flowchart LR
 
 The data layer owns the writes to Postgres. The UI layer only reads,
 turns every table into facts, and computes every metric in one place
-(`ui/core/compute.py`) so the number on the board and the number the
+(`ui/facts/compute.py`) so the number on the board and the number the
 solver scores are the same function. The inference layer reads the facts,
 never the tables.
 
@@ -89,7 +89,7 @@ a stated problem, a lobby's habits, a patch the rates predate.
 sequenceDiagram
     actor You
     participant Board as ui/board.py
-    participant Facts as ui/core/ (World + FactSet)
+    participant Facts as ui/facts/ (World + FactSet)
     participant Solver as inference/ (solver)
     participant DB as PostgreSQL
 

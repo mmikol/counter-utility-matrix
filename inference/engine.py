@@ -12,8 +12,8 @@ current blue picks as they stand.
 
 import time
 
-from ui.core import engine as facts_engine
-from ui.core.compute import TEAM_SIZE, is_sided, opposite
+from ui.facts import engine as facts_engine
+from ui.facts.compute import TEAM_SIZE, is_sided, opposite
 from inference import catalog as catalog_module
 from inference.solver import Candidate, Solver, evaluate_comp
 

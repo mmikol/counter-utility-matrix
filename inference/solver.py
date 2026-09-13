@@ -17,8 +17,8 @@
 import itertools
 import random
 
-from ui.core import compute
-from ui.core.compute import TEAM_SIZE
+from ui.facts import compute
+from ui.facts.compute import TEAM_SIZE
 from inference.expr import scope
 
 REFERENCE_SIZE = 1200

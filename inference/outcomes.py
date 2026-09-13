@@ -14,8 +14,8 @@ tool commits and re-exports the mirror; a test rolls back).
 
 from db import psql
 from db.data.authored import AUTHORED
-from ui.core import model
-from ui.core.compute import TEAM_SIZE
+from ui.facts import model
+from ui.facts.compute import TEAM_SIZE
 
 RESULTS = ("win", "loss", "draw")
 
