@@ -27,7 +27,7 @@ def _same_database(db):
     mark = common.export_mark()
     if mark and mark["system_identifier"] != common.database_identity(db):
         pytest.skip("data/raw was exported from a different database (%s); run"
-                    " `python -m data.orchestrator export` against this one"
+                    " `python -m data.mcp call export_csv` against this one"
                     % mark["exported_at"])
 
 

@@ -10,24 +10,16 @@ The roster page carries every hero's role, subrole and portrait; each hero
 page carries an abilities carousel and a perks section. Blizzard publishes
 prose only - no numbers - and omits some abilities outright, which the wiki
 supplies.
-
-    python -m data.blizzard.heroes
 """
 
-import sys
-import psycopg
-import requests
 from bs4 import BeautifulSoup
 from data.sources import cache_key, cached_get
-from data import common
-from data.blizzard import BASE_URL, BLIZZARD, HEROES_URL, USER_AGENT
+from data import common, sources
+from data.blizzard import BASE_URL, BLIZZARD, HEROES_URL
 import re
 
 
 # --- extract: markup -> Python ---------------------------------------------
-
-WHITESPACE_RE = re.compile(r"\s+")
-
 
 def html_to_text(node):
     """Plain gameplay text from a BeautifulSoup node.
@@ -38,7 +30,7 @@ def html_to_text(node):
     """
     for image in node.find_all("img"):
         image.decompose()
-    return WHITESPACE_RE.sub(" ", node.get_text(" ", strip=True)).strip()
+    return " ".join(node.get_text(" ", strip=True).split())
 
 
 PERK_TIERS = {"minor": 1, "major": 2}
@@ -283,8 +275,7 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
 def run(connection, cache_dir=None, session=None, log=print):
     """Pull the roster and every hero page, clean them, store them.
     Returns a summary dict."""
-    session = session or requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT})
+    session = sources.session(session)
 
     roster_soup = BeautifulSoup(cached_get(session, HEROES_URL, cache_dir,
                                            cache_key(HEROES_URL)), "html.parser")
@@ -315,21 +306,3 @@ def run(connection, cache_dir=None, session=None, log=print):
         "portraits": sum(1 for h in heroes if h.get("portrait_url")),
         "tables": ["roles", "subroles", "heroes", "abilities", "perks"],
     }
-
-
-def main():
-    parser = common.build_parser(__doc__, ".cache-blizzard")
-    args = parser.parse_args()
-    cache = common.prepare_cache(args.cache)
-    with psycopg.connect(common.resolve_dsn(args)) as connection:
-        summary = run(connection, cache)
-        common.export_raw(connection, args, summary["tables"])
-    print("loaded %(heroes)d heroes, %(abilities)d abilities, %(perks)d perks,"
-          " %(portraits)d portraits" % summary)
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (ScrapeError, psycopg.Error, requests.RequestException) as error:
-        sys.exit("error: %s" % error)

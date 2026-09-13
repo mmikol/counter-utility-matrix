@@ -13,11 +13,13 @@ call, with a main() for the shell.
     counterpick/  counterpick.gg: heroes (counters, best maps, its rates)
     playbook      the inputs we write instead of fetch - the CSVs in
                   authored/ - reloaded whole
-    sources       the fetch cache and its freshness policy, shared by all
+    sources       the fetch cache, its freshness policy and the project's
+                  scope, shared by all
+    names         matching hero, map and ability names across sources
     authored/     the CSVs, and the recorded transcripts
-    mcp/          the MCP server and its tools (the door to this layer)
-    orchestrator  the verbs (init, migrate, inflate, update, rebuild,
-                  export, docs)
+    mcp/          the MCP server and its tools - the one door to this
+                  layer, for a session, the refresher, Docker's entrypoint
+                  and the shell (`python -m data.mcp call <tool>`) alike
     refresh       the daily refresh
     db/           migrations, the ledger, rebuild, restore, generated docs
     common        the plumbing every layer shares

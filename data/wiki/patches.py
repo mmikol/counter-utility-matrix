@@ -3,17 +3,11 @@
 A win rate is true of a patch, and snapshots link to the most recent patch
 released at capture time. Runs before the rates pulls so their snapshots
 have patches to link to.
-
-    python -m data.wiki.patches
 """
 
-import sys
 
-import psycopg
-import requests
-
-from data import common
-from data.wiki import USER_AGENT, WIKI, WikiError, cargo_query
+from data import common, sources
+from data.wiki import WIKI, cargo_query
 
 CARGO_TABLE = "Patches"
 # Cargo refuses bare underscore fields; _pageName must be aliased.
@@ -21,8 +15,7 @@ CARGO_FIELDS = ("_pageName=name", "date", "platform", "source")
 
 
 def run(connection, cache_dir=None, session=None, log=print):
-    session = session or requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT})
+    session = sources.session(session)
     rows = cargo_query(session, CARGO_TABLE, CARGO_FIELDS, cache_dir)
 
     cursor = connection.cursor()
@@ -51,20 +44,3 @@ def run(connection, cache_dir=None, session=None, log=print):
     return {"patches": loaded, "skipped": skipped,
             "latest": "%s (%s)" % latest if latest else None,
             "tables": ["patches"]}
-
-
-def main():
-    parser = common.build_parser(__doc__, ".cache-wiki")
-    args = parser.parse_args()
-    cache = common.prepare_cache(args.cache)
-    with psycopg.connect(common.resolve_dsn(args)) as connection:
-        summary = run(connection, cache)
-        common.export_raw(connection, args, summary["tables"])
-    print("latest: %s" % summary["latest"])
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (WikiError, psycopg.Error, requests.RequestException) as error:
-        sys.exit("error: %s" % error)

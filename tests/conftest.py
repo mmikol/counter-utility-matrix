@@ -7,7 +7,7 @@ Three kinds of test:
     validation   our data against a third party's published figures
 
 Only the first runs anywhere. The other two default to the repo's own build
-at data/db/cluster - the same database `python -m data.orchestrator rebuild` produces -
+at data/db/cluster - the same database `python -m data.mcp call db_rebuild` produces -
 and skip themselves when there is nothing there, so `pytest` on a fresh clone
 is still green. OVERWATCH_DB_LOCAL_SERVER or DATABASE_URL override the target.
 """
@@ -35,7 +35,7 @@ def _dsn():
 def db():
     dsn = _dsn()
     if not dsn:
-        pytest.skip("no database: run `python -m data.orchestrator rebuild` first")
+        pytest.skip("no database: run `python -m data.mcp call db_rebuild` first")
     import psycopg
 
     try:
@@ -45,7 +45,7 @@ def db():
     if connection.execute(
         "SELECT count(*) FROM pg_tables WHERE schemaname='public'"
     ).fetchone()[0] == 0:
-        pytest.skip("database is empty: run `python -m data.orchestrator rebuild`")
+        pytest.skip("database is empty: run `python -m data.mcp call db_rebuild`")
     yield connection
     connection.close()
 

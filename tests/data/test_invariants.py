@@ -189,9 +189,9 @@ def test_no_hero_has_two_abilities_that_fold_together(rows):
     # "Biotic Rifle" and "Biotic Rifle (ADS)" fold to one key; two such rows
     # on one hero means a firing config leaked into the abilities table, and
     # every rerun then routes stats to whichever row it finds first.
-    from data.wiki.names import match_key
+    from data.names import ability_key
     from collections import Counter
-    folds = Counter((h, match_key(a)) for h, a in rows(
+    folds = Counter((h, ability_key(a)) for h, a in rows(
         "select hero_id, name from abilities"))
     dupes = {k: v for k, v in folds.items() if v > 1}
     assert not dupes, dupes

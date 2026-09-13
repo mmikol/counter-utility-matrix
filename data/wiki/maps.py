@@ -7,15 +7,10 @@ Extracting maps and game modes from the wiki's Maps article.
 
 Only the "Standard Play" section is read; Former Standard Play (Assault,
 Clash), Stadium, Arcade and seasonal modes are out of scope.
-
-    python -m data.wiki.maps
 """
 
-import sys
-import psycopg
-import requests
-from data import common
-from data.wiki import WIKI, USER_AGENT, WikiError, fetch_wikitext
+from data import common, sources
+from data.wiki import WIKI, WikiError, fetch_wikitext, markup
 import re
 
 
@@ -31,7 +26,6 @@ GALLERY_RE = re.compile(
 )
 # File:Busan.jpg|{{flag|kr}} [[Busan]]
 MAP_LINE_RE = re.compile(r"^File:[^|]*\|(.*)$", re.M)
-LINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 
 MODE_NAMES = {
     "control": "Control",
@@ -63,7 +57,7 @@ def parse_modes_and_maps(text):
 
         maps = []
         for line in MAP_LINE_RE.findall(match.group(2)):
-            link = LINK_RE.search(line)
+            link = markup.LINK_RE.search(line)
             if link:
                 maps.append(link.group(1).strip())
 
@@ -115,8 +109,7 @@ MAPS_PAGE = "Maps"
 
 
 def run(connection, cache_dir=None, session=None, log=print):
-    session = session or requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT})
+    session = sources.session(session)
 
     modes = parse_modes_and_maps(fetch_wikitext(session, MAPS_PAGE, cache_dir))
 
@@ -169,21 +162,3 @@ def run(connection, cache_dir=None, session=None, log=print):
     return {"modes": len(modes), "maps": len(map_ids),
             "combinations": combinations, "stages": stage_rows,
             "tables": ["game_modes", "maps", "map_modes", "map_stages"]}
-
-
-def main():
-    parser = common.build_parser(__doc__, ".cache-wiki")
-    args = parser.parse_args()
-    cache = common.prepare_cache(args.cache)
-    with psycopg.connect(common.resolve_dsn(args)) as connection:
-        summary = run(connection, cache)
-        common.export_raw(connection, args, summary["tables"])
-    print("modes: %(modes)d   maps: %(maps)d   combinations: %(combinations)d"
-          "   stages: %(stages)d" % summary)
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (WikiError, psycopg.Error, requests.RequestException) as error:
-        sys.exit("error: %s" % error)

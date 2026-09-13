@@ -1,9 +1,8 @@
 """The plumbing every layer shares: where the database is, how a page cache
 is prepared, how provenance is recorded, and how the CSV mirror is refreshed.
 
-Lifted out of the orchestrator so that the data layer (the MCP tools), the
-conductor (orchestrator.py) and the loaders can all import it without a
-cycle. Nothing here knows about a particular source or table.
+Shared by the MCP tools, the loaders and the other two layers; nothing here
+knows about a particular source or table.
 """
 
 import argparse
@@ -28,8 +27,8 @@ CACHE_DIRS = {
 }
 
 
-def build_parser(description, cache_dir=None):
-    """A parser carrying the options every entry point accepts."""
+def build_parser(description):
+    """A parser carrying the two options a process accepts: where the database is."""
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--dsn", help="Postgres DSN (default: $DATABASE_URL)")
     parser.add_argument(
@@ -38,15 +37,6 @@ def build_parser(description, cache_dir=None):
         const="pgdata",
         help="run against an embedded Postgres in this directory (needs pgserver)",
     )
-    parser.add_argument(
-        "--no-export", action="store_true", help="skip refreshing data/raw/*.csv"
-    )
-    if cache_dir:
-        parser.add_argument(
-            "--cache",
-            default=os.path.join(ROOT, cache_dir),
-            help="page cache directory ('' to disable)",
-        )
     return parser
 
 
@@ -183,9 +173,3 @@ def export_mark(raw_dir=RAW_DIR):
     with open(path, encoding="utf-8") as handle:
         return json.load(handle)
 
-
-def export_raw(connection, args, tables=()):
-    """Refresh data/raw/*.csv unless asked not to (CLI entry points)."""
-    if getattr(args, "no_export", False):
-        return {}
-    return dict(export(connection))

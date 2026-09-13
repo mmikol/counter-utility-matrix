@@ -223,7 +223,7 @@ def generate_docs(connection):
         fh.write("\n".join(erd))
 
     dd = ["# Data dictionary", "", "Generated from the live schema"
-          " (`python -m data.orchestrator docs`).", "",
+          " (`python -m data.mcp call db_docs`).", "",
           "Every table carries two columns omitted from the lists below, because they",
           "are on all of them: `source_id` (which source the row came from, see",
           "`sources`) and `cao` — \"current as of\", when that row was read.", "",

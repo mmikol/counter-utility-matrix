@@ -148,7 +148,7 @@ stateDiagram-v2
     end note
 ```
 
-`python -m data.orchestrator <verb>` drives the same tools without a session;
+`python -m data.mcp call <tool>` runs the same tools without a session;
 Docker's `data` container runs `rebuild` on an empty or stale database and
 the `refresher` container refreshes once a day (and on start when the
 cached pages are older than a day): the daily refresh refetches the rates

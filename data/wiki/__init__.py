@@ -10,7 +10,6 @@
     measurements   a stat value -> value, unit, window, condition
     weapons        firing modes grouped into weapons
     modifiers      buff direction and target, off the keywords
-    names          matching the wiki's spellings against ours
 
 The article HTML sits behind a bot challenge; the only open path is the
 MediaWiki endpoint below, which returns JSON (Cargo) and raw wikitext and
@@ -29,7 +28,6 @@ from data.sources import is_stale, keep_stale
 WIKI_API = "https://overwatch.fandom.com/api.php"
 CARGO_PAGE_SIZE = 500
 CARGO_RETRIES = 6
-USER_AGENT = "overwatch-db/0.1 (personal project; contact via repo)"
 
 # The sources row this module's pages become.
 WIKI = ("wiki", "Overwatch Wiki", "https://overwatch.fandom.com/")

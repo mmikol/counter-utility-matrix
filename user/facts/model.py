@@ -10,7 +10,7 @@ import re
 import statistics
 from collections import defaultdict
 
-from data.counterpick.names import match_key
+from data.names import name_key
 
 ROLES = ("tank", "damage", "support")
 
@@ -223,11 +223,11 @@ class World:
     # --- lookups -------------------------------------------------------
 
     def hero(self, name):
-        hid = self.by_key.get(match_key(name))
+        hid = self.by_key.get(name_key(name))
         return self.heroes[hid] if hid is not None else None
 
     def map(self, name):
-        mid = self.maps_by_key.get(match_key(name))
+        mid = self.maps_by_key.get(name_key(name))
         return self.maps[mid] if mid is not None else None
 
     def resolve(self, map_name, red, blue, bans=()):
@@ -286,7 +286,7 @@ def load(cx):
             from heroes h join roles r using(role_id)
             join subroles sr on sr.subrole_id = h.subrole_id"""):
         w.heroes[hid] = Hero(hid, slug, name, role, sub, hp, sh, ar, portrait)
-        w.by_key[match_key(name)] = hid
+        w.by_key[name_key(name)] = hid
     for code, url in _rows(cx, "select code, icon_url from roles"):
         w.role_icons[code] = url
     for role, sub, passive, icon in _rows(cx, """
@@ -402,7 +402,7 @@ def load(cx):
             left join map_modes mm using(map_id)
             left join game_modes g using(mode_id)"""):
         w.maps[mid] = Map(mid, name, mode)
-        w.maps_by_key[match_key(name)] = mid
+        w.maps_by_key[name_key(name)] = mid
     for mid, stage in _rows(cx, "select map_id, name from map_stages order by map_id, position"):
         w.maps[mid].stages.append(stage)
     for mid, style, score, note in _rows(cx, "select map_id, style, score, note from map_playstyle"):

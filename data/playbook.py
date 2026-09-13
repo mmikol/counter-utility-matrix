@@ -14,18 +14,13 @@
 Every input follows one contract: the file is the whole truth, a malformed
 row or an unknown name is a loud error to fix in the file (nothing is
 dropped), and loading replaces the table. The `load_playbook` tool runs
-them all and then mirrors the strategies catalog.
-
-    python -m data.playbook               every input
-    python -m data.playbook synergies     one of them
+them all (or a subset) and then mirrors the strategies catalog.
 """
 
 import csv
 import os
-import sys
 from datetime import date
 
-import psycopg
 
 from data import common
 from data.sources import AUTHORED
@@ -210,21 +205,3 @@ def load_map_playstyle(connection, path=None, log=print):
 
 LOADERS = {"seasons": load_seasons, "synergies": load_synergies,
            "archetypes": load_archetypes, "map_playstyle": load_map_playstyle}
-
-
-def main():
-    parser = common.build_parser(__doc__)
-    parser.add_argument("which", nargs="*", choices=list(LOADERS),
-                        help="which inputs (default: all)")
-    args = parser.parse_args()
-    with psycopg.connect(common.resolve_dsn(args)) as connection:
-        for name in args.which or list(LOADERS):
-            summary = LOADERS[name](connection)
-            common.export_raw(connection, args, summary["tables"])
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (AuthoredError, OSError, ValueError, psycopg.Error) as error:
-        sys.exit("error: %s" % error)

@@ -11,7 +11,7 @@
 #               daily (data/refresh.py)
 #
 # Anything else is run as a command in the image:
-#   docker compose run data python -m data.orchestrator update
+#   docker compose run data python -m data.mcp call sync_all
 #   docker compose run data pytest -q
 set -e
 role="${1:-ui}"
@@ -49,11 +49,11 @@ case "$role" in
         case "$state" in
             empty|unfilled)
                 echo "data: $state database - running the first build (scrapes the sources once)"
-                python -m data.orchestrator rebuild ;;
+                python -m data.mcp call db_rebuild ;;
             stale*)
                 echo "data: schema behind the migrations ($state) - rebuilding from the caches;"
                 echo "data: recorded comps come back from the data/raw mirror"
-                python -m data.orchestrator rebuild ;;
+                python -m data.mcp call db_rebuild ;;
             *)
                 echo "data: database current" ;;
         esac

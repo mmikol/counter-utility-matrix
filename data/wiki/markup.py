@@ -25,6 +25,7 @@ FILE_LINK_RE = re.compile(r"\[\[File:[^\]]*\]\]", re.I)
 BREAK_RE = re.compile(r"<br\s*/?>", re.I)
 TAG_RE = re.compile(r"</?[a-z][^>]*>", re.I)
 COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+LINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")      # -> the link's target
 LINK_LABELLED_RE = re.compile(r"\[\[[^\]|]*\|([^\]]*)\]\]")
 LINK_PLAIN_RE = re.compile(r"\[\[([^\]]*)\]\]")
 URL_RE = re.compile(r"https?://\S+")

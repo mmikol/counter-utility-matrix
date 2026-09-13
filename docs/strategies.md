@@ -7,7 +7,7 @@ solver reads the files live, and `load_playbook` mirrors them into the
 `strategies` table so a recommendation can cite the ids it was scored
 under. Tuning is editing a file (the compose stack bind-mounts the
 directory, so the `inference` container picks edits up live). This
-page is generated: `python -m data.orchestrator docs`. Every change to a
+page is generated: `python -m data.mcp call db_docs`. Every change to a
 file goes through the `tune` tool (or a `fit_weights` nudge) and is logged
 in [tuning-log.md](../inference/strategies/tuning-log.md).
 
@@ -270,7 +270,7 @@ per hero on the board.
 
 #### Take the picks the playbook lists for this map (`playbook-map-picks`, map)
 
-`maximize team.map_strategy_hits` - picks the playbook lists among their best maps here. weight 1; when `map.known == 1`
+`maximize team.map_strategy_hits` - picks counterpick lists among their best maps here. weight 1; when `map.known == 1`
 
 How many of the six appear in counterpick.gg's best-maps list for the
 selected map. A second opinion on `map-fit` from a source that ranks
@@ -512,7 +512,7 @@ the `team.*` metrics computed for the red side.
 | `team.map_pick_mass` | summed pick rate on the map |
 | `team.map_specialists` | picks running 2.5+ points over their own baseline here |
 | `team.map_offmap` | picks running 2.5+ points under their own baseline here |
-| `team.map_strategy_hits` | picks the playbook lists among their best maps here |
+| `team.map_strategy_hits` | picks counterpick lists among their best maps here |
 | `team.coverage` | enemies answered by at least one pick |
 | `team.coverage_share` | coverage / enemies revealed |
 | `team.unanswered` (text) | enemies no pick answers |

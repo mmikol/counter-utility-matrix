@@ -11,10 +11,6 @@ rec_id is given. Does not commit: the caller owns the transaction (the
 tool commits and re-exports the mirror; a test rolls back).
 """
 
-import json
-import sys
-
-import psycopg
 
 from data import common
 from data.sources import AUTHORED
@@ -70,24 +66,3 @@ def summary(cx):
     counts = {r: 0 for r in RESULTS}
     counts.update(dict(rows))
     return dict(counts, total=sum(counts.values()))
-
-
-def main():
-    """python -m inference.outcomes < outcome.json"""
-    parser = common.build_parser(main.__doc__)
-    args = parser.parse_args()
-    payload = json.load(sys.stdin)
-    with psycopg.connect(common.resolve_dsn(args)) as cx:
-        oid = record_outcome(cx, payload["result"], payload.get("map"),
-                             payload.get("side", ""), payload.get("blue", []),
-                             payload.get("red", []), payload.get("bans", []),
-                             payload.get("rec_id"), payload.get("note"))
-        commit_and_mirror(cx)
-    print("recorded outcome %d" % oid)
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (ValueError, KeyError, psycopg.Error) as error:
-        sys.exit("error: %s" % error)

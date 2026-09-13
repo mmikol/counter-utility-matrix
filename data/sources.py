@@ -10,6 +10,11 @@
                      fetch (data/authored/); the code stays `user` for
                      continuity with databases built before the rename
 
+    session          a requests session that identifies this project
+    PLATFORM, INPUT_DEVICE, REGION
+                     the project's scope - console, controller, Americas -
+                     declared once; every rates snapshot carries it
+
 Each source package (blizzard, wiki, counterpick) names its own endpoints
 and its own `sources` row, so provenance lives with the source. Fetching
 yields raw markup; reading it is the package's job.
@@ -114,6 +119,23 @@ def cached_get(session, url, cache_dir, key, params=None, suffix=".html",
     # Jittered, so a few hundred sequential requests do not arrive as a clock.
     time.sleep(delay * random.uniform(0.75, 1.5))
     return text
+
+
+USER_AGENT = "overwatch-db/0.1 (personal project; contact via repo)"
+
+# The scope every rates snapshot is pinned to. The sites spell these their
+# own way (Blizzard's input=Console, counterpick's platform=console); these
+# are the codes the database stores.
+PLATFORM = "console"
+INPUT_DEVICE = "controller"
+REGION = "americas"
+
+
+def session(existing=None):
+    """A requests session (the given one, or a new one) that says who we are."""
+    s = existing or requests.Session()
+    s.headers.update({"User-Agent": USER_AGENT})
+    return s
 
 
 # The inputs we write rather than fetch. There is nothing to download - the

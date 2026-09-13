@@ -3,7 +3,7 @@ network - every lesson here was paid for once already."""
 
 from data.wiki.maps import parse_stages
 from data.wiki.measurements import parse_measurements
-from data.counterpick.names import match_key
+from data.names import name_key
 
 
 # --- measurements: value / numerator / denominator / window ------------
@@ -62,13 +62,13 @@ def test_units_never_contain_a_slash():
 
 # --- name matching across sources ---------------------------------------
 
-def test_match_key_reconciles_source_spellings():
+def test_name_key_reconciles_source_spellings():
     # a fold that strips the accent to a space turns Lucio into "Lu io" -
     # NFKD + drop combining marks is the one that works
-    assert match_key("Lúcio") == match_key("Lucio")
-    assert match_key("D.Va") == match_key("DVa")
-    assert match_key("Soldier: 76") == match_key("soldier-76")
-    assert match_key("King's Row") == match_key("Kings Row")
+    assert name_key("Lúcio") == name_key("Lucio")
+    assert name_key("D.Va") == name_key("DVa")
+    assert name_key("Soldier: 76") == name_key("soldier-76")
+    assert name_key("King's Row") == name_key("Kings Row")
 
 
 # --- map stages out of article wikitext ----------------------------------

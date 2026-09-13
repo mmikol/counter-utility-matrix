@@ -4,8 +4,9 @@ tools of the user and inference layers.
 Every pull_* tool is pull -> clean -> store for one source and domain; the
 pulling and cleaning are the extract/transform code under data/, the
 storing is that domain's loader. `sync_all` runs them in dependency order.
-Nothing here is a static script: a session (or the orchestrator, or cron)
-decides what to pull, when, and reads the summary back.
+Nothing here is a static script: a session (or the refresher, or a shell
+through `python -m data.mcp call`) decides what to pull, when, and reads
+the summary back. There is no other door.
 """
 
 import json
@@ -68,7 +69,7 @@ def build(ctx):
 
 
 def run_tool(ctx, name, **arguments):
-    """Call a registered tool by name, in-process (the orchestrator's path)."""
+    """Call a registered tool by name, in-process (the refresher's and the shell's path)."""
     for tool_name, _, schema, fn in REGISTRY:
         if tool_name == name:
             return fn(ctx, **arguments)

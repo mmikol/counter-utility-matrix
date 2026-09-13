@@ -17,18 +17,13 @@ One Cargo row per ability, with every stat as its own column, an explicit
 `removed` flag for retired kit, and an `ability_key` naming the input slot.
 Rows come back alphabetically, so weapons are sorted by firing slot here -
 grouping them into weapons is weapons.py's job.
-
-    python -m data.wiki.heroes
 """
 
 import collections
-import sys
-import psycopg
 import requests
-from data import common
+from data import common, sources
 from data.wiki import (
     WIKI,
-    USER_AGENT,
     WikiError,
     cargo_query,
     fetch_wikitext,
@@ -40,7 +35,7 @@ from data.wiki.weapons import (
     group_weapons,
     slot_id,
 )
-from data.wiki.names import abilities_named_in, match_key
+from data.names import abilities_named_in, ability_key
 import re
 
 
@@ -206,7 +201,7 @@ SUPPLEMENT_FIELDS = (
 
 
 def supplement_from_wikitext(session, hero_name, cache_dir):
-    """One hero page -> ({ability match_key: {stat: ...}}, {health/shield/armor})."""
+    """One hero page -> ({ability ability_key: {stat: ...}}, {health/shield/armor})."""
     try:
         text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
     except (WikiError, requests.RequestException):
@@ -224,7 +219,7 @@ def supplement_from_wikitext(session, hero_name, cache_dir):
             if value:
                 stats[code] = (value, None, params[code])
         if stats:
-            extra[match_key(name)] = stats
+            extra[ability_key(name)] = stats
     return extra, parse_hero_profile(text)
 
 
@@ -338,7 +333,7 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
     """Classify the abilities Blizzard loaded, add the ones it omits, stat
     them, store their keywords. Weapon entries take part ONLY to classify."""
     existing = {
-        match_key(row[0]): row[1]
+        ability_key(row[0]): row[1]
         for row in cursor.execute(
             "SELECT name, ability_id FROM abilities WHERE hero_id = %s",
             (hero_id,),
@@ -351,7 +346,7 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
 
     for entry in weapon_entries:
         for candidate in (entry["name"], entry.get("display_name", "")):
-            ability_id = existing.get(match_key(candidate)) if candidate else None
+            ability_id = existing.get(ability_key(candidate)) if candidate else None
             if ability_id is not None:
                 cursor.execute(
                     "UPDATE abilities SET kind_id = %s, keywords = %s"
@@ -362,7 +357,7 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
                 break
 
     for entry in entries:
-        ability_id = existing.get(match_key(entry["name"]))
+        ability_id = existing.get(ability_key(entry["name"]))
         if ability_id is None:
             cursor.execute(
                 "INSERT INTO abilities (hero_id, kind_id, name, description,"
@@ -377,8 +372,8 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
             if inserted is None:
                 continue
             ability_id = inserted[0]
-            existing[match_key(entry["display_name"])] = ability_id
-            existing[match_key(entry["name"])] = ability_id
+            existing[ability_key(entry["display_name"])] = ability_id
+            existing[ability_key(entry["name"])] = ability_id
             next_position += 1
             tally["added"] += 1
         else:
@@ -408,13 +403,13 @@ def load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
         ).fetchall()
     ]
     perk_ids = {
-        match_key(row[0]): row[1]
+        ability_key(row[0]): row[1]
         for row in cursor.execute(
             "SELECT name, perk_id FROM perks WHERE hero_id = %s", (hero_id,)
         ).fetchall()
     }
     for entry in perks:
-        perk_id = perk_ids.get(match_key(entry["name"]))
+        perk_id = perk_ids.get(ability_key(entry["name"]))
         if perk_id is None:
             continue  # a perk Blizzard does not currently publish
         if entry["stats"]:
@@ -436,8 +431,7 @@ def load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
 
 def run(connection, cache_dir=None, session=None, supplement=True, log=print):
     """Pull the Cargo table (and each hero article), clean, store."""
-    session = session or requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT})
+    session = sources.session(session)
 
     rows = cargo_query(session, CARGO_TABLE, CARGO_FIELDS, cache_dir)
     by_hero = parse_rows(rows)
@@ -450,7 +444,7 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
             if profile:
                 profiles[hero_name] = profile
             for entry in weapons + abilities + perks:
-                for code, value in extra.get(match_key(entry["name"]), {}).items():
+                for code, value in extra.get(ability_key(entry["name"]), {}).items():
                     if code not in entry["stats"]:
                         entry["stats"][code] = value
                         supplemented += 1
@@ -502,26 +496,3 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
                    "perk_ability_effects", "stat_keys", "heroes"],
     })
     return summary
-
-
-def main():
-    parser = common.build_parser(__doc__, ".cache-wiki")
-    parser.add_argument("--no-supplement", action="store_true",
-                        help="skip the wikitext pass for fields Cargo does not expose")
-    args = parser.parse_args()
-    cache = common.prepare_cache(args.cache)
-    with psycopg.connect(common.resolve_dsn(args)) as connection:
-        summary = run(connection, cache, supplement=not args.no_supplement)
-        common.export_raw(connection, args, summary["tables"])
-    for key in ("weapons", "configs", "classified", "added", "stats", "modifiers"):
-        print("%-12s %d" % (key, summary.get(key, 0)))
-    if summary["unknown_heroes"]:
-        print("names in Cargo that are not roster heroes: %s"
-              % ", ".join(summary["unknown_heroes"]))
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (WikiError, psycopg.Error, requests.RequestException) as error:
-        sys.exit("error: %s" % error)

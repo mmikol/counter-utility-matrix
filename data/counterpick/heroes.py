@@ -22,24 +22,18 @@ displayed as "Countered by" - so the tooltips are what settle the direction:
 heroes to avoid picking against it. They are read that way here, and the two
 are kept separately because the site does not treat them as inverses: of 354
 pairings, 114 appear in one direction only.
-
-    python -m data.counterpick.heroes
 """
 
-import sys
-import psycopg
-import requests
-from data.sources import FetchError, cache_key, cached_get
-from data import common
+from data.sources import cache_key, cached_get
+from data import common, sources
 from data.common import current_patch, current_season
-from data.counterpick.names import index, match_key
+from data.names import index, name_key
 from data.counterpick import (
     COUNTERPICK,
     BASE_URL,
     GAMEMODE,
     PLATFORM,
     REGIONS,
-    USER_AGENT,
 )
 import re
 from bs4 import BeautifulSoup
@@ -103,13 +97,12 @@ def parse_table(html):
 # The site never says which queue its competitive games were, and this
 # model must not mistake an unlabelled snapshot for open queue.
 QUEUE = "competitive_unspecified_queue"
-PLATFORM_NAME = "console"
-INPUT_DEVICE = "controller"
+PLATFORM_NAME = sources.PLATFORM
+INPUT_DEVICE = sources.INPUT_DEVICE
 
 
 def run(connection, cache_dir=None, session=None, log=print):
-    session = session or requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT})
+    session = sources.session(session)
     cao = common.now()
 
     pages = {}
@@ -153,7 +146,7 @@ def run(connection, cache_dir=None, session=None, log=print):
             missing_regions.add(region_code)
             continue
         for entry in heroes:
-            hero_id = hero_ids.get(match_key(entry["hero"]))
+            hero_id = hero_ids.get(name_key(entry["hero"]))
             if hero_id is None:
                 unknown_heroes.add(entry["hero"])
                 continue
@@ -171,7 +164,7 @@ def run(connection, cache_dir=None, session=None, log=print):
             # normalise to (hero, countered_by) and the union is kept.
             for relation in ("countered_by", "counters"):
                 for name in entry[relation]:
-                    other_id = hero_ids.get(match_key(name))
+                    other_id = hero_ids.get(name_key(name))
                     if other_id is None:
                         unknown_heroes.add(name)
                         continue
@@ -188,7 +181,7 @@ def run(connection, cache_dir=None, session=None, log=print):
                     )
                     counter_rows += cursor.rowcount
             for position, name in enumerate(entry["best_maps"], start=1):
-                map_id = map_ids.get(match_key(name))
+                map_id = map_ids.get(name_key(name))
                 if map_id is None:
                     unknown_maps.add(name)
                     continue
@@ -207,22 +200,3 @@ def run(connection, cache_dir=None, session=None, log=print):
             "unknown_maps": sorted(unknown_maps),
             "missing_regions": sorted(missing_regions),
             "tables": ["meta_snapshots", "hero_meta", "counters", "map_strategy"]}
-
-
-def main():
-    parser = common.build_parser(__doc__, ".cache-counterpick")
-    args = parser.parse_args()
-    cache = common.prepare_cache(args.cache)
-    with psycopg.connect(common.resolve_dsn(args)) as connection:
-        summary = run(connection, cache)
-        common.export_raw(connection, args, summary["tables"])
-    if summary["unknown_heroes"]:
-        print("names matched no hero: %s" % ", ".join(summary["unknown_heroes"]))
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (CounterpickError, FetchError, psycopg.Error,
-            requests.RequestException) as error:
-        sys.exit("error: %s" % error)

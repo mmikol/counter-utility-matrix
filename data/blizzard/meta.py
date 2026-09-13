@@ -14,17 +14,12 @@ Extracting hero rates from Blizzard's statistics page.
 
 The page carries its rows as JSON on a blz-data-table element, and its filter
 vocabularies as ordinary select options.
-
-    python -m data.blizzard.meta
 """
 
-import sys
-import psycopg
-import requests
 from data.sources import cache_key, cached_get
-from data import common
+from data import common, sources
 from data.common import current_patch, current_season
-from data.blizzard import BLIZZARD, RATES_URL, USER_AGENT
+from data.blizzard import BLIZZARD, RATES_URL
 import json
 from bs4 import BeautifulSoup
 
@@ -81,12 +76,12 @@ RETRY_BACKOFF = 5.0
 QUEUE_NAME = "competitive_role_queue"
 QUEUE_LABEL = "Competitive - Role Queue"
 INPUT_PARAM = "Console"
-PLATFORM_NAME = "console"
+PLATFORM_NAME = sources.PLATFORM
 # Derived, not published: console supports no input but a controller.
-INPUT_DEVICE = "controller"
+INPUT_DEVICE = sources.INPUT_DEVICE
 ALL_TIER = "All"
 REGION_PARAM = "Americas"
-REGION_CODE = "americas"
+REGION_CODE = sources.REGION
 REGION_NAME = "Americas"
 
 
@@ -121,8 +116,7 @@ def fetch(session, params, cache_dir, rq):
 
 
 def run(connection, cache_dir=None, session=None, log=print):
-    session = session or requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT})
+    session = sources.session(session)
     cao = common.now()
 
     rq = competitive_rq(session, cache_dir)
@@ -229,23 +223,3 @@ def run(connection, cache_dir=None, session=None, log=print):
             "skipped_maps": skipped_maps,
             "tables": ["regions", "competitive_tiers", "meta_snapshots",
                        "hero_meta", "map_meta"]}
-
-
-def main():
-    parser = common.build_parser(__doc__, ".cache-blizzard")
-    args = parser.parse_args()
-    cache = common.prepare_cache(args.cache)
-    with psycopg.connect(common.resolve_dsn(args)) as connection:
-        summary = run(connection, cache)
-        common.export_raw(connection, args, summary["tables"])
-    if summary["unmatched"]:
-        print("names matched no hero: %s" % ", ".join(summary["unmatched"]))
-    if summary["skipped_maps"]:
-        print("maps outside scope: %s" % ", ".join(summary["skipped_maps"]))
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (RatesError, psycopg.Error, requests.RequestException) as error:
-        sys.exit("error: %s" % error)

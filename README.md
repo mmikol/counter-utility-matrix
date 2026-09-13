@@ -78,7 +78,7 @@ a rebuild. Upgrading an install that predates the per-layer stack: add
 things to run in the same image:
 
 ```bash
-docker compose run data python -m data.orchestrator update     # refresh the data
+docker compose run data python -m data.mcp call sync_all       # refresh the data
 docker compose run data python -m data.mcp call infer '{"map": "King'"'"'s Row", "red": ["Zarya"]}'
 docker compose run data pytest -q
 docker compose logs -f data                               # watch a build
@@ -92,7 +92,7 @@ macOS and Linux x86_64):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m data.orchestrator rebuild     # build the database
+.venv/bin/python -m data.mcp call db_rebuild      # build the database
 .venv/bin/python -m user.board                       # the board, http://localhost:8017
 .venv/bin/python -m pytest -q                # the test suite
 ```
@@ -135,7 +135,8 @@ from the `data` container. Open the repo in a Claude Code session and
 `overwatch-db-docker` (`http://localhost:8020/mcp`, the compose database);
 the session can then say "refresh the rates" and call `pull_rates`, or ask
 `query` for any SQL. Nothing is a static script: a session, the
-orchestrator, or cron decides what to pull and when.
+refresher, or you from a shell decide what to pull and when - through the
+same tools, which are the only door.
 
 | tool | does |
 | --- | --- |
@@ -145,16 +146,17 @@ orchestrator, or cron decides what to pull and when.
 | `db_status` · `db_init` · `db_migrate` · `db_rebuild` · `export_csv` · `db_docs` · `query` | the database's life (`db_migrate` applies pending migrations in place), and read-only SQL |
 | `roster` · `facts` · `infer` · `evaluate` · `board` · `strategies` · `record` | the user and inference layers through the same door (`board` solves both seats and scores the current comp) |
 
-The same tools run from a shell (`python -m data.mcp call pull_maps`) and are
-what `python -m data.orchestrator` drives:
+The same tools run from a shell, so there is no second script to keep in
+step (Docker's entrypoint and the refresher call them the same way):
 
 | command | does |
 | --- | --- |
-| `python -m data.orchestrator rebuild` | clean slate: schema + every tool + restore recorded comps |
-| `python -m data.orchestrator` | update (default): entities refresh in place, rates append a snapshot |
-| `python -m data.orchestrator init` / `inflate` | schema only / first fill |
-| `python -m data.orchestrator export` / `docs` | refresh `data/raw/*.csv` / regenerate the generated docs |
-| `--only pull_rates`, `--refresh` | one tool; discard the page cache first |
+| `python -m data.mcp list` | the tools |
+| `python -m data.mcp call db_rebuild` | clean slate: schema + every tool + restore recorded comps |
+| `python -m data.mcp call sync_all` | update: entities refresh in place, rates append a snapshot; `'{"refresh": true}'` discards the page cache first |
+| `python -m data.mcp call pull_rates` | one tool |
+| `python -m data.mcp call db_init` / `db_migrate` | schema on an empty database / pending migrations in place |
+| `python -m data.mcp call export_csv` / `db_docs` | refresh `data/raw/*.csv` / regenerate the generated docs |
 
 ## The user layer: the board
 
@@ -258,14 +260,14 @@ The tree is the three layers:
 ```
 data/                DATA LAYER - pulls, cleans, stores; owns the schema
   mcp/               the MCP server: server.py (stdio + HTTP), tools.py (the tools)
-  orchestrator.py    the conductor: verbs over the same tools (Docker, a shell)
   refresh.py         the daily refresh (the `refresher` container)
   blizzard/          one package per source, page to table: heroes.py, meta.py
   wiki/              heroes.py, maps.py, patches.py, playstyles.py, and the
                      markup, measurements, weapons, modifiers and names readers
   counterpick/       heroes.py, names.py
   playbook.py        the authored CSVs, reloaded whole
-  sources.py         the fetch cache and its freshness policy
+  sources.py         the fetch cache, its freshness policy, the project's scope
+  names.py           matching hero, map and ability names across sources
   authored/          the inputs we write: CSVs, recorded transcripts
   db/                migrations/ (001 sources · 002 heroes · 003 maps · 004 meta ·
                      005 playbook · 006 inference · 007 three layers · 008 the

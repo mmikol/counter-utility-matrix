@@ -8,8 +8,6 @@ The one write path for recommendations, whoever decided them - the solver
   meaning  heroes must exist, and every cited fact id must be one the
            board for (map, red, the six picks) actually shows - a
            citation of nothing is refused, not stored
-
-    python -m inference.record < answer.json        # {"question", "map",
         "red", "blue", "model", "answer": {"playstyle", "reasoning",
         "picks": [{"hero", "why", "evidence": ["F7", ...]}]}}
 """
@@ -17,10 +15,8 @@ The one write path for recommendations, whoever decided them - the solver
 import json
 import os
 import re
-import sys
 from datetime import datetime, timezone
 
-import psycopg
 
 from data import common
 from data.sources import AUTHORED
@@ -129,23 +125,3 @@ def record(cx, question, answer, map_name=None, red=(), blue=(),
     path = transcript(rec_id, question, map_name, list(red), list(blue), answer,
                       fs, model_name, list(bans), side)
     return rec_id, path
-
-
-def main():
-    parser = common.build_parser(__doc__)
-    args = parser.parse_args()
-    payload = json.load(sys.stdin)
-    with psycopg.connect(common.resolve_dsn(args)) as cx:
-        rec_id, path = record(cx, payload["question"], payload["answer"],
-                              payload.get("map"), payload.get("red", []),
-                              payload.get("blue", []),
-                              payload.get("model", "claude-code-session"),
-                              payload.get("bans", []), payload.get("side", ""))
-    print("recorded as recommendation %d; transcript: %s" % (rec_id, path))
-
-
-if __name__ == "__main__":
-    try:
-        main()
-    except (ValueError, KeyError, psycopg.Error) as error:
-        sys.exit("error: %s" % error)
