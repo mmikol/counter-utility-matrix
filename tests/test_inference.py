@@ -448,3 +448,46 @@ def test_the_mirror_tranche_aggregates_their_side_too(db):
                 "derived:boardnet"):
         assert tag in tabs, tag
     db.rollback()
+
+
+def test_a_second_meta_snapshot_does_not_double_the_dossier(db):
+    # Regression: meta APPENDS dated snapshots, and every "current meta"
+    # read must pin the latest or it double-counts. The test DB normally
+    # holds one snapshot, so synthesize a second (a later capture of the
+    # same rows) and prove the candidate pool stays deduplicated and the
+    # coverage formula still finds its answer.
+    src = db.execute("select source_id from sources where code='blizzard'"
+                     ).fetchone()[0]
+    latest = db.execute("""select snapshot_id from meta_snapshots
+        where source_id=%s order by captured_at desc, snapshot_id desc
+        limit 1""", (src,)).fetchone()[0]
+    new_id = db.execute("""insert into meta_snapshots
+        (captured_at, queue, platform, input, patch_id, season_id, source_id)
+        select captured_at + interval '1 day', queue, platform, input,
+               patch_id, season_id, source_id
+        from meta_snapshots where snapshot_id=%s returning snapshot_id""",
+        (latest,)).fetchone()[0]
+    for table in ("hero_meta", "map_meta"):
+        cols = [c for c, in db.execute("""select column_name
+            from information_schema.columns where table_name=%s
+            and column_name not in ('%s_id','snapshot_id')"""
+            % ('%s', table), (table,)).fetchall()]
+        collist = ", ".join(cols)
+        db.execute("insert into %s (snapshot_id, %s) select %s, %s from %s"
+                   " where snapshot_id=%s"
+                   % (table, collist, new_id, collist, table, latest))
+
+    ev, _ = dossier.build(db, "King's Row", ["Zarya", "Pharah"],
+                          allies=["Ana"])
+    cands = [t for _, tb, t in ev.lines if tb == "candidates"]
+    names = [c.split(" - ")[0] for c in cands]
+    assert len(names) == len(set(names)), "candidate pool doubled"
+    cov = [t for _, tb, t in ev.lines if tb == "derived:coverage"]
+    assert any("2/2" in c for c in cov), "coverage lost under two snapshots"
+    sk = [t for _, tb, t in ev.lines if tb == "derived:skeleton"]
+    for line in sk:
+        drafted = [n.strip(" *") for part in
+                   line.split(": ", 1)[1].split(" - ")[0].split(" | ")
+                   for n in part.split(" ", 1)[1].split(", ")]
+        assert len(drafted) == len(set(drafted)), "skeleton double-drafted"
+    db.rollback()

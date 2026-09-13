@@ -214,7 +214,7 @@ def _hero_insights(ev, cx, hero_id, name):
             join competitive_tiers t on t.tier_id = m.tier_id
             join meta_snapshots s using(snapshot_id)
             join sources src on src.source_id = s.source_id
-            where m.hero_id=%s and src.code='blizzard'
+            where m.hero_id=%s and src.code='blizzard' and s.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
               and m.win_rate is not null
             order by t.tier_id, s.captured_at desc""", hero_id):
         ev.add("hero_meta", "%s in %s lobbies: wins %.1f%%, picked %.1f%%%s"
@@ -225,6 +225,7 @@ def _hero_insights(ev, cx, hero_id, name):
             join maps mp using(map_id)
             join competitive_tiers t on t.tier_id = m.tier_id
             where m.hero_id=%s and t.code='all' and m.win_rate is not null
+              and m.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
             order by m.win_rate desc""", hero_id):
         ev.add("map_meta", "%s on %s: wins %.1f%%, picked %.1f%%"
                % (name, mname, win, pick))
@@ -241,7 +242,7 @@ def _rank_sensitivity(cx, hero_id):
         from hero_meta m join competitive_tiers t on t.tier_id=m.tier_id
         join meta_snapshots s using(snapshot_id)
         join sources src on src.source_id=s.source_id
-        where m.hero_id=%s and t.code <> 'all' and src.code='blizzard'
+        where m.hero_id=%s and t.code <> 'all' and src.code='blizzard' and s.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
         and m.win_rate is not null""", hero_id)
     if row and row[0][0] is not None and row[0][1] - row[0][0] >= 6:
         return float(row[0][0]), float(row[0][1])
@@ -300,6 +301,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
                 join heroes h using(hero_id)
                 join competitive_tiers t on t.tier_id=m.tier_id
                 where m.map_id=%s and t.code='all' and m.win_rate is not null
+                  and m.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
                 order by m.win_rate desc limit 10""", ctx["map_id"]):
             ev.add("map_meta", "on %s: %s wins %.1f%% (picked %.1f%%)"
                    % (ctx["map_name"], hero, win, pick))
@@ -308,6 +310,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
                 join heroes h using(hero_id)
                 join competitive_tiers t on t.tier_id=m.tier_id
                 where m.map_id=%s and t.code='all' and m.win_rate is not null
+                  and m.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
                 order by m.win_rate asc limit 6""", ctx["map_id"])
         if strugglers:
             ev.add("map_meta", "struggle on %s: %s" % (ctx["map_name"],
@@ -360,7 +363,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
             join competitive_tiers t on t.tier_id=m.tier_id
             join meta_snapshots s using(snapshot_id)
             join sources src on src.source_id=s.source_id
-            where m.hero_id=%s and t.code='all' and src.code='blizzard'
+            where m.hero_id=%s and t.code='all' and src.code='blizzard' and s.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
             and m.win_rate is not null limit 1""", ally_id)
         if rates:
             card += "; wins %.1f%% picks %.1f%%" % rates[0]
@@ -417,6 +420,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
                 join competitive_tiers t on t.tier_id = m.tier_id
                 where p.style = %s and t.code = 'all'
                   and m.win_rate is not null
+                  and m.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
                 order by m.win_rate desc limit 6""", ctx["map_id"], style)
             if fits:
                 ev.add("playstyle+map_meta",
@@ -434,6 +438,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
                 join competitive_tiers t on t.tier_id = m.tier_id
                 where c.hero_id = %s and t.code = 'all'
                   and m.win_rate is not null
+                  and m.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
                 order by m.win_rate desc limit 6""",
                 ctx["map_id"], enemy_id)
             if joined:
@@ -461,6 +466,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
                 select m.hero_id from map_meta m
                 join competitive_tiers t on t.tier_id=m.tier_id
                 where m.map_id=%s and t.code='all'
+                  and m.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
                 order by m.win_rate desc nulls last limit 12""",
                 ctx["map_id"]):
             pool[hid] = True
@@ -475,7 +481,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
         join competitive_tiers t on t.tier_id=m.tier_id
         join meta_snapshots s using(snapshot_id)
         join sources src on src.source_id=s.source_id
-        where t.code='all' and src.code='blizzard'
+        where t.code='all' and src.code='blizzard' and s.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
         and m.hero_id = any(%s) order by m.win_rate desc nulls last
         limit 18""", pool)
     for hid, name, win, pick in ranked:
@@ -536,7 +542,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
             join competitive_tiers t on t.tier_id=m.tier_id
             join meta_snapshots s using(snapshot_id)
             join sources src on src.source_id=s.source_id
-            where t.code='all' and src.code='blizzard'
+            where t.code='all' and src.code='blizzard' and s.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
             and m.win_rate is not null order by %s limit 8""" % order)
         ev.add("hero_meta", "%s right now: %s" % (label, ", ".join(
             "%s (%.1f%%/%.1f%%)" % r for r in rows)))
@@ -546,7 +552,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
             join competitive_tiers t on t.tier_id=m.tier_id
             join meta_snapshots s using(snapshot_id)
             join sources src on src.source_id=s.source_id
-            where t.code='all' and src.code='blizzard' and m.ban_rate > 25
+            where t.code='all' and src.code='blizzard' and s.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1) and m.ban_rate > 25
             order by m.ban_rate desc limit 6"""):
         ev.add("hero_meta", "%s is banned in %.0f%% of lobbies - do not build"
                " a comp that dies with the ban" % (hero, rate))
@@ -665,7 +671,8 @@ def _derived_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
     if ctx["map_id"]:
         for hid, w in _rows(cx, """select m.hero_id, m.win_rate from map_meta m
             join competitive_tiers t on t.tier_id=m.tier_id
-            where m.map_id=%s and t.code='all' and m.hero_id = any(%s)""",
+            where m.map_id=%s and t.code='all' and m.hero_id = any(%s)
+              and m.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)""",
             ctx["map_id"], avail):
             if w is not None:
                 prof[hid][3] = float(w)
@@ -719,6 +726,8 @@ def _derived_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
             join sources s2 on s2.source_id = ms2.source_id
                 and s2.code='blizzard'
             where m.map_id=%s and m.win_rate is not null
+              and m.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
+              and hm.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s3src on s3src.source_id = ms.source_id where s3src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
               and hm.win_rate is not null
               and m.win_rate - hm.win_rate >= %s
             order by 2 desc limit 6""", ctx["map_id"],
@@ -730,6 +739,7 @@ def _derived_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
             join heroes h using(hero_id)
             join competitive_tiers t on t.tier_id=m.tier_id and t.code='all'
             where m.map_id=%s and m.win_rate >= %s and m.pick_rate <= %s
+              and m.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
             order by m.win_rate desc limit 5""",
             ctx["map_id"], tune["SLEEPER_WIN"],
             tune["SLEEPER_PICK"]):
@@ -1160,7 +1170,7 @@ def _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
             join competitive_tiers t on t.tier_id=m.tier_id
             join meta_snapshots s using(snapshot_id)
             join sources src on src.source_id=s.source_id
-            where t.code='all' and src.code='blizzard'
+            where t.code='all' and src.code='blizzard' and s.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
               and m.hero_id = any(%s)""", A))
         avail = 1.0
         for h in A:
@@ -1172,7 +1182,7 @@ def _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
             join competitive_tiers t on t.tier_id=m.tier_id
             join meta_snapshots s using(snapshot_id)
             join sources src on src.source_id=s.source_id
-            where t.code='all' and src.code='blizzard'
+            where t.code='all' and src.code='blizzard' and s.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
               and m.hero_id = any(%s)""", A)
         ev.add("derived:pickmass", "pick-rate mass: %.1f summed - %s"
                % (float(picks_[0][0]),
@@ -1235,7 +1245,7 @@ def _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
                 join competitive_tiers t on t.tier_id=m.tier_id
                 join meta_snapshots s using(snapshot_id)
                 join sources src on src.source_id=s.source_id
-                where t.code='all' and src.code='blizzard'
+                where t.code='all' and src.code='blizzard' and s.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
                   and m.hero_id = any(%s)""", [a for _, a in cover]))
             answerers = {a for _, a in cover}
             if answerers:
@@ -1267,7 +1277,8 @@ def _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
             join sources src on src.source_id = s.source_id
             join heroes h on h.hero_id = mm.hero_id
             where mm.map_id=%s and t.code='all' and t2.code='all'
-              and src.code='blizzard' and mm.hero_id = any(%s)
+              and mm.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s4src on s4src.source_id = ms.source_id where s4src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
+              and src.code='blizzard' and s.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1) and mm.hero_id = any(%s)
               and mm.win_rate is not null and hm.win_rate is not null
               and mm.win_rate <= hm.win_rate - %s
             order by hm.win_rate - mm.win_rate desc limit 6""",
@@ -1281,6 +1292,7 @@ def _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
             join competitive_tiers t on t.tier_id=m.tier_id
             join heroes h using(hero_id)
             where m.map_id=%s and t.code='all' and m.win_rate < 50
+              and m.snapshot_id = (select ms.snapshot_id from meta_snapshots ms join sources s2src on s2src.source_id = ms.source_id where s2src.code='blizzard' order by ms.captured_at desc, ms.snapshot_id desc limit 1)
               and m.pick_rate >= %s order by m.pick_rate desc limit 5""",
             ctx["map_id"], 2 * tune["SLEEPER_PICK"])
         for name, win, pick in overrated:
