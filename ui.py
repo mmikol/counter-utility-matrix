@@ -255,8 +255,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    import orchestrator
-    orchestrator.load_env()
     host = os.environ.get("OVERWATCH_DB_UI_HOST", "127.0.0.1")
     server = ThreadingHTTPServer((host, PORT), Handler)
     print("overwatch-db ui: http://%s:%d" % (host, PORT))
