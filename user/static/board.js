@@ -227,6 +227,7 @@ function recordComp(d) {
 }
 
 function renderPlaybook(d) {
+  if (!d || !d.strategies) { el('playbook').innerHTML = "<div class='warnbox'>" + esc(d && d.error ? d.error : 'the strategies are not answering') + '</div>'; return; }
   var out = "<div class='hcards'>";
   d.strategies.forEach(function (h) {
     var meta = h.form === 'heuristic' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight

@@ -113,7 +113,7 @@ def api_infer(cx, query):
     return inference_engine.board_dict(b), 200
 
 
-def api_heuristics():
+def api_strategies():
     if INFERENCE_URL:
         return remote("/strategies")[0]
     catalog = catalog_module.load()
@@ -308,7 +308,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(_page("not found", "<p>Nothing here.</p>"), 404)
                 return self._send_bytes(*served)
             if path == "/api/strategies":
-                return self._json(api_heuristics())
+                return self._json(api_strategies())
             with psycopg.connect(dsn()) as cx:
                 if path == "/api/roster":
                     return self._json(api_roster(cx))

@@ -53,8 +53,8 @@ def test_infer_endpoint_serves_both_seats_and_the_current_comp(db):
     db.rollback()
 
 
-def test_heuristics_and_recs_endpoints(db):
-    data = board.api_heuristics()
+def test_strategies_and_recs_endpoints(db):
+    data = board.api_strategies()
     assert len(data["strategies"]) >= 30
     data = board.api_recs(db)
     assert isinstance(data["latest"], int)
