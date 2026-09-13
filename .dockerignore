@@ -1,11 +1,11 @@
 .git
 .venv
 .env
-data/db/cluster
+db/psql/cluster
 .cache-blizzard
 .cache-wiki
 .cache-counterpick
-data/raw
+db/raw
 __pycache__
 **/__pycache__
 .pytest_cache

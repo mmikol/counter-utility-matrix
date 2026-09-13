@@ -22,7 +22,8 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import psycopg
 
-from data import ROOT, db
+from db import ROOT
+from db import psql
 from ui.facts import engine as facts_engine
 from ui.facts import model
 from ui.facts.compute import SIDED_MODES, TEAM_SIZE
@@ -38,7 +39,7 @@ INFERENCE_URL = os.environ.get("INFERENCE_URL", "").rstrip("/")
 
 
 def dsn():
-    return db.default_dsn()
+    return psql.default_dsn()
 
 
 def remote(path, query=None, payload=None):

@@ -8,10 +8,10 @@
 #   inference   INFERENCE ENGINE: wait for the database, serve on 8019
 #   ui          UI LAYER: wait for the database, serve the board on 8017
 #   refresh     DATA LAYER's clock: wait for the database, then refresh it
-#               daily (data/refresh.py)
+#               daily (db/refresh.py)
 #
 # Anything else is run as a command in the image:
-#   docker compose run data python -m data.mcp call sync_all
+#   docker compose run data python -m db.mcp call sync_all
 #   docker compose run data pytest -q
 set -e
 role="${1:-ui}"
@@ -23,7 +23,7 @@ esac
 db_state() {
     python - <<'END'
 import os, sys, time, psycopg
-from data.db import schema
+from db.psql import schema
 for _ in range(60):
     try:
         cx = psycopg.connect(os.environ["DATABASE_URL"])
@@ -49,15 +49,15 @@ case "$role" in
         case "$state" in
             empty|unfilled)
                 echo "data: $state database - running the first build (scrapes the sources once)"
-                python -m data.mcp call db_rebuild ;;
+                python -m db.mcp call db_rebuild ;;
             stale*)
                 echo "data: schema behind the migrations ($state) - rebuilding from the caches;"
-                echo "data: recorded comps come back from the data/raw mirror"
-                python -m data.mcp call db_rebuild ;;
+                echo "data: recorded comps come back from the db/raw mirror"
+                python -m db.mcp call db_rebuild ;;
             *)
                 echo "data: database current" ;;
         esac
-        exec python -m data.mcp --http 0.0.0.0:8020 data ;;
+        exec python -m db.mcp --http 0.0.0.0:8020 data ;;
     inference|ui|refresh)
         until [ "$(db_state)" = "current" ]; do
             echo "$role: waiting for the data layer to build the database"
@@ -65,7 +65,7 @@ case "$role" in
         done
         case "$role" in
             inference) exec python -m inference.serve --host 0.0.0.0 --port 8019 ;;
-            refresh)   exec python -m data.refresh ;;
+            refresh)   exec python -m db.refresh ;;
             *)         exec python -m ui.board --host 0.0.0.0 --port 8017 ;;
         esac ;;
 esac

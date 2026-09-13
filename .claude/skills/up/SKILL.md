@@ -29,7 +29,7 @@ take seconds. Then:
    container refreshes daily on its own and on start when the caches are a
    day old, so this is rarely needed.
 4. Never run `docker compose down -v`: that deletes the database volume
-   (recorded comps and outcomes come back from the data/raw mirror, but
+   (recorded comps and outcomes come back from the db/raw mirror, but
    the rebuild costs a scrape).
 
 `python stack.py status` answers "is it up?" without touching anything;

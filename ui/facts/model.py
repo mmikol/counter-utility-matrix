@@ -10,7 +10,7 @@ import re
 import statistics
 from collections import defaultdict
 
-from data.names import name_key
+from db.data.names import name_key
 
 ROLES = ("tank", "damage", "support")
 

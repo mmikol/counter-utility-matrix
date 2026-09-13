@@ -1,6 +1,6 @@
 # Data dictionary
 
-Generated from the live schema (`python -m data.mcp call db_docs`).
+Generated from the live schema (`python -m db.mcp call db_docs`).
 
 Every table carries two columns omitted from the lists below, because they
 are on all of them: `source_id` (which source the row came from, see
@@ -80,7 +80,7 @@ One row per measurement, not per stat. A wiki value like "0.67 shots/s (max char
 
 *PLAYBOOK · 9 rows · `005_playbook.sql`*
 
-What a composition IS, by archetype: the role shape a playstyle wants. playstyle tags heroes; this defines the comp those heroes assemble into - dive wants one engage tank, two flankers who arrive with him, two mobile supports. Authored in data/authored/archetypes.csv; the style vocabulary follows the playstyle table by convention. slots describe the standard 1-2-2 shape; Open Queue may flex them, and note says with whom.
+What a composition IS, by archetype: the role shape a playstyle wants. playstyle tags heroes; this defines the comp those heroes assemble into - dive wants one engage tank, two flankers who arrive with him, two mobile supports. Authored in db/data/authored/archetypes.csv; the style vocabulary follows the playstyle table by convention. slots describe the standard 1-2-2 shape; Open Queue may flex them, and note says with whom.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -192,7 +192,7 @@ One row per playable combination: this table is the set of matches that can actu
 
 *PLAYBOOK · 20 rows · `005_playbook.sql`*
 
-Which playstyle suits which map: the bridge between MAPS and the playbook. map_strategy picks heroes for a map; this says what KIND of fight the map rewards, which is what a comp is built around. Authored in data/authored/map_playstyle.csv, same score scale as synergies.
+Which playstyle suits which map: the bridge between MAPS and the playbook. map_strategy picks heroes for a map; this says what KIND of fight the map rewards, which is what a comp is built around. Authored in db/data/authored/map_playstyle.csv, same score scale as synergies.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -424,7 +424,7 @@ The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a 
 
 *META · 20 rows · `004_meta.sql`*
 
-The game versions the meta moves with. A win rate is true of a patch, so a snapshot records which patch was live when it was captured - that is what makes an accumulated series interpretable ("these rates predate the nerf"). Scraped from the wiki's Patches cargo table; name is the wiki's own page name, since Blizzard ships most balance patches unversioned. Seasons: the coarser delineator. A patch tweaks numbers; a season swaps the hero pool and map rotation, so a snapshot records both. Authored in data/authored/seasons.csv rather than scraped: the wiki's season pages are lore articles, and its current-era page carries no dates at all.
+The game versions the meta moves with. A win rate is true of a patch, so a snapshot records which patch was live when it was captured - that is what makes an accumulated series interpretable ("these rates predate the nerf"). Scraped from the wiki's Patches cargo table; name is the wiki's own page name, since Blizzard ships most balance patches unversioned. Seasons: the coarser delineator. A patch tweaks numbers; a season swaps the hero pool and map rotation, so a snapshot records both. Authored in db/data/authored/seasons.csv rather than scraped: the wiki's season pages are lore articles, and its current-era page carries no dates at all.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -494,7 +494,7 @@ The ten subroles, each belonging to exactly one role, each carrying the passive 
 
 *PLAYBOOK · 41 rows · `005_playbook.sql`*
 
-Which heroes work WITH which. Proprietary, not scraped: hand-authored in data/authored/synergies.csv. No snapshot, region or tier, because an authored judgement has no population behind it. Bidirectional, unlike counters. Synergy is a property of the PAIR: if Mei works with Tracer then Tracer works with Mei - one fact, one row. A counter is an arrow: Mei answering Tracer says nothing about the reverse. So this table stores each pair once, in canonical order (lower hero_id first, enforced below), and a query reads it from either side. score is whatever scale the author keeps consistently; note carries the reasoning, which is the part a model actually wants.
+Which heroes work WITH which. Proprietary, not scraped: hand-authored in db/data/authored/synergies.csv. No snapshot, region or tier, because an authored judgement has no population behind it. Bidirectional, unlike counters. Synergy is a property of the PAIR: if Mei works with Tracer then Tracer works with Mei - one fact, one row. A counter is an arrow: Mei answering Tracer says nothing about the reverse. So this table stores each pair once, in canonical order (lower hero_id first, enforced below), and a query reads it from either side. score is whatever scale the author keeps consistently; note carries the reasoning, which is the part a model actually wants.
 
 | column | type | null | references |
 | --- | --- | --- | --- |

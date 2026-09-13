@@ -10,7 +10,7 @@ cooldown is a cooldown in every region, on every platform, at every rank.
 and the migrations ledger makes the Docker entrypoint do the same the moment
 the files change. So adding a dimension is never a data migration — there is
 no data to migrate. It is an edit to `004_meta.sql`, an edit to `pull_rates`,
-and a refetch (recorded comps come back from the `data/raw` mirror).
+and a refetch (recorded comps come back from the `db/raw` mirror).
 
 That means the schema is *not* the constraint on any of this. The constraint is
 the request count, and it is multiplicative.

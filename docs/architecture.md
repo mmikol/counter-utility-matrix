@@ -13,7 +13,7 @@ flowchart LR
         CSV["authored files<br/>synergies, archetypes,<br/>map styles, seasons, notes"]
     end
 
-    subgraph DATA["DATA LAYER - data/mcp/ (an MCP server)"]
+    subgraph DATA["DATA LAYER - db/mcp/ (an MCP server)"]
         PULL["pull_* tools<br/>fetch (cached) -> clean -> store"]
         PLAY["load_authored<br/>the authored inputs +<br/>the strategies mirror"]
         DBT["db_* · query · export_csv"]
@@ -141,14 +141,14 @@ stateDiagram-v2
     Populated --> Empty: db_rebuild<br/>drop everything...
     note right of Populated
         ...but recorded recommendations
-        are restored from the data/raw
+        are restored from the db/raw
         mirror after every rebuild -
         the one thing no tool can
         re-fetch is never discarded.
     end note
 ```
 
-`python -m data.mcp call <tool>` runs the same tools without a session;
+`python -m db.mcp call <tool>` runs the same tools without a session;
 Docker's `data` container runs `rebuild` on an empty or stale database and
 the `refresher` container refreshes once a day (and on start when the
 cached pages are older than a day): the daily refresh refetches the rates
@@ -168,8 +168,8 @@ row gets there - and therefore what a rebuild can and cannot recover.
 flowchart TD
     Q{"Can a pull tool<br/>re-fetch it?"}
     Q -->|"yes"| F["pulled<br/>blizzard · wiki · counterpick<br/>one package per source: page -> table"]
-    Q -->|"no - we wrote it"| A["authored<br/>data/authored/: synergies, archetypes,<br/>map playstyles, seasons, notes<br/>+ inference/strategies/*.md (the brain)"]
-    Q -->|"no - the inference<br/>layer decided it"| R["recorded<br/>recommendations + transcripts,<br/>mirrored to data/raw, restored<br/>after every rebuild"]
+    Q -->|"no - we wrote it"| A["authored<br/>db/data/authored/: synergies, archetypes,<br/>map playstyles, seasons, notes<br/>+ inference/strategies/*.md (the brain)"]
+    Q -->|"no - the inference<br/>layer decided it"| R["recorded<br/>recommendations + transcripts,<br/>mirrored to db/raw, restored<br/>after every rebuild"]
 ```
 
 ## Deployment: one container per layer
@@ -201,11 +201,11 @@ flowchart LR
 `docker-entrypoint.sh` takes the role as its argument (`data`,
 `inference`, `ui`); `inference` and `ui` wait until the data layer reports
 the database current, and compose's healthchecks order the start the same
-way. Bind mounts keep the page caches, `data/raw`, `data/authored` and
+way. Bind mounts keep the page caches, `db/raw`, `db/data/authored` and
 `inference/strategies/` on the host, so tuning a strategy or authoring a
 synergy needs no image rebuild.
 
 Local-only works identically: without `DATABASE_URL`, everything runs in
-one process against the embedded pgserver cluster at `data/db/cluster` - the
+one process against the embedded pgserver cluster at `db/psql/cluster` - the
 MCP server over stdio, the board with the engine in-process - same tools,
 same facts, same strategies.

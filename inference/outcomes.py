@@ -12,8 +12,8 @@ tool commits and re-exports the mirror; a test rolls back).
 """
 
 
-from data import db
-from data.authored import AUTHORED
+from db import psql
+from db.data.authored import AUTHORED
 from ui.facts import model
 from ui.facts.compute import TEAM_SIZE
 
@@ -38,7 +38,7 @@ def record_outcome(cx, result, map_name=None, side="", blue=(), red=(), bans=(),
     if rec_id is not None and not cursor.execute(
             "select 1 from recommendations where rec_id = %s", (rec_id,)).fetchone():
         raise ValueError("no recommendation #%s to link" % rec_id)
-    source_id = db.register_source(cursor, AUTHORED, db.now())
+    source_id = psql.register_source(cursor, AUTHORED, psql.now())
     cursor.execute(
         "insert into outcomes (rec_id, map_id, side, result, note, source_id)"
         " values (%s, %s, %s, %s, %s, %s) returning outcome_id",
@@ -55,9 +55,9 @@ def record_outcome(cx, result, map_name=None, side="", blue=(), red=(), bans=(),
 
 def commit_and_mirror(cx):
     """What every real recording does after the gates: commit, then keep
-    the data/raw mirror (the rebuild's backup) in step."""
+    the db/raw mirror (the rebuild's backup) in step."""
     cx.commit()
-    db.export(cx)
+    psql.export(cx)
 
 
 def summary(cx):

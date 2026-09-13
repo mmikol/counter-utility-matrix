@@ -71,15 +71,15 @@ the authored playbook - a few polite minutes; page caches land in
 `.cache-*/` so later builds cost almost no requests); `inference` and `ui`
 wait for it, and `docker compose ps` shows all four healthy. A schema
 change rebuilds automatically (the migrations ledger), with recorded comps
-restored from the `data/raw` mirror. Edits to `inference/strategies/`,
-`data/authored/` and the caches are bind-mounted, so they apply without
+restored from the `db/raw` mirror. Edits to `inference/strategies/`,
+`db/data/authored/` and the caches are bind-mounted, so they apply without
 a rebuild. Upgrading an install that predates the per-layer stack: add
 `--remove-orphans` once to retire the old single `app` container. Other
 things to run in the same image:
 
 ```bash
-docker compose run data python -m data.mcp call sync_all       # refresh the data
-docker compose run data python -m data.mcp call infer '{"map": "King'"'"'s Row", "red": ["Zarya"]}'
+docker compose run data python -m db.mcp call sync_all       # refresh the data
+docker compose run data python -m db.mcp call infer '{"map": "King'"'"'s Row", "red": ["Zarya"]}'
 docker compose run data pytest -q
 docker compose logs -f data                               # watch a build
 docker compose down
@@ -92,7 +92,7 @@ macOS and Linux x86_64):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m data.mcp call db_rebuild      # build the database
+.venv/bin/python -m db.mcp call db_rebuild      # build the database
 .venv/bin/python -m ui.board                       # the board, http://localhost:8017
 .venv/bin/python -m pytest -q                # the test suite
 ```
@@ -103,7 +103,7 @@ The `refresher` container refreshes the database once a day, so the board
 is ready when a game starts. The daily refresh refetches what moves day to
 day - the rates (a new dated snapshot, the series the trend facts
 difference) and counterpick's counters - then re-mirrors the authored
-playbook and the strategies and re-exports `data/raw`. Once a week (when
+playbook and the strategies and re-exports `db/raw`. Once a week (when
 the wiki cache is older than `OVERWATCH_DB_REFRESH_FULL_DAYS`) it refetches
 every page of every source, hero pages and articles included. It also
 refreshes right away on start when the cached pages are older than a day. A page that fails to fetch keeps its cached copy, so a flaky source
@@ -120,14 +120,14 @@ Set them in the environment or a `.env` file next to `compose.yaml`. The
 same refresh from a shell, against whichever database `DATABASE_URL` names:
 
 ```bash
-.venv/bin/python -m data.refresh --now        # once, now (daily set; --full for everything)
-.venv/bin/python -m data.refresh              # the daily loop
-.venv/bin/python -m data.mcp call sync_all '{"refresh": true}'
+.venv/bin/python -m db.refresh --now        # once, now (daily set; --full for everything)
+.venv/bin/python -m db.refresh              # the daily loop
+.venv/bin/python -m db.mcp call sync_all '{"refresh": true}'
 ```
 
 ## The data layer: an MCP server
 
-`data/mcp/` is a [Model Context Protocol](https://modelcontextprotocol.io) server
+`db/mcp/` is a [Model Context Protocol](https://modelcontextprotocol.io) server
 (dependency-free) that exposes the pulling, cleaning and storing of every
 source as tools, over stdio for a local build and over Streamable HTTP
 from the `data` container. Open the repo in a Claude Code session and
@@ -151,12 +151,12 @@ step (Docker's entrypoint and the refresher call them the same way):
 
 | command | does |
 | --- | --- |
-| `python -m data.mcp list` | the tools |
-| `python -m data.mcp call db_rebuild` | clean slate: schema + every tool + restore recorded comps |
-| `python -m data.mcp call sync_all` | update: entities refresh in place, rates append a snapshot; `'{"refresh": true}'` discards the page cache first |
-| `python -m data.mcp call pull_rates` | one tool |
-| `python -m data.mcp call db_init` / `db_migrate` | schema on an empty database / pending migrations in place |
-| `python -m data.mcp call export_csv` / `db_docs` | refresh `data/raw/*.csv` / regenerate the generated docs |
+| `python -m db.mcp list` | the tools |
+| `python -m db.mcp call db_rebuild` | clean slate: schema + every tool + restore recorded comps |
+| `python -m db.mcp call sync_all` | update: entities refresh in place, rates append a snapshot; `'{"refresh": true}'` discards the page cache first |
+| `python -m db.mcp call pull_rates` | one tool |
+| `python -m db.mcp call db_init` / `db_migrate` | schema on an empty database / pending migrations in place |
+| `python -m db.mcp call export_csv` / `db_docs` | refresh `db/raw/*.csv` / regenerate the generated docs |
 
 ## The UI layer: the board
 
@@ -222,7 +222,7 @@ three skills that drive them from a session):
 
 | tool / skill | does |
 | --- | --- |
-| `record_outcome` · `/outcome` | records how a match went - result, map and side, both sixes, bans, the recommendation played. Outcomes are facts on the board (per hero, per map), mirrored to `data/raw`, restored after every rebuild. |
+| `record_outcome` · `/outcome` | records how a match went - result, map and side, both sixes, bans, the recommendation played. Outcomes are facts on the board (per hero, per map), mirrored to `db/raw`, restored after every rebuild. |
 | `tune` · `/tune` | changes one strategy's weight, a `params` dial or an expression - validated through the catalog before the file is written, re-mirrored, logged with the reason in [inference/strategies/tuning-log.md](inference/strategies/tuning-log.md). |
 | `fit_weights` · `/tune` | scores every decided outcome's blue six on the solver's own scale and asks which heuristics ran higher in wins than losses: a mean difference from ten decided matches, a ridge logistic regression demeaned within each map from fifty; proposes a bounded nudge per weight (dry run), applies it through `tune` on request. |
 | `tuning_log` | the audit trail: every change, when, what, why, by whom. |
@@ -258,21 +258,19 @@ the same database the board shows; for shell commands, prefix
 The tree is the three layers:
 
 ```
-data/                DATA LAYER - pulls, cleans, stores; owns the schema
+db/                  DATA LAYER - pulls, cleans, stores; owns the schema
   mcp/               the MCP server: server.py (stdio + HTTP), tools.py (the tools)
   refresh.py         the daily refresh (the `refresher` container)
-  blizzard/          one package per source, page to table: heroes.py, meta.py
-  wiki/              heroes.py, maps.py, patches.py, playstyles.py, and the
-                     markup, measurements, weapons, modifiers and names readers
-  counterpick/       heroes.py, names.py
-  fetch.py           the page cache and its freshness policy
-  names.py           matching hero, map and ability names across sources
-  authored/          the inputs we write: CSVs and their loader, recorded transcripts
-  db/                where the database is and the helpers every writer needs;
+  data/              the sources, page to table: blizzard/ (heroes, meta),
+                     wiki/ (heroes, maps, patches, playstyles, and the markup,
+                     measurements, weapons, modifiers readers), counterpick/
+                     (heroes), authored/ (the CSVs we write and their loader,
+                     recorded transcripts), fetch.py (the page cache), names.py
+  psql/              where the database is and the helpers every writer needs;
                      migrations/ (001 sources · 002 heroes · 003 maps · 004 meta ·
                      005 playbook · 006 inference · 007 three layers · 008 the
-                     ledger · 009 outcomes · 010 constraints and heuristics), schema.py,
-                     cluster/ (gitignored)
+                     ledger · 009 outcomes · 010 constraints and heuristics),
+                     schema.py, cluster/ (gitignored)
   raw/               one CSV per table plus EXPORT.json naming the database
                      they came from (exported, gitignored)
 ui/                  UI LAYER - every click becomes facts
@@ -293,7 +291,7 @@ inference/           INFERENCE LAYER - facts in, the optimal six out
   fit.py             heuristic weights nudged toward what separated wins from losses
   strategies/tuning-log.md   the audit trail of every change (beside the files, so a
                      tune through a container lands on the host)
-tests/               mirrored: tests/data · tests/ui · tests/inference
+tests/               mirrored: tests/db · tests/ui · tests/inference
 stack.py             up · status · refresh · test · down (the `/up` skill)
 compose.yaml         one container per layer: db · data · inference · ui · refresher
 Dockerfile           one image for all of them; docker-entrypoint.sh picks the role
@@ -306,7 +304,7 @@ docs/                architecture.md · strategies.md · erd.md · data-dictiona
 - [docs/strategies.md](docs/strategies.md) - the catalog, how scoring works, and every metric a strategy may reference (generated)
 - [docs/erd.md](docs/erd.md) · [docs/data-dictionary.md](docs/data-dictionary.md) - the schema (generated)
 - [docs/scaling.md](docs/scaling.md) - how region/rank/platform/stage granularity widens
-- [data/authored/README.md](data/authored/README.md) - the authored inputs
+- [db/data/authored/README.md](db/data/authored/README.md) - the authored inputs
 
 ## Scope, honestly
 

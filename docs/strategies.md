@@ -7,7 +7,7 @@ solver reads the files live, and `load_authored` mirrors them into the
 `strategies` table so a recommendation can cite the ids it was scored
 under. Tuning is editing a file (the compose stack bind-mounts the
 directory, so the `inference` container picks edits up live). This
-page is generated: `python -m data.mcp call db_docs`. Every change to a
+page is generated: `python -m db.mcp call db_docs`. Every change to a
 file goes through the `tune` tool (or a `fit_weights` nudge) and is logged
 in [tuning-log.md](../inference/strategies/tuning-log.md).
 
@@ -384,7 +384,7 @@ supports who together heal little); this heuristic rewards the slope.
 `maximize team.synergy_score` - summed synergy scores among the picks. weight 2.5
 
 The summed scores of authored synergy pairs among the six, from
-`data/authored/synergies.csv`. Every pair carries the author's
+`db/data/authored/synergies.csv`. Every pair carries the author's
 reasoning, so a high score is not a vibe - it is a stack of documented
 interactions: nano on the dive tank, speed on the brawl core, pocket on
 the flier.

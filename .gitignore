@@ -222,7 +222,7 @@ __marimo__/
 .cache-wiki/
 .cache-counterpick/
 pgdata/
-/data/db/cluster/
+/db/psql/cluster/
 
 # OS generated files
 .DS_Store
@@ -234,8 +234,8 @@ ehthumbs.db
 Thumbs.db
 
 # CSV Folders/Files
-data/raw/
+db/raw/
 *.csv
 # ...except the authored inputs: they cannot be re-fetched, so the
 # repo is their home and their backup.
-!data/authored/*.csv
+!db/data/authored/*.csv

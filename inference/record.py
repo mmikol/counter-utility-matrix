@@ -18,8 +18,9 @@ import re
 from datetime import datetime, timezone
 
 
-from data import AUTHORED_DIR, db
-from data.authored import AUTHORED
+from db import AUTHORED_DIR
+from db import psql
+from db.data.authored import AUTHORED
 from ui.facts import engine as facts_engine
 from ui.facts import model
 from ui.facts.compute import TEAM_SIZE
@@ -46,8 +47,8 @@ def persist(cx, question, answer, fs, map_id, prompt, model_name, raw_json):
     """Store the exchange; returns rec_id. Raises on citations of nothing.
     Does not commit - the caller owns the transaction."""
     cursor = cx.cursor()
-    source_id = db.register_source(cursor, AUTHORED, db.now())
-    hero_ids = db.lookup_ids(cursor, "heroes", "name", "hero_id")
+    source_id = psql.register_source(cursor, AUTHORED, psql.now())
+    hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
     by_tag = {f.id: f for f in fs.facts}
     unknown_heroes = [p["hero"] for p in answer["picks"]
                       if p["hero"].lower() not in hero_ids]
@@ -121,7 +122,7 @@ def record(cx, question, answer, map_name=None, red=(), blue=(),
                      "facts rebuilt at record time:\n\n" + fs.rendered(),
                      model_name, json.dumps(answer))
     cx.commit()
-    db.export(cx)
+    psql.export(cx)
     path = transcript(rec_id, question, map_name, list(red), list(blue), answer,
                       fs, model_name, list(bans), side)
     return rec_id, path

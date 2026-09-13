@@ -59,7 +59,7 @@ def test_outcome_gates(db):
 
 
 def test_outcomes_restore_with_the_recommendations(db, tmp_path, monkeypatch):
-    from data.db import schema
+    from db.psql import schema
     monkeypatch.setattr(db, "commit", lambda: None)    # restore commits by design; not here
     raw = str(tmp_path / "raw")
     outcomes.record_outcome(db, "loss", None, "", SIX, RED)

@@ -29,7 +29,7 @@ connected; they expose the same tools.
    each pick with its reasons and the fact ids (F#) that justify it, the
    score breakdown per strategy, and alternatives.
    If the tools are unavailable, the shell equivalent is
-   `.venv/bin/python -m data.mcp call infer '{"map": "King's Row", "red": ["Zarya"]}'`
+   `.venv/bin/python -m db.mcp call infer '{"map": "King's Row", "red": ["Zarya"]}'`
    (prefix `./docker-db` to read the Docker database).
 3. Read the `facts` tool for the same board when you want the evidence
    behind a number (`{"map": ..., "red": [...], "blue": [<the six>]}`) -

@@ -3,7 +3,7 @@
 #   db          PostgreSQL (the database)
 #   data        DATA LAYER: builds the database when empty or stale (rebuilds
 #               from the bind-mounted page caches; recorded comps come back
-#               from the data/raw mirror), then serves the MCP server over
+#               from the db/raw mirror), then serves the MCP server over
 #               HTTP at http://localhost:8020/mcp - the door a Claude Code
 #               session opens (.mcp.json, server "overwatch-db-docker")
 #   inference   INFERENCE ENGINE: http://localhost:8019 (infer, evaluate,
@@ -30,8 +30,8 @@ x-app: &app
     - ./.cache-blizzard:/app/.cache-blizzard
     - ./.cache-wiki:/app/.cache-wiki
     - ./.cache-counterpick:/app/.cache-counterpick
-    - ./data/raw:/app/data/raw
-    - ./data/authored:/app/data/authored
+    - ./db/raw:/app/db/raw
+    - ./db/data/authored:/app/db/data/authored
     - ./inference/strategies:/app/inference/strategies
 
 services:

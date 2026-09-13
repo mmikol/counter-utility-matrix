@@ -20,6 +20,6 @@ Record the match through the `record_outcome` tool on the `overwatch-db`
 3. Report the running tally the tool returns (wins-losses-draws), and
    once it reaches ten decided matches, offer `/tune` to fit the weights.
 
-Outcomes are mirrored to data/raw with the recorded comps and restored
+Outcomes are mirrored to db/raw with the recorded comps and restored
 after every rebuild; they show up as facts on the board (per hero and per
 map) and in the `facts` tool.
