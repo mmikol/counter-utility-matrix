@@ -240,6 +240,7 @@ def main():
         rec_id = persist(cx, args.ask, answer, ev, ctx["map_id"], prompt,
                          served_by, json.dumps(answer))
         cx.commit()
+        pipeline.export_raw(cx, args, ("recommendations", "recommendation_picks", "recommendation_evidence"))
         path = transcript(rec_id, args.ask, args.map_name, args.enemy,
                           answer, ev, served_by)
         if served_by != args.model:

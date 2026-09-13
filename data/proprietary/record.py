@@ -41,6 +41,9 @@ def main():
                          " time:\n\n" + ev.rendered(),
                          model, json.dumps(payload["answer"]))
         cx.commit()
+        # a stored recommendation is rows like any other - the CSV mirror
+        # must follow, or export parity is silently broken
+        pipeline.export_raw(cx, args, ("recommendations", "recommendation_picks", "recommendation_evidence"))
     path = transcript(rec_id, question, map_name, enemies,
                       payload["answer"], ev, model)
     print("recorded as recommendation %d; transcript: %s" % (rec_id, path))
