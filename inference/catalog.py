@@ -19,9 +19,9 @@ Kinds:
     constraint  `require: <expr>` must hold. Hard by default - a comp that
                 fails is discarded; `soft: true` with `penalty: <number>`
                 subtracts instead.
-    goal        `metric` (a numeric fact key) is min-max normalised across
-                the candidates and weighted; `direction` says which end is
-                good.
+    goal        `metric` (a numeric fact key) is min-max normalised against
+                a seeded reference sample of legal sixes for the board and
+                weighted; `direction` says which end is good.
     strategy    prose the /comp skill reads and the board shows; when it
                 also carries `bonus: <expr>` and/or `penalty: <expr>`, the
                 solver adds `weight x (bonus - penalty)` while `when` holds.
@@ -35,7 +35,7 @@ import re
 
 from data.common import ROOT
 from user.facts import compute
-from inference.expr import ExprError, compile_expr
+from inference.expr import ExprError, Section, compile_expr
 
 HEURISTICS_DIR = os.path.join(ROOT, "inference", "heuristics")
 DOCS_PATH = os.path.join(ROOT, "docs", "heuristics.md")
@@ -123,6 +123,7 @@ class Heuristic:
         self.weight = float(meta.get("weight", 1.0) or 0.0)
         self.soft = bool(meta.get("soft", False))
         self.params = {k: v for k, v in (meta.get("params") or {}).items()}
+        self.params_section = Section(self.params)
         try:
             self.when = compile_expr(str(meta["when"])) if "when" in meta else None
             self.require = compile_expr(str(meta["require"])) if "require" in meta else None
@@ -263,15 +264,19 @@ def write_docs(catalog, path=DOCS_PATH):
            "file goes through the `tune` tool (or a `fit_weights` nudge) and is logged",
            "in [tuning-log.md](../inference/heuristics/tuning-log.md).", "",
            "## How a composition is scored", "",
-           "```", "COMP = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
+           "```", "FACTS      = HEROES ∪ MAPS ∪ META",
+           "STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY",
+           "COMP       = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
            "For a board (map, red picks, locked blue picks) the solver enumerates",
            "candidate sixes around the locked picks, computes every team, enemy and",
            "matchup metric for each (the same functions the board renders as facts),",
            "then:", "",
            "- **constraints** discard a candidate whose `require` fails (soft ones",
            "  subtract their `penalty` instead);",
-           "- **goals** min-max normalise their `metric` across the surviving",
-           "  candidates to [0, 1] (flipped for `minimize`) and add `weight x norm`;",
+           "- **goals** min-max normalise their `metric` to [0, 1] against a seeded",
+           "  reference sample of random legal sixes for the board (flipped for",
+           "  `minimize`) and add `weight x norm` - one scale per board, so infer,",
+           "  evaluate and the current comp agree;",
            "- **strategies** are prose the session reads and the board shows; one",
            "  that also carries `bonus`/`penalty` adds `weight x (bonus - penalty)`",
            "  while its `when` holds.", "",

@@ -136,3 +136,26 @@ def test_the_loop_refreshes_stale_data_on_start_then_waits(monkeypatch):
     with pytest.raises(KeyboardInterrupt):
         refresh.run_forever(None, "05:00", 20, log=lambda m: None, sleep=sleep)
     assert runs == [1, 1] and all(0 < w <= 24 * 3600 for w in waits)
+
+
+def test_full_refresh_is_due_when_the_slow_caches_are_stale(tmp_path):
+    assert refresh.full_due(7, [str(tmp_path / "none")]) is True        # nothing cached
+    _old_file(tmp_path / "Ana.wikitext", "x", hours=24 * 3)
+    assert refresh.full_due(7, [str(tmp_path)]) is False
+    _old_file(tmp_path / "Ana.wikitext", "x", hours=24 * 8)
+    assert refresh.full_due(7, [str(tmp_path)]) is True
+
+
+def test_daily_refresh_touches_only_what_moves(monkeypatch):
+    from data.mcp import tools
+    calls = []
+    monkeypatch.setattr(tools, "run_tool", lambda ctx, name, **kw: calls.append(
+        (name, kw.get("refresh"))) or ("%s: ok" % name, {}))
+    ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"),
+                                 lambda m: None, full=False)
+    assert ok and calls == [("pull_rates", True), ("pull_counters", True),
+                            ("load_playbook", None), ("export_csv", None)]
+    calls.clear()
+    ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"),
+                                 lambda m: None, full=True)
+    assert ok and calls == [("sync_all", True)]

@@ -2,19 +2,26 @@
 
     enumerate  every shape the hard constraints allow, filled around the
                locked picks from a per-role pool ranked by a cheap prior
-               (six per role by default: about a second for a live click;
-               eight is five times the field for a few points more)
+               (six per role by default)
     score      constraints prune, goals normalise and weigh, scored
-               strategies add
+               strategies add. Goals are normalised against a REFERENCE:
+               a seeded sample of random legal sixes for this board (map,
+               side, enemies, bans), so infer, evaluate and the current
+               comp share one scale and a score means the same thing
+               across calls.
     refine     local search from the best few: swap any slot for any
                same-role hero on the roster, keep improvements
 """
 
 import itertools
+import random
 
 from user.facts import compute
 from user.facts.compute import TEAM_SIZE
-from inference.expr import lookup
+from inference.expr import scope
+
+REFERENCE_SIZE = 1200
+REFERENCE_SEED = 20260913
 
 SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size",
               "team.open_slots"}
@@ -22,13 +29,14 @@ ROLE_KEY = {"tank": "tanks", "damage": "damage", "support": "supports"}
 
 
 class Candidate:
-    __slots__ = ("heroes", "key", "ns", "score", "contributions", "violations",
-                 "raw")
+    __slots__ = ("heroes", "key", "ns", "scope", "score", "contributions",
+                 "violations", "raw")
 
     def __init__(self, heroes):
         self.heroes = tuple(heroes)
         self.key = frozenset(h.id for h in heroes)
         self.ns = None
+        self.scope = None
         self.score = 0.0
         self.contributions = []
         self.violations = []
@@ -50,6 +58,7 @@ class Solver:
         self.constraints = [h for h in catalog if h.kind == "constraint"]
         self.goals = [h for h in catalog if h.kind == "goal"]
         self.strategies = [h for h in catalog if h.kind == "strategy" and h.scored]
+        self.goal_keys = {g.id: tuple(g.metric.split(".", 1)) for g in self.goals}
         # the red side's metrics do not change across candidates
         self.red_t = compute.team_metrics(world, self.red, m, ())
         self.static = {"enemy": self.red_t, "map": compute.map_metrics(m, side),
@@ -59,33 +68,76 @@ class Solver:
 
     # --- namespace and scoring -----------------------------------------------
 
-    def namespace(self, heroes):
-        team = compute.team_metrics(self.world, heroes, self.m, self.red)
+    def namespace(self, heroes, lean=True):
+        team = compute.team_metrics(self.world, heroes, self.m, self.red, lean=lean)
         ns = dict(self.static)
         ns["team"] = team
         ns["matchup"] = compute.matchup_metrics(team, self.red_t)
         return ns
 
     @staticmethod
-    def _holds(h, ns):
+    def _holds(h, sc):
+        """`when` on a Scope whose params slot is already h's."""
         if h.when is None:
             return True
-        return bool(h.when.eval(dict(ns, params=h.params)))
+        return bool(h.when.eval(sc))
 
     def prepare(self, cand):
         """Namespace, hard-constraint check, raw goal values."""
         cand.ns = self.namespace(cand.heroes)
+        cand.scope = scope(cand.ns)
+        sc = cand.scope
         cand.violations = []
         for h in self.constraints:
-            ns = dict(cand.ns, params=h.params)
-            if self._holds(h, ns) and not bool(h.require.eval(ns)) and not h.soft:
+            sc["params"] = h.params_section
+            if self._holds(h, sc) and not bool(h.require.eval(sc)) and not h.soft:
                 cand.violations.append(h.id)
-        cand.raw = {g.id: (float(lookup(cand.ns, g.metric) or 0)
-                           if self._holds(g, cand.ns) else None)
-                    for g in self.goals}
+        raw = {}
+        for g in self.goals:
+            sc["params"] = g.params_section
+            if self._holds(g, sc):
+                section, key = self.goal_keys[g.id]
+                value = cand.ns.get(section, {}).get(key)
+                raw[g.id] = float(value or 0)
+            else:
+                raw[g.id] = None
+        cand.raw = raw
         return cand
 
-    def freeze_bounds(self, candidates):
+    # --- the reference: one scale per board -------------------------------------
+
+    def reference(self, size=REFERENCE_SIZE):
+        """A seeded sample of random legal sixes for this board, prepared:
+        what every goal is normalised against. Deterministic for a given
+        map, side, enemies and bans, and independent of the locked picks
+        and the pool, so every call on one board shares a scale."""
+        if getattr(self, "_reference", None) is not None:
+            return self._reference
+        rng = random.Random("%d|%s|%s|%s|%s" % (        # a str seed is stable across processes
+            REFERENCE_SEED, self.m.id if self.m else 0, self.side,
+            ",".join(str(i) for i in sorted(h.id for h in self.red)),
+            ",".join(str(i) for i in sorted(self.banned))))
+        by_role = {r: [h for h in self.world.heroes.values()
+                       if h.role == r and h.id not in self.banned] for r in ROLE_KEY}
+        shapes = self._shapes(locked_counts={r: 0 for r in ROLE_KEY})
+        out, seen = [], set()
+        if shapes:
+            while len(out) < size:
+                t, d, s = rng.choice(shapes)
+                heroes = (rng.sample(by_role["tank"], t) + rng.sample(by_role["damage"], d)
+                          + rng.sample(by_role["support"], s))
+                cand = Candidate(heroes)
+                if cand.key in seen:
+                    continue
+                seen.add(cand.key)
+                out.append(self.prepare(cand))
+        self._reference = [c for c in out if not c.violations]
+        return self._reference
+
+    def freeze_bounds(self, candidates=None):
+        """Bounds per goal from the reference sample (default) or from an
+        explicit list of prepared candidates."""
+        candidates = self.reference() if candidates is None else candidates
         for g in self.goals:
             values = [c.raw[g.id] for c in candidates if c.raw.get(g.id) is not None]
             self.bounds[g.id] = (min(values), max(values)) if values else (0.0, 0.0)
@@ -93,11 +145,12 @@ class Solver:
     def score(self, cand):
         """Score with the frozen bounds; fills contributions."""
         total, contributions = 0.0, []
+        sc = cand.scope
         for h in self.constraints:
-            ns = dict(cand.ns, params=h.params)
-            applies = self._holds(h, ns)
-            ok = bool(h.require.eval(ns)) if applies else True
-            penalty = float(h.penalty.eval(ns)) if (h.soft and applies and not ok) else 0.0
+            sc["params"] = h.params_section
+            applies = self._holds(h, sc)
+            ok = bool(h.require.eval(sc)) if applies else True
+            penalty = float(h.penalty.eval(sc)) if (h.soft and applies and not ok) else 0.0
             total -= penalty
             contributions.append({"id": h.id, "kind": h.kind, "applies": applies,
                                   "ok": ok, "weighted": -penalty,
@@ -123,10 +176,10 @@ class Solver:
                                   "raw": raw, "norm": norm, "weighted": weighted,
                                   "metric": g.metric, "spread": hi > lo})
         for r in self.strategies:
-            ns = dict(cand.ns, params=r.params)
-            applies = self._holds(r, ns)
-            bonus = float(r.bonus.eval(ns)) if (applies and r.bonus is not None) else 0.0
-            penalty = float(r.penalty.eval(ns)) if (applies and r.penalty is not None) else 0.0
+            sc["params"] = r.params_section
+            applies = self._holds(r, sc)
+            bonus = float(r.bonus.eval(sc)) if (applies and r.bonus is not None) else 0.0
+            penalty = float(r.penalty.eval(sc)) if (applies and r.penalty is not None) else 0.0
             weighted = r.weight * (bonus - penalty)
             total += weighted
             contributions.append({"id": r.id, "kind": "strategy", "applies": applies,
@@ -141,8 +194,10 @@ class Solver:
     def shapes(self):
         """(tanks, damage, supports) triples the shape-only hard constraints
         allow, that can still seat the locked picks."""
-        locked_counts = {r: sum(1 for h in self.locked if h.role == r)
-                         for r in ROLE_KEY}
+        return self._shapes({r: sum(1 for h in self.locked if h.role == r)
+                             for r in ROLE_KEY})
+
+    def _shapes(self, locked_counts):
         shape_rules = [h for h in self.constraints if not h.soft and h.require
                        and set(h.require.names) <= SHAPE_KEYS
                        and (h.when is None or set(h.when.names) <= SHAPE_KEYS)]
@@ -153,11 +208,15 @@ class Solver:
                 if (t < locked_counts["tank"] or d < locked_counts["damage"]
                         or s < locked_counts["support"]):
                     continue
-                stub = {"team": {"tanks": t, "damage": d, "supports": s,
-                                 "size": TEAM_SIZE, "open_slots": 0}}
-                if all(not self._holds(h, dict(stub, params=h.params))
-                       or bool(h.require.eval(dict(stub, params=h.params)))
-                       for h in shape_rules):
+                stub = scope({"team": {"tanks": t, "damage": d, "supports": s,
+                                       "size": TEAM_SIZE, "open_slots": 0}})
+                ok = True
+                for h in shape_rules:
+                    stub["params"] = h.params_section
+                    if self._holds(h, stub) and not bool(h.require.eval(stub)):
+                        ok = False
+                        break
+                if ok:
                     out.append((t, d, s))
         return out
 
@@ -209,7 +268,7 @@ class Solver:
         feasible = [c for c in candidates if not c.violations]
         if not feasible:
             return []
-        self.freeze_bounds(feasible)
+        self.freeze_bounds()
         for c in feasible:
             self.score(c)
         feasible.sort(key=self._rank_key)
@@ -266,7 +325,7 @@ def evaluate_comp(world, m, red, heroes, catalog, pool_size=6, bans=(), side="")
     solver.considered = len(field)
     target = solver.prepare(Candidate(heroes))
     feasible = [c for c in field if not c.violations]
-    solver.freeze_bounds(feasible + [target])
+    solver.freeze_bounds()                    # the same reference scale as infer
     for c in feasible:
         solver.score(c)
     solver.score(target)

@@ -4,9 +4,11 @@
     min(team.hitscan, 2) * 1.5
     matchup.chew_time_ours < params.LIMIT
 
-Python's grammar, parsed with `ast` and evaluated by walking a whitelist of
-node types - no eval, no attribute access beyond dotted metric names, no
-calls but the handful of arithmetic helpers below. Names are dotted keys
+Python's grammar, parsed with `ast`, checked once against a whitelist of
+node types - no attribute access beyond dotted metric names, no calls but
+the handful of arithmetic helpers below, no names but the namespaces -
+and then compiled to a code object, so evaluating a heuristic on a
+candidate is a native expression, not a tree walk. Names are dotted keys
 into a namespace of dicts ({"team": {...}, "enemy": {...}, "matchup": ...,
 "map": ..., "world": ..., "params": ...}); a key a namespace lacks reads 0.
 """
@@ -30,6 +32,34 @@ class ExprError(ValueError):
     pass
 
 
+NAMESPACES = ("team", "enemy", "matchup", "map", "world", "params")
+
+
+class Section(object):
+    """A namespace dict read by attribute: missing keys and None read 0."""
+    __slots__ = ("_d",)
+
+    def __init__(self, d):
+        self._d = d
+
+    def __getattr__(self, key):
+        value = self._d.get(key)
+        return 0 if value is None else value
+
+
+class Scope(dict):
+    """The eval locals: every namespace a Section, absent ones empty, and
+    the arithmetic helpers by name."""
+
+    def __missing__(self, key):
+        if key in FUNCTIONS:
+            return FUNCTIONS[key]
+        return Section({})
+
+
+_EMPTY = Section({})
+
+
 class Expr:
     """A compiled expression: its source, the dotted names it reads, and
     eval(namespace)."""
@@ -44,6 +74,8 @@ class Expr:
         for name in self.names:
             if any(part.startswith("_") for part in name.split(".")):
                 raise ExprError("%r: underscore names are not allowed" % name)
+        self._check(self.tree)
+        self.code = compile(ast.Expression(body=self.tree), "<heuristic>", "eval")
 
     def __repr__(self):
         return "Expr(%r)" % self.source
@@ -72,53 +104,70 @@ class Expr:
             return ".".join(reversed(parts))
         return None
 
-    def eval(self, namespace):
-        return self._eval(self.tree, namespace)
-
-    def _eval(self, node, ns):
+    def _check(self, node):
+        """The whitelist, enforced once at compile time."""
         if isinstance(node, ast.Constant):
-            if isinstance(node.value, (int, float, str, bool)) or node.value is None:
-                return node.value
-            raise ExprError("unsupported constant %r" % (node.value,))
-        if isinstance(node, ast.BoolOp):
-            values = [self._eval(v, ns) for v in node.values]
-            return all(values) if isinstance(node.op, ast.And) else any(values)
-        if isinstance(node, ast.BinOp) and type(node.op) in BINARY:
-            left, right = self._eval(node.left, ns), self._eval(node.right, ns)
-            try:
-                return BINARY[type(node.op)](left, right)
-            except ZeroDivisionError:
-                return 0.0
-        if isinstance(node, ast.UnaryOp) and type(node.op) in UNARY:
-            return UNARY[type(node.op)](self._eval(node.operand, ns))
-        if isinstance(node, ast.Compare):
-            left = self._eval(node.left, ns)
-            for op, comparator in zip(node.ops, node.comparators):
-                right = self._eval(comparator, ns)
-                if type(op) not in COMPARE:
-                    raise ExprError("unsupported comparison in %r" % self.source)
-                if not COMPARE[type(op)](left, right):
-                    return False
-                left = right
-            return True
-        if isinstance(node, ast.IfExp):
-            return (self._eval(node.body, ns) if self._eval(node.test, ns)
-                    else self._eval(node.orelse, ns))
-        if isinstance(node, ast.Call):
+            if not (isinstance(node.value, (int, float, str, bool)) or node.value is None):
+                raise ExprError("unsupported constant %r" % (node.value,))
+        elif isinstance(node, ast.BoolOp):
+            for v in node.values:
+                self._check(v)
+        elif isinstance(node, ast.BinOp) and type(node.op) in BINARY:
+            self._check(node.left)
+            self._check(node.right)
+        elif isinstance(node, ast.UnaryOp) and type(node.op) in UNARY:
+            self._check(node.operand)
+        elif isinstance(node, ast.Compare):
+            if any(type(op) not in COMPARE for op in node.ops):
+                raise ExprError("unsupported comparison in %r" % self.source)
+            self._check(node.left)
+            for c in node.comparators:
+                self._check(c)
+        elif isinstance(node, ast.IfExp):
+            self._check(node.test)
+            self._check(node.body)
+            self._check(node.orelse)
+        elif isinstance(node, ast.Call):
             if not isinstance(node.func, ast.Name) or node.func.id not in FUNCTIONS:
                 raise ExprError("unsupported call in %r" % self.source)
             if node.keywords:
                 raise ExprError("keyword arguments are not supported")
-            return FUNCTIONS[node.func.id](*[self._eval(a, ns) for a in node.args])
-        if isinstance(node, (ast.List, ast.Tuple)):
-            return [self._eval(e, ns) for e in node.elts]
-        if isinstance(node, (ast.Attribute, ast.Name)):
-            dotted = self._dotted(node) if isinstance(node, ast.Attribute) else node.id
-            if dotted is None:
+            for a in node.args:
+                self._check(a)
+        elif isinstance(node, (ast.List, ast.Tuple)):
+            for e in node.elts:
+                self._check(e)
+        elif isinstance(node, ast.Attribute):
+            if self._dotted(node) is None:
                 raise ExprError("unsupported attribute access in %r" % self.source)
-            return lookup(ns, dotted)
-        raise ExprError("unsupported syntax %s in %r"
-                        % (type(node).__name__, self.source))
+        elif isinstance(node, ast.Name):
+            if node.id not in NAMESPACES and node.id not in FUNCTIONS:
+                raise ExprError("unknown name %r in %r" % (node.id, self.source))
+        else:
+            raise ExprError("unsupported syntax %s in %r"
+                            % (type(node).__name__, self.source))
+
+    def eval(self, namespace):
+        """Evaluate against {"team": {...}, ...}; a Scope is used as is."""
+        scope = namespace if isinstance(namespace, Scope) else Scope(
+            (k, Section(v)) for k, v in namespace.items())
+        try:
+            return eval(self.code, _GLOBALS, scope)
+        except ZeroDivisionError:
+            return 0.0
+        except TypeError as error:            # e.g. a text metric in arithmetic
+            raise ExprError("%r: %s" % (self.source, error))
+
+
+_GLOBALS = dict(FUNCTIONS, __builtins__={})
+
+
+def scope(namespace, params=None):
+    """A reusable Scope for many evaluations over one candidate."""
+    s = Scope((k, Section(v)) for k, v in namespace.items())
+    if params is not None:
+        s["params"] = Section(params)
+    return s
 
 
 def lookup(namespace, dotted, default=0):

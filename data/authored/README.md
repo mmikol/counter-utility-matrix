@@ -14,7 +14,7 @@ written by hand, so they are committed, loaded whole-truth by
 - `seasons.csv` - `name,started,note`: the coarse delineator of rates
   snapshots; loading recomputes `season_id` on every snapshot.
 - `strategies/*.md` - free-form operator notes, loaded whole and shown on the
-  board as citable `playbook.strategy` facts.
+  board as citable `strategy.note` entries on the strategy side (S1..).
 
 All follow the same contract: committed, whole-truth on reload, loud errors
 on malformed rows or unknown names. The inference layer's own brain - the

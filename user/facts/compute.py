@@ -171,8 +171,9 @@ def _mean(values):
     return sum(values) / len(values) if values else 0.0
 
 
-def team_metrics(world, heroes, m=None, enemies=()):
-    """Every TEAM_METRICS key for these picks, on this map, vs these enemies."""
+def team_metrics(world, heroes, m=None, enemies=(), lean=False):
+    """Every TEAM_METRICS key for these picks, on this map, vs these enemies.
+    lean=True leaves the name lists empty (the solver never reads them)."""
     heroes = list(heroes)
     n = len(heroes)
     t = {}
@@ -259,10 +260,11 @@ def team_metrics(world, heroes, m=None, enemies=()):
     t["cooldown_median"] = _median(cds)
     t["cooldown_count"] = len(cds)
     t["cc_count"] = sum(1 for h in heroes if h.cc_tools)
-    t["cc_tools"] = ["%s: %s" % (h.name, ", ".join(h.cc_tools)) for h in heroes if h.cc_tools]
+    t["cc_tools"] = [] if lean else ["%s: %s" % (h.name, ", ".join(h.cc_tools))
+                                     for h in heroes if h.cc_tools]
     t["mobility_count"] = sum(1 for h in heroes if h.mobility_tools)
-    t["mobility_tools"] = ["%s: %s" % (h.name, ", ".join(h.mobility_tools))
-                           for h in heroes if h.mobility_tools]
+    t["mobility_tools"] = [] if lean else ["%s: %s" % (h.name, ", ".join(h.mobility_tools))
+                                           for h in heroes if h.mobility_tools]
     t["flyers"] = sum(1 for h in heroes if h.flyer)
     t["barrier_hp"] = sum(h.barrier_hp for h in heroes)
     t["barrier_count"] = sum(1 for h in heroes if h.barrier_hp)
@@ -338,8 +340,8 @@ def team_metrics(world, heroes, m=None, enemies=()):
             1 for e in enemies if any(x != risky.name for x in answered[e.id]))
     else:
         t["banproof_coverage"] = 0
-    t["_answered"] = {e.name: answered[e.id] for e in enemies}
-    t["_exposure"] = {h.name: exposure[h.id] for h in heroes}
+    t["_answered"] = {} if lean else {e.name: answered[e.id] for e in enemies}
+    t["_exposure"] = {} if lean else {h.name: exposure[h.id] for h in heroes}
     return t
 
 

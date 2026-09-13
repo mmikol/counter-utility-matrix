@@ -29,7 +29,7 @@ flowchart LR
 
     subgraph USER["USER LAYER - user/facts/ + user/board.py"]
         WORLD["World<br/>the database in memory,<br/>per request"]
-        FACTS["FactSet F1..<br/>hero · map · team ·<br/>matchup · playbook"]
+        FACTS["FactSet<br/>F1.. hero · map · meta ·<br/>team · matchup<br/>S1.. the strategy side"]
         BOARD["the board<br/>map + red/blue rosters"]
     end
 
@@ -60,15 +60,24 @@ never the tables.
 The equation the whole repo serves:
 
 ```
-FACTS = HEROES ∪ MAPS ∪ META ∪ PLAYBOOK ∪ HISTORY     the whole database, for one board
-COMP  = ARGMAX[ STRATEGIES( FACTS ) ]                  constraints prune, goals weigh,
-                                                       strategies adjust; the agent argues
+FACTS      = HEROES ∪ MAPS ∪ META               the authoritative data: pulled from the sources and set
+STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY    everything else: authored, recorded, tuned
+COMP       = ARGMAX[ STRATEGIES( FACTS ) ]      constraints prune, goals weigh, strategies adjust;
+                                                the agent argues
 ```
 
-`STRATEGIES( FACTS )` is the score the solver maximises; the inference
-agent (a Claude Code session on the `/comp` skill) reads the same facts and
-the same strategies and reconciles them where arithmetic cannot - a stated
-problem, a lobby's habits, a patch the rates predate.
+FACTS are the authoritative data: the heroes, maps and meta domains as the
+sources report them, restricted to one board. The union, not the
+intersection - a hero is not a map; the joins between the domains (a hero
+on a map, a hero against a hero) are the pairwise facts. Everything else is
+strategy: the markdown heuristics, the authored playbook (archetypes, the
+operator's notes, recorded recommendations), and history (outcomes, the
+tuning log). The user layer numbers the facts F1.. and carries the strategy
+side below them as S1.. so both are citable and neither is mistaken for the
+other. `STRATEGIES( FACTS )` is the score the solver maximises; the
+inference agent (a Claude Code session on the `/comp` skill) reads the same
+facts and the same strategies and reconciles them where arithmetic cannot -
+a stated problem, a lobby's habits, a patch the rates predate.
 
 ## One click on the board
 
@@ -124,7 +133,7 @@ stateDiagram-v2
     Empty --> Schema: db_init<br/>9 migrations, 42 tables
     Schema --> Populated: sync_all<br/>7 pull tools + load_playbook
     Empty --> Populated: db_rebuild<br/>(the entrypoint's move<br/>on an empty database)
-    Populated --> Populated: sync_all / any pull_*<br/>(the refresher, daily)<br/>entities upsert in place,<br/>rates APPEND a dated snapshot
+    Populated --> Populated: pull_rates + pull_counters daily,<br/>sync_all weekly (the refresher)<br/>entities upsert in place,<br/>rates APPEND a dated snapshot
     Populated --> Empty: db_rebuild<br/>drop everything...
     note right of Populated
         ...but recorded recommendations
@@ -137,8 +146,11 @@ stateDiagram-v2
 
 `python -m data.orchestrator <verb>` drives the same tools without a session;
 Docker's `data` container runs `rebuild` on an empty or stale database and
-the `refresher` container runs `sync_all` with refresh on once a day (and
-on start when the cached pages are older than a day). A page that fails
+the `refresher` container refreshes once a day (and on start when the
+cached pages are older than a day): the daily refresh refetches the rates
+and the counters and re-mirrors the playbook and the heuristics; once the
+wiki cache is older than `OVERWATCH_DB_REFRESH_FULL_DAYS` (7) it runs
+`sync_all` with refresh on, every page of every source. A page that fails
 to refetch keeps its cached copy, so a bad day at a source degrades to
 yesterday's numbers rather than an empty table.
 
@@ -170,7 +182,7 @@ flowchart LR
         INF["inference - INFERENCE ENGINE<br/>:8019 infer · evaluate ·<br/>heuristics · record"]
         UI["ui - USER LAYER<br/>:8017 the board<br/>facts in-process,<br/>comps via INFERENCE_URL"]
         DBC["db - postgres:16<br/>volume pgdata"]
-        REF["refresher - the clock<br/>sync_all(refresh) daily,<br/>and on start when stale"]
+        REF["refresher - the clock<br/>rates + counters daily,<br/>every source weekly,<br/>and on start when stale"]
     end
     SESSION -->|".mcp.json: overwatch-db-docker"| DATA
     BROWSER --> UI

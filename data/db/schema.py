@@ -200,13 +200,15 @@ def generate_docs(connection):
         return sorted(seen)
 
     erd = ["# Entity relationship diagram", "",
-           "Five domains, and every one of them becomes facts for a board: which hero",
-           "(HEROES), on which map (MAPS), performing how well (META), answering whom",
-           "and alongside whom (PLAYBOOK), and what the inference layer decided before",
-           "(INFERENCE). The composition is the argmax of the strategies over those",
-           "facts.", "",
-           "```", "FACTS = HEROES ∪ MAPS ∪ META ∪ PLAYBOOK ∪ HISTORY",
-           "COMP  = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
+           "Five domains. Three are the authoritative data the sources are pulled",
+           "for - which hero (HEROES), on which map (MAPS), performing how well",
+           "(META) - and become the FACTS of a board. The other two are the strategy",
+           "side: what was authored (PLAYBOOK) and what the inference layer decided",
+           "and what came of it (INFERENCE). The composition is the argmax of the",
+           "strategies over the facts.", "",
+           "```", "FACTS      = HEROES ∪ MAPS ∪ META",
+           "STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY",
+           "COMP       = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
            "Every table also carries `source_id` → `sources` and a `cao` timestamp.",
            "Those edges are left off - they would connect `sources` to all %d tables"
            % len(tables), "and obscure everything else.", ""]

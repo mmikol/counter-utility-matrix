@@ -208,3 +208,18 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
         {"tank": 0, "damage": 1, "support": 2}[world.hero(n).role], n))
     b = engine.board(world, None, [], [])
     assert not b["current"].blue and b["current"].partial
+
+
+@pytest.mark.invariant
+def test_scores_share_one_scale_per_board(world):
+    # infer, evaluate and the current comp normalise against the same
+    # seeded reference sample, so the same six scores the same everywhere
+    from inference import engine
+    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
+    e = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"], r.blue)
+    assert abs(r.score - e.score) < 1e-9 and e.rank == 1
+    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], r.blue)
+    assert abs(b["current"].score - r.score) < 1e-9
+    again = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], pool_size=4)
+    assert abs(again.score - engine.evaluate(
+        world, "King's Row", ["Zarya", "Pharah"], again.blue).score) < 1e-9

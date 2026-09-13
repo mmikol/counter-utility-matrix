@@ -16,8 +16,10 @@
 #               on start when the cached pages are older than a day - so the
 #               board is ready when a game starts
 #
-# No keys, no accounts. Host-side tools reach the same database through
-# ./docker-db (port 5433).
+# No keys, no accounts. Every published port binds to 127.0.0.1: the board,
+# the engine, the MCP endpoint and the database are reachable from this
+# machine only. Host-side tools reach the database through ./docker-db
+# (port 5433).
 # One image, built once (by `data`), shared by every layer's container.
 x-app: &app
   image: overwatch-db
@@ -40,7 +42,7 @@ services:
       POSTGRES_PASSWORD: overwatch
       POSTGRES_DB: overwatch
     ports:
-      - "5433:5432"        # host-side tools via ./docker-db
+      - "127.0.0.1:5433:5432"        # host-side tools via ./docker-db
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -54,7 +56,7 @@ services:
     build: .
     command: ["data"]
     ports:
-      - "8020:8020"        # MCP over HTTP: /mcp, /health
+      - "127.0.0.1:8020:8020"        # MCP over HTTP: /mcp, /health
     depends_on:
       db:
         condition: service_healthy
@@ -71,7 +73,7 @@ services:
     <<: *app
     command: ["inference"]
     ports:
-      - "8019:8019"
+      - "127.0.0.1:8019:8019"
     depends_on:
       data:
         condition: service_healthy
@@ -87,7 +89,7 @@ services:
     <<: *app
     command: ["ui"]
     ports:
-      - "8017:8017"
+      - "127.0.0.1:8017:8017"
     environment:
       <<: *env
       INFERENCE_URL: http://inference:8019
@@ -105,6 +107,7 @@ services:
       <<: *env
       OVERWATCH_DB_REFRESH_AT: ${OVERWATCH_DB_REFRESH_AT:-05:00}
       OVERWATCH_DB_REFRESH_MAX_AGE_HOURS: ${OVERWATCH_DB_REFRESH_MAX_AGE_HOURS:-20}
+      OVERWATCH_DB_REFRESH_FULL_DAYS: ${OVERWATCH_DB_REFRESH_FULL_DAYS:-7}
       TZ: ${TZ:-UTC}
     depends_on:
       data:

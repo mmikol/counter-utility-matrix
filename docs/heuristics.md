@@ -14,7 +14,9 @@ in [tuning-log.md](../inference/heuristics/tuning-log.md).
 ## How a composition is scored
 
 ```
-COMP = ARGMAX[ STRATEGIES( FACTS ) ]
+FACTS      = HEROES ∪ MAPS ∪ META
+STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY
+COMP       = ARGMAX[ STRATEGIES( FACTS ) ]
 ```
 
 For a board (map, red picks, locked blue picks) the solver enumerates
@@ -24,8 +26,10 @@ then:
 
 - **constraints** discard a candidate whose `require` fails (soft ones
   subtract their `penalty` instead);
-- **goals** min-max normalise their `metric` across the surviving
-  candidates to [0, 1] (flipped for `minimize`) and add `weight x norm`;
+- **goals** min-max normalise their `metric` to [0, 1] against a seeded
+  reference sample of random legal sixes for the board (flipped for
+  `minimize`) and add `weight x norm` - one scale per board, so infer,
+  evaluate and the current comp agree;
 - **strategies** are prose the session reads and the board shows; one
   that also carries `bonus`/`penalty` adds `weight x (bonus - penalty)`
   while its `when` holds.

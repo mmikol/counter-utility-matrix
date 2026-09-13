@@ -34,12 +34,16 @@ connected; they expose the same tools.
 3. Read the `facts` tool for the same board when you want the evidence
    behind a number (`{"map": ..., "red": [...], "blue": [<the six>]}`) -
    every fact the database holds about those heroes, the map, each team
-   and the matchup, numbered F1.. and citable. The game is 6v6 Open
-   Queue: six picks, at most two tanks. The heuristics come in three
+   and the matchup, numbered F1.. and citable - FACTS = HEROES ∪ MAPS ∪
+   META, the authoritative data. Below a divider comes the strategy side,
+   numbered S1.. and just as citable: archetypes, the operator's own
+   notes, previous recommendations, recorded outcomes. The game is 6v6
+   Open Queue: six picks, at most two tanks. The heuristics come in three
    kinds - constraints, goals, strategies (read them with the `heuristics`
    tool or as MCP resources); the prose-only strategies are the ground
-   rules, and the operator's own strategy notes ride inside the facts.
-4. Decide - you are the agent in COMP = ARGMAX[ STRATEGIES( FACTS ) ]:
+   rules.
+4. Decide - you are the agent in COMP = ARGMAX[ STRATEGIES( FACTS ) ],
+   where STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY:
    the solver's optimum is the straw man, and your job is to reconcile the
    facts with the strategies where arithmetic cannot. Adopt the optimum
    and say why, or improve on it and say why - a user's stated problem

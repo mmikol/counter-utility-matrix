@@ -14,9 +14,10 @@ pytestmark = pytest.mark.invariant
 def test_board_page_has_two_rosters_and_the_three_panels():
     body = board.view_board()
     assert "team red" in body and "team blue" in body
-    assert "/api/roster" in body and "/api/facts" in body and "/api/infer" in body
     assert "tab-facts" in body and "tab-inf" in body and "tab-playbook" in body
-    assert "localStorage" in body
+    script = board.static_file("board.js")[0].decode()
+    assert "/api/roster" in script and "/api/facts" in script and "/api/infer" in script
+    assert "localStorage" in script
 
 
 def test_roster_endpoint_carries_portraits_and_maps(db):
@@ -72,3 +73,14 @@ def test_bans_ride_the_query_string(db):
     assert any(m["name"] == "King's Row" and m["sided"] for m in data["maps"])
     assert any(m["name"] == "Ilios" and not m["sided"] for m in data["maps"])
     db.rollback()
+
+
+def test_the_page_is_a_shell_over_static_files():
+    body = board.view_board()
+    assert "/static/board.css" in body and "/static/board.js" in body
+    assert "var TEAM = 6, BANS = 5;" in body
+    data, ctype = board.static_file("board.js")
+    assert ctype.startswith("application/javascript") and b"function renderResult" in data
+    data, ctype = board.static_file("board.css")
+    assert ctype.startswith("text/css") and b".tile.banned" in data
+    assert board.static_file("../board.py") is None and board.static_file("nope.js") is None

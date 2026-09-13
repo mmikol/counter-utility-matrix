@@ -8,12 +8,15 @@ brought up to date on a schedule, so the board is ready when a game starts.
                                         OVERWATCH_DB_REFRESH_MAX_AGE_HOURS (20)
     python -m data.refresh --now        one refresh, then exit
 
-One refresh is `sync_all` with refresh on: every page of every source is
-fetched again (a page that fails keeps its cached copy, so a flaky source
-degrades to yesterday's numbers rather than an empty table), entities are
-upserted in place, the rates append a new dated snapshot, the authored
-playbook and the heuristics files are re-mirrored, and data/raw is
-re-exported. The `refresher` container runs this loop.
+A refresh comes in two sizes. The DAILY one refetches what moves day to
+day - the rates and counterpick's counters - then re-mirrors the authored
+playbook and the heuristics and re-exports data/raw. The FULL one is
+`sync_all` with refresh on: every page of every source, including the
+hero pages and wiki articles that only change with a patch; it runs when
+the wiki cache is older than OVERWATCH_DB_REFRESH_FULL_DAYS (7). Either
+way a page that fails keeps its cached copy, so a flaky source degrades
+to yesterday's numbers rather than an empty table. The `refresher`
+container runs this loop.
 """
 
 import os
@@ -26,6 +29,8 @@ from data.mcp import tools
 
 DEFAULT_AT = os.environ.get("OVERWATCH_DB_REFRESH_AT", "05:00")
 DEFAULT_MAX_AGE_HOURS = float(os.environ.get("OVERWATCH_DB_REFRESH_MAX_AGE_HOURS", "20"))
+DEFAULT_FULL_DAYS = float(os.environ.get("OVERWATCH_DB_REFRESH_FULL_DAYS", "7"))
+DAILY = ("pull_rates", "pull_counters")     # what moves between patches
 
 
 def parse_at(text):
@@ -66,13 +71,33 @@ def cache_age_hours(cache_dirs=None):
     return (time.time() - newest) / 3600.0
 
 
-def refresh_once(ctx, log=print):
-    """One full refresh -> (ok, text). Never raises: the loop must survive
-    a bad day at the sources."""
+def full_due(full_days=DEFAULT_FULL_DAYS, cache_dirs=None):
+    """A full refresh is due when the slow-moving caches (the wiki's) are
+    older than `full_days`, or absent."""
+    dirs = cache_dirs or [common.CACHE_DIRS["wiki"], common.CACHE_DIRS["blizzard"]]
+    age = cache_age_hours(dirs)
+    return age is None or age > full_days * 24
+
+
+def refresh_once(ctx, log=print, full=None, full_days=DEFAULT_FULL_DAYS):
+    """One refresh -> (ok, text): daily (rates, counters, playbook, export)
+    or full (every source) - decided by full_due() unless `full` is given.
+    Never raises: the loop must survive a bad day at the sources."""
     started = time.time()
-    log("refresh: starting at %s" % datetime.now().strftime("%Y-%m-%d %H:%M"))
+    if full is None:
+        full = full_due(full_days)
+    log("refresh: starting a %s refresh at %s" % (
+        "FULL" if full else "daily", datetime.now().strftime("%Y-%m-%d %H:%M")))
     try:
-        text, _ = tools.run_tool(ctx, "sync_all", refresh=True)
+        if full:
+            text, _ = tools.run_tool(ctx, "sync_all", refresh=True)
+        else:
+            parts = []
+            for name in DAILY:
+                parts.append(tools.run_tool(ctx, name, refresh=True)[0].splitlines()[0])
+            parts.append(tools.run_tool(ctx, "load_playbook")[0].split(";")[0])
+            parts.append(tools.run_tool(ctx, "export_csv")[0])
+            text = "; ".join(parts)
     except Exception as error:      # a failed refresh leaves yesterday's data in place
         log("refresh: FAILED after %.0fs: %s: %s"
             % (time.time() - started, type(error).__name__, error))
@@ -105,10 +130,12 @@ def main():
                         % DEFAULT_AT)
     parser.add_argument("--max-age-hours", type=float, default=DEFAULT_MAX_AGE_HOURS,
                         help="refresh on start when the cache is older than this")
+    parser.add_argument("--full", action="store_true",
+                        help="with --now: every source, not just the daily set")
     args = parser.parse_args()
     ctx = tools.Context(dsn=common.resolve_dsn(args), log=print)
     if args.now:
-        ok, _ = refresh_once(ctx)
+        ok, _ = refresh_once(ctx, full=True if args.full else None)
         sys.exit(0 if ok else 1)
     run_forever(ctx, args.at, args.max_age_hours)
 

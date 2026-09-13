@@ -40,8 +40,8 @@ def test_outcome_is_recorded_with_its_picks_and_becomes_facts(db):
     world = model.load(db)
     assert world.hero("Ana").outcomes["win"] >= 1
     fs = engine.generate(world, "King's Row", [], ["Ana"])
-    assert fs.find("playbook.outcomes") and fs.find("hero.outcomes", "Ana")
-    assert any("WIN with Reinhardt" in f.text for f in fs.find("playbook.outcome"))
+    assert fs.find("strategy.outcomes") and fs.find("hero.outcomes", "Ana")
+    assert any("WIN with Reinhardt" in f.text for f in fs.find("strategy.outcome"))
     assert outcomes.summary(db)["win"] >= 1
     db.rollback()
 
@@ -141,3 +141,21 @@ def test_fit_waits_for_evidence_then_nudges_toward_what_won(db, catalog_copy):
         if abs(g["change"]) >= 0.005:
             assert tuned[g["id"]] == g["proposed"]
     db.rollback()
+
+
+# --- the logistic tier (pure) --------------------------------------------------------
+
+def test_logistic_evidence_finds_the_goal_that_predicts_wins():
+    import random
+    rng = random.Random(7)
+    rows = []
+    for i in range(80):
+        a = rng.random()                        # goal "a" decides the game
+        b = rng.random()                        # goal "b" is noise
+        win = rng.random() < (0.15 + 0.7 * a)
+        rows.append(("win" if win else "loss", i % 3, {"a": a, "b": b}))
+    ev = fit.logistic_evidence(rows, ["a", "b"])
+    assert ev["a"] > 0.4 and abs(ev["b"]) < ev["a"] / 2
+    assert fit.logistic_evidence([], ["a"]) == {}
+    diff, w, l = fit.mean_difference(rows, "a")
+    assert diff > 0.15 and w > l

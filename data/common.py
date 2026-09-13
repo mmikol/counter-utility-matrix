@@ -7,6 +7,7 @@ cycle. Nothing here knows about a particular source or table.
 """
 
 import argparse
+import json
 import os
 from datetime import datetime, timezone
 
@@ -133,8 +134,20 @@ def table_names(connection):
     ]
 
 
+EXPORT_MARK = "EXPORT.json"
+
+
+def database_identity(connection):
+    """The cluster's own identifier (assigned at initdb): the same for every
+    connection string that reaches the same database, different for every
+    other database. What the mirror is stamped with."""
+    return str(connection.execute(
+        "SELECT system_identifier FROM pg_control_system()").fetchone()[0])
+
+
 def export(connection, raw_dir=RAW_DIR):
-    """Write one CSV per table. Returns [(table, row_count)]."""
+    """Write one CSV per table, and EXPORT.json saying which database they
+    came from and when. Returns [(table, row_count)]."""
     if not os.path.isdir(raw_dir):
         os.makedirs(raw_dir)
     counts = []
@@ -156,7 +169,19 @@ def export(connection, raw_dir=RAW_DIR):
     for stale in sorted(set(os.listdir(raw_dir)) - current):
         if stale.endswith(".csv"):
             os.remove(os.path.join(raw_dir, stale))
+    with open(os.path.join(raw_dir, EXPORT_MARK), "w", encoding="utf-8") as handle:
+        json.dump({"system_identifier": database_identity(connection),
+                   "exported_at": now().isoformat(), "tables": len(counts)}, handle)
     return counts
+
+
+def export_mark(raw_dir=RAW_DIR):
+    """{system_identifier, exported_at, tables} of the mirror, or None."""
+    path = os.path.join(raw_dir, EXPORT_MARK)
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def export_raw(connection, args, tables=()):

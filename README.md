@@ -14,14 +14,24 @@ INFERENCE LAYER   markdown heuristics (constraints, goals, strategies)
 ```
 
 ```
-FACTS = HEROES ∪ MAPS ∪ META ∪ PLAYBOOK ∪ HISTORY     the whole database, for one board
-COMP  = ARGMAX[ STRATEGIES( FACTS ) ]                  constraints prune, goals weigh,
-                                                       strategies adjust; the agent argues
+FACTS      = HEROES ∪ MAPS ∪ META               the authoritative data: pulled from the sources and set
+STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY    everything else: authored, recorded, tuned
+COMP       = ARGMAX[ STRATEGIES( FACTS ) ]      constraints prune, goals weigh, strategies adjust;
+                                                the agent argues
 ```
 
-The user layer turns every table into facts for the board in front of you;
-the inference layer scores those facts under the heuristics (constraints,
-goals, strategies) and searches for the argmax; the inference agent - a
+FACTS are the union of the three authoritative domains - what the sources
+say about the heroes, the maps and the meta - restricted to the board in
+front of you (the twelve heroes and the bans, the one map, the rates and
+counters for them there); a union, not an intersection, because a hero is
+not a map: the joins between the domains (this hero on this map, this hero
+against that one) are where the pairwise facts come from. Everything else
+is strategy: the markdown heuristics, the authored playbook, and the
+history the outcomes and the tuning log record. The user layer turns the
+authoritative tables into F-numbered facts and carries the strategy side
+below them as S-numbered notes; the inference layer scores the facts under
+the heuristics (constraints, goals, strategies) and searches for the
+argmax; the inference agent - a
 Claude Code session on the `/comp` skill - reads the same facts and the
 same strategies and reconciles them where arithmetic cannot.
 
@@ -50,8 +60,10 @@ One container per layer, from one image:
 | `ui` | USER LAYER | the **board** at **http://localhost:8017** |
 | `refresher` | the data layer's clock | refreshes everything daily (see below) |
 
-The first run builds the database from scratch (migrations, every pull
-tool, the authored playbook - a few polite minutes; page caches land in
+Every published port binds to 127.0.0.1, so the board, the engine, the
+MCP endpoint and the database are reachable from your machine only. The
+first run builds the database from scratch (migrations, every pull tool,
+the authored playbook - a few polite minutes; page caches land in
 `.cache-*/` so later builds cost almost no requests); `inference` and `ui`
 wait for it, and `docker compose ps` shows all four healthy. A schema
 change rebuilds automatically (the migrations ledger), with recorded comps
@@ -83,13 +95,14 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 ## Keeping it fresh
 
-The `refresher` container refreshes the whole database once a day, so the
-board is ready when a game starts: every page of every source is fetched
-again, entities are upserted in place, the rates append a new dated
-snapshot (the series the trend facts difference), the authored playbook and
-the heuristics files are re-mirrored, and `data/raw` is re-exported. It
-also refreshes right away on start when the cached pages are older than a
-day. A page that fails to fetch keeps its cached copy, so a flaky source
+The `refresher` container refreshes the database once a day, so the board
+is ready when a game starts. The daily refresh refetches what moves day to
+day - the rates (a new dated snapshot, the series the trend facts
+difference) and counterpick's counters - then re-mirrors the authored
+playbook and the heuristics and re-exports `data/raw`. Once a week (when
+the wiki cache is older than `OVERWATCH_DB_REFRESH_FULL_DAYS`) it refetches
+every page of every source, hero pages and articles included. It also
+refreshes right away on start when the cached pages are older than a day. A page that fails to fetch keeps its cached copy, so a flaky source
 degrades to yesterday's numbers rather than an empty table; the board's
 header shows the capture date and warns when patches shipped since.
 
@@ -97,12 +110,13 @@ header shows the capture date and warns when patches shipped since.
 | --- | --- | --- |
 | `OVERWATCH_DB_REFRESH_AT` | `05:00` | daily time, in the container's `TZ` (UTC unless set) |
 | `OVERWATCH_DB_REFRESH_MAX_AGE_HOURS` | `20` | refresh on start when the cache is older than this |
+| `OVERWATCH_DB_REFRESH_FULL_DAYS` | `7` | refetch every source (not just rates and counters) when the wiki cache is older than this |
 
 Set them in the environment or a `.env` file next to `compose.yaml`. The
 same refresh from a shell, against whichever database `DATABASE_URL` names:
 
 ```bash
-.venv/bin/python -m data.refresh --now        # once, now
+.venv/bin/python -m data.refresh --now        # once, now (daily set; --full for everything)
 .venv/bin/python -m data.refresh              # the daily loop
 .venv/bin/python -m data.mcp call sync_all '{"refresh": true}'
 ```
@@ -178,7 +192,9 @@ The share of revealed enemies at least one of our picks answers...
 The solver keeps the locked blue picks, enumerates the rest of the six
 from per-role pools (6v6 Open Queue: any mix, at most two tanks - the one
 constraint shipped), prunes with the constraints, normalises each goal
-across the candidates, adds the scored strategies, and refines the best
+against a seeded reference sample of random legal sixes for the board (so
+infer, evaluate and the current comp share one scale and a score means the
+same thing across calls), adds the scored strategies, and refines the best
 few by local search -
 players assumed to play optimally, so the score is a comp's ceiling. The
 board's two displays are the **optimal comps** - blue's six around your
@@ -202,7 +218,7 @@ three skills that drive them from a session):
 | --- | --- |
 | `record_outcome` · `/outcome` | records how a match went - result, map and side, both sixes, bans, the recommendation played. Outcomes are facts on the board (per hero, per map), mirrored to `data/raw`, restored after every rebuild. |
 | `tune` · `/tune` | changes one heuristic's weight, a `params` dial or an expression - validated through the catalog before the file is written, re-mirrored, logged with the reason in [inference/heuristics/tuning-log.md](inference/heuristics/tuning-log.md). |
-| `fit_weights` · `/tune` | for every decided outcome, how each goal's metric ran in wins versus losses; proposes a bounded nudge per weight (dry run), applies it through `tune` on request, and only past ten decided matches. |
+| `fit_weights` · `/tune` | scores every decided outcome's blue six on the solver's own scale and asks which goals ran higher in wins than losses: a mean difference from ten decided matches, a ridge logistic regression demeaned within each map from fifty; proposes a bounded nudge per weight (dry run), applies it through `tune` on request. |
 | `tuning_log` | the audit trail: every change, when, what, why, by whom. |
 
 A weight of zero silences a goal; deleting a file is a human decision.
@@ -251,11 +267,13 @@ data/                DATA LAYER - pulls, cleans, stores; owns the schema
                      005 playbook · 006 inference · 007 three layers · 008 the
                      ledger · 009 outcomes), schema.py, cluster/ (gitignored)
   common.py          the plumbing every layer shares
-  raw/               one CSV per table (exported, gitignored)
+  raw/               one CSV per table plus EXPORT.json naming the database
+                     they came from (exported, gitignored)
 user/                USER LAYER - every click becomes facts
   facts/             model.py (the World), compute.py (the metrics registry),
                      engine.py (the FactSet)
-  board.py           the map selector and the red and blue rosters
+  board.py           the map selector and the red and blue rosters (a shell)
+  static/            board.css and board.js, served by board.py
 inference/           INFERENCE LAYER - facts in, the optimal six out
   heuristics/        one markdown file per heuristic (the brain)
   catalog.py         reads, validates, mirrors and documents the heuristics
