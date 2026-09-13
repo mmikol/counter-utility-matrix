@@ -1,16 +1,27 @@
-"""The stack, from a shell or a Claude Code session: build it, start it, wait
-until every layer is healthy and the data is current, and say so.
+"""The orchestrator: the end-to-end run, from a shell or a Claude Code session.
 
-    python stack.py up        build the image, start the containers, wait, report
-    python stack.py status    what is running, how fresh the data is, the URLs
-    python stack.py refresh   refetch every source now (through the data layer)
-    python stack.py test      the test suite inside the image
-    python stack.py down      stop everything (the database volume stays)
+    python orchestrator.py            run: everything below, then leave the app up
+    python orchestrator.py up         build the image, start the containers, wait -
+                                      the data container pulls every source and
+                                      ingests it when the database is empty or stale
+    python orchestrator.py agents     Claude Code, headless, on the /refresh skill:
+                                      refresh the data, derive draft strategies,
+                                      re-fit the weights, regenerate the docs - and
+                                      leave a deterministic playbook for the board
+    python orchestrator.py status     what is running, how fresh the data is, the URLs
+    python orchestrator.py refresh    refetch every source now (no agents)
+    python orchestrator.py test       the test suite inside the image
+    python orchestrator.py down       stop everything (the database volume stays)
 
-Standard library only. Exit code 0 means everything answered.
+Everything the board uses at game time is deterministic - the database
+and the strategy files. The agents run beforehand, on the host, on the
+subscription (the claude CLI, signed in once), never at game time; when
+the CLI is absent the run still brings the stack up and says what it
+skipped. Standard library only. Exit code 0 means everything answered.
 """
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -20,6 +31,7 @@ import urllib.request
 URLS = {"data": "http://localhost:8020/health",
         "inference": "http://localhost:8019/health",
         "ui": "http://localhost:8017/api/roster"}
+ROOT = os.path.dirname(os.path.abspath(__file__))
 BOARD = "http://localhost:8017"
 
 
@@ -101,6 +113,31 @@ def verdict(h):
     return ok, lines
 
 
+def mcp(name, arguments=None, timeout=600):
+    """Call one tool on the stack's MCP endpoint -> its text."""
+    payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                          "params": {"name": name, "arguments": arguments or {}}})
+    request = urllib.request.Request("http://localhost:8020/mcp", data=payload.encode(),
+                                     headers={"Content-Type": "application/json",
+                                              "Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        body = json.loads(response.read().decode())
+    if "error" in body:
+        raise RuntimeError(body["error"].get("message", str(body["error"])))
+    return body["result"]["content"][0]["text"]
+
+
+def derive_pending(h):
+    """Drafts in inference/strategies/ are completed on the host (the claude CLI
+    lives here, not in the containers), then the stack's database re-mirrors."""
+    pending = (h.get("inference") or {}).get("pending")
+    if not pending:
+        return
+    print("%d draft strategy(ies) await frontmatter; deriving on the host..." % pending)
+    sh(sys.executable, "-m", "db.mcp", "call", "derive_strategies")
+    mcp("load_authored", {"only": ["strategies"]})
+
+
 def up():
     print("building the image and starting the containers...")
     sh("docker", "compose", "build", "data")
@@ -110,6 +147,7 @@ def up():
     wait_for(URLS["inference"], 300, "the inference engine")
     wait_for(URLS["ui"], 120, "the board")
     h = health()
+    derive_pending(h)
     ok, lines = verdict(h)
     if not ok and h.get("inference") and not h["inference"].get("strategies"):
         print("stale bind mounts detected; recreating the containers...")
@@ -121,8 +159,60 @@ def up():
 
 
 def status():
-    ok, lines = verdict(health())
+    h = health()
+    derive_pending(h)
+    ok, lines = verdict(h if not h.get("inference", {}).get("pending") else health())
     return report(ok, lines)
+
+
+AGENT_TOOLS = "mcp__overwatch-db-docker,mcp__overwatch-db"   # the stack's tools, nothing else
+
+
+def agents_command(claude=None):
+    """The headless run: Claude Code in print mode on the /refresh skill, with
+    the stack's MCP tools allowed and nothing else."""
+    from inference import derive
+    binary = claude or derive.cli()
+    if not binary:
+        raise RuntimeError("no claude CLI on this machine (set %s)" % derive.CLI_ENV)
+    return [binary, "-p", "/refresh", "--output-format", "text",
+            "--allowedTools", AGENT_TOOLS, "--no-session-persistence"]
+
+
+def agents():
+    """The agents' run: refresh the database, derive drafts, re-fit the weights,
+    regenerate the docs - and leave a deterministic playbook for the board.
+    Runs on the host, on the subscription; schedule it with cron or launchd."""
+    print("agents: Claude Code, headless, on the /refresh skill (minutes)...")
+    try:
+        command = agents_command()
+    except RuntimeError as error:
+        return report(False, [str(error)])
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
+    done = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True,
+                          timeout=3600)
+    print(done.stdout.strip() or done.stderr.strip())
+    if done.returncode != 0:
+        return report(False, ["agents: claude -p exited %d" % done.returncode])
+    return status()
+
+
+def run():
+    """Pull, ingest, infer, serve: the stack up, the agents' run when the CLI is
+    here, and the app left running for the user."""
+    code = up()
+    if code:
+        return code
+    from inference import derive
+    if derive.available():
+        code = agents()
+        if code:
+            return code
+    else:
+        print("agents: skipped - no claude CLI signed in on this host (the stack is up;"
+              " drafts stay pending, weights stay as they are)")
+    print("\nthe app is up: %s" % BOARD)
+    return 0
 
 
 def report(ok, lines):
@@ -135,13 +225,7 @@ def report(ok, lines):
 
 def refresh():
     print("refreshing every source through the data layer (minutes at a polite pace)...")
-    payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                          "params": {"name": "sync_all", "arguments": {"refresh": True}}})
-    request = urllib.request.Request("http://localhost:8020/mcp", data=payload.encode(),
-                                     headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(request, timeout=3600) as response:
-        reply = json.loads(response.read().decode("utf-8"))
-    print(reply["result"]["content"][0]["text"])
+    print(mcp("sync_all", {"refresh": True}, timeout=3600))
     return status()
 
 
@@ -157,7 +241,10 @@ def down():
 
 
 def main(argv):
-    verbs = {"up": up, "status": status, "refresh": refresh, "test": test, "down": down}
+    verbs = {"run": run, "up": up, "agents": agents, "status": status,
+             "refresh": refresh, "test": test, "down": down}
+    if not argv:
+        argv = ["run"]
     if len(argv) != 1 or argv[0] not in verbs:
         sys.exit(__doc__)
     return verbs[argv[0]]()

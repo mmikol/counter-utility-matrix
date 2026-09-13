@@ -204,14 +204,22 @@ AUTHORED_INPUTS = ("seasons", "synergies", "archetypes", "map_playstyle", "strat
                                             "enum": list(AUTHORED_INPUTS)},
                 "description": "a subset to reload (default: all)"}})
 def load_authored(ctx, only=None):
-    from data import authored
+    from db.data import authored
     selected = [p for p in AUTHORED_INPUTS if not only or p in only]
     summaries = {}
     with ctx.connect() as cx:
         for name in selected:
             if name == "strategies":
-                from inference import catalog
-                summaries[name] = catalog.mirror(cx, catalog.load())
+                from inference import catalog, derive
+                cat = catalog.load()
+                if any(h.pending for h in cat) and derive.available():
+                    # drafts on a host with the CLI: the engine derives them now
+                    ctx.log(derive.rendered(derive.derive(log=ctx.log)))
+                    cat = catalog.load()
+                summaries[name] = catalog.mirror(cx, cat)
+                pending = [h.id for h in cat if h.pending]
+                if pending:
+                    summaries[name]["pending"] = len(pending)
             else:
                 summaries[name] = authored.LOADERS[name](cx, log=ctx.log)
     text = "load_authored: " + "; ".join(
@@ -644,6 +652,21 @@ def infer_strategy(ctx, id, reason, **fields):
         raise ToolError(str(error))
     return "%s is now %s: %s\n%s" % (id, done["form"], ", ".join(
         "%s=%s" % kv for kv in done["set"].items()), done["line"]), done
+
+
+@tool("derive_strategies", "Complete every draft (a strategy with only a name, a kind"
+      " and prose) by asking Claude Code in print mode - the subscription, no key -"
+      " for the frontmatter, validated through the catalog and logged. Runs where"
+      " the claude CLI is signed in (the host); elsewhere drafts stay pending.",
+      {"ids": {"type": "array", "items": {"type": "string"},
+               "description": "which drafts (default: all)"}})
+def derive_strategies(ctx, ids=None):
+    from inference import catalog, derive
+    result = derive.derive(ids, log=ctx.log)
+    if result["derived"]:
+        with ctx.connect() as cx:
+            catalog.mirror(cx, catalog.load())
+    return derive.rendered(result), result
 
 
 @tool("fit_weights", "Fit the heuristic weights to the recorded outcomes: for every"

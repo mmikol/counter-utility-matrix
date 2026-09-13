@@ -217,3 +217,72 @@ def test_add_stores_a_validated_strategy_and_complete_finishes_a_draft(catalog_c
     with pytest.raises(tune.TuneError, match="nothing to set"):
         tune.complete("sustain-first", {}, "r", directory=catalog_copy)
 
+
+
+# --- deriving: the engine asks the model, the catalog keeps the gate ------------------
+
+def _draft(directory, hid="heal-line", kind="constraint"):
+    with open(os.path.join(directory, hid + ".md"), "w", encoding="utf-8") as handle:
+        handle.write("---\nname: Shut off a heavy heal line\nkind: %s\ncategory: matchup\n---\n"
+                     "# Shut off a heavy heal line\n\nWhen their support line heals at or above"
+                     " the roster bench, one anti-heal pick is worth more than another damage"
+                     " dealer. One is rewarded; two overlap.\n" % kind)
+
+
+def test_derive_completes_a_draft_from_the_models_answer(catalog_copy):
+    from inference import derive
+    _draft(catalog_copy)
+    asked = []
+    def runner(text):
+        asked.append(text)
+        return ('Sure. {"fields": {"when": "enemy.heal_ratio >= params.HEAL_RATIO", '
+                '"bonus": "min(team.antiheal, 1) * 1.5", "params": {"HEAL_RATIO": 1.0}}, '
+                '"reason": "one anti-heal pick is worth more than another damage dealer"}')
+    result = derive.derive(directory=catalog_copy, runner=runner, log=lambda m: None)
+    assert result["derived"] == [{"id": "heal-line", "form": "scored", "set": {
+        "when": "enemy.heal_ratio >= params.HEAL_RATIO", "bonus": "min(team.antiheal, 1) * 1.5",
+        "params.HEAL_RATIO": "1"}}] and not result["failed"]
+    assert len(asked) == 1
+    text = asked[0]
+    assert "name: Shut off a heavy heal line" in text and "kind: constraint" in text
+    assert "team.antiheal - " in text and "map.side" in text and "(text)" in text
+    assert "kind: constraint\ncategory: matchup\nwhen: enemy.heal_ratio" in text   # a style anchor
+    cat = catalog.load(catalog_copy)
+    assert next(h for h in cat if h.id == "heal-line").scored
+    assert "inferred -> scored" in tune.log_tail(1, os.path.join(catalog_copy, "tuning-log.md"))[0]
+    assert derive.derive(directory=catalog_copy, runner=runner)["skipped"] == "nothing pending"
+
+
+def test_derive_sends_the_catalogs_objection_back_once(catalog_copy):
+    from inference import derive
+    _draft(catalog_copy, "sustain-first", "heuristic")
+    answers = iter(['{"fields": {"metric": "team.hps_peak", "direction": "maximize", "weight": 2}, "reason": "r"}',
+                    '{"fields": {"metric": "team.heal_peak_total", "direction": "maximize", "weight": 2}, "reason": "r"}'])
+    seen = []
+    def runner(text):
+        seen.append(text)
+        return next(answers)
+    result = derive.derive(directory=catalog_copy, runner=runner, log=lambda m: None)
+    assert result["derived"][0]["form"] == "heuristic" and len(seen) == 2
+    assert "refused by the catalog: sustain-first: metric 'team.hps_peak'" in seen[1]
+    # two refusals leave the draft as it was
+    _draft(catalog_copy, "stubborn", "heuristic")
+    bad = lambda text: '{"fields": {"metric": "team.nope", "direction": "maximize"}, "reason": "r"}'
+    result = derive.derive(["stubborn"], directory=catalog_copy, runner=bad, log=lambda m: None)
+    assert "stubborn" in result["failed"] and not result["derived"]
+    assert next(h for h in catalog.load(catalog_copy) if h.id == "stubborn").pending
+    with pytest.raises(ValueError, match="no JSON object"):
+        derive.parse("I would rather not.")
+
+
+def test_derive_without_a_signed_in_cli_leaves_drafts_pending(catalog_copy, monkeypatch):
+    from inference import derive
+    _draft(catalog_copy)
+    monkeypatch.setattr(derive, "cli", lambda: None)
+    result = derive.derive(directory=catalog_copy, log=lambda m: None)
+    assert result["skipped"].startswith("no claude CLI here") and not result["derived"]
+    def not_logged_in(text):
+        raise derive.CliUnavailable("the claude CLI is not signed in: run `claude login` once")
+    result = derive.derive(directory=catalog_copy, runner=not_logged_in, log=lambda m: None)
+    assert "not signed in" in result["skipped"] and "not signed in" in derive.rendered(result)
+    assert next(h for h in catalog.load(catalog_copy) if h.id == "heal-line").pending

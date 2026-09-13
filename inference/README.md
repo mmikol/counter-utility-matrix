@@ -49,8 +49,9 @@ The share of revealed enemies at least one of our picks answers...
 | constraint | prose | `prose: true` | nothing - the file is a ground rule the agent holds a comp to and the board shows |
 | either | draft | name, kind and prose only | nothing yet - shown and served, ignored by the solver, until `/strategy` infers the rest |
 
-**The solver does not infer a formula or a weight from prose; the
-`/strategy` skill does, on command.** You give it three things - a name,
+**The solver does not infer a formula or a weight from prose; a model
+does - the `/strategy` skill on command, or the engine on its own through
+`derive.py`.** The skill: you give it three things - a name,
 a kind, and two to six sentences of what the strategy means - and the
 session reads the vocabulary (`metrics`), reads the catalog for the house
 style, decides the frontmatter (a heuristic's metric, direction and
@@ -61,8 +62,21 @@ before it exists, mirrors it into the `strategies` table, and logs it
 with a reason that quotes the prose. A file you drop in yourself with
 only a name, a kind and prose loads as a *draft*: the board and the
 `strategies` tool show it, `infer` results list it as not yet scored,
-and `/strategy` completes it through `infer_strategy`. Either way a
-person or a session decides; nothing here derives a formula unasked.
+and `/strategy` completes it through `infer_strategy`.
+
+**The engine derives drafts on its own, on the subscription.** `derive.py`
+asks Claude Code in print mode (`claude -p`, from a neutral directory, no
+project settings, no tools) for one JSON answer - the same inference the
+skill does, headless - and stores it through the same validated path,
+sending the catalog's objection back once if the first answer is
+refused. It runs wherever the claude CLI is signed in, which is the
+host: `load_authored` derives pending drafts before it mirrors,
+`orchestrator.py up` and `status` derive them and re-mirror the stack's
+database, and the `derive_strategies` tool does it on demand. Inside
+the containers the CLI is absent, so drafts stay pending until the host
+runs. No API key anywhere: the free-only rule holds. Sign the CLI in
+once with `claude login`; until then the engine says so and leaves the
+draft as it was.
 
 Expressions are a whitelist, compiled once and validated against the
 metrics registry when the catalog loads: the `team`, `enemy`, `matchup`,
@@ -111,7 +125,8 @@ inference/
   engine.py        infer(), evaluate(), board(): the solver plus citations
   record.py        the gates and the transcript for a decided comp
   outcomes.py      how a match went, stored beside the comp it played
-  tune.py          one validated, logged edit to a strategy file
+  tune.py          one validated, logged edit to a strategy file; add and complete
+  derive.py        the engine asking the model for a draft's frontmatter
   fit.py           weight proposals from recorded outcomes
   serve.py         the HTTP service the compose stack's ui container calls
 ```
@@ -125,6 +140,7 @@ inference/
 | `record.py` | Storing a decided comp: the gates (six real heroes, every cited fact one the board showed), the tables (`recommendations`, picks, evidence), and a markdown transcript under `db/data/authored/recommendations/`. |
 | `outcomes.py` | Storing a match result - win, loss or draw, the map and side, both sixes, the bans, the recommendation played - and the summary the fit reads. |
 | `tune.py` | `tune(id, field, value, reason)`: one frontmatter edit; `add(id, name, kind, prose, fields, reason)`: a new file from what the user gave and what `/strategy` inferred; `complete(id, fields, reason)`: a draft's frontmatter in one step. Each is validated by loading the catalog with the new text, then written, re-mirrored and logged. |
+| `derive.py` | `derive()`: for every draft, the prompt (the three inputs, the vocabulary, four catalog files for style), `claude -p` on the subscription, the JSON answer through `tune.complete`, one retry carrying the catalog's objection. `available()` says whether the CLI is here. |
 | `fit.py` | `propose` and `apply`: the two evidence tiers above, and the bounded nudge. |
 | `serve.py` | `/board`, `/infer`, `/evaluate`, `/strategies`, `/health`, `POST /record` - the same functions, over HTTP, for a board that runs in another container. |
 
@@ -140,6 +156,6 @@ inference/
 
 All of it runs on the MCP tools the data layer serves (`infer`,
 `evaluate`, `board`, `facts`, `strategies`, `metrics`, `add_strategy`,
-`infer_strategy`, `record`, `record_outcome`, `tune`, `fit_weights`,
-`tuning_log`), which is what makes a session and the board see the same
-numbers.
+`infer_strategy`, `derive_strategies`, `record`, `record_outcome`, `tune`,
+`fit_weights`, `tuning_log`), which is what makes a session and the board
+see the same numbers.

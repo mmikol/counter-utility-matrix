@@ -213,3 +213,8 @@ def test_metrics_tool_serves_the_vocabulary(ctx):
     assert "team.coverage_share" in data["metrics"] and "team.coverage_share" in data["numeric"]
     assert "map.side" in data["text"] and "map.side" not in data["numeric"]
     assert text.splitlines()[0].startswith("team.")
+
+
+def test_derive_strategies_is_idle_with_nothing_pending(ctx):
+    text, data = tools.run_tool(ctx, "derive_strategies")
+    assert data["skipped"] == "nothing pending" and "nothing pending" in text

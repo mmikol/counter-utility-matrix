@@ -145,7 +145,7 @@ same tools, which are the only door.
 | `sync_all` | all of the above in dependency order, then the CSV mirror; `refresh: true` fetches every page again |
 | `db_status` · `db_init` · `db_migrate` · `db_rebuild` · `export_csv` · `db_docs` · `query` | the database's life (`db_migrate` applies pending migrations in place), and read-only SQL |
 | `roster` · `facts` · `infer` · `evaluate` · `board` · `strategies` · `record` | the UI and inference layers through the same door (`board` solves both seats and scores the current comp) |
-| `metrics` · `add_strategy` · `infer_strategy` | the vocabulary a strategy may reference, and storing a strategy from a name, a kind, prose and the frontmatter the `/strategy` skill inferred (a bare file is a draft until it does) |
+| `metrics` · `add_strategy` · `infer_strategy` · `derive_strategies` | the vocabulary a strategy may reference; storing a strategy from a name, a kind, prose and the frontmatter the `/strategy` skill inferred; and the engine deriving a draft's frontmatter itself through `claude -p` on the subscription (host only, no key) |
 
 The same tools run from a shell, so there is no second script to keep in
 step (Docker's entrypoint and the refresher call them the same way):
@@ -224,7 +224,8 @@ three skills that drive them from a session):
 | tool / skill | does |
 | --- | --- |
 | `record_outcome` · `/outcome` | records how a match went - result, map and side, both sixes, bans, the recommendation played. Outcomes are facts on the board (per hero, per map), mirrored to `db/raw`, restored after every rebuild. |
-| `add_strategy` · `infer_strategy` · `/strategy` | you give a name, a kind and prose; the skill reads the vocabulary (`metrics`) and the catalog, infers the frontmatter - a heuristic's metric, direction and weight, a constraint's limit or its when/bonus/penalty and params, or `prose: true` - and stores the file, validated before it exists, mirrored, logged. A bare file you drop in is a draft the solver ignores until the skill completes it. |
+| `add_strategy` · `infer_strategy` · `/strategy` | you give a name, a kind and prose; the skill reads the vocabulary (`metrics`) and the catalog, infers the frontmatter - a heuristic's metric, direction and weight, a constraint's limit or its when/bonus/penalty and params, or `prose: true` - and stores the file, validated before it exists, mirrored, logged. |
+| `derive_strategies` | a bare file you drop in (name, kind, prose) is a draft; on the host the engine derives its frontmatter itself - `load_authored`, `orchestrator.py up` and this tool ask `claude -p` on your subscription, no key, and store the answer through the same validated path. Sign the CLI in once: `claude login`. |
 | `tune` · `/tune` | changes one strategy's weight, a `params` dial or an expression - validated through the catalog before the file is written, re-mirrored, logged with the reason in [inference/strategies/tuning-log.md](inference/strategies/tuning-log.md). |
 | `fit_weights` · `/tune` | scores every decided outcome's blue six on the solver's own scale and asks which heuristics ran higher in wins than losses: a mean difference from ten decided matches, a ridge logistic regression demeaned within each map from fifty; proposes a bounded nudge per weight (dry run), applies it through `tune` on request. |
 | `tuning_log` | the audit trail: every change, when, what, why, by whom. |
@@ -235,7 +236,12 @@ losses in your own games - not a learner that rewrites the brain overnight.
 
 ## Running it from a session
 
-`python stack.py up` (the `/up` skill) builds the image, starts one
+`python orchestrator.py` is the end-to-end run: `up` builds the image and
+starts the containers (the data container pulls every source and ingests it
+when the database is empty or stale), `agents` runs Claude Code headless on
+the `/refresh` skill (refresh, derive drafts, re-fit weights, regenerate
+docs - on your subscription, on the host, never at game time), and the app
+is left running for you. `python orchestrator.py up` alone (the `/up` skill) builds the image, starts one
 container per layer, waits for every layer's health, and prints a verdict
 with the URLs and the rates' capture date; `status`, `refresh`, `test` and
 `down` are the other verbs. With the stack up, a Claude Code session has
@@ -294,7 +300,7 @@ inference/           INFERENCE LAYER - facts in, the optimal six out
   strategies/tuning-log.md   the audit trail of every change (beside the files, so a
                      tune through a container lands on the host)
 tests/               mirrored: tests/db · tests/ui · tests/inference
-stack.py             up · status · refresh · test · down (the `/up` skill)
+orchestrator.py      run (default) · up · agents · status · refresh · test · down
 compose.yaml         one container per layer: db · data · inference · ui · refresher
 Dockerfile           one image for all of them; docker-entrypoint.sh picks the role
 docs/                architecture.md · strategies.md · erd.md · data-dictionary.md

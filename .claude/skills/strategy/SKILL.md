@@ -77,6 +77,17 @@ uncertainty, assumptions ...); confirm both in passing, never as a question.
    line), what it does in the solver's terms, and the one dial a person
    might turn (`/tune` changes it).
 
+## Drafts the engine derives itself
+
+A file dropped into `inference/strategies/` with only a name, a kind and
+prose is a draft. On a host where the claude CLI is signed in, the engine
+derives its frontmatter without you: `load_authored`, `orchestrator.py up` and
+the `derive_strategies` tool ask `claude -p` the same question this skill
+answers and store the result through the same validated path. This skill
+is the interactive version - use it when the user wants to see and
+discuss the inference, or when `strategies` shows a draft that the
+engine could not complete (its log line says why).
+
 ## Ground rules
 
 - Three inputs from the user, everything else inferred and explained:

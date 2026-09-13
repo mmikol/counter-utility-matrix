@@ -5,7 +5,7 @@ description: Bring the whole overwatch-db stack up and current - database, data 
 
 Bring everything up and prove it is ready. Run, from the repo root:
 
-    python stack.py up
+    python orchestrator.py up          # or `python orchestrator.py` to also run the agents
 
 It builds the one image, starts one container per layer (`db`, `data`,
 `inference`, `ui`, `refresher`), waits for each layer's health, and prints
@@ -21,10 +21,10 @@ take seconds. Then:
    mount after moving directories -> `docker compose up -d --force-recreate`
    (the script already tries this once); a schema behind the migrations ->
    the `data` container rebuilds on its own, wait and run
-   `python stack.py status` again; the database never became reachable ->
+   `python orchestrator.py status` again; the database never became reachable ->
    `docker compose logs db`.
 3. If the rates capture date is not today and the user is about to play,
-   offer `python stack.py refresh` (or the `sync_all` tool with
+   offer `python orchestrator.py refresh` (or the `sync_all` tool with
    `refresh: true` on the `overwatch-db-docker` MCP server). The refresher
    container refreshes daily on its own and on start when the caches are a
    day old, so this is rarely needed.
@@ -32,5 +32,5 @@ take seconds. Then:
    (recorded comps and outcomes come back from the db/raw mirror, but
    the rebuild costs a scrape).
 
-`python stack.py status` answers "is it up?" without touching anything;
-`python stack.py test` runs the suite inside the image.
+`python orchestrator.py status` answers "is it up?" without touching anything;
+`python orchestrator.py test` runs the suite inside the image.
