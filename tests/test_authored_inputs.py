@@ -11,6 +11,9 @@ from data.proprietary.load.user.map_playstyle import MapPlaystyleError
 from data.proprietary.load.user.map_playstyle import read_rows as read_map_playstyle
 from data.proprietary.load.user.seasons import SeasonError
 from data.proprietary.load.user.seasons import read_rows as read_seasons
+from data.proprietary.load.user.heuristics import (
+    CATALOG_PATH, PARAMS_PATH, HeuristicError,
+    read_catalog as read_heuristics, read_params)
 from data.proprietary.load.user.synergies import SynergyError
 from data.proprietary.load.user.synergies import read_rows as read_synergies
 
@@ -89,3 +92,52 @@ def test_seasons_reject_duplicate_names(tmp_path):
     with pytest.raises(SeasonError, match="duplicate"):
         read_seasons(write(tmp_path,
             "name,started,note\nSeason 1,2022-10-04,\nseason 1,2022-12-06,\n"))
+
+
+# --- heuristics (the playbook's tunable brain) ---------------------------
+
+def test_heuristics_reject_a_gapped_numbering(tmp_path):
+    with pytest.raises(HeuristicError, match="1..2 with no gaps"):
+        read_heuristics(write(tmp_path,
+            "id,tag,name,category,formula,inputs,status,rationale\n"
+            "1,derived:x,a,cat,f,i,live,r\n3,derived:y,b,cat,f,i,ready,r\n"))
+
+
+def test_heuristics_reject_an_invented_status(tmp_path):
+    # live/ready/blocked is the whole honesty vocabulary
+    with pytest.raises(HeuristicError, match="status"):
+        read_heuristics(write(tmp_path,
+            "id,tag,name,category,formula,inputs,status,rationale\n"
+            "1,derived:x,a,cat,f,i,someday,r\n"))
+
+
+def test_heuristics_reject_a_duplicate_name(tmp_path):
+    with pytest.raises(HeuristicError, match="duplicate name"):
+        read_heuristics(write(tmp_path,
+            "id,tag,name,category,formula,inputs,status,rationale\n"
+            "1,derived:x,a,cat,f,i,live,r\n2,derived:y,A,cat,f,i,live,r\n"))
+
+
+def test_heuristic_params_reject_a_wordy_value(tmp_path):
+    # a dial the dossier cannot multiply by is not a dial
+    with pytest.raises(HeuristicError, match="not numeric"):
+        read_params(write(tmp_path, "code,value,note\nHEAL_MARGIN,plenty,x\n"))
+
+
+def test_the_shipped_catalog_is_exactly_one_hundred():
+    rows = read_heuristics(CATALOG_PATH)
+    assert len(rows) == 100
+    assert [r[0] for r in rows] == list(range(1, 101))
+
+
+def test_every_dossier_default_has_a_shipped_dial():
+    # the params file must cover every constant dossier.py falls back on,
+    # or "tunable" would be true for some dials and silently false for others
+    codes = {code for code, _, _ in read_params(PARAMS_PATH)}
+    from data.proprietary import dossier
+    defaults = {"COVERAGE_MIN", "SPECIALIST_DELTA", "SLEEPER_WIN",
+                "SLEEPER_PICK", "PAIRING_LIMIT", "NET_LIMIT",
+                "TREND_POINTS", "HEAL_MARGIN"}
+    assert defaults <= codes
+    for name in defaults:
+        assert hasattr(dossier, name), name

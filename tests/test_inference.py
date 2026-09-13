@@ -269,7 +269,7 @@ def test_unknown_ally_is_refused(db):
     db.rollback()
 
 
-# --- the derived-insight formulas (documented in docs/insights.md) ----------
+# --- the derived heuristics (cataloged in docs/heuristics.md) ---------------
 
 def _derived(db, *args, **kw):
     ev, _ = dossier.build(db, *args, **kw)
@@ -311,4 +311,67 @@ def test_specialists_and_lean_emit_on_a_real_map(db):
     tables = {tab for tab, _ in lines}
     assert "derived:specialists" in tables
     assert "derived:lean" in tables
+    db.rollback()
+
+
+def test_shape_flags_a_tankless_solo_heal_lock(db):
+    lines = _derived(db, "King's Row", ["Zarya"],
+                     allies=["Ana", "Genji", "Tracer"])
+    shape = [t for tab, t in lines if tab == "derived:shape"]
+    assert shape and "0 tank / 2 dps / 1 support" in shape[0], shape
+    assert "TANKLESS" in shape[0] and "solo heal" in shape[0], shape
+    db.rollback()
+
+
+def test_healing_supply_reads_the_kits_own_numbers(db):
+    lines = _derived(db, "King's Row", ["Zarya"], allies=["Ana", "Brigitte"])
+    heal = [t for tab, t in lines if tab == "derived:healing"]
+    # Ana's biggest heal lives ability-side, Brigitte's too; both nonzero
+    assert heal and "Ana 250" in heal[0] and "Brigitte 100" in heal[0], heal
+    db.rollback()
+
+
+def test_teamcover_names_the_unanswered_enemy(db):
+    lines = _derived(db, "King's Row", ["Zarya", "Pharah"], allies=["Mei"])
+    cover = [t for tab, t in lines if tab == "derived:teamcover"]
+    assert cover, lines
+    covered, total = cover[0].split("answer ")[1].split(" ")[0].split("/")
+    assert int(covered) <= int(total) == 2
+    if int(covered) < 2:
+        assert "still unanswered:" in cover[0], cover
+    db.rollback()
+
+
+def test_netmatchup_shows_both_sides_of_the_ledger(db):
+    lines = _derived(db, "King's Row", ["Zarya", "Pharah"])
+    net = [t for tab, t in lines if tab == "derived:netmatchup"]
+    assert net and "answers" in net[0] and "answered-by" in net[0], net
+    db.rollback()
+
+
+def test_heuristic_params_tune_a_live_formula_without_code(db):
+    # crank the dial inside the transaction, watch the flag flip, roll back
+    db.execute("UPDATE heuristic_params SET value = 2.0"
+               " WHERE code = 'HEAL_MARGIN'")
+    lines = _derived(db, "King's Row", ["Zarya"], allies=["Ana", "Brigitte"])
+    heal = [t for tab, t in lines if tab == "derived:healing"]
+    assert heal and "UNDER-HEALED" in heal[0], heal
+    db.rollback()
+    lines = _derived(db, "King's Row", ["Zarya"], allies=["Ana", "Brigitte"])
+    heal = [t for tab, t in lines if tab == "derived:healing"]
+    assert heal and "UNDER-HEALED" not in heal[0], heal
+    db.rollback()
+
+
+def test_catalog_parity_the_table_matches_the_code(db):
+    # the heuristics table may never drift from the dossier that emits it
+    import os
+    import re
+    src = open(os.path.join(os.path.dirname(dossier.__file__), "dossier.py"),
+               encoding="utf-8").read()
+    in_code = set(re.findall(r"derived:[a-z]+", src))
+    in_table = {tag for tag, in db.execute(
+        "SELECT tag FROM heuristics WHERE status = 'live'"
+        " AND tag LIKE 'derived:%'").fetchall()}
+    assert in_code == in_table, (in_code ^ in_table)
     db.rollback()

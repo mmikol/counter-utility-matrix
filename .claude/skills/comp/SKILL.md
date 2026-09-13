@@ -55,7 +55,7 @@ five-hero composition, fast.
 - Respect ban pressure: never build a comp that dies with a likely ban.
 - If the dossier warned that patches shipped since capture, weight kit facts
   and the playbook over rates, and tell the user.
-- `derived:` lines are pre-computed analytics (formulas in docs/insights.md):
+- `derived:` lines are pre-computed analytics (the 100-formula catalog in docs/heuristics.md; thresholds are tunable rows in heuristic_params):
   coverage and safe-picks tell you the leverage slots, the draft skeleton is
   a straw man to argue against - improve on it and say why, or adopt it and
   say why. Cite them like any other line.

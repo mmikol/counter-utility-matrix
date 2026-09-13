@@ -16,13 +16,20 @@ notes, and what this layer has recommended before.
 
 from data.heuristic.transform.counterpick.names import match_key
 
-# Thresholds for the derived insights - every formula is documented in
-# docs/insights.md; change a constant there and here together.
+# Default thresholds for the derived heuristics. The playbook's
+# heuristic_params table overrides these at build time (see _tuning), so
+# tuning is a CSV edit and a reload, not a code change; these values only
+# decide when the table is absent or a dial is missing from it. The whole
+# catalog is documented in docs/heuristics.md and stored in the heuristics
+# table.
 COVERAGE_MIN = 2          # answers at least this many named enemies
 SPECIALIST_DELTA = 2.5    # on-map win minus own baseline, percentage points
 SLEEPER_WIN = 51.0        # wins at least this much on the map...
 SLEEPER_PICK = 6.0        # ...while picked at most this much
 PAIRING_LIMIT = 6
+NET_LIMIT = 5             # top candidates by net matchup
+TREND_POINTS = 1.5        # win-rate movement between snapshots worth naming
+HEAL_MARGIN = 0.75        # supply below this share of the benchmark is a flag
 
 
 class Evidence:
@@ -360,7 +367,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
             ev.add("counters", "CAUTION: %s is answered by enemy %s"
                    % (name, ", ".join(threats)))
 
-    _derived_insights(ev, cx, ctx, [h for h, *_ in ranked],
+    _derived_heuristics(ev, cx, ctx, [h for h, *_ in ranked],
                       enemy_set, ctx["ally_ids"])
 
     # --- who plays which style, roster-wide -----------------------------
@@ -441,27 +448,46 @@ def build(cx, map_name=None, enemies=(), allies=()):
     return ev, ctx
 
 
-def _derived_insights(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
+def _tuning(cx):
+    """The dial panel: heuristic_params rows override the module defaults."""
+    tune = {"COVERAGE_MIN": COVERAGE_MIN,
+            "SPECIALIST_DELTA": SPECIALIST_DELTA,
+            "SLEEPER_WIN": SLEEPER_WIN, "SLEEPER_PICK": SLEEPER_PICK,
+            "PAIRING_LIMIT": PAIRING_LIMIT, "NET_LIMIT": NET_LIMIT,
+            "TREND_POINTS": TREND_POINTS, "HEAL_MARGIN": HEAL_MARGIN}
+    if _rows(cx, "select to_regclass('heuristic_params')")[0][0]:
+        for code, value in _rows(cx,
+                                 "select code, value from heuristic_params"):
+            if code in tune:
+                tune[code] = float(value)
+    return tune
+
+
+def _derived_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
     """Analytics the database computes so the model does not have to.
 
     Every line here is DERIVED - a formula over tables, not a row from one -
-    and tagged `derived:<name>`. The formulas live in docs/insights.md.
+    and tagged `derived:<name>`. The catalog lives in the playbook's
+    heuristics table and docs/heuristics.md; the thresholds come from
+    _tuning.
     """
     avail = list(dict.fromkeys(list(ally_ids) + cand_ids))
     if not avail:
         return
+    tune = _tuning(cx)
     names = dict(_rows(cx, "select hero_id, name from heroes"))
     ally_mark = {h: "*" for h in ally_ids}
 
     # coverage: how many of the named enemies each available hero answers
-    if len(enemy_set) >= COVERAGE_MIN:
+    if len(enemy_set) >= tune["COVERAGE_MIN"]:
         cover = _rows(cx, """
             select c.countered_by_id, count(distinct c.hero_id),
                    string_agg(distinct e.name, ', ')
             from counters c join heroes e on e.hero_id = c.hero_id
             where c.hero_id = any(%s) and c.countered_by_id = any(%s)
             group by 1 having count(distinct c.hero_id) >= %s
-            order by 2 desc""", list(enemy_set), avail, COVERAGE_MIN)
+            order by 2 desc""", list(enemy_set), avail,
+            tune["COVERAGE_MIN"])
         for hid, k, covered in cover[:6]:
             ev.add("derived:coverage", "coverage: %s%s answers %d/%d named"
                    " enemies (%s)" % (names[hid], ally_mark.get(hid, ""),
@@ -483,7 +509,7 @@ def _derived_insights(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
         select s.hero_id, s.other_id, s.score, s.note from synergies s
         where s.hero_id = any(%s) and s.other_id = any(%s)
         order by s.score desc nulls last limit %s""",
-        avail, avail, PAIRING_LIMIT)
+        avail, avail, int(tune["PAIRING_LIMIT"]))
     for a, b, score, note in pairs:
         ev.add("derived:pairings", "available pairing: %s%s + %s%s (%s/3): %s"
                % (names[a], ally_mark.get(a, ""), names[b],
@@ -568,7 +594,8 @@ def _derived_insights(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
             where m.map_id=%s and m.win_rate is not null
               and hm.win_rate is not null
               and m.win_rate - hm.win_rate >= %s
-            order by 2 desc limit 6""", ctx["map_id"], SPECIALIST_DELTA):
+            order by 2 desc limit 6""", ctx["map_id"],
+            tune["SPECIALIST_DELTA"]):
             ev.add("derived:specialists", "map specialist: %s runs %+.1f here"
                    " vs their own overall baseline" % (name, delta))
         for name, win, pick in _rows(cx, """
@@ -577,10 +604,14 @@ def _derived_insights(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
             join competitive_tiers t on t.tier_id=m.tier_id and t.code='all'
             where m.map_id=%s and m.win_rate >= %s and m.pick_rate <= %s
             order by m.win_rate desc limit 5""",
-            ctx["map_id"], SLEEPER_WIN, SLEEPER_PICK):
+            ctx["map_id"], tune["SLEEPER_WIN"],
+            tune["SLEEPER_PICK"]):
             ev.add("derived:sleepers", "sleeper here: %s wins %.1f%% while"
                    " picked only %.1f%% - the lobby underrates this"
                    % (name, win, pick))
+
+    _team_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
+                     ally_mark, tune)
 
     # what the enemy comp leans toward
     if len(enemy_set) >= 2:
@@ -593,6 +624,176 @@ def _derived_insights(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
                           for s, n in lean),
                 " - leans %s" % lean[0][0]
                 if lean[0][1] > len(enemy_set) / 2 else ""))
+
+
+def _team_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
+                     ally_mark, tune):
+    """Comp-shape, sustain, and matchup arithmetic over the locked picks."""
+    E, A = list(enemy_set), list(ally_ids)
+
+    # net matchup: answers minus exposures against the named enemies
+    if E and cand_ids:
+        net = _rows(cx, """
+            with ans as (select countered_by_id h, count(*) n from counters
+                         where hero_id = any(%s) and countered_by_id = any(%s)
+                         group by 1),
+                 exp as (select hero_id h, count(*) n from counters
+                         where countered_by_id = any(%s) and hero_id = any(%s)
+                         group by 1)
+            select c.h, coalesce(a.n,0), coalesce(x.n,0)
+            from (select unnest(%s::int[]) h) c
+            left join ans a on a.h = c.h left join exp x on x.h = c.h
+            order by coalesce(a.n,0) - coalesce(x.n,0) desc,
+                     coalesce(a.n,0) desc limit %s""",
+            E, cand_ids, E, cand_ids, cand_ids,
+            int(tune["NET_LIMIT"]))
+        parts = ["%s %+d (answers %d, answered-by %d)"
+                 % (names[h], a - x, a, x) for h, a, x in net]
+        ev.add("derived:netmatchup",
+               "net matchup vs this enemy comp: " + "; ".join(parts))
+
+    if not A:
+        return
+
+    # team coverage of the locked picks, and who is still unanswered
+    if E:
+        covered = {e for e, in _rows(cx, """
+            select distinct hero_id from counters
+            where hero_id = any(%s) and countered_by_id = any(%s)""", E, A)}
+        ev.add("derived:teamcover",
+               "your locked picks answer %d/%d named enemies%s"
+               % (len(covered), len(E),
+                  "; still unanswered: " + ", ".join(
+                      names[e] for e in E if e not in covered)
+                  if len(covered) < len(E) else ""))
+
+    # role shape: counts, and the flags that decide games
+    role_of = dict(_rows(cx, """select h.hero_id, r.code from heroes h
+        join roles r using(role_id) where h.hero_id = any(%s)""", A))
+    counts = {"tank": 0, "damage": 0, "support": 0}
+    for h in A:
+        counts[role_of[h]] = counts.get(role_of[h], 0) + 1
+    flags = []
+    if counts["tank"] == 0:
+        flags.append("TANKLESS - no one makes space")
+    if counts["tank"] >= 2:
+        flags.append("double tank")
+    if counts["damage"] >= 3:
+        flags.append("triple+ DPS - wins fights it starts, loses attrition")
+    if counts["support"] == 0:
+        flags.append("NO SUPPORT - sustain is spawn-door only")
+    if counts["support"] == 1:
+        flags.append("solo heal - protect them or run self-sustain")
+    open_slots = 5 - len(A)
+    ev.add("derived:shape",
+           "locked shape: %d tank / %d dps / %d support, %d slot%s open%s"
+           % (counts["tank"], counts["damage"], counts["support"],
+              open_slots, "" if open_slots == 1 else "s",
+              " - " + "; ".join(flags) if flags else ""))
+    if ctx["map_id"]:
+        top = _rows(cx, """select style from map_playstyle where map_id=%s
+            order by score desc nulls last limit 1""", ctx["map_id"])
+        if top:
+            slots = dict(_rows(cx, """select r.code, a.slots
+                from comp_archetypes a join roles r using(role_id)
+                where a.style=%s""", top[0][0]))
+            if slots:
+                dev = sum(max(0, counts.get(r, 0) - n)
+                          for r, n in slots.items())
+                if dev:
+                    ev.add("derived:shape",
+                           "shape deviation: %d pick(s) over the %s"
+                           " archetype's role slots for this map"
+                           % (dev, top[0][0]))
+
+    # healing supply: peak single heal in each kit (ability or weapon side),
+    # against the median across the whole support roster - the kits' own
+    # numbers, not a judged rating
+    def peak_heal(ids):
+        return dict(_rows(cx, """
+            select hero_id, max(v) from (
+                select a.hero_id, s.value v from ability_stats s
+                join abilities a using(ability_id)
+                join stat_keys k using(stat_key_id)
+                where k.code in ('heal','hps') and s.value is not null
+                  and a.hero_id = any(%s)
+                union all
+                select w.hero_id, s.value from weapon_stats s
+                join weapon_configs c on c.config_id = s.config_id
+                join weapons w on w.weapon_id = c.weapon_id
+                join stat_keys k on k.stat_key_id = s.stat_key_id
+                where k.code in ('heal','hps') and s.value is not null
+                  and w.hero_id = any(%s)) t group by 1""", ids, ids))
+    sup_ids = [h for h in A if role_of[h] == "support"]
+    if sup_ids:
+        roster = [h for h, in _rows(cx,
+            """select h.hero_id from heroes h join roles r using(role_id)
+               where r.code='support'""")]
+        supply = peak_heal(sup_ids)
+        all_sup = sorted(float(v) for v in peak_heal(roster).values())
+        median = all_sup[len(all_sup) // 2] if all_sup else 0
+        total = sum(float(supply.get(h, 0)) for h in sup_ids)
+        bench = median * 2
+        ev.add("derived:healing",
+               "healing supply locked in: %s (peak single heal) = %.0f total"
+               " vs ~%.0f for a typical two-support line%s"
+               % (", ".join("%s %.0f" % (names[h], supply.get(h, 0))
+                            for h in sup_ids), total, bench,
+                  " - UNDER-HEALED unless the open slots add sustain"
+                  if len(sup_ids) >= 2
+                  and total < bench * tune["HEAL_MARGIN"]
+                  else ""))
+
+    # frontline pool: what the tanks actually bring
+    tanks = [h for h in A if role_of[h] == "tank"]
+    if tanks:
+        pools = _rows(cx, """select name, coalesce(health,0)+coalesce(shield,0)
+            +coalesce(armor,0), coalesce(armor,0) from heroes
+            where hero_id = any(%s)""", tanks)
+        ev.add("derived:frontline", "frontline pool locked in: %s"
+               % "; ".join("%s %dhp (%d armor)" % p for p in pools))
+
+    # barrier war: their barrier HP vs our pierce
+    if E:
+        eb = _rows(cx, """select e.name, max(s.value) from ability_stats s
+            join abilities a using(ability_id)
+            join heroes e on e.hero_id = a.hero_id
+            join stat_keys k using(stat_key_id)
+            where k.code='barrier_health' and s.value is not null
+              and a.hero_id = any(%s) group by 1""", E)
+        if eb:
+            pierce = _rows(cx, """
+                select distinct h.name from ability_stats s
+                join abilities a using(ability_id)
+                join heroes h on h.hero_id = a.hero_id
+                join stat_keys k using(stat_key_id)
+                where k.code='ignores_barrier' and s.value=1
+                  and a.hero_id = any(%s)""", list(dict.fromkeys(A + cand_ids)))
+            ev.add("derived:barriers",
+                   "barrier war: enemy fields %s; available barrier-piercers:"
+                   " %s" % ("; ".join("%s %.0fhp" % b for b in eb),
+                            ", ".join(n for n, in pierce) or "none"))
+
+    # trend: movement since the previous blizzard snapshot, when one exists
+    trend = _rows(cx, """
+        with snaps as (select snapshot_id, row_number() over
+            (order by captured_at desc) rn from meta_snapshots ms
+            join sources s using(source_id) where s.code='blizzard')
+        select h.name, round(cur.win_rate - prev.win_rate, 1) d
+        from hero_meta cur
+        join snaps sc on sc.snapshot_id = cur.snapshot_id and sc.rn = 1
+        join competitive_tiers t on t.tier_id = cur.tier_id and t.code='all'
+        join hero_meta prev on prev.hero_id = cur.hero_id
+        join snaps sp on sp.snapshot_id = prev.snapshot_id and sp.rn = 2
+        join competitive_tiers t2 on t2.tier_id = prev.tier_id
+            and t2.code='all'
+        join heroes h on h.hero_id = cur.hero_id
+        where abs(cur.win_rate - prev.win_rate) >= %s
+        order by abs(cur.win_rate - prev.win_rate) desc limit 6""",
+        tune["TREND_POINTS"])
+    for name, d in trend:
+        ev.add("derived:trend", "trend since the previous capture: %s %+.1f"
+               " win rate" % (name, d))
 
 
 def main():

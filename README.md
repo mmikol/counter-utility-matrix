@@ -37,7 +37,8 @@ in `.cache-*/` so later builds cost almost no requests). Then the UI serves
 at **http://localhost:8017**: a dashboard of the whole database, an evidence
 explorer showing the 90-150 cited lines a comp decision rests on - including
 `derived:` analytics the database computes itself (coverage, draft
-skeletons, map specialists; formulas in docs/insights.md), and a
+skeletons, map specialists; the 100-formula catalog in
+docs/heuristics.md, tunable via the playbook), and a
 viewer for every recorded recommendation.
 
 Every later `docker compose up` skips straight to serving (the database
@@ -117,7 +118,7 @@ tests/               82 tests: unit, invariants, export parity, validation
 
 - [docs/erd.md](docs/erd.md) - entity relationships, by domain and whole-db
 - [docs/data-dictionary.md](docs/data-dictionary.md) - every table & column, generated from the live schema
-- [docs/insights.md](docs/insights.md) - every formula behind the `derived:` evidence lines
+- [docs/heuristics.md](docs/heuristics.md) - the 100-consideration catalog behind the `derived:` evidence lines, stored and tuned in the playbook
 - [docs/scaling.md](docs/scaling.md) - how region/rank/platform/stage granularity widens
 - [data/proprietary/README.md](data/proprietary/README.md) - the authored inputs and the inference layer
 

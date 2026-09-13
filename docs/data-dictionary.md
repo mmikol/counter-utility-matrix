@@ -12,7 +12,7 @@ are on all of them: `source_id` (which source the row came from, see
 | **HEROES** | `abilities` · `ability_kinds` · `ability_modifiers` · `ability_stats` · `heroes` · `perk_ability_effects` · `perk_stats` · `perk_tiers` · `perks` · `roles` · `stat_keys` · `subroles` · `weapon_config_slots` · `weapon_configs` · `weapon_stats` · `weapons` |
 | **MAPS** | `game_modes` · `map_modes` · `map_stages` · `maps` |
 | **META** | `competitive_tiers` · `hero_meta` · `map_meta` · `meta_snapshots` · `patches` · `regions` · `seasons` |
-| **PLAYBOOK** | `comp_archetypes` · `counters` · `map_playstyle` · `map_strategy` · `playstyle` · `synergies` |
+| **PLAYBOOK** | `comp_archetypes` · `counters` · `heuristic_params` · `heuristics` · `map_playstyle` · `map_strategy` · `playstyle` · `synergies` |
 | **INFERENCE** | `recommendation_evidence` · `recommendation_picks` · `recommendations` · `strategies` |
 
 
@@ -150,11 +150,36 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 | `hero_id` | integer | no |  |
 | `slug` | text | no |  |
 | `name` | text | no |  |
-| `role_id` | integer | no | `subroles.role_id` |
+| `role_id` | integer | no | `subroles.subrole_id` |
 | `subrole_id` | integer | no | `subroles.subrole_id` |
 | `health` | smallint | yes |  |
 | `shield` | smallint | yes |  |
 | `armor` | smallint | yes |  |
+
+## `heuristic_params`
+
+*PLAYBOOK · 9 rows · `007_heuristics.sql`*
+
+| column | type | null | references |
+| --- | --- | --- | --- |
+| `code` | text | no |  |
+| `value` | numeric | no |  |
+| `note` | text | no |  |
+
+## `heuristics`
+
+*PLAYBOOK · 100 rows · `007_heuristics.sql`*
+
+| column | type | null | references |
+| --- | --- | --- | --- |
+| `heuristic_id` | smallint | no |  |
+| `tag` | text | no |  |
+| `name` | text | no |  |
+| `category` | text | no |  |
+| `formula` | text | no |  |
+| `inputs` | text | no |  |
+| `status` | text | no |  |
+| `rationale` | text | no |  |
 
 ## `map_meta`
 
@@ -322,7 +347,7 @@ Which playstyle a hero belongs to, straight from the wiki's team composition pag
 
 ## `recommendation_evidence`
 
-*INFERENCE · 0 rows · `006_inference.sql`*
+*INFERENCE · 17 rows · `006_inference.sql`*
 
 The dossier lines the model cited, by tag (E1, E2, ...). hero_id links a citation to the specific pick it justified; NULL means it supported the comp as a whole.
 
@@ -336,7 +361,7 @@ The dossier lines the model cited, by tag (E1, E2, ...). hero_id links a citatio
 
 ## `recommendation_picks`
 
-*INFERENCE · 0 rows · `006_inference.sql`*
+*INFERENCE · 5 rows · `006_inference.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -347,7 +372,7 @@ The dossier lines the model cited, by tag (E1, E2, ...). hero_id links a citatio
 
 ## `recommendations`
 
-*INFERENCE · 0 rows · `006_inference.sql`*
+*INFERENCE · 1 rows · `006_inference.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |

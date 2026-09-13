@@ -17,7 +17,7 @@ Two tables can be joinable with no edge between them: `hero_meta` and
 means a foreign key, and neither owns the other.
 
 Every table also carries `source_id` → `sources` and a `cao` timestamp.
-Those edges are left off - they would connect `sources` to all 38 tables
+Those edges are left off - they would connect `sources` to all 40 tables
 and obscure everything else.
 
 ## HEROES

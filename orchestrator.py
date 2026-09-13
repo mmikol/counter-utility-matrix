@@ -184,7 +184,8 @@ def register_source(cursor, source, cao):
 DOC_DOMAIN = {"001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES",
               "003_maps.sql": "MAPS", "004_meta.sql": "META",
               "005_playbook.sql": "PLAYBOOK",
-              "006_inference.sql": "INFERENCE"}
+              "006_inference.sql": "INFERENCE",
+              "007_heuristics.sql": "PLAYBOOK"}
 
 
 def _migration_tables():
@@ -422,6 +423,7 @@ PIPELINES = {
         "user.synergies",
         "user.archetypes",
         "user.map_playstyle",
+        "user.heuristics",
     ),
 }
 

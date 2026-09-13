@@ -1,10 +1,12 @@
 # proprietary — the strategy layer
 
-**Partially implemented: the authored playbook is real.** Three committed
+**Partially implemented: the authored playbook is real.** Five committed
 CSVs load into the playbook — `synergies.csv`, `archetypes.csv` (the role
-shape each style's comp wants) and `map_playstyle.csv` (what kind of fight
-each map rewards) — see "The authored pipelines" below. The inference layer
-is built too — see "Asking for a comp".
+shape each style's comp wants), `map_playstyle.csv` (what kind of fight
+each map rewards), and the tunable brain: `heuristics.csv` (the
+100-consideration catalog behind the dossier's `derived:` lines) with
+`heuristic_params.csv` (its dials) — see "The authored pipelines" below.
+The inference layer is built too — see "Asking for a comp".
 
 ## What this type of data is for
 
@@ -64,8 +66,19 @@ published dates yet; add them here the day they do.
 `archetypes.csv` (`style,role,slots,note`) defines what a composition IS - the
 role shape each playstyle wants, with the note naming who typically fills the
 slot. `map_playstyle.csv` (`map,style,score,note`) says what kind of fight
-each map rewards, on the same 1-3 scale. All three follow the same contract:
-committed, whole-truth on reload, loud errors on unknown names.
+each map rewards, on the same 1-3 scale.
+
+`heuristics.csv` is the catalog of every consideration the dossier
+mathematically encodes when weighing a comp - 100 numbered formulas with an
+honest status each (`live` / `ready` / `blocked`) - and
+`heuristic_params.csv` is its dial panel: the thresholds the live formulas
+read at build time. Tuning is continuous by design: edit a value, re-run
+`python -m data.proprietary.load.user.heuristics`, and the next dossier
+computes with it - no code change. The whole catalog is rendered in
+[docs/heuristics.md](../../docs/heuristics.md).
+
+All of them follow the same contract:
+committed, whole-truth on reload, loud errors on malformed rows.
 
 ## Asking for a comp (built)
 
@@ -87,7 +100,7 @@ candidate, role passives, archetype slot shapes, every authored synergy and
 strategy note, meta leaders and ban pressure, a block of `derived:`
 analytics computed by formula (multi-enemy coverage, safe picks, available
 pairings, greedy draft skeletons around your locked picks, map specialists,
-sleepers, enemy style lean — see docs/insights.md) — and what this layer
+sleepers, enemy style lean — see docs/heuristics.md) — and what this layer
 itself recommended before on the same map. The model that reads it is the Claude
 Code session itself: the `/comp` skill (`.claude/skills/comp`) turns any
 session in this repo into the inference layer - subscription-covered, no API
