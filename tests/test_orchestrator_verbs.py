@@ -98,3 +98,51 @@ def test_update_on_a_truly_empty_database_points_at_a_builder(run, fresh):
     pgserver.get_server(fresh)            # cluster exists, zero tables
     with pytest.raises(SystemExit, match="rebuild"):
         run(fresh)("update")
+
+
+def test_restore_brings_recorded_recommendations_back(cluster, tmp_path):
+    # a recorded comp survives export -> wipe -> restore, ids and all
+    raw = str(tmp_path / "raw")
+    with connect(cluster) as cx:
+        cx.execute("insert into roles (code,name,source_id) values"
+                   " ('tank','Tank',1) on conflict (code) do nothing")
+        cx.execute("insert into subroles (role_id,code,name,"
+                   "passive_description,source_id)"
+                   " select role_id,'x','X','',1 from roles where code='tank'"
+                   " on conflict (code) do nothing")
+        cx.execute("insert into heroes (slug,name,role_id,subrole_id,source_id)"
+                   " select 'mei','Mei',role_id,subrole_id,1"
+                   " from subroles where code='x'"
+                   " on conflict (slug) do nothing")
+        cx.execute("delete from recommendations")
+        rec_id, hero_id = cx.execute(
+            "insert into recommendations (request,model,playstyle,reasoning,"
+            " prompt,response,source_id) values"
+            " ('q','m','brawl','r','p','{}',1)"
+            " returning rec_id, (select hero_id from heroes where slug='mei')"
+        ).fetchone()
+        cx.execute("insert into recommendation_picks (rec_id,position,hero_id,"
+                   "why,source_id) values (%s,1,%s,'walls',1)",
+                   (rec_id, hero_id))
+        cx.execute("insert into recommendation_evidence (rec_id,tag,"
+                   "source_table,description,hero_id,source_id)"
+                   " values (%s,'E1','t','d',%s,1)", (rec_id, hero_id))
+        cx.commit()
+        orchestrator.export(cx, raw_dir=raw)
+        cx.execute("delete from recommendations")   # cascades to children
+        cx.commit()
+
+        assert orchestrator.restore_recommendations(cx, raw_dir=raw) == 3
+        assert cx.execute("select request from recommendations"
+                          " where rec_id=%s", (rec_id,)).fetchone() == ("q",)
+        # the sequence continues past the restored ids, no collision
+        nxt = cx.execute("insert into recommendations (request,model,"
+                         "playstyle,reasoning,prompt,response,source_id)"
+                         " values ('q2','m','poke','r','p','{}',1)"
+                         " returning rec_id"
+                         ).fetchone()[0]
+        assert nxt > rec_id
+        # never merges into a database that already holds records
+        assert orchestrator.restore_recommendations(cx, raw_dir=raw) == 0
+        cx.execute("delete from recommendations")
+        cx.commit()

@@ -399,6 +399,59 @@ def export(connection, raw_dir=RAW_DIR):
     return counts
 
 
+# --- restoring what no pipeline can re-fetch ---------------------------
+
+RECORD_TABLES = ("recommendations", "recommendation_picks",
+                 "recommendation_evidence")
+
+
+def restore_recommendations(connection, raw_dir=RAW_DIR):
+    """Re-import recorded recommendations from the data/raw mirror.
+
+    Recorded comps are this database's own proprietary output - the one
+    thing no pipeline can re-scrape - and the mirror CSVs that record.py
+    refreshes at write time are their backup. A fresh build restores them,
+    extending the rule the authored playbook lives by (a rebuild must never
+    silently discard what cannot be re-fetched) to the rows the inference
+    layer itself produced.
+
+    COPY round-trips exactly what export wrote - ids included, so picks and
+    evidence keep their rec_id references; that leans on the pipelines
+    reloading heroes and maps in a deterministic order, which a same-code
+    rebuild does. The rec_id sequence is advanced past the restored ids.
+    Never merges: a database that already holds recommendations keeps them.
+    """
+    cursor = connection.cursor()
+    if cursor.execute("SELECT count(*) FROM recommendations").fetchone()[0]:
+        return 0
+    paths = [os.path.join(raw_dir, t + ".csv") for t in RECORD_TABLES]
+    if not all(os.path.exists(p) for p in paths):
+        return 0
+    restored = 0
+    try:
+        for table, path in zip(RECORD_TABLES, paths):
+            with open(path, encoding="utf-8") as handle:
+                with cursor.copy("COPY %s FROM STDIN WITH (FORMAT csv,"
+                                 " HEADER true)" % table) as copy:
+                    copy.write(handle.read())
+            restored += cursor.execute(
+                "SELECT count(*) FROM " + table).fetchone()[0]
+        cursor.execute(
+            "SELECT setval(pg_get_serial_sequence('recommendations',"
+            " 'rec_id'), greatest((SELECT coalesce(max(rec_id), 0)"
+            " FROM recommendations), 1))")
+        connection.commit()
+    except psycopg.Error as error:
+        # A mirror whose ids no longer line up (the roster or map pool
+        # changed shape) must not kill the build it rides on.
+        connection.rollback()
+        print("WARNING: could not restore recorded recommendations from"
+              " data/raw (%s); the transcripts in"
+              " data/proprietary/recommendations/ still hold them" % error)
+        return 0
+    return restored
+
+
 # --- running the stages in order --------------------------------------
 
 # Each type's stages as source.domain, in the order they must run, and the
@@ -554,6 +607,13 @@ def run_pipelines(args, passthrough):
             sys.exit("\n%s failed (exit %d); stopping so later stages do not run"
                      " against a partial database." % (name, result.returncode))
     print("\nall %d pipelines completed" % len(selected))
+
+    if args.command in ("rebuild", "inflate"):
+        with psycopg.connect(resolve_dsn(args)) as connection:
+            restored = restore_recommendations(connection)
+            if restored:
+                print("restored %d recorded-recommendation rows from the"
+                      " data/raw mirror" % restored)
 
 
 if __name__ == "__main__":
