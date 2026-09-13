@@ -221,7 +221,7 @@ supports who together heal little); this goal rewards the slope.
 `maximize team.synergy_score` - summed synergy scores among the picks. weight 2.5
 
 The summed scores of authored synergy pairs among the six, from
-`data/proprietary/synergies.csv`. Every pair carries the author's
+`data/authored/synergies.csv`. Every pair carries the author's
 reasoning, so a high score is not a vibe - it is a stack of documented
 interactions: nano on the dive tank, speed on the brawl core, pocket on
 the flier.

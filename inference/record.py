@@ -23,13 +23,12 @@ from datetime import datetime, timezone
 import psycopg
 
 from data import common
-from data.common import ROOT
-from data.proprietary.pipeline import USER
+from data.sources.authored import AUTHORED
 from user.facts import engine as facts_engine
 from user.facts import model
 from user.facts.compute import TEAM_SIZE
 
-REC_DIR = os.path.join(ROOT, "data", "proprietary", "recommendations")
+REC_DIR = os.path.join(common.AUTHORED_DIR, "recommendations")
 
 
 def validate_answer(answer):
@@ -51,7 +50,7 @@ def persist(cx, question, answer, fs, map_id, prompt, model_name, raw_json):
     """Store the exchange; returns rec_id. Raises on citations of nothing.
     Does not commit - the caller owns the transaction."""
     cursor = cx.cursor()
-    source_id = common.register_source(cursor, USER, common.now())
+    source_id = common.register_source(cursor, AUTHORED, common.now())
     hero_ids = common.lookup_ids(cursor, "heroes", "name", "hero_id")
     by_tag = {f.id: f for f in fs.facts}
     unknown_heroes = [p["hero"] for p in answer["picks"]
@@ -84,7 +83,8 @@ def persist(cx, question, answer, fs, map_id, prompt, model_name, raw_json):
     return rec_id
 
 
-def transcript(rec_id, question, map_name, red, blue, answer, fs, model_name):
+def transcript(rec_id, question, map_name, red, blue, answer, fs, model_name,
+               bans=()):
     """The durable record: a committed markdown file per recommendation."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     slug = re.sub(r"[^a-z0-9]+", "-", (map_name or "any-map").lower()).strip("-")
@@ -94,9 +94,10 @@ def transcript(rec_id, question, map_name, red, blue, answer, fs, model_name):
                    key=lambda t: int(t[1:]))
     lines = ["# Recommendation %d" % rec_id, "",
              "**Question:** %s" % question,
-             "**Map:** %s   **Red:** %s   **Blue locked:** %s   **Model:** %s"
+             "**Map:** %s   **Red:** %s   **Blue locked:** %s   **Bans:** %s"
+             "   **Model:** %s"
              % (map_name or "-", ", ".join(red) or "-", ", ".join(blue) or "-",
-                model_name), "",
+                ", ".join(bans) or "-", model_name), "",
              "## Comp - %s" % answer["playstyle"], ""]
     for p in answer["picks"]:
         lines.append("- **%s** - %s _(%s)_" % (p["hero"], p["why"], ", ".join(p["evidence"])))
@@ -109,7 +110,7 @@ def transcript(rec_id, question, map_name, red, blue, answer, fs, model_name):
 
 
 def record(cx, question, answer, map_name=None, red=(), blue=(),
-           model_name="claude-code-session"):
+           model_name="claude-code-session", bans=()):
     """The whole path: gates, tables, mirror, transcript -> (rec_id, path).
 
     The evidence board is (map, red, the six picks): the facts a pick
@@ -117,7 +118,7 @@ def record(cx, question, answer, map_name=None, red=(), blue=(),
     validate_answer(answer)
     world = model.load(cx)
     picks = [p["hero"] for p in answer["picks"]]
-    fs = facts_engine.generate(world, map_name, list(red), picks)
+    fs = facts_engine.generate(world, map_name, list(red), picks, list(bans))
     m = world.map(map_name) if map_name else None
     rec_id = persist(cx, question, answer, fs, m.id if m else None,
                      "facts rebuilt at record time:\n\n" + fs.rendered(),
@@ -125,7 +126,7 @@ def record(cx, question, answer, map_name=None, red=(), blue=(),
     cx.commit()
     common.export(cx)
     path = transcript(rec_id, question, map_name, list(red), list(blue), answer,
-                      fs, model_name)
+                      fs, model_name, list(bans))
     return rec_id, path
 
 
@@ -137,7 +138,8 @@ def main():
         rec_id, path = record(cx, payload["question"], payload["answer"],
                               payload.get("map"), payload.get("red", []),
                               payload.get("blue", []),
-                              payload.get("model", "claude-code-session"))
+                              payload.get("model", "claude-code-session"),
+                              payload.get("bans", []))
     print("recorded as recommendation %d; transcript: %s" % (rec_id, path))
 
 

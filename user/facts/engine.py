@@ -41,8 +41,9 @@ def _plain(value):
 
 
 class FactSet:
-    def __init__(self, map_name=None, red=(), blue=()):
+    def __init__(self, map_name=None, red=(), blue=(), bans=()):
         self.map_name, self.red, self.blue = map_name, list(red), list(blue)
+        self.bans = list(bans)
         self.facts = []
         self._by_key = {}
 
@@ -65,7 +66,7 @@ class FactSet:
 
     def to_dict(self):
         return {"map": self.map_name, "red": self.red, "blue": self.blue,
-                "count": len(self.facts),
+                "bans": self.bans, "count": len(self.facts),
                 "facts": [f.to_dict() for f in self.facts]}
 
 
@@ -80,11 +81,16 @@ def _trim(text, limit=110):
 
 # --- the board -------------------------------------------------------------
 
-def generate(world, map_name=None, red=(), blue=()):
-    m, red_h, blue_h = world.resolve(map_name, red, blue)
+def generate(world, map_name=None, red=(), blue=(), bans=()):
+    """The FactSet for a board: the map, the red and blue picks, and the
+    match's bans (each team's two and the lobby's - up to five, all
+    optional). A banned hero cannot be picked and cannot be recommended."""
+    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     fs = FactSet(m.name if m else None, [h.name for h in red_h],
-                 [h.name for h in blue_h])
+                 [h.name for h in blue_h], [h.name for h in bans_h])
     _meta_facts(fs, world)
+    if bans_h:
+        _ban_facts(fs, world, bans_h, red_h, blue_h)
     if m is not None:
         _map_facts(fs, world, m)
     for h in red_h:
@@ -118,6 +124,26 @@ def _meta_facts(fs, world):
                " newest %s (%s) - treat rates as pre-patch"
                % (len(world.newer_patches), name, released),
                value=len(world.newer_patches), source="patches")
+
+
+def _ban_facts(fs, world, bans, red, blue):
+    """What the bans took off the table, for both sides."""
+    fs.add("bans", "match", "bans.count", "bans this match: %d of 5 - %s"
+           % (len(bans), ", ".join(h.name for h in bans)),
+           value=[h.name for h in bans], source="derived:bans.count")
+    for h in bans:
+        fs.add("bans", h.name, "bans.hero", "%s is banned this match - neither team"
+               " can pick them" % h.name, value=h.name, source="derived:bans.hero")
+        answered = [e.name for e in red if world.counters_of(e.id, h.id)]
+        if answered:
+            fs.add("bans", h.name, "bans.answered_red", "banned %s answered red %s -"
+                   " that answer is off the table" % (h.name, ", ".join(answered)),
+                   value=answered, source="counters")
+        threatened = [a.name for a in blue if world.counters_of(a.id, h.id)]
+        if threatened:
+            fs.add("bans", h.name, "bans.answered_blue", "banned %s answered blue %s -"
+                   " that threat is gone" % (h.name, ", ".join(threatened)),
+                   value=threatened, source="counters")
 
 
 def _map_facts(fs, world, m):

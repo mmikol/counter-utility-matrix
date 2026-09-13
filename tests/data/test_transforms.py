@@ -1,9 +1,9 @@
 """Unit tests: the pure functions the pipelines lean on. No database, no
 network - every lesson here was paid for once already."""
 
-from data.authoritative.extract.wiki.maps import parse_stages
-from data.authoritative.transform.wiki.measurements import parse_measurements
-from data.heuristic.transform.counterpick.names import match_key
+from data.extract.wiki.maps import parse_stages
+from data.transform.wiki.measurements import parse_measurements
+from data.transform.counterpick.names import match_key
 
 
 # --- measurements: value / numerator / denominator / window ------------

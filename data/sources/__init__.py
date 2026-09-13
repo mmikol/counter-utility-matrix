@@ -1,11 +1,8 @@
 """SOURCES: where the data comes from, and how a page is fetched once.
 
-One module per source, and the one part of the pipeline the scraping types
-share (proprietary fetches nothing - its input is authored in the repo). A
-source is a source whatever a type makes of what it says: the wiki is read for
-ability numbers by the authoritative type and for playstyles by the heuristic
-one, and there is no reason for two clients. So sources sit above the types,
-and each type begins at extract.
+One module per source - the wiki is read for ability numbers, maps, patches
+and playstyles by one client, not four - plus `authored` for the inputs we
+write instead of fetch.
 
     cached_get       one page, from the cache if it is there and fresh
     set_max_age      the freshness policy: None keeps a page forever (a build

@@ -41,7 +41,8 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
     monkeypatch.setattr(board, "remote", fake_remote)
     assert board.api_infer(None, {"map": ["Ilios"], "red": ["Zarya"], "blue": []}) == (
         {"forwarded": True}, 200)
-    assert calls[-1] == ("/infer", {"map": "Ilios", "red": ["Zarya"], "blue": []}, None)
+    assert calls[-1] == ("/infer", {"map": "Ilios", "red": ["Zarya"], "blue": [],
+                                    "ban": []}, None)
     assert board.api_heuristics() == {"forwarded": True}
     assert board.api_record(None, {"answer": {}}) == ({"forwarded": True}, 200)
     assert calls[-1][0] == "/record"

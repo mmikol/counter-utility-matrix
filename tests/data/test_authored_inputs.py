@@ -5,14 +5,14 @@ rejection here must be loud, name the line, and leave nothing half-loaded."""
 
 import pytest
 
-from data.proprietary.load.user.archetypes import ArchetypeError
-from data.proprietary.load.user.archetypes import read_rows as read_archetypes
-from data.proprietary.load.user.map_playstyle import MapPlaystyleError
-from data.proprietary.load.user.map_playstyle import read_rows as read_map_playstyle
-from data.proprietary.load.user.seasons import SeasonError
-from data.proprietary.load.user.seasons import read_rows as read_seasons
-from data.proprietary.load.user.synergies import SynergyError
-from data.proprietary.load.user.synergies import read_rows as read_synergies
+from data.load.authored.archetypes import ArchetypeError
+from data.load.authored.archetypes import read_rows as read_archetypes
+from data.load.authored.map_playstyle import MapPlaystyleError
+from data.load.authored.map_playstyle import read_rows as read_map_playstyle
+from data.load.authored.seasons import SeasonError
+from data.load.authored.seasons import read_rows as read_seasons
+from data.load.authored.synergies import SynergyError
+from data.load.authored.synergies import read_rows as read_synergies
 
 
 def write(tmp_path, text):

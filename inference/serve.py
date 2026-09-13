@@ -3,8 +3,8 @@
     python -m inference.serve --port 8019
 
     GET  /health                       the catalog size and the database state
-    GET  /infer?map=&red=&blue=[&top=&pool=]   the optimal six
-    GET  /evaluate?map=&red=&blue=     a full six scored against the field
+    GET  /infer?map=&red=&blue=&ban=[&top=&pool=]   the optimal six
+    GET  /evaluate?map=&red=&blue=&ban=     a full six scored against the field
     GET  /heuristics                   the catalog
     POST /record  {question, map, red, blue, model, answer}   the gates + tables
 
@@ -35,29 +35,31 @@ def board(query):
     map_name = (query.get("map") or [None])[0] or None
     red = [x for x in query.get("red", []) if x]
     blue = [x for x in query.get("blue", []) if x]
-    return map_name, red, blue
+    bans = [x for x in query.get("ban", []) if x][:5]
+    return map_name, red, blue, bans
 
 
 def handle_infer(cx, query):
-    map_name, red, blue = board(query)
+    map_name, red, blue, bans = board(query)
     top = int((query.get("top") or ["5"])[0])
     pool = int((query.get("pool") or ["6"])[0])
     world = model.load(cx)
     try:
         if len(blue) == TEAM_SIZE:
-            result = engine.evaluate(world, map_name, red, blue, pool_size=pool)
+            result = engine.evaluate(world, map_name, red, blue, pool_size=pool, bans=bans)
         else:
-            result = engine.infer(world, map_name, red, blue, top=top, pool_size=pool)
+            result = engine.infer(world, map_name, red, blue, top=top, pool_size=pool,
+                                  bans=bans)
     except ValueError as error:
         return {"error": str(error)}, 400
     return result.to_dict(), 200
 
 
 def handle_evaluate(cx, query):
-    map_name, red, blue = board(query)
+    map_name, red, blue, bans = board(query)
     world = model.load(cx)
     try:
-        result = engine.evaluate(world, map_name, red, blue)
+        result = engine.evaluate(world, map_name, red, blue, bans=bans)
     except ValueError as error:
         return {"error": str(error)}, 400
     return result.to_dict(), 200
@@ -72,7 +74,8 @@ def handle_record(cx, payload):
         rec_id, path = record_module.record(
             cx, payload.get("question") or "recorded through the inference service",
             payload["answer"], payload.get("map"), payload.get("red", []),
-            payload.get("blue", []), payload.get("model", "inference-service"))
+            payload.get("blue", []), payload.get("model", "inference-service"),
+            payload.get("bans", []))
     except (ValueError, KeyError) as error:
         return {"error": str(error)}, 400
     return {"rec_id": rec_id, "transcript": os.path.relpath(path, common.ROOT)}, 200

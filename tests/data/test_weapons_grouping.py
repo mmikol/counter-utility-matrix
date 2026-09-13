@@ -4,7 +4,7 @@ The trickiest calls in the repo, each shipped wrong once or nearly so:
 hip-fire + ADS are ONE weapon, primary + secondary usually merge, but two
 weapons of one class (Mauga's chainguns) share a head noun and must NOT."""
 
-from data.authoritative.transform.wiki.weapons import (
+from data.transform.wiki.weapons import (
     base_name,
     group_weapons,
     head_noun,

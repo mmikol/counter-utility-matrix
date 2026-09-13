@@ -133,7 +133,7 @@ def _pull(ctx, source, module_path, refresh=False, **options):
       REFRESH)
 def pull_heroes(ctx, refresh=False):
     return _summary("pull_heroes: roster stored", _pull(
-        ctx, "blizzard", "data.authoritative.load.blizzard.heroes", refresh))
+        ctx, "blizzard", "data.load.blizzard.heroes", refresh))
 
 
 @tool("pull_kits", "The wiki's Cargo ability table and hero articles: weapons"
@@ -145,7 +145,7 @@ def pull_heroes(ctx, refresh=False):
                                                " (default true)"}))
 def pull_kits(ctx, refresh=False, supplement=True):
     return _summary("pull_kits: kit numbers stored", _pull(
-        ctx, "wiki", "data.authoritative.load.wiki.heroes", refresh,
+        ctx, "wiki", "data.load.wiki.heroes", refresh,
         supplement=supplement))
 
 
@@ -154,14 +154,14 @@ def pull_kits(ctx, refresh=False, supplement=True):
       REFRESH)
 def pull_maps(ctx, refresh=False):
     return _summary("pull_maps: map pool stored", _pull(
-        ctx, "wiki", "data.authoritative.load.wiki.maps", refresh))
+        ctx, "wiki", "data.load.wiki.maps", refresh))
 
 
 @tool("pull_patches", "The wiki's patch list, so every rates snapshot can say"
       " which game version it measured.", REFRESH)
 def pull_patches(ctx, refresh=False):
     return _summary("pull_patches: patches stored", _pull(
-        ctx, "wiki", "data.authoritative.load.wiki.patches", refresh))
+        ctx, "wiki", "data.load.wiki.patches", refresh))
 
 
 @tool("pull_rates", "Blizzard's win/pick/ban rates as a NEW dated snapshot,"
@@ -170,21 +170,21 @@ def pull_patches(ctx, refresh=False):
       REFRESH)
 def pull_rates(ctx, refresh=False):
     return _summary("pull_rates: snapshot stored", _pull(
-        ctx, "blizzard", "data.authoritative.load.blizzard.meta", refresh))
+        ctx, "blizzard", "data.load.blizzard.meta", refresh))
 
 
 @tool("pull_playstyles", "The wiki's team-composition page: which playstyle"
       " (dive, brawl, poke) each hero belongs to.", REFRESH)
 def pull_playstyles(ctx, refresh=False):
     return _summary("pull_playstyles: styles stored", _pull(
-        ctx, "wiki", "data.heuristic.load.wiki.meta", refresh))
+        ctx, "wiki", "data.load.wiki.playstyles", refresh))
 
 
 @tool("pull_counters", "counterpick.gg: who answers whom, each hero's best"
       " maps, and its own rates under a separate snapshot.", REFRESH)
 def pull_counters(ctx, refresh=False):
     return _summary("pull_counters: playbook stored", _pull(
-        ctx, "counterpick", "data.heuristic.load.counterpick.heroes", refresh))
+        ctx, "counterpick", "data.load.counterpick.heroes", refresh))
 
 
 PULLS = [("pull_heroes", "blizzard"), ("pull_kits", "wiki"),
@@ -213,7 +213,7 @@ def load_playbook(ctx, only=None):
                 summaries[name] = catalog.mirror(cx, catalog.load())
             else:
                 module = importlib.import_module(
-                    "data.proprietary.load.user." + name)
+                    "data.load.authored." + name)
                 summaries[name] = module.run(cx, log=ctx.log)
     text = "load_playbook: " + "; ".join(
         "%s %s" % (name, ", ".join("%s=%s" % (k, v) for k, v in s.items()
@@ -367,6 +367,10 @@ BOARD = {
             "description": "the enemy team's revealed heroes"},
     "blue": {"type": "array", "items": {"type": "string"},
              "description": "your team's locked heroes"},
+    "bans": {"type": "array", "items": {"type": "string"},
+             "description": "the match's bans, up to five (each team's two and"
+                            " the lobby's), all optional; neither team can"
+                            " pick them"},
 }
 
 
@@ -393,12 +397,12 @@ def roster(ctx):
       " once both teams have picks. Numbered F1.. for citation.",
       dict(BOARD, format={"type": "string", "enum": ["lines", "json"],
                           "description": "lines (default) or json"}))
-def facts_tool(ctx, map=None, red=(), blue=(), format="lines"):
+def facts_tool(ctx, map=None, red=(), blue=(), bans=(), format="lines"):
     from user.facts import engine, model
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
-        fs = engine.generate(world, map, list(red), list(blue))
+        fs = engine.generate(world, map, list(red), list(blue), list(bans))
     except ValueError as error:
         raise ToolError(str(error))
     payload = fs.to_dict()
@@ -415,14 +419,14 @@ def facts_tool(ctx, map=None, red=(), blue=(), format="lines"):
                                                          " return (default 5)"},
            pool={"type": "integer", "description": "candidates per role the"
                                                    " search keeps (default 6)"}))
-def infer_tool(ctx, map=None, red=(), blue=(), top=5, pool=6):
+def infer_tool(ctx, map=None, red=(), blue=(), bans=(), top=5, pool=6):
     from user.facts import model
     from inference import engine
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
         result = engine.infer(world, map, list(red), list(blue), top=top,
-                              pool_size=pool)
+                              pool_size=pool, bans=list(bans))
     except ValueError as error:
         raise ToolError(str(error))
     return result.rendered(), result.to_dict()
@@ -431,13 +435,13 @@ def infer_tool(ctx, map=None, red=(), blue=(), top=5, pool=6):
 @tool("evaluate", "Score a FULL blue six against the heuristics without"
       " searching: the breakdown per heuristic, constraint violations, and"
       " how it ranks against the optimum.", BOARD, ["blue"])
-def evaluate_tool(ctx, map=None, red=(), blue=()):
+def evaluate_tool(ctx, map=None, red=(), blue=(), bans=()):
     from user.facts import model
     from inference import engine
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
-        result = engine.evaluate(world, map, list(red), list(blue))
+        result = engine.evaluate(world, map, list(red), list(blue), bans=list(bans))
     except ValueError as error:
         raise ToolError(str(error))
     return result.rendered(), result.to_dict()
@@ -460,13 +464,13 @@ def heuristics_tool(ctx):
            answer={"type": "object", "description":
                    "{playstyle, reasoning, picks: [{hero, why, evidence: [F#]}]}"}),
       ["question", "answer"])
-def record_tool(ctx, question, answer, map=None, red=(), blue=(),
+def record_tool(ctx, question, answer, map=None, red=(), blue=(), bans=(),
                 model="claude-code-session"):
     from inference import record
     try:
         with ctx.connect() as cx:
             rec_id, path = record.record(cx, question, answer, map, list(red),
-                                         list(blue), model)
+                                         list(blue), model, list(bans))
     except ValueError as error:
         raise ToolError(str(error))
     return ("recorded as recommendation %d; transcript %s"

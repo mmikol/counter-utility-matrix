@@ -59,7 +59,7 @@ affects names the quantity scaled, so a query can find every effect on outgoing 
 
 ## `ability_stats`
 
-*HEROES · 2808 rows · `002_heroes.sql`*
+*HEROES · 2809 rows · `002_heroes.sql`*
 
 One row per measurement, not per stat. A wiki value like "0.67 shots/s (max charge); 3.33 shots/s (min charge)" becomes two rows sharing a stat_key, separated by `condition`. Units are split into the unit on top and the unit underneath, so nothing has to parse a "/" to know what a number means. denominator_value carries the magnitude underneath - 1 for a plain rate, or the window a burst spans: "125 m/s"              -> 125,  meters  / seconds,  denominator_value 1 "1.25 shots/s"         -> 1.25, shots   / seconds,  denominator_value 1 "75 over 0.59 seconds" -> 75,   hp      / seconds,  denominator_value 0.59 "14 seconds"           -> 14,   seconds / NULL A rate is therefore always value / denominator_value per unit_denominator. value is NULL where the measurement is not numeric (shot types, "partial"). value_text and raw_value always keep the source strings, so anything the parser misreads stays recoverable.
 
@@ -80,7 +80,7 @@ One row per measurement, not per stat. A wiki value like "0.67 shots/s (max char
 
 *PLAYBOOK · 9 rows · `005_playbook.sql`*
 
-What a composition IS, by archetype: the role shape a playstyle wants. playstyle tags heroes; this defines the comp those heroes assemble into - dive wants one engage tank, two flankers who arrive with him, two mobile supports. Authored in data/proprietary/archetypes.csv; the style vocabulary follows the playstyle table by convention. slots describe the standard 1-2-2 shape; Open Queue may flex them, and note says with whom.
+What a composition IS, by archetype: the role shape a playstyle wants. playstyle tags heroes; this defines the comp those heroes assemble into - dive wants one engage tank, two flankers who arrive with him, two mobile supports. Authored in data/authored/archetypes.csv; the style vocabulary follows the playstyle table by convention. slots describe the standard 1-2-2 shape; Open Queue may flex them, and note says with whom.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -125,7 +125,7 @@ Who answers whom: one row means countered_by_id answers hero_id. The source publ
 
 ## `hero_meta`
 
-*META · 530 rows · `004_meta.sql`*
+*META · 1060 rows · `004_meta.sql`*
 
 Rates by region and tier. All rates are percentages as published (47.9 means 47.9%). These rows are across all maps.
 
@@ -177,7 +177,7 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 
 ## `map_meta`
 
-*META · 1590 rows · `004_meta.sql`*
+*META · 3180 rows · `004_meta.sql`*
 
 Rates per map, and per tier within a map. The source's filters compose, so a hero's rates on King's Row in Bronze are a different figure from the same hero's rates on King's Row overall - and both are published. tier_id 'all' is the unfiltered figure for that map, which keeps the dimension key non-nullable. Region is not broken out here: map x tier is already 240 requests, and map x tier x region would be 720.
 
@@ -209,7 +209,7 @@ One row per playable combination: this table is the set of matches that can actu
 
 *PLAYBOOK · 20 rows · `005_playbook.sql`*
 
-Which playstyle suits which map: the bridge between MAPS and the playbook. map_strategy picks heroes for a map; this says what KIND of fight the map rewards, which is what a comp is built around. Authored in data/proprietary/map_playstyle.csv, same score scale as synergies.
+Which playstyle suits which map: the bridge between MAPS and the playbook. map_strategy picks heroes for a map; this says what KIND of fight the map rewards, which is what a comp is built around. Authored in data/authored/map_playstyle.csv, same score scale as synergies.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -254,7 +254,7 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 
 ## `meta_snapshots`
 
-*META · 2 rows · `004_meta.sql`*
+*META · 4 rows · `004_meta.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -280,7 +280,7 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 
 ## `perk_ability_effects`
 
-*HEROES · 193 rows · `002_heroes.sql`*
+*HEROES · 194 rows · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -289,7 +289,7 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 
 ## `perk_stats`
 
-*HEROES · 678 rows · `002_heroes.sql`*
+*HEROES · 680 rows · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -414,7 +414,7 @@ The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a 
 
 *META · 20 rows · `004_meta.sql`*
 
-The game versions the meta moves with. A win rate is true of a patch, so a snapshot records which patch was live when it was captured - that is what makes an accumulated series interpretable ("these rates predate the nerf"). Scraped from the wiki's Patches cargo table; name is the wiki's own page name, since Blizzard ships most balance patches unversioned. Seasons: the coarser delineator. A patch tweaks numbers; a season swaps the hero pool and map rotation, so a snapshot records both. Authored in data/proprietary/seasons.csv rather than scraped: the wiki's season pages are lore articles, and its current-era page carries no dates at all.
+The game versions the meta moves with. A win rate is true of a patch, so a snapshot records which patch was live when it was captured - that is what makes an accumulated series interpretable ("these rates predate the nerf"). Scraped from the wiki's Patches cargo table; name is the wiki's own page name, since Blizzard ships most balance patches unversioned. Seasons: the coarser delineator. A patch tweaks numbers; a season swaps the hero pool and map rotation, so a snapshot records both. Authored in data/authored/seasons.csv rather than scraped: the wiki's season pages are lore articles, and its current-era page carries no dates at all.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -450,7 +450,7 @@ The stat vocabulary. `unit` is the canonical unit for the stat, used when a valu
 
 *INFERENCE · 0 rows · `006_inference.sql`*
 
-Free-form strategy notes, authored as markdown files in data/proprietary/strategies/ and loaded whole: the model conditions on the prose, so no structure is imposed on it.
+Free-form strategy notes, authored as markdown files in data/authored/strategies/ and loaded whole: the model conditions on the prose, so no structure is imposed on it.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -477,7 +477,7 @@ The ten subroles, each belonging to exactly one role, each carrying the passive 
 
 *PLAYBOOK · 41 rows · `005_playbook.sql`*
 
-Which heroes work WITH which. Proprietary, not scraped: hand-authored in data/proprietary/synergies.csv. No snapshot, region or tier, because an authored judgement has no population behind it. Bidirectional, unlike counters. Synergy is a property of the PAIR: if Mei works with Tracer then Tracer works with Mei - one fact, one row. A counter is an arrow: Mei answering Tracer says nothing about the reverse. So this table stores each pair once, in canonical order (lower hero_id first, enforced below), and a query reads it from either side. score is whatever scale the author keeps consistently; note carries the reasoning, which is the part a model actually wants.
+Which heroes work WITH which. Proprietary, not scraped: hand-authored in data/authored/synergies.csv. No snapshot, region or tier, because an authored judgement has no population behind it. Bidirectional, unlike counters. Synergy is a property of the PAIR: if Mei works with Tracer then Tracer works with Mei - one fact, one row. A counter is an arrow: Mei answering Tracer says nothing about the reverse. So this table stores each pair once, in canonical order (lower hero_id first, enforced below), and a query reads it from either side. score is whatever scale the author keeps consistently; note carries the reasoning, which is the part a model actually wants.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -513,7 +513,7 @@ weapon_type lives here rather than on the weapon because it varies by config: An
 
 ## `weapon_stats`
 
-*HEROES · 1304 rows · `002_heroes.sql`*
+*HEROES · 1305 rows · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |

@@ -10,7 +10,7 @@ import re
 import statistics
 from collections import defaultdict
 
-from data.heuristic.transform.counterpick.names import match_key
+from data.transform.counterpick.names import match_key
 
 ROLES = ("tank", "damage", "support")
 
@@ -228,9 +228,10 @@ class World:
         mid = self.maps_by_key.get(match_key(name))
         return self.maps[mid] if mid is not None else None
 
-    def resolve(self, map_name, red, blue):
-        """Names -> (map or None, [Hero], [Hero]); unknown names raise."""
-        unknown = [n for n in list(red) + list(blue) if self.hero(n) is None]
+    def resolve(self, map_name, red, blue, bans=()):
+        """Names -> (map or None, [Hero] red, [Hero] blue, [Hero] banned);
+        unknown names raise, and so does a pick that is banned."""
+        unknown = [n for n in list(red) + list(blue) + list(bans) if self.hero(n) is None]
         if unknown:
             raise ValueError("unknown heroes: %s" % ", ".join(unknown))
         m = None
@@ -238,7 +239,13 @@ class World:
             m = self.map(map_name)
             if m is None:
                 raise ValueError("unknown map: %s" % map_name)
-        return m, [self.hero(n) for n in red], [self.hero(n) for n in blue]
+        banned = [self.hero(n) for n in bans]
+        banned_ids = {h.id for h in banned}
+        picked = [self.hero(n) for n in list(red) + list(blue)]
+        clash = [h.name for h in picked if h.id in banned_ids]
+        if clash:
+            raise ValueError("banned this match, cannot be picked: %s" % ", ".join(clash))
+        return (m, [self.hero(n) for n in red], [self.hero(n) for n in blue], banned)
 
     def heroes_by_role(self):
         return sorted(self.heroes.values(),

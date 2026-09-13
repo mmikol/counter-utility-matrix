@@ -80,11 +80,11 @@ sequenceDiagram
     participant Solver as inference/ (solver)
     participant DB as PostgreSQL
 
-    You->>Board: pick the map, click red picks as they reveal,<br/>lock your blue picks
-    Board->>Facts: /api/facts (map, red, blue)
+    You->>Board: pick the map, set the bans, click red picks<br/>as they reveal, lock your blue picks
+    Board->>Facts: /api/facts (map, red, blue, bans)
     Facts->>DB: load the World (a dozen queries)
     Facts-->>Board: F1..Fn - every fact about those heroes,<br/>the map, each team, the matchup
-    Board->>Solver: /api/infer (map, red, blue)
+    Board->>Solver: /api/infer (map, red, blue, bans)
     Solver->>Solver: shapes the constraints allow · per-role pools ·<br/>every candidate scored · local search
     Solver->>Facts: the FactSet for (map, red, the optimal six)
     Solver-->>Board: the six with reasons and [F#] citations,<br/>score per heuristic, alternatives
@@ -123,15 +123,16 @@ yesterday's numbers rather than an empty table.
 
 ## Where every kind of data lives
 
+Any data in the database is just data: every row carries its `source_id`,
+and that is the only distinction the schema draws. What differs is how a
+row gets there - and therefore what a rebuild can and cannot recover.
+
 ```mermaid
 flowchart TD
     Q{"Can a pull tool<br/>re-fetch it?"}
-    Q -->|"yes, it was measured"| A["authoritative<br/>roster, kits, numbers, keywords,<br/>maps, patches, rates"]
-    Q -->|"yes, it was judged<br/>by someone else"| H["heuristic<br/>counters, best maps, playstyles"]
-    Q -->|"no - it is ours"| P["proprietary"]
-    P --> P1["authored judgement<br/>synergies, archetypes,<br/>map playstyles, seasons, notes"]
-    P --> P2["the brain<br/>inference/heuristics/*.md<br/>(mirrored into the heuristics table)"]
-    P --> P3["recorded output<br/>recommendations + transcripts,<br/>mirrored to data/raw, restored<br/>after every rebuild"]
+    Q -->|"yes"| F["pulled<br/>blizzard · wiki · counterpick<br/>data/extract -> transform -> load"]
+    Q -->|"no - we wrote it"| A["authored<br/>data/authored/: synergies, archetypes,<br/>map playstyles, seasons, notes<br/>+ inference/heuristics/*.md (the brain)"]
+    Q -->|"no - the inference<br/>layer decided it"| R["recorded<br/>recommendations + transcripts,<br/>mirrored to data/raw, restored<br/>after every rebuild"]
 ```
 
 ## Deployment: one container per layer
@@ -163,7 +164,7 @@ flowchart LR
 `docker-entrypoint.sh` takes the role as its argument (`data`,
 `inference`, `ui`); `inference` and `ui` wait until the data layer reports
 the database current, and compose's healthchecks order the start the same
-way. Bind mounts keep the page caches, `data/raw`, `data/proprietary` and
+way. Bind mounts keep the page caches, `data/raw`, `data/authored` and
 `inference/heuristics/` on the host, so tuning a heuristic or authoring a
 synergy needs no image rebuild.
 

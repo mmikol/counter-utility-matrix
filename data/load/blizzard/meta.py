@@ -1,0 +1,208 @@
+"""Pull + clean + store: overwatch.blizzard.com/en-us/rates/ - win, pick and
+ban rates as a dated snapshot, sliced by skill tier and by map.
+
+Three deliberate restrictions, all recorded on the snapshot:
+
+  queue     Competitive - Role Queue (the page offers no Open Queue). The rq
+            code is read from the page's own queue filter, never hardcoded:
+            Blizzard renumbered it once and the old code silently served a
+            different population.
+  platform  Console (the parameter is spelled input=Console).
+  region    Americas, on every request including the baseline.
+
+    python -m data.load.blizzard.meta
+"""
+
+import sys
+
+import psycopg
+import requests
+
+from data.sources import cache_key, cached_get
+from data import common
+from data.common import current_patch, current_season
+from data.sources.blizzard import BLIZZARD, RATES_URL, USER_AGENT
+from data.extract.blizzard.meta import (
+    RatesError,
+    parse_filter_options,
+    parse_rows,
+)
+
+# ~280 sequential pages is more load than the source will take. Slower here
+# is faster overall, because being cut off costs the whole stage.
+REQUEST_DELAY = 5.0
+REQUEST_TIMEOUT = 90
+RETRIES = 6
+RETRY_BACKOFF = 5.0
+
+QUEUE_NAME = "competitive_role_queue"
+QUEUE_LABEL = "Competitive - Role Queue"
+INPUT_PARAM = "Console"
+PLATFORM_NAME = "console"
+# Derived, not published: console supports no input but a controller.
+INPUT_DEVICE = "controller"
+ALL_TIER = "All"
+REGION_PARAM = "Americas"
+REGION_CODE = "americas"
+REGION_NAME = "Americas"
+
+
+def competitive_rq(session, cache_dir):
+    """The rq code the page currently assigns to Competitive - Role Queue."""
+    page = cached_get(
+        session, RATES_URL, cache_dir,
+        cache_key("rates", "queue-vocabulary",
+                  "input-%s" % INPUT_PARAM, "region-%s" % REGION_PARAM),
+        params={"input": INPUT_PARAM, "region": REGION_PARAM},
+        timeout=REQUEST_TIMEOUT, retries=RETRIES,
+        delay=REQUEST_DELAY, backoff=RETRY_BACKOFF,
+    )
+    options = parse_filter_options(page, "filter-rq-select")
+    codes = [code for code, label in options if label == QUEUE_LABEL]
+    if len(codes) != 1:
+        raise RatesError(
+            "queue filter no longer offers exactly one %r: %s"
+            % (QUEUE_LABEL, options))
+    return codes[0]
+
+
+def fetch(session, params, cache_dir, rq):
+    """One rates page for a given filter combination."""
+    query = dict(params, rq=rq, input=INPUT_PARAM, region=REGION_PARAM)
+    return cached_get(
+        session, RATES_URL, cache_dir,
+        cache_key("rates", *("%s-%s" % kv for kv in sorted(query.items()))),
+        params=query, timeout=REQUEST_TIMEOUT, retries=RETRIES,
+        delay=REQUEST_DELAY, backoff=RETRY_BACKOFF,
+    )
+
+
+def run(connection, cache_dir=None, session=None, log=print):
+    session = session or requests.Session()
+    session.headers.update({"User-Agent": USER_AGENT})
+    cao = common.now()
+
+    rq = competitive_rq(session, cache_dir)
+    baseline = fetch(session, {}, cache_dir, rq)
+    tiers = parse_filter_options(baseline, "filter-tier-select")
+    maps = [m for m in parse_filter_options(baseline, "filter-map-select")
+            if m[0] != "all-maps"]
+
+    cursor = connection.cursor()
+    source_id = common.register_source(cursor, BLIZZARD, cao)
+    cursor.execute(
+        "INSERT INTO regions (code, name, source_id) VALUES (%s, %s, %s)"
+        " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name"
+        " RETURNING region_id",
+        (REGION_CODE, REGION_NAME, source_id),
+    )
+    region_id = cursor.fetchone()[0]
+
+    tier_ids = {}
+    for order, (code, name) in enumerate(tiers):
+        cursor.execute(
+            "INSERT INTO competitive_tiers (code, name, rank_order, source_id)"
+            " VALUES (%s, %s, %s, %s)"
+            " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name,"
+            " rank_order = EXCLUDED.rank_order RETURNING tier_id",
+            (code.lower(), name, order, source_id),
+        )
+        tier_ids[code] = cursor.fetchone()[0]
+
+    cursor.execute(
+        "INSERT INTO meta_snapshots (captured_at, queue, platform, input,"
+        " patch_id, season_id, source_id)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING snapshot_id",
+        (cao, QUEUE_NAME, PLATFORM_NAME, INPUT_DEVICE,
+         current_patch(cursor), current_season(cursor), source_id),
+    )
+    snapshot_id = cursor.fetchone()[0]
+
+    hero_ids = common.lookup_ids(cursor, "heroes", "name", "hero_id")
+    map_ids = common.lookup_ids(cursor, "maps", "name", "map_id")
+    unmatched = set()
+
+    def load_hero_slice(html, tier_code):
+        written = 0
+        for name, win, pick, ban in parse_rows(html):
+            hero_id = hero_ids.get(name.lower())
+            if hero_id is None:
+                unmatched.add(name)
+                continue
+            cursor.execute(
+                "INSERT INTO hero_meta (snapshot_id, hero_id, region_id,"
+                " tier_id, win_rate, pick_rate, ban_rate, source_id)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+                " ON CONFLICT (snapshot_id, hero_id, region_id, tier_id)"
+                " DO NOTHING",
+                (snapshot_id, hero_id, region_id, tier_ids[tier_code],
+                 win, pick, ban, source_id),
+            )
+            written += 1
+        return written
+
+    rows = load_hero_slice(baseline, ALL_TIER)
+    for code, _ in tiers:
+        if code != ALL_TIER:
+            rows += load_hero_slice(fetch(session, {"tier": code}, cache_dir, rq),
+                                    code)
+    log("hero/tier rows: %d" % rows)
+
+    # Per map, across all ranks. Map x tier would be 270 requests against
+    # 30, and the source refuses connections well before the end of a sweep
+    # that size; rows carry tier_id (all ranks) so widening needs no
+    # migration, only the inner loop.
+    map_rows, skipped_maps = 0, []
+    for slug, label in maps:
+        map_id = map_ids.get(label.lower())
+        if map_id is None:
+            skipped_maps.append(label)
+            continue
+        for name, win, pick, ban in parse_rows(
+            fetch(session, {"map": slug}, cache_dir, rq)
+        ):
+            hero_id = hero_ids.get(name.lower())
+            if hero_id is None:
+                unmatched.add(name)
+                continue
+            cursor.execute(
+                "INSERT INTO map_meta (snapshot_id, hero_id, map_id,"
+                " tier_id, region_id, stage_id, win_rate, pick_rate,"
+                " ban_rate, source_id)"
+                " VALUES (%s, %s, %s, %s, %s, NULL, %s, %s, %s, %s)"
+                " ON CONFLICT (snapshot_id, hero_id, map_id, tier_id,"
+                " region_id, stage_id) DO NOTHING",
+                (snapshot_id, hero_id, map_id, tier_ids[ALL_TIER],
+                 region_id, win, pick, ban, source_id),
+            )
+            map_rows += 1
+    connection.commit()
+    snapshots = cursor.execute("SELECT count(*) FROM meta_snapshots").fetchone()[0]
+    log("hero/map rows: %d   snapshots held: %d" % (map_rows, snapshots))
+    return {"queue": QUEUE_NAME, "platform": PLATFORM_NAME, "region": REGION_CODE,
+            "tiers": len(tier_ids), "maps": len(maps) - len(skipped_maps),
+            "hero_rows": rows, "map_rows": map_rows, "snapshot_id": snapshot_id,
+            "snapshots": snapshots, "unmatched": sorted(unmatched),
+            "skipped_maps": skipped_maps,
+            "tables": ["regions", "competitive_tiers", "meta_snapshots",
+                       "hero_meta", "map_meta"]}
+
+
+def main():
+    parser = common.build_parser(__doc__, ".cache-blizzard")
+    args = parser.parse_args()
+    cache = common.prepare_cache(args.cache)
+    with psycopg.connect(common.resolve_dsn(args)) as connection:
+        summary = run(connection, cache)
+        common.export_raw(connection, args, summary["tables"])
+    if summary["unmatched"]:
+        print("names matched no hero: %s" % ", ".join(summary["unmatched"]))
+    if summary["skipped_maps"]:
+        print("maps outside scope: %s" % ", ".join(summary["skipped_maps"]))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except (RatesError, psycopg.Error, requests.RequestException) as error:
+        sys.exit("error: %s" % error)

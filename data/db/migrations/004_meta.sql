@@ -40,7 +40,7 @@ CREATE TABLE competitive_tiers (
 -- name, since Blizzard ships most balance patches unversioned.
 -- Seasons: the coarser delineator. A patch tweaks numbers; a season swaps
 -- the hero pool and map rotation, so a snapshot records both. Authored in
--- data/proprietary/seasons.csv rather than scraped: the wiki's season pages
+-- data/authored/seasons.csv rather than scraped: the wiki's season pages
 -- are lore articles, and its current-era page carries no dates at all.
 CREATE TABLE seasons (
     season_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

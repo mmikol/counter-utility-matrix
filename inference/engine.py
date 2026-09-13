@@ -18,9 +18,10 @@ ROLE_ORDER = {"tank": 0, "damage": 1, "support": 2}
 
 
 class Result:
-    def __init__(self, kind, map_name, red, blue, locked, catalog):
+    def __init__(self, kind, map_name, red, blue, locked, catalog, bans=()):
         self.kind, self.map_name = kind, map_name
         self.red, self.blue, self.locked = red, blue, locked
+        self.bans = list(bans)
         self.catalog = catalog
         self.score = 0.0
         self.picks = []
@@ -46,7 +47,8 @@ class Result:
             ids |= {c["fact"] for c in self.contributions if c.get("fact")}
             cited = {f.id: f.text for f in self.facts.facts if f.id in ids}
         return {"kind": self.kind, "map": self.map_name, "red": self.red,
-                "blue": self.blue, "locked": self.locked, "score": round(self.score, 3),
+                "blue": self.blue, "locked": self.locked, "bans": self.bans,
+                "score": round(self.score, 3),
                 "playstyle": self.playstyle, "picks": self.picks,
                 "contributions": self.contributions, "violations": self.violations,
                 "alternatives": self.alternatives, "rank": self.rank,
@@ -56,10 +58,11 @@ class Result:
                 "facts": self.facts.to_dict() if (include_facts and self.facts) else None}
 
     def rendered(self):
-        head = "%s for %s vs %s%s" % (
+        head = "%s for %s vs %s%s%s" % (
             "optimal comp" if self.kind == "infer" else "evaluation",
             self.map_name or "any map", ", ".join(self.red) or "an unknown enemy",
-            " (locked: %s)" % ", ".join(self.locked) if self.locked else "")
+            " (locked: %s)" % ", ".join(self.locked) if self.locked else "",
+            " (banned: %s)" % ", ".join(self.bans) if self.bans else "")
         counts = {k: sum(1 for h in self.catalog if h.kind == k)
                   for k in catalog_module.KINDS}
         lines = [head, "  %s%s - score %.2f%s, %d candidates considered in %.1fs"
@@ -177,22 +180,23 @@ def _cited_fact(fs, keys):
     return None
 
 
-def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=None):
+def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=None,
+          bans=()):
     started = time.time()
     catalog = catalog or catalog_module.load()
-    m, red_h, blue_h = world.resolve(map_name, red, blue)
+    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     if len(blue_h) > TEAM_SIZE:
         raise ValueError("more than %d blue picks" % TEAM_SIZE)
     result = Result("infer", m.name if m else None, [h.name for h in red_h], [],
-                    [h.name for h in blue_h], catalog)
-    solver = Solver(world, m, red_h, blue_h, catalog, pool_size)
+                    [h.name for h in blue_h], catalog, [h.name for h in bans_h])
+    solver = Solver(world, m, red_h, blue_h, catalog, pool_size, bans_h)
     ranked = solver.solve(top=max(top, 1) + 1)
     if not ranked:
         raise ValueError("no composition satisfies the constraints around the"
                          " locked picks - relax a constraint in inference/heuristics/")
     best = ranked[0]
     result.blue = [h.name for h in sorted(best.heroes, key=lambda h: (ROLE_ORDER[h.role], h.name))]
-    fs = facts_engine.generate(world, result.map_name, result.red, result.blue)
+    fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans)
     _fill(result, best, fs, solver)
     result.alternatives = [{"blue": [h.name for h in sorted(
         c.heroes, key=lambda h: (ROLE_ORDER[h.role], h.name))], "score": round(c.score, 3)}
@@ -201,18 +205,19 @@ def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=Non
     return result
 
 
-def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None):
+def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
+             bans=()):
     started = time.time()
     catalog = catalog or catalog_module.load()
-    m, red_h, blue_h = world.resolve(map_name, red, blue)
+    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     if len(blue_h) != TEAM_SIZE:
         raise ValueError("evaluate needs exactly %d blue picks (got %d)"
                          % (TEAM_SIZE, len(blue_h)))
     result = Result("evaluate", m.name if m else None, [h.name for h in red_h],
-                    [h.name for h in blue_h], [], catalog)
+                    [h.name for h in blue_h], [], catalog, [h.name for h in bans_h])
     target, field, rank, solver = evaluate_comp(world, m, red_h, blue_h, catalog,
-                                                pool_size)
-    fs = facts_engine.generate(world, result.map_name, result.red, result.blue)
+                                                pool_size, bans_h)
+    fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans)
     _fill(result, target, fs, solver)
     result.rank = rank
     result.alternatives = [{"blue": [h.name for h in sorted(

@@ -213,10 +213,10 @@ def load(directory=HEURISTICS_DIR):
 
 def mirror(cx, catalog):
     """Reload the heuristics table from the files (whole truth)."""
-    from data.proprietary.pipeline import USER
+    from data.sources.authored import AUTHORED
     from data.common import now, register_source
     cursor = cx.cursor()
-    source_id = register_source(cursor, USER, now())
+    source_id = register_source(cursor, AUTHORED, now())
     cursor.execute("DELETE FROM heuristics")
     for h in catalog:
         cursor.execute(

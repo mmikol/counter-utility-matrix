@@ -105,3 +105,16 @@ def test_the_whole_database_becomes_facts(world, rows):
     keys = {f.key for f in fs.facts}
     assert {"hero.rate_alt", "hero.perk_effect", "playbook.catalog"} <= keys, keys
     assert any("Americas" in f.text for f in fs.facts if f.key == "meta.snapshot")
+
+
+def test_bans_become_facts_and_a_banned_pick_is_refused(world):
+    fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"],
+                         bans=["Widowmaker", "Sombra"])
+    assert fs.bans == ["Widowmaker", "Sombra"]
+    assert fs.find("bans.count") and len(fs.find("bans.hero")) == 2
+    # Widowmaker answers Pharah and Zarya: the ban took an answer off the table
+    assert any("banned Widowmaker answered red" in f.text for f in fs.facts)
+    with pytest.raises(ValueError, match="banned this match"):
+        engine.generate(world, None, ["Zarya"], ["Ana"], bans=["Ana"])
+    with pytest.raises(ValueError, match="unknown heroes"):
+        engine.generate(world, None, [], [], bans=["Goku"])

@@ -7,14 +7,14 @@
 --
 -- These tables are a session log. `rebuild` drops them like everything else;
 -- the durable record is the transcript each recommendation also writes into
--- data/proprietary/recommendations/, which is committed and survives.
+-- data/authored/recommendations/, which is committed and survives.
 --
 -- Depends on heroes (002), maps (003) and the playbook (005).
 
 BEGIN;
 
 -- Free-form strategy notes, authored as markdown files in
--- data/proprietary/strategies/ and loaded whole: the model conditions on
+-- data/authored/strategies/ and loaded whole: the model conditions on
 -- the prose, so no structure is imposed on it.
 CREATE TABLE strategies (
     strategy_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

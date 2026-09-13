@@ -143,7 +143,7 @@ def restore_recommendations(connection, raw_dir=RAW_DIR):
         connection.rollback()
         print("WARNING: could not restore recorded recommendations from"
               " data/raw (%s); the transcripts in"
-              " data/proprietary/recommendations/ still hold them" % error)
+              " data/authored/recommendations/ still hold them" % error)
         return 0
     return restored
 

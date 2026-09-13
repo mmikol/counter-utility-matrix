@@ -9,7 +9,7 @@ weight: 2.5
 # Play heroes the playbook has seen work together
 
 The summed scores of authored synergy pairs among the six, from
-`data/proprietary/synergies.csv`. Every pair carries the author's
+`data/authored/synergies.csv`. Every pair carries the author's
 reasoning, so a high score is not a vibe - it is a stack of documented
 interactions: nano on the dive tank, speed on the brawl core, pocket on
 the flier.

@@ -40,9 +40,10 @@ class Candidate:
 
 
 class Solver:
-    def __init__(self, world, m, red, locked, catalog, pool_size=6):
+    def __init__(self, world, m, red, locked, catalog, pool_size=6, bans=()):
         self.world, self.m, self.red = world, m, list(red)
         self.locked = list(locked)
+        self.banned = {h.id for h in bans}
         self.catalog = catalog
         self.pool_size = pool_size
         self.constraints = [h for h in catalog if h.kind == "constraint"]
@@ -171,7 +172,7 @@ class Solver:
         return base + 3.0 * answers - 3.0 * exposed + 2.0 * partners + style + listed
 
     def pools(self):
-        locked_ids = {h.id for h in self.locked}
+        locked_ids = {h.id for h in self.locked} | self.banned
         pools = {}
         for role in ROLE_KEY:
             heroes = [h for h in self.world.heroes.values()
@@ -232,7 +233,8 @@ class Solver:
                     if hero.id in locked_ids:
                         continue
                     for other in self.world.heroes.values():
-                        if other.role != hero.role or other.id in current.key:
+                        if (other.role != hero.role or other.id in current.key
+                                or other.id in self.banned):
                             continue
                         heroes = list(current.heroes)
                         heroes[index] = other
@@ -256,9 +258,9 @@ class Solver:
         return out if improved_any else ranked
 
 
-def evaluate_comp(world, m, red, heroes, catalog, pool_size=6):
+def evaluate_comp(world, m, red, heroes, catalog, pool_size=6, bans=()):
     """Score one full six against the field the solver would search."""
-    solver = Solver(world, m, red, [], catalog, pool_size)
+    solver = Solver(world, m, red, [], catalog, pool_size, bans)
     field = [solver.prepare(c) for c in solver.enumerate()]
     solver.considered = len(field)
     target = solver.prepare(Candidate(heroes))

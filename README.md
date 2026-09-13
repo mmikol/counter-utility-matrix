@@ -56,7 +56,7 @@ tool, the authored playbook - a few polite minutes; page caches land in
 wait for it, and `docker compose ps` shows all four healthy. A schema
 change rebuilds automatically (the migrations ledger), with recorded comps
 restored from the `data/raw` mirror. Edits to `inference/heuristics/`,
-`data/proprietary/` and the caches are bind-mounted, so they apply without
+`data/authored/` and the caches are bind-mounted, so they apply without
 a rebuild. Upgrading an install that predates the per-layer stack: add
 `--remove-orphans` once to retire the old single `app` container. Other
 things to run in the same image:
@@ -140,9 +140,11 @@ what `python -m data.orchestrator` drives:
 
 ## The user layer: the board
 
-`user/board.py` serves a map selector and two hero-select screens - red for the
-enemy, blue for you - organised by role with the game's own portraits and
-role icons. Every click re-reads the database and rebuilds the **facts**:
+`user/board.py` serves a map selector, a bans bar (up to five, all optional:
+each team's two and the lobby's; a banned hero leaves both rosters and the
+search), and two hero-select screens - red for the enemy, blue for you -
+organised by role with the game's own portraits and role icons. Every click
+re-reads the database and rebuilds the **facts**:
 100+ independent facts per named hero (kit numbers, keywords, perks, rates
 by rank and map, counters, partners), the map's own facts, joint facts per
 team once it has picks (shape, effective HP, damage and healing floors,
@@ -207,10 +209,13 @@ data/                DATA LAYER - pulls, cleans, stores; owns the schema
   mcp/               the MCP server: server.py (stdio + HTTP), tools.py (the tools)
   orchestrator.py    the conductor: verbs over the same tools (Docker, a shell)
   refresh.py         the daily refresh (the `refresher` container)
-  sources/           where pages come from (blizzard, wiki, counterpick), cached
-  authoritative/     what a source measured   extract -> transform -> load (run())
-  heuristic/         what a source judges     extract -> transform -> load (run())
-  proprietary/       what WE author: CSVs, strategy notes, recorded transcripts
+  sources/           where pages come from (blizzard, wiki, counterpick), the
+                     fetch cache and its freshness policy
+  extract/           markup -> Python, one package per source
+  transform/         normalising and deriving values
+  load/              storing, one module per source and domain (each a run()
+                     the tools call): blizzard/ wiki/ counterpick/ authored/
+  authored/          the inputs we write: CSVs, strategy notes, recorded transcripts
   db/                migrations/ (001 sources · 002 heroes · 003 maps · 004 meta ·
                      005 playbook · 006 inference · 007 three layers · 008 the
                      ledger), schema.py, cluster/ (the local build, gitignored)
@@ -240,7 +245,7 @@ docs/                architecture.md · heuristics.md · erd.md · data-dictiona
 - [docs/heuristics.md](docs/heuristics.md) - the catalog, how scoring works, and every metric a heuristic may reference (generated)
 - [docs/erd.md](docs/erd.md) · [docs/data-dictionary.md](docs/data-dictionary.md) - the schema (generated)
 - [docs/scaling.md](docs/scaling.md) - how region/rank/platform/stage granularity widens
-- [data/proprietary/README.md](data/proprietary/README.md) - the authored inputs
+- [data/authored/README.md](data/authored/README.md) - the authored inputs
 
 ## Scope, honestly
 
@@ -249,5 +254,7 @@ so META is Competitive Role Queue on console (Americas), stated on every
 snapshot fact rather than assumed away. Rates carry the patch and season
 they were captured under, and the board warns when patches shipped since.
 Judgements (counters, synergies, playstyles) are tier- and region-agnostic
-by design. Players are assumed to play optimally - the central assumption,
+by design, and a table is a table: every row carries its source, and that
+is the only distinction drawn between measured, judged and hand-written
+data. Players are assumed to play optimally - the central assumption,
 named in [inference/heuristics/optimal-play.md](inference/heuristics/optimal-play.md).

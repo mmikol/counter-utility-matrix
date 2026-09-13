@@ -29,7 +29,7 @@ x-app: &app
     - ./.cache-wiki:/app/.cache-wiki
     - ./.cache-counterpick:/app/.cache-counterpick
     - ./data/raw:/app/data/raw
-    - ./data/proprietary:/app/data/proprietary
+    - ./data/authored:/app/data/authored
     - ./inference/heuristics:/app/inference/heuristics
 
 services:

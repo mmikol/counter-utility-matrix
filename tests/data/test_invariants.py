@@ -2,7 +2,7 @@
 
 import pytest
 
-from data.authoritative.transform.wiki.measurements import CANONICAL_UNITS
+from data.transform.wiki.measurements import CANONICAL_UNITS
 
 pytestmark = pytest.mark.invariant
 
@@ -189,7 +189,7 @@ def test_no_hero_has_two_abilities_that_fold_together(rows):
     # "Biotic Rifle" and "Biotic Rifle (ADS)" fold to one key; two such rows
     # on one hero means a firing config leaked into the abilities table, and
     # every rerun then routes stats to whichever row it finds first.
-    from data.authoritative.transform.wiki.names import match_key
+    from data.transform.wiki.names import match_key
     from collections import Counter
     folds = Counter((h, match_key(a)) for h, a in rows(
         "select hero_id, name from abilities"))

@@ -55,3 +55,13 @@ def test_heuristics_and_recs_endpoints(db):
     assert isinstance(data["latest"], int)
     assert json.dumps(data)
     db.rollback()
+
+
+def test_bans_ride_the_query_string(db):
+    data, code = board.api_facts(db, {"map": ["King's Row"], "red": ["Zarya"],
+                                      "ban": ["Widowmaker", "Sombra"]})
+    assert code == 200 and data["bans"] == ["Widowmaker", "Sombra"]
+    assert any(f["scope"] == "bans" for f in data["facts"])
+    data, code = board.api_infer(db, {"red": ["Zarya"], "blue": ["Ana"], "ban": ["Ana"]})
+    assert code == 400 and "banned" in data["error"]
+    db.rollback()

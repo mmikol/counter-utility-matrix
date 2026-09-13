@@ -236,6 +236,6 @@ Thumbs.db
 # CSV Folders/Files
 data/raw/
 *.csv
-# ...except authored proprietary inputs: they cannot be re-scraped, so the
+# ...except the authored inputs: they cannot be re-fetched, so the
 # repo is their home and their backup.
-!data/proprietary/*.csv
+!data/authored/*.csv

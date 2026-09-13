@@ -71,7 +71,8 @@ def _board(query):
     map_name = (query.get("map") or [None])[0] or None
     red = [x for x in query.get("red", []) if x]
     blue = [x for x in query.get("blue", []) if x]
-    return map_name, red, blue
+    bans = [x for x in query.get("ban", []) if x][:5]
+    return map_name, red, blue, bans
 
 
 def api_roster(cx):
@@ -87,25 +88,26 @@ def api_roster(cx):
 
 
 def api_facts(cx, query):
-    map_name, red, blue = _board(query)
+    map_name, red, blue, bans = _board(query)
     world = model.load(cx)
     try:
-        fs = facts_engine.generate(world, map_name, red, blue)
+        fs = facts_engine.generate(world, map_name, red, blue, bans)
     except ValueError as error:
         return {"error": str(error)}, 400
     return fs.to_dict(), 200
 
 
 def api_infer(cx, query):
-    map_name, red, blue = _board(query)
+    map_name, red, blue, bans = _board(query)
     if INFERENCE_URL:
-        return remote("/infer", {"map": map_name or "", "red": red, "blue": blue})
+        return remote("/infer", {"map": map_name or "", "red": red, "blue": blue,
+                                 "ban": bans})
     world = model.load(cx)
     try:
         if len(blue) == TEAM_SIZE:
-            result = inference_engine.evaluate(world, map_name, red, blue)
+            result = inference_engine.evaluate(world, map_name, red, blue, bans=bans)
         else:
-            result = inference_engine.infer(world, map_name, red, blue)
+            result = inference_engine.infer(world, map_name, red, blue, bans=bans)
     except ValueError as error:
         return {"error": str(error)}, 400
     return result.to_dict(), 200
@@ -137,7 +139,8 @@ def api_record(cx, payload):
         rec_id, path = record_module.record(
             cx, payload.get("question") or "recorded from the board",
             payload["answer"], payload.get("map"), payload.get("red", []),
-            payload.get("blue", []), payload.get("model", "board"))
+            payload.get("blue", []), payload.get("model", "board"),
+            payload.get("bans", []))
     except (ValueError, KeyError) as error:
         return {"error": str(error)}, 400
     return {"rec_id": rec_id, "transcript": os.path.relpath(path, common.ROOT)}, 200
@@ -176,6 +179,23 @@ button { background:#263041; color:#fff; border:1px solid #35435a; border-radius
 button:hover { background:#31405a; }
 button.primary { background:var(--blue2); border-color:var(--blue); }
 .status { color:var(--muted); font-size:12px; min-width:160px; text-align:right; }
+.bans { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px;
+  padding:8px 14px; background:#1a141a; border:1px solid #4a2a3a; border-radius:10px; }
+.bans h3 { margin:0; font-size:18px; color:#ff7a8a; letter-spacing:.18em; }
+.bans .hint { color:var(--muted); font-size:12px; }
+.banchip { display:inline-flex; align-items:center; gap:6px; background:#3a1d22;
+  border:1px solid #6b2f3a; border-radius:99px; padding:3px 10px 3px 6px; font-size:12px;
+  cursor:pointer; text-transform:uppercase; letter-spacing:.06em; }
+.banchip img { width:22px; height:22px; border-radius:50%; object-fit:cover; }
+.banchip b { color:#ff7a8a; }
+.banslot { display:inline-block; width:64px; border:1px dashed #4a2a3a; border-radius:99px;
+  color:#4a2a3a; text-align:center; font-size:11px; padding:5px 0; }
+.bans select { background:#0b0e14; color:var(--text); border:1px solid var(--line);
+  border-radius:6px; padding:6px 8px; font:inherit; }
+.tile.banned { opacity:.28; filter:grayscale(1); cursor:not-allowed; }
+.tile.banned::before { content:'✕'; position:absolute; inset:0; display:flex; align-items:center;
+  justify-content:center; font-size:34px; color:#ff4b57; z-index:1; }
+.tile.banned:hover { transform:none; }
 
 /* --- the two hero-select screens --------------------------------------- */
 .teams { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
@@ -297,9 +317,11 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 SCRIPT = r"""
 var el = function (id) { return document.getElementById(id); };
 var TEAM = __TEAM_SIZE__;
-var ROSTER = null, st = { map: '', red: [], blue: [] };
+var BANS = 5;
+var ROSTER = null, st = { map: '', red: [], blue: [], bans: [] };
 try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
       if (saved && saved.red && saved.blue) st = saved; } catch (e) {}
+if (!st.bans) st.bans = [];
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 function save() { try { localStorage.setItem('owdb-board2', JSON.stringify(st)); } catch (e) {} }
@@ -328,6 +350,7 @@ function buildTeam(team) {
 }
 
 function toggle(team, name) {
+  if (st.bans.indexOf(name) >= 0) { flash(name + ' is banned this match'); return; }
   var arr = st[team], at = arr.indexOf(name);
   if (at >= 0) arr.splice(at, 1);
   else if (arr.length < TEAM) arr.push(name);
@@ -335,7 +358,36 @@ function toggle(team, name) {
   save(); paint(); refresh();
 }
 
+function toggleBan(name) {
+  var at = st.bans.indexOf(name);
+  if (at >= 0) st.bans.splice(at, 1);
+  else if (st.bans.length < BANS) {
+    st.bans.push(name);
+    ['red', 'blue'].forEach(function (team) {          /* a banned hero cannot be picked */
+      var i = st[team].indexOf(name); if (i >= 0) st[team].splice(i, 1);
+    });
+  } else { flash('five bans already - click a chip to free one'); return; }
+  save(); paint(); refresh();
+}
+
+function paintBans() {
+  var out = '';
+  st.bans.forEach(function (name) {
+    var h = hero(name);
+    out += "<span class='banchip' data-ban=\"" + esc(name) + "\" title='click to unban'>" +
+      (h && h.portrait ? "<img src='" + esc(h.portrait) + "' alt=''>" : '') + '<b>✕</b>' + esc(name) + '</span>';
+  });
+  for (var i = st.bans.length; i < BANS; i++) out += "<span class='banslot'>" + (i < 4 ? (i < 2 ? 'red' : 'blue') : 'lobby') + '</span>';
+  el('banslots').innerHTML = out;
+  var sel = el('bansel');
+  sel.innerHTML = "<option value=''>add a ban…</option>" + ROSTER.heroes.filter(function (h) {
+    return st.bans.indexOf(h.name) < 0; }).map(function (h) {
+    return "<option value=\"" + esc(h.name) + "\">" + esc(h.name) + ' (' + h.role + ')</option>'; }).join('');
+  sel.disabled = st.bans.length >= BANS;
+}
+
 function paint() {
+  paintBans();
   ['red', 'blue'].forEach(function (team) {
     var other = team === 'red' ? 'blue' : 'red';
     var slots = el(team + 'slots').children;
@@ -348,7 +400,8 @@ function paint() {
     var tiles = el(team + 'roster').querySelectorAll('.tile');
     for (var t = 0; t < tiles.length; t++) {
       var n = tiles[t].getAttribute('data-h');
-      tiles[t].className = 'tile' + (st[team].indexOf(n) >= 0 ? ' on' : '') + (st[other].indexOf(n) >= 0 ? ' other' : '');
+      tiles[t].className = 'tile' + (st[team].indexOf(n) >= 0 ? ' on' : '') + (st[other].indexOf(n) >= 0 ? ' other' : '') +
+        (st.bans.indexOf(n) >= 0 ? ' banned' : '');
     }
     el(team + 'count').textContent = st[team].length + '/' + TEAM;
   });
@@ -358,6 +411,8 @@ function paint() {
 }
 
 document.addEventListener('click', function (e) {
+  var ban = e.target.closest ? e.target.closest('[data-ban]') : null;
+  if (ban) { toggleBan(ban.getAttribute('data-ban')); return; }
   var hit = e.target.closest ? e.target.closest('[data-h][data-team]') : null;
   if (hit) toggle(hit.getAttribute('data-team'), hit.getAttribute('data-h'));
   var tab = e.target.closest ? e.target.closest('nav.tabs button') : null;
@@ -373,6 +428,7 @@ function qs() {
   if (st.map) q.push('map=' + encodeURIComponent(st.map));
   st.red.forEach(function (h) { q.push('red=' + encodeURIComponent(h)); });
   st.blue.forEach(function (h) { q.push('blue=' + encodeURIComponent(h)); });
+  st.bans.forEach(function (h) { q.push('ban=' + encodeURIComponent(h)); });
   return q.join('&');
 }
 
@@ -396,8 +452,8 @@ function refresh() {
   }, 200);
 }
 
-var SCOPES = ['meta', 'map', 'hero', 'team', 'matchup', 'playbook'];
-var scopeOn = { meta: true, map: true, hero: true, team: true, matchup: true, playbook: true };
+var SCOPES = ['meta', 'bans', 'map', 'hero', 'team', 'matchup', 'playbook'];
+var scopeOn = { meta: true, bans: true, map: true, hero: true, team: true, matchup: true, playbook: true };
 function renderFacts() {
   if (!FACTS) return;
   var f = el('filter').value.toLowerCase(), out = '', last = null;
@@ -405,6 +461,7 @@ function renderFacts() {
     if (!scopeOn[x.scope]) return;
     if (f && (x.id + ' ' + x.key + ' ' + x.subject + ' ' + x.text).toLowerCase().indexOf(f) < 0) return;
     var head = x.scope === 'hero' ? (x.team + ' · ' + x.subject) : x.scope === 'team' ? (x.subject + ' team') : x.scope;
+    if (x.scope === 'bans') head = 'bans';
     if (head !== last) { out += "<tr class='h'><td colspan='3' class='head'>" + esc(head) + '</td></tr>'; last = head; }
     var cls = (x.team || '') + (/^(WARNING|CAUTION)/.test(x.text) ? ' warn' : '') + (x.source.indexOf('derived:') === 0 ? ' derived' : '');
     out += "<tr class='" + cls + "'><td class='tag'>[" + x.id + "]</td><td class='text'>" + esc(x.text) + "</td><td class='src'>" + esc(x.source) + '</td></tr>';
@@ -458,7 +515,7 @@ function recordComp(d) {
   var answer = { playstyle: d.playstyle || 'balanced', reasoning: 'solver optimum under the catalog: score ' + (+d.score).toFixed(2) + ' over ' + d.considered + ' candidates',
     picks: d.picks.map(function (p) { return { hero: p.hero, why: p.why, evidence: p.evidence }; }) };
   fetch('/api/record', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question: 'board: ' + (st.map || 'any map') + ' vs ' + st.red.join(', '), map: st.map || null, red: st.red, blue: st.blue, model: 'inference-engine', answer: answer }) })
+    body: JSON.stringify({ question: 'board: ' + (st.map || 'any map') + ' vs ' + st.red.join(', ') + (st.bans.length ? ' (bans: ' + st.bans.join(', ') + ')' : ''), map: st.map || null, red: st.red, blue: st.blue, bans: st.bans, model: 'inference-engine', answer: answer }) })
     .then(function (r) { return r.json(); }).then(function (r) {
       var n = el('recnote'); n.style.display = 'block';
       n.innerHTML = r.error ? 'refused: ' + esc(r.error) : 'recorded as <a href="/rec/' + r.rec_id + '">recommendation #' + r.rec_id + '</a> - ' + esc(r.transcript);
@@ -508,8 +565,9 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   if (d.newer_patches && d.newer_patches.length) { var w = el('vintage'); w.style.display = 'block';
     w.textContent = d.newer_patches.length + ' patch(es) shipped since the rates were captured (newest ' + d.newer_patches[0][0] + ') - rates are pre-patch; run pull_rates'; }
   el('mapsel').onchange = function () { st.map = this.value; save(); paint(); refresh(); };
+  el('bansel').onchange = function () { if (this.value) toggleBan(this.value); };
   el('filter').oninput = renderFacts;
-  el('clearbtn').onclick = function () { st = { map: '', red: [], blue: [] }; save(); paint(); refresh(); };
+  el('clearbtn').onclick = function () { st = { map: '', red: [], blue: [], bans: [] }; save(); paint(); refresh(); };
   el('swapbtn').onclick = function () { var r = st.red; st.red = st.blue; st.blue = r; save(); paint(); refresh(); };
   var chips = el('chips'); chips.innerHTML = SCOPES.map(function (s) { return "<button class='chip on' data-scope='" + s + "'>" + s + '</button>'; }).join('');
   chips.onclick = function (e) { var c = e.target.closest('.chip'); if (!c) return; var s = c.getAttribute('data-scope');
@@ -532,6 +590,10 @@ def view_board():
             "<button id='swapbtn' title='swap red and blue'>swap sides</button>"
             "<button id='clearbtn'>new game</button><span class='status' id='status'></span></div>"
             "</header>"
+            "<div class='bans'><h3>bans</h3><span id='banslots'></span>"
+            "<select id='bansel'></select>"
+            "<span class='hint'>up to five, all optional: each team's two and the lobby's -"
+            " a banned hero leaves both rosters and the search</span></div>"
             "<div class='warnbox' id='vintage' style='display:none'></div>"
             "<div class='notice' id='newrec'></div>"
             "<div class='teams'>"

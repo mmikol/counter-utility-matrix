@@ -162,3 +162,15 @@ def test_record_gates_then_rolls_back(db, world):
     db.rollback()
     with pytest.raises(ValueError, match="exactly 6 picks"):
         record.validate_answer(dict(answer, picks=answer["picks"][:4]))
+
+
+@pytest.mark.invariant
+def test_infer_never_drafts_a_banned_hero(world):
+    from inference import engine
+    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"],
+                     bans=["Widowmaker", "Bastion", "Reinhardt"])
+    assert not {"Widowmaker", "Bastion", "Reinhardt"} & set(r.blue)
+    assert r.bans == ["Widowmaker", "Bastion", "Reinhardt"] and "banned" in r.rendered()
+    assert r.facts.bans == r.bans
+    with pytest.raises(ValueError, match="banned this match"):
+        engine.infer(world, None, ["Zarya"], ["Ana"], bans=["Zarya"])
