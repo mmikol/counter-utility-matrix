@@ -9,7 +9,10 @@ Fields: weight, direction, soft, when, require, bonus, penalty, params.NAME.
 The edited file is loaded through the catalog before it is written, so a
 metric that does not exist or an expression that does not parse is refused
 and nothing changes. Every accepted change is one line in
-inference/tuning-log.md - the audit trail of how the brain came to be.
+inference/heuristics/tuning-log.md - the audit trail of how the brain came
+to be. The log lives beside the files on purpose: the compose stack
+bind-mounts that directory, so a tune made through a container lands on
+the host and in git like the file it changed.
 """
 
 import os
@@ -19,7 +22,7 @@ from datetime import datetime, timezone
 
 from inference import catalog as catalog_module
 
-LOG_PATH = os.path.join(os.path.dirname(catalog_module.HEURISTICS_DIR), "tuning-log.md")
+LOG_PATH = os.path.join(catalog_module.HEURISTICS_DIR, "tuning-log.md")
 SCALARS = ("weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric")
 WEIGHT_RANGE = (0.0, 10.0)
 
@@ -96,8 +99,7 @@ def tune(hid, field, value, reason, directory=None, by="claude-code-session",
          log_path=None):
     """Apply one change -> {"id", "field", "old", "new", "line"}."""
     directory = directory or catalog_module.HEURISTICS_DIR
-    log_path = log_path or (LOG_PATH if directory == catalog_module.HEURISTICS_DIR
-                            else os.path.join(directory, "tuning-log.md"))
+    log_path = log_path or os.path.join(directory, "tuning-log.md")
     if not reason or not reason.strip():
         raise TuneError("a tuning change needs a reason")
     path = os.path.join(directory, hid + ".md")

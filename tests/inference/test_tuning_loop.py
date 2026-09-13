@@ -16,7 +16,7 @@ pytestmark = pytest.mark.invariant
 def catalog_copy(tmp_path):
     """A private copy of the heuristics to tune without touching the repo."""
     for name in os.listdir(catalog.HEURISTICS_DIR):
-        if name.endswith(".md"):
+        if name.endswith(".md") and name not in catalog.NOT_HEURISTICS:
             shutil.copy(os.path.join(catalog.HEURISTICS_DIR, name), tmp_path / name)
     return str(tmp_path)
 

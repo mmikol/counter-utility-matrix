@@ -201,7 +201,7 @@ three skills that drive them from a session):
 | tool / skill | does |
 | --- | --- |
 | `record_outcome` · `/outcome` | records how a match went - result, map and side, both sixes, bans, the recommendation played. Outcomes are facts on the board (per hero, per map), mirrored to `data/raw`, restored after every rebuild. |
-| `tune` · `/tune` | changes one heuristic's weight, a `params` dial or an expression - validated through the catalog before the file is written, re-mirrored, logged with the reason in [inference/tuning-log.md](inference/tuning-log.md). |
+| `tune` · `/tune` | changes one heuristic's weight, a `params` dial or an expression - validated through the catalog before the file is written, re-mirrored, logged with the reason in [inference/heuristics/tuning-log.md](inference/heuristics/tuning-log.md). |
 | `fit_weights` · `/tune` | for every decided outcome, how each goal's metric ran in wins versus losses; proposes a bounded nudge per weight (dry run), applies it through `tune` on request, and only past ten decided matches. |
 | `tuning_log` | the audit trail: every change, when, what, why, by whom. |
 
@@ -267,7 +267,8 @@ inference/           INFERENCE LAYER - facts in, the optimal six out
   outcomes.py        recording what happened - the matches the fit learns from
   tune.py            one validated, logged change to a heuristic's frontmatter
   fit.py             goal weights nudged toward what separated wins from losses
-  tuning-log.md      the audit trail of every change
+  heuristics/tuning-log.md   the audit trail of every change (beside the files, so a
+                     tune through a container lands on the host)
 tests/               mirrored: tests/data · tests/user · tests/inference
 stack.py             up · status · refresh · test · down (the `/up` skill)
 compose.yaml         one container per layer: db · data · inference · ui · refresher

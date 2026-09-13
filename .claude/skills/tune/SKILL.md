@@ -7,8 +7,8 @@ You are editing the brain: the markdown heuristics in `inference/heuristics/`
 (constraints, goals, strategies). Every change goes through the `tune`
 tool on the `overwatch-db` (or `overwatch-db-docker`) MCP server, which
 validates it against the catalog, writes the file, re-mirrors the table,
-and logs it with your reason in `inference/tuning-log.md`. Nothing is
-edited by hand.
+and logs it with your reason in `inference/heuristics/tuning-log.md`.
+Nothing is edited by hand.
 
 ## A manual tune ("it keeps ignoring anti-heal")
 

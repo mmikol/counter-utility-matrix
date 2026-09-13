@@ -268,7 +268,7 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 
 ## `outcome_picks`
 
-*INFERENCE · 97 rows · `009_outcomes.sql`*
+*INFERENCE · 0 rows · `009_outcomes.sql`*
 
 team is 'blue', 'red' or 'ban'; position orders the picks within a team.
 
@@ -281,7 +281,7 @@ team is 'blue', 'red' or 'ban'; position orders the picks within a team.
 
 ## `outcomes`
 
-*INFERENCE · 8 rows · `009_outcomes.sql`*
+*INFERENCE · 0 rows · `009_outcomes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |

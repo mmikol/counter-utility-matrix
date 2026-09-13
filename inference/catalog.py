@@ -261,7 +261,7 @@ def write_docs(catalog, path=DOCS_PATH):
            "directory, so the `inference` container picks edits up live). This",
            "page is generated: `python -m data.orchestrator docs`. Every change to a",
            "file goes through the `tune` tool (or a `fit_weights` nudge) and is logged",
-           "in [tuning-log.md](../inference/tuning-log.md).", "",
+           "in [tuning-log.md](../inference/heuristics/tuning-log.md).", "",
            "## How a composition is scored", "",
            "```", "COMP = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
            "For a board (map, red picks, locked blue picks) the solver enumerates",

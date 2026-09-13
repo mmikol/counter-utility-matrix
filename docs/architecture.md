@@ -108,7 +108,7 @@ flowchart LR
     OUT -->|"fit_weights: each goal's<br/>metric in wins vs losses"| FIT["a bounded nudge<br/>per goal weight"]
     FIT -->|"apply -> tune"| HEUR["inference/heuristics/*.md"]
     USER["'it keeps ignoring anti-heal'<br/>/tune -> tune"] --> HEUR
-    HEUR -->|"validated on load,<br/>mirrored, logged"| LOG["tuning-log.md"]
+    HEUR -->|"validated on load,<br/>mirrored, logged"| LOG["heuristics/tuning-log.md"]
     HEUR --> SOLVER["the solver, next click"]
 ```
 
