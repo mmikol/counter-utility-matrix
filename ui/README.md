@@ -1,0 +1,152 @@
+# ui - the UI LAYER
+
+The board in front of you, and the facts behind it. Every click - a map,
+a side, a ban, a hero on either roster - becomes a request, the database
+is read, and three things come back: every fact about that board, the
+optimal six for both seats with the current picks scored, and the
+playbook as it sits on disk. This layer only reads; the data layer owns
+every write, and the inference layer owns the scoring. What it owns is
+the equation's left-hand term:
+
+```
+FACTS = HEROES ∪ MAPS ∪ META        the authoritative data, restricted to one board
+```
+
+```bash
+.venv/bin/python -m ui.board              # http://localhost:8017, the local cluster
+INFERENCE_URL=http://localhost:8019 .venv/bin/python -m ui.board   # comps from the service
+```
+
+Standard library only: an `http.server` handler, no framework, no build
+step. In the compose stack the `ui` container runs the same module with
+`INFERENCE_URL` pointing at the `inference` container, so the board
+computes facts in-process and asks the service for comps.
+
+## Layout
+
+```
+ui/
+  README.md        this file
+  __init__.py      the package's map
+  board.py         the page, its JSON endpoints, the recorded-comp pages
+  static/
+    board.css      the look: the game's hero select, dark, red and blue
+    board.js       the behaviour: state, fetches, the four panels
+  facts/           everything the database knows about a board
+    model.py       the World: the database in memory, per request
+    compute.py     the metrics registry: every number, one function each
+    engine.py      the FactSet: the numbered facts for a board
+```
+
+## `board.py` - the page and its endpoints
+
+The page is a shell: the stylesheet and the script are static files, and
+`TEAM` (six) and `BANS` (five) are the only values the page injects, so
+the script has no constant to keep in step with the Python.
+
+| route | serves |
+| --- | --- |
+| `/` | the board: map selector, attack/defense switch (Escort and Hybrid maps), the bans bar (up to five, all optional), the red and blue rosters grouped by role, and four panels - **facts**, **optimal comps**, **current comp**, **playbook** |
+| `/static/<file>` | `board.css` and `board.js` |
+| `/api/roster` | every hero (role, subrole, portrait, icon) and every map (mode, sided or not), the rosters are built from |
+| `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
+| `/api/infer?map=&side=&red=&blue=&ban=` | both seats solved and the current picks scored - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
+| `/api/strategies` | the strategies catalog: every constraint and heuristic with its kind, form, frontmatter and body |
+| `/api/record` (POST) | record a comp shown on the board through the inference layer's `record`: the gates hold (six real heroes, citations the board showed) and a transcript is written |
+| `/recs`, `/rec/<id>` | the recorded compositions, and one transcript rendered |
+
+Every request opens its own connection and loads a fresh World, so a
+`pull_rates` or a tune shows on the next click without a restart.
+
+## `static/` - the board's look and behaviour
+
+`board.js` keeps one piece of state - the map, the side, the bans, the
+red picks, the blue picks - in `localStorage`, so a reload mid-game keeps
+the board. A click on a portrait toggles that hero on that team (a banned
+hero cannot be picked; a hero on one team cannot be on the other); a
+change debounces, then fetches facts and inference together. The facts
+panel filters by text and by scope (meta, bans, map, hero, team, matchup,
+playbook); the comps panels render each pick with its reasons and `[F#]`
+citations, the score bars per strategy, the alternatives, and a
+"record this comp" button; the playbook panel renders the catalog with
+each constraint's form. `board.css` is the game's hero select: role
+columns, portrait tiles, red and blue seats, the dark palette.
+
+## `facts/` - everything the database knows about a board
+
+### `model.py` - the World
+
+`load(cx)` reads every table into one object, once per request: the
+heroes (role, subrole, health/shield/armor, the kit - weapons with their
+firing configs, abilities, perks, every stat as a measurement with unit
+and condition - keywords, the latest and previous rates, the per-map and
+per-tier rates, counters both ways, best maps, playstyles), the maps
+(mode, stages, playstyle fit), the meta snapshots and the patches newer
+than the capture, synergies and partners, archetypes, the recorded
+recommendations and outcomes, the catalog's shape. `Hero.finish()`
+derives what the kit implies - peak damage and healing per second,
+burst, mobility and crowd-control tools, hitscan, flight, anti-heal,
+cleanse, barrier, effective HP - so the metrics read fields, not SQL.
+`resolve(map, red, blue, bans)` turns names into objects through the
+same name matching the data layer uses, and refuses a banned pick, an
+unknown hero, or a hero on both teams. A test in `tests/ui` insists
+every data table is read here: a table nothing reads is not data.
+
+### `compute.py` - the metrics registry
+
+Pure functions over a World, and the one place a number is defined. The
+board renders them as facts and the inference layer's solver scores the
+same functions, so the number on the screen and the number in the score
+are the same function - a change here changes both. Four registries,
+each key with a one-line meaning (`registry()` lists them all, and
+`docs/strategies.md` prints them as the vocabulary a strategy may
+reference):
+
+| group | count | examples |
+| --- | --- | --- |
+| `team.*` | 91 | shape (`tanks`, `damage`, `supports`, `shape_flags`), sustain (`hps_peak`, `heal_ratio`), damage (`dps_floor`, `burst`), durability (`effective_hp`, `squish_count`), tools (`mobility_count`, `cc_count`, `hitscan`, `antiheal`, `barrier_count`), coverage of the enemy (`coverage_share`), cohesion (`synergy_score`), map fit (`map_specialists`, `map_strategy_hits`), style (`style_lean`) |
+| `matchup.*` | 21 | the differences and ratios between the two teams: `dps_diff`, `burst_vs_heal`, `tempo_diff`, `ult_threat`, `style_lean_red` |
+| `map.*` | 7 | `known`, `mode`, `sided`, `side`, `style_top`, `style_margin`, `stages` |
+| `world.*` | 2 | `heal_bench`, `roster_size` |
+
+`team_metrics(world, heroes, map, enemies)` computes a team's numbers
+(with `lean=True` for the solver, which skips the descriptive strings);
+`matchup_metrics(blue, red)`, `map_metrics(map, side)` and
+`world_metrics(world)` the rest; `namespace(...)` bundles them as the
+`team`, `enemy`, `matchup`, `map` and `world` sections a strategy's
+expression reads. `TEAM_SIZE` (six, 6v6 Open Queue), `SIDED_MODES`
+(Escort, Hybrid), `SIDES`, `is_sided` and `opposite` live here too.
+
+### `engine.py` - the FactSet
+
+`generate(world, map, red, blue, bans, side)` walks the board and
+numbers what it finds. Facts are structured (scope, subject, key, value,
+unit, source) so the inference layer reads them by key, and rendered as
+sentences so a person - or the `/comp` session - reads them as evidence:
+
+```
+[F1]  blizzard rates captured 2026-09-13 under Patch 14.3 ...      meta
+[F7]  Widowmaker is banned: 2 red pick(s) it would have answered    bans
+[F12] King's Row is Hybrid; blue attacks, red defends              map
+[F40] Zarya (red): peak 190 dps, 200 barrier, ...                  hero
+[F210] blue team: 2 tanks, 2 damage, 2 supports ...                team
+[F230] sustain war: red supports peak 165 heal vs 1 blue anti-heal matchup
+-- the playbook's record: what it holds, decided and saw - not facts --
+[S1]  a brawl comp wants 2 tank: ...                               playbook
+```
+
+Independent facts per hero and for the map come first; joint facts per
+team appear once a team has picks; matchup facts once both teams do.
+Ids are dense and stable within a board, which is what makes a citation
+mean something: `record` checks every `[F#]` a comp cites against the
+board it was decided on. Below the facts, numbered S1.., rides the
+playbook's record - archetypes, previous recommendations here, recorded
+outcomes, how many constraints and heuristics the catalog holds - citable
+but never mistaken for data, and not the strategies themselves.
+
+## What reads this package
+
+The inference layer's solver (`compute`), engine and record path
+(`engine`, `model`), the fit and outcome tools (`model`), the inference
+service, and the MCP tools `roster`, `facts`, `infer`, `evaluate`,
+`board` and `record` - all through the same functions the board calls.
