@@ -7,11 +7,11 @@
 #               HTTP at http://localhost:8020/mcp - the door a Claude Code
 #               session opens (.mcp.json, server "overwatch-db-docker")
 #   inference   INFERENCE ENGINE: http://localhost:8019 (infer, evaluate,
-#               heuristics, record) reading the heuristics files live
+#               strategies, record) reading the strategies files live
 #   ui          USER LAYER: the board at http://localhost:8017, reading the
 #               database for facts and the inference service for comps
 #   refresher   the data layer's clock: refreshes every source, the playbook
-#               and the heuristics mirror daily at OVERWATCH_DB_REFRESH_AT
+#               and the strategies mirror daily at OVERWATCH_DB_REFRESH_AT
 #               (05:00 container time; set TZ for local time), and right away
 #               on start when the cached pages are older than a day - so the
 #               board is ready when a game starts
@@ -32,7 +32,7 @@ x-app: &app
     - ./.cache-counterpick:/app/.cache-counterpick
     - ./data/raw:/app/data/raw
     - ./data/authored:/app/data/authored
-    - ./inference/heuristics:/app/inference/heuristics
+    - ./inference/strategies:/app/inference/strategies
 
 services:
   db:

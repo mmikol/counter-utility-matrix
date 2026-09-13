@@ -22,7 +22,8 @@ DOC_DOMAIN = {"001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES"
               "005_playbook.sql": "PLAYBOOK", "006_inference.sql": "INFERENCE",
               "007_three_layers.sql": "PLAYBOOK",
               "008_schema_migrations.sql": "foundation",
-              "009_outcomes.sql": "INFERENCE"}
+              "009_outcomes.sql": "INFERENCE",
+              "010_rules_and_goals.sql": "INFERENCE"}
 
 
 class SchemaError(Exception):
@@ -202,12 +203,13 @@ def generate_docs(connection):
     erd = ["# Entity relationship diagram", "",
            "Five domains. Three are the authoritative data the sources are pulled",
            "for - which hero (HEROES), on which map (MAPS), performing how well",
-           "(META) - and become the FACTS of a board. The other two are the strategy",
-           "side: what was authored (PLAYBOOK) and what the inference layer decided",
-           "and what came of it (INFERENCE). The composition is the argmax of the",
-           "strategies over the facts.", "",
+           "(META) - and become the FACTS of a board. The other two are the",
+           "playbook's record: the authored inputs and the mirror of the constraints and",
+           "heuristics (PLAYBOOK), and what the inference layer decided and what came of",
+           "it (INFERENCE). The composition is the argmax of the strategies - the",
+           "constraints and heuristics in inference/strategies/ - over the facts.", "",
            "```", "FACTS      = HEROES ∪ MAPS ∪ META",
-           "STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY",
+           "STRATEGIES = CONSTRAINTS ∪ HEURISTICS",
            "COMP       = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
            "Every table also carries `source_id` → `sources` and a `cao` timestamp.",
            "Those edges are left off - they would connect `sources` to all %d tables"

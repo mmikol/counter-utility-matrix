@@ -14,7 +14,7 @@ take seconds. Then:
 
 1. Read the verdict. `READY` means: the data layer answers with no pending
    migrations and a populated database, the inference engine sees the
-   heuristics, the board serves the roster. Report the URLs it prints
+   strategies, the board serves the roster. Report the URLs it prints
    (board http://localhost:8017, inference :8019, MCP over HTTP :8020/mcp)
    and the line "rates captured YYYY-MM-DD".
 2. `NOT READY` names the problem. The usual fixes, in order: a stale bind

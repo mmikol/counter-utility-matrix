@@ -2,7 +2,7 @@
 
 import pytest
 
-from data.transform.wiki.measurements import CANONICAL_UNITS
+from data.wiki.measurements import CANONICAL_UNITS
 
 pytestmark = pytest.mark.invariant
 
@@ -189,7 +189,7 @@ def test_no_hero_has_two_abilities_that_fold_together(rows):
     # "Biotic Rifle" and "Biotic Rifle (ADS)" fold to one key; two such rows
     # on one hero means a firing config leaked into the abilities table, and
     # every rerun then routes stats to whichever row it finds first.
-    from data.transform.wiki.names import match_key
+    from data.wiki.names import match_key
     from collections import Counter
     folds = Counter((h, match_key(a)) for h, a in rows(
         "select hero_id, name from abilities"))
@@ -214,7 +214,7 @@ def test_ability_keywords_are_stored_verbatim(one):
 def test_heuristics_table_mirrors_the_files(rows):
     from inference import catalog
     files = {h.id: h.kind for h in catalog.load()}
-    table = dict(rows("select heuristic_id, kind from heuristics"))
+    table = dict(rows("select strategy_id, kind from strategies"))
     assert table == files
 
 

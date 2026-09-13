@@ -5,14 +5,10 @@ rejection here must be loud, name the line, and leave nothing half-loaded."""
 
 import pytest
 
-from data.load.authored.archetypes import ArchetypeError
-from data.load.authored.archetypes import read_rows as read_archetypes
-from data.load.authored.map_playstyle import MapPlaystyleError
-from data.load.authored.map_playstyle import read_rows as read_map_playstyle
-from data.load.authored.seasons import SeasonError
-from data.load.authored.seasons import read_rows as read_seasons
-from data.load.authored.synergies import SynergyError
-from data.load.authored.synergies import read_rows as read_synergies
+from data.playbook import AuthoredError, read_archetypes
+from data.playbook import read_map_playstyle
+from data.playbook import read_seasons
+from data.playbook import read_synergies
 
 
 def write(tmp_path, text):
@@ -32,18 +28,18 @@ def test_synergies_happy_path_keeps_order_score_and_note(tmp_path):
 
 def test_synergies_reject_a_reversed_duplicate(tmp_path):
     # bidirectional: (a, b) and (b, a) are the same claim
-    with pytest.raises(SynergyError, match="duplicate pair"):
+    with pytest.raises(AuthoredError, match="duplicate pair"):
         read_synergies(write(tmp_path,
             "hero,other,score,note\nAna,Winston,2,\nWinston,Ana,1,\n"))
 
 
 def test_synergies_reject_a_self_pair(tmp_path):
-    with pytest.raises(SynergyError, match="paired with itself"):
+    with pytest.raises(AuthoredError, match="paired with itself"):
         read_synergies(write(tmp_path, "hero,other,score,note\nMei,mei,1,\n"))
 
 
 def test_synergies_reject_a_wrong_header(tmp_path):
-    with pytest.raises(SynergyError, match="header"):
+    with pytest.raises(AuthoredError, match="header"):
         read_synergies(write(tmp_path, "a,b,c\nAna,Winston,2\n"))
 
 
@@ -53,7 +49,7 @@ def test_archetypes_lowercase_and_reject_duplicates(tmp_path):
     rows = read_archetypes(write(tmp_path,
         "style,role,slots,note\nDive,Tank,1,engage\n"))
     assert rows == [("dive", "tank", 1, "engage")]
-    with pytest.raises(ArchetypeError, match="duplicate"):
+    with pytest.raises(AuthoredError, match="duplicate"):
         read_archetypes(write(tmp_path,
             "style,role,slots,note\ndive,tank,1,\nDIVE,TANK,2,\n"))
 
@@ -61,7 +57,7 @@ def test_archetypes_lowercase_and_reject_duplicates(tmp_path):
 # --- map playstyle -------------------------------------------------------
 
 def test_map_playstyle_rejects_duplicate_map_style(tmp_path):
-    with pytest.raises(MapPlaystyleError, match="duplicate"):
+    with pytest.raises(AuthoredError, match="duplicate"):
         read_map_playstyle(write(tmp_path,
             "map,style,score,note\nIlios,dive,2,\nilios,Dive,1,\n"))
 
@@ -81,11 +77,11 @@ def test_seasons_parse_iso_dates(tmp_path):
 
 
 def test_seasons_reject_a_sloppy_date(tmp_path):
-    with pytest.raises(SeasonError, match="YYYY-MM-DD"):
+    with pytest.raises(AuthoredError, match="YYYY-MM-DD"):
         read_seasons(write(tmp_path, "name,started,note\nSeason 1,Oct 4 2022,\n"))
 
 
 def test_seasons_reject_duplicate_names(tmp_path):
-    with pytest.raises(SeasonError, match="duplicate"):
+    with pytest.raises(AuthoredError, match="duplicate"):
         read_seasons(write(tmp_path,
             "name,started,note\nSeason 1,2022-10-04,\nseason 1,2022-12-06,\n"))

@@ -82,13 +82,13 @@ def verdict(h):
         lines.append("inference: not answering" if not inf else "inference: %s"
                      % inf.get("error", inf.get("status")))
     else:
-        if not inf.get("heuristics"):
+        if not inf.get("strategies"):
             ok = False
-            lines.append("inference: no heuristics visible (a stale bind mount -"
+            lines.append("inference: no strategies visible (a stale bind mount -"
                          " run `docker compose up -d --force-recreate`)")
         else:
-            lines.append("inference: %d heuristics, %d heroes"
-                         % (inf["heuristics"], inf.get("heroes", 0)))
+            lines.append("inference: %d strategies, %d heroes"
+                         % (inf["strategies"], inf.get("heroes", 0)))
     ui = h.get("ui")
     if not ui or "heroes" not in ui:
         ok = False
@@ -109,7 +109,7 @@ def up():
     wait_for(URLS["ui"], 120, "the board")
     h = health()
     ok, lines = verdict(h)
-    if not ok and h.get("inference") and not h["inference"].get("heuristics"):
+    if not ok and h.get("inference") and not h["inference"].get("strategies"):
         print("stale bind mounts detected; recreating the containers...")
         sh("docker", "compose", "up", "-d", "--force-recreate")
         wait_for(URLS["inference"], 300, "the inference engine")

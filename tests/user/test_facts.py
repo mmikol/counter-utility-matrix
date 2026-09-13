@@ -37,11 +37,11 @@ def test_names_resolve_across_spellings(world):
 
 def test_facts_are_densely_numbered_and_keyed(world):
     fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
-    facts = [f for f in fs.facts if f.scope != engine.STRATEGY_SCOPE]
+    facts = [f for f in fs.facts if f.scope != engine.PLAYBOOK_SCOPE]
     assert [f.id for f in facts] == ["F%d" % i for i in range(1, len(facts) + 1)]
     assert all(f.key and f.scope and f.text for f in fs.facts)
     assert fs.facts[0].scope == "meta"
-    assert {"map", "hero", "team", "matchup", "strategy"} <= {f.scope for f in fs.facts}
+    assert {"map", "hero", "team", "matchup", "playbook"} <= {f.scope for f in fs.facts}
 
 
 def test_every_named_hero_gets_a_hundred_independent_facts(world):
@@ -104,7 +104,7 @@ def test_the_whole_database_becomes_facts(world, rows):
     assert unread == [], unread
     fs = engine.generate(world, "King's Row", ["Zarya"], ["Ana"])
     keys = {f.key for f in fs.facts}
-    assert {"hero.rate_alt", "hero.perk_effect", "strategy.catalog"} <= keys, keys
+    assert {"hero.rate_alt", "hero.perk_effect", "playbook.catalog"} <= keys, keys
     assert any("Americas" in f.text for f in fs.facts if f.key == "meta.snapshot")
 
 
@@ -140,19 +140,20 @@ def test_sides_exist_only_on_escort_and_hybrid(world):
 
 
 @pytest.mark.invariant
-def test_facts_are_the_authoritative_data_and_the_strategy_side_is_numbered_apart(world):
-    # FACTS = HEROES ∪ MAPS ∪ META (F1..); STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY (S1..)
+def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_apart(world):
+    # FACTS = HEROES ∪ MAPS ∪ META (F1..); the playbook's record rides below as S1..
     fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
-    facts = [f for f in fs.facts if f.scope != engine.STRATEGY_SCOPE]
-    side = fs.strategies
+    facts = [f for f in fs.facts if f.scope != engine.PLAYBOOK_SCOPE]
+    side = fs.playbook
     assert facts and side
     assert all(f.id.startswith("F") for f in facts) and all(f.id.startswith("S") for f in side)
     assert [f.id for f in facts] == ["F%d" % i for i in range(1, len(facts) + 1)]
     assert [f.id for f in side] == ["S%d" % i for i in range(1, len(side) + 1)]
     assert {f.scope for f in facts} <= {"meta", "bans", "map", "hero", "team", "matchup"}
-    assert {f.key.split(".")[0] for f in side} == {"strategy"}
-    assert {"strategy.archetype", "strategy.catalog"} <= {f.key for f in side}
-    assert fs.count == len(facts) and fs.to_dict()["strategy_count"] == len(side)
+    assert {f.key.split(".")[0] for f in side} == {"playbook"}
+    assert {"playbook.archetype", "playbook.catalog"} <= {f.key for f in side}
+    assert fs.count == len(facts) and fs.to_dict()["playbook_count"] == len(side)
     text = fs.rendered()
-    assert text.startswith("[F1]") and engine.STRATEGY_DIVIDER in text
-    assert text.index("[S1]") > text.index(engine.STRATEGY_DIVIDER) > text.index("[F%d]" % len(facts))
+    assert text.startswith("[F1]") and engine.PLAYBOOK_DIVIDER in text
+    assert text.index("[S1]") > text.index(engine.PLAYBOOK_DIVIDER) > text.index("[F%d]" % len(facts))
+    assert "STRATEGIES = CONSTRAINTS ∪ HEURISTICS" in [f.text for f in side if f.key == "playbook.catalog"][0]

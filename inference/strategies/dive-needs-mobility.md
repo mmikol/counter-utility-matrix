@@ -1,0 +1,12 @@
+---
+name: A dive comp needs to arrive together
+kind: constraint
+category: shape
+when: map.style_top == 'dive' or team.style_lean == 'dive'
+bonus: min(team.mobility_count, 5) * 0.5
+---
+# A dive comp needs to arrive together
+
+On a map that rewards dive, or when the picks already lean dive, every
+pick with a movement tool is one who arrives with the engage instead of
+watching it from the choke. Five rewarded; the sixth is the anchor.

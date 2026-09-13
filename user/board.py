@@ -7,7 +7,7 @@ and the inference layer.
 Standard library only. Every click re-reads the database: the facts
 panel is the FactSet for (map, red, blue), the optimal-comp panel is the
 inference layer's answer around the locked blue picks (or the evaluation
-of a full six), and the playbook panel is the heuristics catalog as it
+of a full six), and the playbook panel is the strategies catalog as it
 sits on disk. JSON endpoints under /api/ serve the same three things.
 """
 
@@ -115,9 +115,9 @@ def api_infer(cx, query):
 
 def api_heuristics():
     if INFERENCE_URL:
-        return remote("/heuristics")[0]
+        return remote("/strategies")[0]
     catalog = catalog_module.load()
-    return {"heuristics": [h.to_dict() for h in catalog]}
+    return {"strategies": [h.to_dict() for h in catalog]}
 
 
 def api_recs(cx):
@@ -181,9 +181,10 @@ def view_board():
     return (HEAD + "<title>overwatch-db board</title><main>"
             "<header class='top'><h1>overwatch<span>-db</span></h1>"
             "<span class='sub' title='FACTS = HEROES ∪ MAPS ∪ META (authoritative: pulled and set)"
-            "&#10;STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY (authored, recorded, tuned)"
+            "&#10;STRATEGIES = CONSTRAINTS ∪ HEURISTICS (the playbook: markdown files, tuned by what history shows)"
             "&#10;COMP = ARGMAX[ STRATEGIES( FACTS ) ]'>"
-            "FACTS = HEROES ∪ MAPS ∪ META &nbsp; COMP = ARGMAX[ STRATEGIES( FACTS ) ] &nbsp;·&nbsp; "
+            "FACTS = HEROES ∪ MAPS ∪ META &nbsp; STRATEGIES = CONSTRAINTS ∪ HEURISTICS &nbsp; "
+            "COMP = ARGMAX[ STRATEGIES( FACTS ) ] &nbsp;·&nbsp; "
             "<a href='/recs'>recorded comps</a> &nbsp;·&nbsp; <span id='captured'></span></span>"
             "<div class='mapsel'><select id='mapsel'></select><span class='mode' id='mode'></span>"
             "<span class='sideseg' id='sideseg' title='blue attacks or defends; red gets the other side'>"
@@ -306,7 +307,7 @@ class Handler(BaseHTTPRequestHandler):
                 if served is None:
                     return self._send(_page("not found", "<p>Nothing here.</p>"), 404)
                 return self._send_bytes(*served)
-            if path == "/api/heuristics":
+            if path == "/api/strategies":
                 return self._json(api_heuristics())
             with psycopg.connect(dsn()) as cx:
                 if path == "/api/roster":

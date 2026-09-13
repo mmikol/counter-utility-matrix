@@ -1,15 +1,15 @@
-"""Fitting the goal weights to recorded outcomes.
+"""Fitting the heuristic weights to recorded outcomes.
 
 For every recorded match with both sixes known, score blue's six against
-red on that map and side the way the solver would - each goal's metric,
+red on that map and side the way the solver would - each heuristic's metric,
 normalised against the solver's own reference sample for that board
-(0..1, flipped for minimise) - and ask which goals ran higher in wins than
-in losses. Two tiers of evidence, in [-1, 1] per goal:
+(0..1, flipped for minimise) - and ask which heuristics ran higher in wins than
+in losses. Two tiers of evidence, in [-1, 1] per heuristic:
 
     mean difference   from MIN_OUTCOMES (10) decided matches: the mean
                       normalised value in wins minus that in losses
     logistic          from LOGISTIC_MIN (50): a ridge logistic regression
-                      of win/loss on the goals' values, each demeaned
+                      of win/loss on the heuristics' values, each demeaned
                       within its map so a map that is simply won more
                       often does not masquerade as a metric; the evidence
                       is tanh of the coefficient
@@ -41,9 +41,9 @@ REFERENCE_SIZE = 600
 
 
 def _scored_outcomes(world, catalog):
-    """[(result, map_id, {goal id: normalised value})] for every decided
+    """[(result, map_id, {heuristic id: normalised value})] for every decided
     outcome with both sixes, on the solver's scale for that board."""
-    goals = [h for h in catalog if h.kind == "goal"]
+    heuristics = [h for h in catalog if h.kind == "heuristic"]
     out = []
     for o in world.outcomes:
         if o["result"] not in ("win", "loss"):
@@ -59,7 +59,7 @@ def _scored_outcomes(world, catalog):
         solver.freeze_bounds()
         cand = solver.prepare(Candidate(blue))
         norms = {}
-        for g in goals:
+        for g in heuristics:
             raw = cand.raw.get(g.id)
             lo, hi = solver.bounds.get(g.id, (0.0, 0.0))
             if raw is None:
@@ -81,8 +81,8 @@ def mean_difference(scored, goal_id):
 
 
 def logistic_evidence(scored, goal_ids, l2=1.0, steps=400, lr=0.05):
-    """{goal id: tanh(coefficient)} from a ridge logistic regression of the
-    result on the goals' normalised values, standardised and demeaned
+    """{heuristic id: tanh(coefficient)} from a ridge logistic regression of the
+    result on the heuristics' normalised values, standardised and demeaned
     within each map. Pure Python gradient descent - the samples are dozens,
     not millions."""
     rows = [(1.0 if r == "win" else 0.0, mid, n) for r, mid, n in scored]
@@ -131,24 +131,24 @@ def propose(cx, catalog=None, min_outcomes=MIN_OUTCOMES, rate=RATE,
     wins = sum(1 for r, _, _ in scored if r == "win")
     losses = len(scored) - wins
     ready = len(scored) >= min_outcomes and wins > 0 and losses > 0
-    goals = [h for h in catalog if h.kind == "goal"]
-    logistic = (logistic_evidence(scored, [g.id for g in goals])
+    heuristics = [h for h in catalog if h.kind == "heuristic"]
+    logistic = (logistic_evidence(scored, [g.id for g in heuristics])
                 if ready and len(scored) >= logistic_min else {})
     proposal = {"outcomes": len(scored), "wins": wins, "losses": losses,
                 "min_outcomes": min_outcomes, "ready": ready,
                 "method": ("logistic, demeaned within map" if logistic
-                           else "mean difference"), "goals": []}
-    for g in goals:
+                           else "mean difference"), "heuristics": []}
+    for g in heuristics:
         diff, win_mean, loss_mean = mean_difference(scored, g.id)
         evidence = logistic.get(g.id, diff) if ready else 0.0
         new = g.weight * (1.0 + rate * evidence)
         new = round(min(MAX_WEIGHT, max(MIN_WEIGHT, new)), 2)
-        proposal["goals"].append({
+        proposal["heuristics"].append({
             "id": g.id, "metric": g.metric, "weight": g.weight, "proposed": new,
             "evidence": round(evidence, 3), "win_mean": round(win_mean, 3),
             "loss_mean": round(loss_mean, 3),
             "change": round(new - g.weight, 2) if ready else 0.0})
-    proposal["goals"].sort(key=lambda x: -abs(x["evidence"]))
+    proposal["heuristics"].sort(key=lambda x: -abs(x["evidence"]))
     return proposal
 
 
@@ -159,7 +159,7 @@ def apply(cx, proposal, by="fit", directory=None):
                          " (with at least one win and one loss)"
                          % (proposal["outcomes"], proposal["min_outcomes"]))
     applied = []
-    for g in proposal["goals"]:
+    for g in proposal["heuristics"]:
         if abs(g["change"]) < 0.005:
             continue
         applied.append(tune_module.tune(
@@ -178,7 +178,7 @@ def rendered(proposal):
         else "needs %d before weights move" % proposal["min_outcomes"],
         " - %s" % proposal["method"] if proposal["ready"] else "")
     lines = [head]
-    for g in proposal["goals"]:
+    for g in proposal["heuristics"]:
         lines.append("  %-22s evidence %+.2f (wins %.2f, losses %.2f)  weight %g -> %g"
                      % (g["id"], g["evidence"], g["win_mean"], g["loss_mean"],
                         g["weight"], g["proposed"]))

@@ -1,0 +1,15 @@
+---
+name: Win on this ground
+kind: heuristic
+category: map
+direction: maximize
+metric: team.map_win_mean
+weight: 2
+---
+# Win on this ground
+
+Mean all-ranks win rate of the six on the selected map (the roster-wide
+win rate when no map is set, so the heuristic still ranks comps on a blank
+board). Map rates are the closest measured thing to "this comp works
+here"; specialists and off-map liabilities are the same numbers seen
+per hero on the board.

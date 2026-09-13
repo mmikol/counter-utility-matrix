@@ -45,12 +45,16 @@ def test_frontmatter_parses_scalars_lists_and_params():
 def test_shipped_catalog_is_valid_and_references_real_metrics():
     cat = catalog.load()
     kinds = {h.kind for h in cat}
-    assert kinds == set(catalog.KINDS) == {"constraint", "goal", "strategy"}
-    assert any(h.kind == "strategy" and h.scored for h in cat)        # peel, under-healed...
-    assert any(h.kind == "strategy" and not h.scored for h in cat)    # optimal-play...
+    assert kinds == set(catalog.KINDS) == {"constraint", "heuristic"}
+    forms = {h.form for h in cat}
+    assert forms == {"limit", "scored", "prose", "heuristic"}
+    assert all(h.form == "heuristic" for h in cat if h.kind == "heuristic")
+    assert any(h.form == "limit" for h in cat)         # open-queue-tanks
+    assert any(h.form == "scored" for h in cat)        # peel, under-healed...
+    assert any(h.form == "prose" and not h.scored for h in cat)     # optimal-play...
     registry = compute.registry()
     for h in cat:
-        if h.kind == "goal":
+        if h.kind == "heuristic":
             assert h.metric in registry and h.metric not in compute.TEXT_METRICS
         for e in (h.when, h.require, h.bonus, h.penalty):
             for name in (e.names if e else []):
@@ -60,12 +64,12 @@ def test_shipped_catalog_is_valid_and_references_real_metrics():
 
 def test_catalog_rejects_a_goal_on_an_unknown_metric(tmp_path):
     (tmp_path / "bad.md").write_text(
-        "---\nname: bad\nkind: goal\ndirection: maximize\nmetric: team.nope\n---\nx\n",
+        "---\nname: bad\nkind: heuristic\ndirection: maximize\nmetric: team.nope\n---\nx\n",
         "utf-8")
     with pytest.raises(catalog.CatalogError, match="not a registered fact key"):
         catalog.load(str(tmp_path))
     (tmp_path / "bad.md").write_text(
-        "---\nname: bad\nkind: strategy\nwhen: team.tanks > params.T\nbonus: 1\n---\nx\n",
+        "---\nname: bad\nkind: constraint\nwhen: team.tanks > params.T\nbonus: 1\n---\nx\n",
         "utf-8")
     with pytest.raises(catalog.CatalogError, match="params"):
         catalog.load(str(tmp_path))
@@ -129,9 +133,9 @@ def test_the_tank_limit_is_the_only_shape_constraint(world, tmp_path):
     with pytest.raises(ValueError, match="no composition satisfies"):
         engine.infer(world, "King's Row", [], ["Winston", "D.Va", "Reinhardt"], pool_size=4)
     # a stricter authored constraint narrows the search the same way
-    for name in os.listdir(catalog.HEURISTICS_DIR):
+    for name in os.listdir(catalog.STRATEGIES_DIR):
         if name != "open-queue-tanks.md":
-            shutil.copy(os.path.join(catalog.HEURISTICS_DIR, name), tmp_path / name)
+            shutil.copy(os.path.join(catalog.STRATEGIES_DIR, name), tmp_path / name)
     (tmp_path / "shape.md").write_text(
         "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and"
         " team.damage == 2 and team.supports == 2\n---\nx\n", "utf-8")
@@ -190,7 +194,7 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     d = engine.board_dict(b)
     assert d["side"] == "attack" and d["red"]["seat"] == "red" and d["current"]["partial"]
     assert "current comp" in engine.board_rendered(b)
-    # the side strategies fire on the right seat
+    # the side constraints fire on the right seat
     ids = {c["id"] for c in blue.contributions if c.get("applies")}
     assert "attack-breaks-the-hold" in ids and "defense-holds-the-ground" not in ids
     ids = {c["id"] for c in red.contributions if c.get("applies")}
@@ -223,3 +227,24 @@ def test_scores_share_one_scale_per_board(world):
     again = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], pool_size=4)
     assert abs(again.score - engine.evaluate(
         world, "King's Row", ["Zarya", "Pharah"], again.blue).score) < 1e-9
+
+
+def test_a_constraint_is_a_limit_or_scored_or_prose_never_a_heuristic(tmp_path):
+    def load_one(text):
+        (tmp_path / "x.md").write_text(text, encoding="utf-8")
+        return catalog.load(str(tmp_path))[0]
+    assert load_one("---\nname: l\nkind: constraint\nrequire: team.tanks <= 2\n---\nx\n").form == "limit"
+    assert load_one("---\nname: s\nkind: constraint\nbonus: team.tanks\n---\nx\n").form == "scored"
+    assert load_one("---\nname: p\nkind: constraint\n---\nx\n").form == "prose"
+    assert load_one("---\nname: g\nkind: heuristic\ndirection: maximize\nmetric: team.tanks\n"
+                    "---\nx\n").form == "heuristic"
+    for bad in ("---\nname: b\nkind: constraint\nrequire: team.tanks <= 2\nbonus: 1\n---\nx\n",
+                "---\nname: b\nkind: constraint\nmetric: team.tanks\n---\nx\n",
+                "---\nname: b\nkind: heuristic\ndirection: maximize\nmetric: team.tanks\n"
+                "require: team.tanks <= 2\n---\nx\n",
+                "---\nname: b\nkind: constraint\nrequire: team.tanks <= 2\nsoft: true\n---\nx\n",
+                "---\nname: b\nkind: rule\nrequire: team.tanks <= 2\n---\nx\n",
+                "---\nname: b\nkind: goal\ndirection: maximize\nmetric: team.tanks\n---\nx\n",
+                "---\nname: b\nkind: strategy\n---\nx\n"):
+        with pytest.raises(catalog.CatalogError):
+            load_one(bad)

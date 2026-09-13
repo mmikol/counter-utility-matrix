@@ -59,7 +59,7 @@ def test_tools_call_without_a_database_and_unknown_method():
     assert replies[0]["result"]["isError"] is False
     assert replies[1]["error"]["code"] == -32601
     uris = {r["uri"] for r in replies[2]["result"]["resources"]}
-    assert "heuristic://coverage" in uris and "heuristic://tuning-log" in uris
+    assert "strategy://coverage" in uris and "strategy://tuning-log" in uris
 
 
 def test_bad_json_is_a_parse_error_not_a_crash():
@@ -201,3 +201,8 @@ def test_http_transport_guards_get_origin_and_health(http_server):
     assert status == 403
     health = json.load(urllib.request.urlopen(http_server + "/health", timeout=10))
     assert health["status"] in ("ok", "degraded")
+
+
+def test_db_migrate_is_idle_when_the_ledger_is_current(ctx):
+    text, data = tools.run_tool(ctx, "db_migrate")
+    assert data["applied"] == [] and text.startswith("db_migrate: applied 0")

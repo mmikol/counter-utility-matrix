@@ -2,19 +2,20 @@
 
 Five domains. Three are the authoritative data the sources are pulled
 for - which hero (HEROES), on which map (MAPS), performing how well
-(META) - and become the FACTS of a board. The other two are the strategy
-side: what was authored (PLAYBOOK) and what the inference layer decided
-and what came of it (INFERENCE). The composition is the argmax of the
-strategies over the facts.
+(META) - and become the FACTS of a board. The other two are the
+playbook's record: the authored inputs and the mirror of the constraints and
+heuristics (PLAYBOOK), and what the inference layer decided and what came of
+it (INFERENCE). The composition is the argmax of the strategies - the
+constraints and heuristics in inference/strategies/ - over the facts.
 
 ```
 FACTS      = HEROES ∪ MAPS ∪ META
-STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY
+STRATEGIES = CONSTRAINTS ∪ HEURISTICS
 COMP       = ARGMAX[ STRATEGIES( FACTS ) ]
 ```
 
 Every table also carries `source_id` → `sources` and a `cao` timestamp.
-Those edges are left off - they would connect `sources` to all 42 tables
+Those edges are left off - they would connect `sources` to all 41 tables
 and obscure everything else.
 
 ## HEROES

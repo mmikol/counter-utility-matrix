@@ -135,7 +135,7 @@ function refresh() {
       if (mine !== seq) return;
       if (d.error) { flash(d.error); return; }
       FACTS = d; renderFacts(); el('factsn').textContent = d.count;
-      el('status').textContent = d.count + ' facts + ' + (d.strategy_count || 0) + ' strategy notes · ' + new Date().toLocaleTimeString();
+      el('status').textContent = d.count + ' facts + ' + (d.playbook_count || 0) + ' playbook notes · ' + new Date().toLocaleTimeString();
     }).catch(function () { flash('the database is not answering'); });
     el('inf-blue').innerHTML = "<p class='legend'>searching both seats…</p>"; el('inf-red').innerHTML = '';
     el('cur').innerHTML = "<p class='legend'>scoring the current comp…</p>";
@@ -146,8 +146,8 @@ function refresh() {
   }, 200);
 }
 
-var SCOPES = ['meta', 'bans', 'map', 'hero', 'team', 'matchup', 'strategy'];
-var scopeOn = { meta: true, bans: true, map: true, hero: true, team: true, matchup: true, strategy: true };
+var SCOPES = ['meta', 'bans', 'map', 'hero', 'team', 'matchup', 'playbook'];
+var scopeOn = { meta: true, bans: true, map: true, hero: true, team: true, matchup: true, playbook: true };
 function renderFacts() {
   if (!FACTS) return;
   var f = el('filter').value.toLowerCase(), out = '', last = null;
@@ -156,7 +156,7 @@ function renderFacts() {
     if (f && (x.id + ' ' + x.key + ' ' + x.subject + ' ' + x.text).toLowerCase().indexOf(f) < 0) return;
     var head = x.scope === 'hero' ? (x.team + ' · ' + x.subject) : x.scope === 'team' ? (x.subject + ' team') : x.scope;
     if (x.scope === 'bans') head = 'bans';
-    if (x.scope === 'strategy') head = 'strategies \u00b7 authored, recorded, tuned \u2014 not facts';
+    if (x.scope === 'playbook') head = 'the playbook\u2019s record \u00b7 what it holds, decided and saw \u2014 not facts';
     if (head !== last) { out += "<tr class='h'><td colspan='3' class='head'>" + esc(head) + '</td></tr>'; last = head; }
     var cls = (x.team || '') + (/^(WARNING|CAUTION)/.test(x.text) ? ' warn' : '') + (x.source.indexOf('derived:') === 0 ? ' derived' : '');
     out += "<tr class='" + cls + "'><td class='tag'>[" + x.id + "]</td><td class='text'>" + esc(x.text) + "</td><td class='src'>" + esc(x.source) + '</td></tr>';
@@ -170,9 +170,9 @@ function bars(contribs) {
   var out = "<div class='bars'>";
   contribs.forEach(function (c) {
     var w = Math.abs(c.weighted || 0) / mx * 100;
-    var detail = c.kind === 'goal' ? (c.applies ? c.metric + ' = ' + (typeof c.raw === 'number' ? +c.raw.toFixed(2) : c.raw) + ' · norm ' + (+c.norm).toFixed(2) : 'not applicable here')
-               : c.kind === 'strategy' ? (c.applies ? 'bonus ' + c.bonus + ' − penalty ' + c.penalty : 'condition not met')
-               : (c.ok ? 'satisfied' : 'VIOLATED');
+    var detail = c.form === 'heuristic' ? (c.applies ? c.metric + ' = ' + (typeof c.raw === 'number' ? +c.raw.toFixed(2) : c.raw) + ' · norm ' + (+c.norm).toFixed(2) : 'not applicable here')
+               : c.form === 'scored' ? (c.applies ? 'bonus ' + c.bonus + ' − penalty ' + c.penalty : 'condition not met')
+               : (c.ok ? 'limit satisfied' : 'limit VIOLATED');
     out += "<div class='bar" + ((c.weighted || 0) < 0 ? ' neg' : '') + (c.applies === false ? ' off' : '') + "' title=\"" + esc(detail + (c.text ? ' — ' + c.text : '')) + "\"><span class='lbl'>" + esc(c.id) + (c.fact ? " <span class='ev'>" + c.fact + '</span>' : '') + "</span><span class='trk'><span class='fill' style='width:" + w.toFixed(1) + "%'></span></span><span class='val'>" + ((c.weighted || 0) >= 0 ? '+' : '') + (+(c.weighted || 0)).toFixed(2) + '</span></div>';
   });
   return out + '</div>';
@@ -192,7 +192,7 @@ function renderResult(d, container, title, recordable) {
   if (!d || d.error) { container.innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
   var out = "<div class='inf-head'><h3>" + esc(title) + "</h3><span class='score'>score " + (+d.score).toFixed(2) + "</span><span class='legend'>" +
     (d.rank ? 'rank ' + d.rank + ' among the feasible field · ' : '') + (d.considered ? d.considered + ' candidates · ' : '') + d.seconds + 's · ' +
-    d.heuristics.constraint + ' constraints, ' + d.heuristics.goal + ' goals, ' + d.heuristics.strategy + ' strategies' +
+    d.strategies.constraint + ' constraints, ' + d.strategies.heuristic + ' heuristics' +
     (d.playstyle ? ' · leans ' + d.playstyle : '') + '</span>' +
     (recordable ? "<button class='primary' id='recbtn'>record this comp</button>" : '') + '</div>';
   if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search\u2019s field</div>';
@@ -228,15 +228,15 @@ function recordComp(d) {
 
 function renderPlaybook(d) {
   var out = "<div class='hcards'>";
-  d.heuristics.forEach(function (h) {
-    var meta = h.kind === 'goal' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight
-             : h.kind === 'constraint' ? 'require ' + h.require + (h.soft ? ' · soft, penalty ' + h.penalty : ' · hard') + (h.when ? ' · when ' + h.when : '')
-             : (h.bonus || h.penalty) ? [h.when ? 'when ' + h.when : '', h.bonus ? 'bonus ' + h.bonus : '', h.penalty ? 'penalty ' + h.penalty : ''].filter(Boolean).join(' · ') + ' · weight ' + h.weight
+  d.strategies.forEach(function (h) {
+    var meta = h.form === 'heuristic' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight
+             : h.form === 'limit' ? 'require ' + h.require + (h.soft ? ' · soft, penalty ' + h.penalty : ' · hard') + (h.when ? ' · when ' + h.when : '')
+             : h.form === 'scored' ? [h.when ? 'when ' + h.when : '', h.bonus ? 'bonus ' + h.bonus : '', h.penalty ? 'penalty ' + h.penalty : ''].filter(Boolean).join(' · ') + ' · weight ' + h.weight
              : 'prose - read by the session, shown here, not scored';
     var params = Object.keys(h.params || {}).map(function (k) { return k + '=' + h.params[k]; }).join(', ');
     var body = h.body.replace(/^#[^\n]*\n/, '').split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.replace(/\s+/g, ' ')) + '</p>'; }).join('');
-    out += "<div class='hcard'><span class='kind " + h.kind + "'>" + h.kind + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
-      "<div class='legend'>inference/heuristics/" + esc(h.id) + '.md · ' + esc(h.category) + '</div></div>';
+    out += "<div class='hcard'><span class='kind " + h.kind + "'>" + h.kind + (h.kind === 'constraint' ? ' · ' + h.form : '') + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
+      "<div class='legend'>inference/strategies/" + esc(h.id) + '.md · ' + esc(h.category) + '</div></div>';
   });
   el('playbook').innerHTML = out + '</div>';
 }
@@ -276,7 +276,7 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   var chips = el('chips'); chips.innerHTML = SCOPES.map(function (s) { return "<button class='chip on' data-scope='" + s + "'>" + s + '</button>'; }).join('');
   chips.onclick = function (e) { var c = e.target.closest('.chip'); if (!c) return; var s = c.getAttribute('data-scope');
     scopeOn[s] = !scopeOn[s]; c.classList.toggle('on', scopeOn[s]); renderFacts(); };
-  fetch('/api/heuristics').then(function (r) { return r.json(); }).then(renderPlaybook);
+  fetch('/api/strategies').then(function (r) { return r.json(); }).then(renderPlaybook);
   showTab((function () { try { return localStorage.getItem('owdb-tab') || 'facts'; } catch (e) { return 'facts'; } })());
   refresh(); pollRecs(); setInterval(pollRecs, 8000);
 });

@@ -2,18 +2,21 @@
 
     generate(world, "King's Row", red=["Zarya", "Pharah"], blue=["Ana"])
 
-    FACTS      = HEROES ∪ MAPS ∪ META           F1..  the authoritative data
-    STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY S1..  everything else
+    FACTS      = HEROES ∪ MAPS ∪ META         F1..  the authoritative data
+    STRATEGIES = CONSTRAINTS ∪ HEURISTICS     the playbook, inference/strategies/
+    (the playbook's record)                   S1..  what it holds, decided and saw
 
 FACTS are the authoritative data - what the sources say about the heroes,
 the maps and the meta, pulled and set - restricted to this board: the
 twelve heroes (and the bans), the one map, the rates and counters for them
 here. Independent facts per hero and for the map come first; joint facts
 per team appear once a team has picks; matchup facts once both teams do.
-The STRATEGY side is everything authored, recorded or tuned - archetypes,
-the operator's notes, previous recommendations, recorded outcomes, the
-heuristics catalog - and rides below the facts as S1.., citable but never
-mistaken for data. Both are structured (scope, subject, key, value) so the
+Below them, numbered S1.., rides the PLAYBOOK's record: the archetypes it
+names, how many constraints and heuristics it holds, what it recommended
+here before and how recorded matches went - citable, never mistaken for
+data, and not the strategies themselves (those are the constraints and
+heuristics the solver reads). Both sides are structured (scope, subject,
+key, value) so the
 inference layer can read them by key, and rendered as sentences so a
 person - or the /comp skill - can read them as evidence. Ids are dense and
 stable within a board.
@@ -51,14 +54,14 @@ def _plain(value):
     return str(value)
 
 
-STRATEGY_SCOPE = "strategy"
-STRATEGY_DIVIDER = "-- strategies: authored, recorded, tuned - not facts --"
+PLAYBOOK_SCOPE = "playbook"
+PLAYBOOK_DIVIDER = "-- the playbook's record: what it holds, decided and saw - not facts --"
 
 
 class FactSet:
-    """The facts (F1..) and the strategy side (S1..) of one board. Both live
-    in `facts` in order, so a citation of either resolves; `count` is the
-    facts alone."""
+    """The facts (F1..) and the playbook's record (S1..) of one board. Both
+    live in `facts` in order, so a citation of either resolves; `count` is
+    the facts alone."""
 
     def __init__(self, map_name=None, red=(), blue=(), bans=(), side=""):
         self.map_name, self.red, self.blue = map_name, list(red), list(blue)
@@ -69,7 +72,7 @@ class FactSet:
 
     def add(self, scope, subject, key, text, value=None, unit=None,
             source="", team=None):
-        prefix = "S" if scope == STRATEGY_SCOPE else "F"
+        prefix = "S" if scope == PLAYBOOK_SCOPE else "F"
         self._n[prefix] += 1
         fid = "%s%d" % (prefix, self._n[prefix])
         fact = Fact(fid, scope, subject, team, key, text, value, unit, source)
@@ -82,8 +85,8 @@ class FactSet:
         return self._n["F"]
 
     @property
-    def strategies(self):
-        return [f for f in self.facts if f.scope == STRATEGY_SCOPE]
+    def playbook(self):
+        return [f for f in self.facts if f.scope == PLAYBOOK_SCOPE]
 
     def find(self, key, subject=None):
         """Facts with this key (and subject, if given)."""
@@ -92,16 +95,16 @@ class FactSet:
         return [f for f in self.facts if f.key == key]
 
     def rendered(self):
-        lines = ["[%s] %s" % (f.id, f.text) for f in self.facts if f.scope != STRATEGY_SCOPE]
-        side = self.strategies
+        lines = ["[%s] %s" % (f.id, f.text) for f in self.facts if f.scope != PLAYBOOK_SCOPE]
+        side = self.playbook
         if side:
-            lines += [STRATEGY_DIVIDER] + ["[%s] %s" % (f.id, f.text) for f in side]
+            lines += [PLAYBOOK_DIVIDER] + ["[%s] %s" % (f.id, f.text) for f in side]
         return "\n".join(lines)
 
     def to_dict(self):
         return {"map": self.map_name, "red": self.red, "blue": self.blue,
                 "bans": self.bans, "side": self.side, "count": self.count,
-                "strategy_count": self._n["S"],
+                "playbook_count": self._n["S"],
                 "facts": [f.to_dict() for f in self.facts]}
 
 
@@ -144,7 +147,7 @@ def generate(world, map_name=None, red=(), blue=(), bans=(), side=""):
         _team_facts(fs, world, "blue", blue_h, blue_t, m, red_h)
     if red_t and blue_t:
         _matchup_facts(fs, world, blue_t, red_t)
-    _strategy_side(fs, world, m)
+    _playbook_record(fs, world, m)
     return fs
 
 
@@ -681,34 +684,32 @@ def _matchup_facts(fs, world, blue_t, red_t):
             x["style_lean_red"] or "nothing yet", x["style_lean_blue"] or "nothing yet"))
 
 
-def _strategy_side(fs, world, m):
-    """S1..: the authored, recorded and tuned side of the board - what the
-    strategies are made of, never what the sources say."""
-    S = STRATEGY_SCOPE
+def _playbook_record(fs, world, m):
+    """S1..: the playbook's record - what it holds, what it decided here
+    before and how it went - never what the sources say, and not the
+    constraints and heuristics themselves."""
+    S = PLAYBOOK_SCOPE
     for style in sorted(world.archetypes):
         for role, (slots, note) in world.archetypes[style].items():
-            fs.add(S, style, "strategy.archetype", "a %s comp wants %d %s: %s"
+            fs.add(S, style, "playbook.archetype", "a %s comp wants %d %s: %s"
                    % (style, slots, role, note or ""), value={"style": style, "role": role,
                                                              "slots": slots},
                    source="comp_archetypes")
-    for title, body in world.strategies:
-        fs.add(S, title, "strategy.note", "operator note '%s': %s"
-               % (title, " ".join(body.split())), value=title, source="strategies")
     for rec_id, playstyle, reasoning, map_id, picks, cited in world.history:
         if m is None or map_id == m.id:
-            fs.add(S, "history", "strategy.history",
+            fs.add(S, "history", "playbook.recommendation",
                    "previously recommended (#%d, %s, %d facts cited): %s - %s"
                    % (rec_id, playstyle, cited, picks, _trim(reasoning, 90)),
                    value=rec_id, source="recommendations+recommendation_evidence")
     if m is not None and m.id in world.outcomes_by_map:
         o = world.outcomes_by_map[m.id]
-        fs.add(S, "outcomes", "strategy.outcomes",
+        fs.add(S, "outcomes", "playbook.outcomes",
                "recorded matches on %s: %d-%d%s from blue's seat" % (
                    m.name, o["win"], o["loss"], "-%d" % o["draw"] if o["draw"] else ""),
                value=o, source="outcomes")
     for o in world.outcomes[:3]:
         if m is None or o["map_id"] == m.id:
-            fs.add(S, "outcomes", "strategy.outcome",
+            fs.add(S, "outcomes", "playbook.outcome",
                    "played %s on %s%s: %s with %s vs %s%s" % (
                        o["played"], world.maps[o["map_id"]].name if o["map_id"] in world.maps
                        else "an unknown map", " (%s)" % o["side"] if o["side"] else "",
@@ -720,8 +721,7 @@ def _strategy_side(fs, world, m):
                    value=o["id"], source="outcomes+outcome_picks")
     if world.catalog_counts:
         c = world.catalog_counts
-        fs.add(S, "catalog", "strategy.catalog",
-               "the inference layer scores under %d heuristics: %d constraints, %d goals,"
-               " %d strategies" % (sum(c.values()), c.get("constraint", 0),
-                                    c.get("goal", 0), c.get("strategy", 0)),
-               value=c, source="heuristics")
+        fs.add(S, "catalog", "playbook.catalog",
+               "the playbook holds %d constraints and %d heuristics (STRATEGIES = CONSTRAINTS ∪ HEURISTICS)"
+               % (c.get("constraint", 0), c.get("heuristic", 0)),
+               value=c, source="strategies")

@@ -6,7 +6,7 @@
     GET  /board?map=&side=&red=&blue=&ban=   both seats' optimal six + the current comp
     GET  /infer?map=&side=&red=&blue=&ban=[&top=&pool=]   blue's optimal six
     GET  /evaluate?map=&side=&red=&blue=&ban=   a full six scored against the field
-    GET  /heuristics                   the catalog
+    GET  /strategies                   the catalog
     POST /record  {question, map, red, blue, model, answer}   the gates + tables
 
 The same functions user/board.py calls in-process when no INFERENCE_URL is set;
@@ -81,7 +81,7 @@ def handle_board(cx, query):
 
 
 def handle_heuristics():
-    return {"heuristics": [h.to_dict() for h in catalog_module.load()]}, 200
+    return {"strategies": [h.to_dict() for h in catalog_module.load()]}, 200
 
 
 def handle_record(cx, payload):
@@ -97,7 +97,7 @@ def handle_record(cx, payload):
 
 
 def handle_health():
-    out = {"status": "ok", "heuristics": len(catalog_module.load())}
+    out = {"status": "ok", "strategies": len(catalog_module.load())}
     try:
         with psycopg.connect(common.default_dsn()) as cx:
             out["heroes"] = cx.execute("select count(*) from heroes").fetchone()[0]
@@ -124,7 +124,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/health":
                 return self._json(*handle_health())
-            if path == "/heuristics":
+            if path == "/strategies":
                 return self._json(*handle_heuristics())
             with psycopg.connect(common.default_dsn()) as cx:
                 if path == "/board":

@@ -10,7 +10,7 @@ import re
 import statistics
 from collections import defaultdict
 
-from data.transform.counterpick.names import match_key
+from data.counterpick.names import match_key
 
 ROLES = ("tank", "damage", "support")
 
@@ -210,14 +210,13 @@ class World:
         self.synergies = {}                     # frozenset({a,b}) -> (score, note)
         self.partners = defaultdict(dict)       # a -> {b: (score, note)}
         self.archetypes = defaultdict(dict)     # style -> {role: (slots, note)}
-        self.strategies = []
         self.snapshots = []
         self.newer_patches = []
         self.history = []
         self.subrole_passives = {}
         self.role_icons = {}
         self.heal_bench = 0.0
-        self.catalog_counts = {}     # the heuristics mirror: kind -> count
+        self.catalog_counts = {}     # the strategies mirror: kind -> count
         self.outcomes = []           # every recorded match, newest first
         self.outcomes_by_map = {}    # map_id -> {"win": n, "loss": n, "draw": n}
 
@@ -430,7 +429,6 @@ def load(cx):
             select a.style, r.code, a.slots, a.note from comp_archetypes a
             join roles r using(role_id)"""):
         w.archetypes[style][role] = (slots, note)
-    w.strategies = _rows(cx, "select title, body from strategies order by title")
 
     w.snapshots = [{"source": src, "captured": str(cap), "patch": patch,
                     "released": str(rel) if rel else None, "season": season,
@@ -460,8 +458,8 @@ def load(cx):
             join recommendation_picks p using(rec_id)
             join heroes h using(hero_id)
             group by r.rec_id order by r.rec_id desc limit 6""")
-    if cx.execute("select to_regclass('heuristics')").fetchone()[0]:
-        w.catalog_counts = dict(_rows(cx, "select kind, count(*) from heuristics group by kind"))
+    if cx.execute("select to_regclass('strategies')").fetchone()[0]:
+        w.catalog_counts = dict(_rows(cx, "select kind, count(*) from strategies group by kind"))
     if cx.execute("select to_regclass('outcomes')").fetchone()[0]:
         picks = {}
         for oid, team, hid in _rows(cx, """select outcome_id, team, hero_id

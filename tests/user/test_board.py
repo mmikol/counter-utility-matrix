@@ -55,7 +55,7 @@ def test_infer_endpoint_serves_both_seats_and_the_current_comp(db):
 
 def test_heuristics_and_recs_endpoints(db):
     data = board.api_heuristics()
-    assert len(data["heuristics"]) >= 30
+    assert len(data["strategies"]) >= 30
     data = board.api_recs(db)
     assert isinstance(data["latest"], int)
     assert json.dumps(data)

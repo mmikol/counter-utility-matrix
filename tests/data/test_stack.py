@@ -7,12 +7,12 @@ def test_verdict_reads_the_three_health_replies():
     ok, lines = stack.verdict({
         "data": {"status": "ok", "tables": 42, "heroes": 53, "outcomes": 2,
                  "pending_migrations": [], "newest_capture": "2026-09-13"},
-        "inference": {"status": "ok", "heuristics": 38, "heroes": 53},
+        "inference": {"status": "ok", "strategies": 38, "heroes": 53},
         "ui": {"heroes": [{}] * 53, "maps": [{}] * 30}})
     assert ok and any("rates captured 2026-09-13" in l for l in lines)
     ok, lines = stack.verdict({"data": {"status": "ok", "tables": 42, "heroes": 53,
                                         "pending_migrations": ["009_outcomes.sql"]},
-                               "inference": {"status": "ok", "heuristics": 0},
+                               "inference": {"status": "ok", "strategies": 0},
                                "ui": None})
     assert not ok
     assert any("behind the migrations" in l for l in lines)

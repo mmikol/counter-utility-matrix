@@ -165,8 +165,7 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .hcard { background:#10141c; border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
 .hcard .kind { display:inline-block; font-size:10px; letter-spacing:.14em; text-transform:uppercase;
   padding:2px 7px; border-radius:3px; margin-right:6px; }
-.kind.goal { background:#1d3a2a; color:var(--green); } .kind.constraint { background:#3a1d22; color:var(--red); }
-.kind.strategy { background:#1d2a3a; color:var(--blue); }
+.kind.heuristic { background:#1d3a2a; color:var(--green); } .kind.constraint { background:#1d2a3a; color:var(--blue); }
 .hcard b { font-family:"Bebas Neue",Impact,sans-serif; font-size:18px; letter-spacing:.05em; }
 .hcard .meta { font-family:ui-monospace,monospace; font-size:11.5px; color:var(--muted); margin:4px 0; }
 .hcard p { margin:6px 0 0; color:#c9d0db; font-size:12.5px; }

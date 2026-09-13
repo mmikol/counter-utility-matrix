@@ -4,6 +4,7 @@ tools rather than a chain of subprocesses.
 Every verb refuses the state it is not for and names the verb you wanted:
 
     init      apply the migrations to an empty database - schema, no data
+    migrate   apply the migrations the ledger has not recorded, in place
     inflate   the first fill: sync_all into a fresh schema. Refuses a
               database that already holds data - loading again is `update`.
     update    (default) sync_all into a populated database. Entity tables
@@ -11,7 +12,7 @@ Every verb refuses the state it is not for and names the verb you wanted:
     rebuild   drop everything, reapply the migrations, sync_all, restore
               recorded recommendations from the data/raw mirror.
     export    refresh data/raw/*.csv
-    docs      regenerate docs/erd.md, data-dictionary.md, heuristics.md
+    docs      regenerate docs/erd.md, data-dictionary.md, strategies.md
 
     python -m data.orchestrator rebuild
     python -m data.orchestrator                       update, everything
@@ -60,7 +61,7 @@ def main():
     parser = build_parser(__doc__)
     parser.add_argument(
         "command", nargs="?", default="update",
-        choices=("init", "inflate", "update", "rebuild", "export", "docs"))
+        choices=("init", "migrate", "inflate", "update", "rebuild", "export", "docs"))
     parser.add_argument("--only", action="append",
                         help="run just this tool (repeatable): pull_heroes,"
                              " pull_kits, ... load_playbook, export_csv")
@@ -74,6 +75,9 @@ def main():
         return
     if args.command == "export":
         print(tools.run_tool(ctx, "export_csv")[0])
+        return
+    if args.command == "migrate":
+        print(tools.run_tool(ctx, "db_migrate")[0])
         return
     if args.command == "init":
         with psycopg.connect(ctx.dsn) as connection:

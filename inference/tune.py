@@ -1,4 +1,4 @@
-"""Tuning a heuristic: an edit to its frontmatter, validated, written back,
+"""Tuning a strategy: an edit to its frontmatter, validated, written back,
 mirrored, and logged with its reason.
 
     tune("coverage", "weight", 3.5, "the solver kept leaving Pharah unanswered")
@@ -9,7 +9,7 @@ Fields: weight, direction, soft, when, require, bonus, penalty, params.NAME.
 The edited file is loaded through the catalog before it is written, so a
 metric that does not exist or an expression that does not parse is refused
 and nothing changes. Every accepted change is one line in
-inference/heuristics/tuning-log.md - the audit trail of how the brain came
+inference/strategies/tuning-log.md - the audit trail of how the brain came
 to be. The log lives beside the files on purpose: the compose stack
 bind-mounts that directory, so a tune made through a container lands on
 the host and in git like the file it changed.
@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 
 from inference import catalog as catalog_module
 
-LOG_PATH = os.path.join(catalog_module.HEURISTICS_DIR, "tuning-log.md")
+LOG_PATH = os.path.join(catalog_module.STRATEGIES_DIR, "tuning-log.md")
 SCALARS = ("weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric")
 WEIGHT_RANGE = (0.0, 10.0)
 
@@ -98,13 +98,13 @@ def validate(directory, hid, new_text):
 def tune(hid, field, value, reason, directory=None, by="claude-code-session",
          log_path=None):
     """Apply one change -> {"id", "field", "old", "new", "line"}."""
-    directory = directory or catalog_module.HEURISTICS_DIR
+    directory = directory or catalog_module.STRATEGIES_DIR
     log_path = log_path or os.path.join(directory, "tuning-log.md")
     if not reason or not reason.strip():
         raise TuneError("a tuning change needs a reason")
     path = os.path.join(directory, hid + ".md")
     if not os.path.exists(path):
-        raise TuneError("no heuristic %r" % hid)
+        raise TuneError("no strategy %r" % hid)
     if field == "weight":
         try:
             value = float(value)
@@ -129,7 +129,7 @@ def tune(hid, field, value, reason, directory=None, by="claude-code-session",
         " ".join(reason.split()), by)
     if not os.path.exists(log_path):
         with open(log_path, "w", encoding="utf-8") as handle:
-            handle.write("# Tuning log\n\nEvery change to a heuristic's frontmatter,"
+            handle.write("# Tuning log\n\nEvery change to a strategy's frontmatter,"
                          " newest last: when, what, why, and who.\n\n")
     with open(log_path, "a", encoding="utf-8") as handle:
         handle.write(line + "\n")

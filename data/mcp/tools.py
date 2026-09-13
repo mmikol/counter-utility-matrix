@@ -97,9 +97,9 @@ def _summary(title, summary):
 @tool("list_sources", "The sources the data layer pulls from, what each"
       " supplies, and how many pages its cache holds.")
 def list_sources(ctx):
-    from data.sources.blizzard import BLIZZARD
-    from data.sources.counterpick import COUNTERPICK
-    from data.sources.wiki import WIKI
+    from data.blizzard import BLIZZARD
+    from data.counterpick import COUNTERPICK
+    from data.wiki import WIKI
     rows = []
     for code, name, url in (BLIZZARD, WIKI, COUNTERPICK):
         path = ctx.caches[code]
@@ -133,7 +133,7 @@ def _pull(ctx, source, module_path, refresh=False, **options):
       REFRESH)
 def pull_heroes(ctx, refresh=False):
     return _summary("pull_heroes: roster stored", _pull(
-        ctx, "blizzard", "data.load.blizzard.heroes", refresh))
+        ctx, "blizzard", "data.blizzard.heroes", refresh))
 
 
 @tool("pull_kits", "The wiki's Cargo ability table and hero articles: weapons"
@@ -145,7 +145,7 @@ def pull_heroes(ctx, refresh=False):
                                                " (default true)"}))
 def pull_kits(ctx, refresh=False, supplement=True):
     return _summary("pull_kits: kit numbers stored", _pull(
-        ctx, "wiki", "data.load.wiki.heroes", refresh,
+        ctx, "wiki", "data.wiki.heroes", refresh,
         supplement=supplement))
 
 
@@ -154,14 +154,14 @@ def pull_kits(ctx, refresh=False, supplement=True):
       REFRESH)
 def pull_maps(ctx, refresh=False):
     return _summary("pull_maps: map pool stored", _pull(
-        ctx, "wiki", "data.load.wiki.maps", refresh))
+        ctx, "wiki", "data.wiki.maps", refresh))
 
 
 @tool("pull_patches", "The wiki's patch list, so every rates snapshot can say"
       " which game version it measured.", REFRESH)
 def pull_patches(ctx, refresh=False):
     return _summary("pull_patches: patches stored", _pull(
-        ctx, "wiki", "data.load.wiki.patches", refresh))
+        ctx, "wiki", "data.wiki.patches", refresh))
 
 
 @tool("pull_rates", "Blizzard's win/pick/ban rates as a NEW dated snapshot,"
@@ -170,21 +170,21 @@ def pull_patches(ctx, refresh=False):
       REFRESH)
 def pull_rates(ctx, refresh=False):
     return _summary("pull_rates: snapshot stored", _pull(
-        ctx, "blizzard", "data.load.blizzard.meta", refresh))
+        ctx, "blizzard", "data.blizzard.meta", refresh))
 
 
 @tool("pull_playstyles", "The wiki's team-composition page: which playstyle"
       " (dive, brawl, poke) each hero belongs to.", REFRESH)
 def pull_playstyles(ctx, refresh=False):
     return _summary("pull_playstyles: styles stored", _pull(
-        ctx, "wiki", "data.load.wiki.playstyles", refresh))
+        ctx, "wiki", "data.wiki.playstyles", refresh))
 
 
 @tool("pull_counters", "counterpick.gg: who answers whom, each hero's best"
       " maps, and its own rates under a separate snapshot.", REFRESH)
 def pull_counters(ctx, refresh=False):
     return _summary("pull_counters: playbook stored", _pull(
-        ctx, "counterpick", "data.load.counterpick.heroes", refresh))
+        ctx, "counterpick", "data.counterpick.heroes", refresh))
 
 
 PULLS = [("pull_heroes", "blizzard"), ("pull_kits", "wiki"),
@@ -192,29 +192,26 @@ PULLS = [("pull_heroes", "blizzard"), ("pull_kits", "wiki"),
          ("pull_rates", "blizzard"), ("pull_playstyles", "wiki"),
          ("pull_counters", "counterpick")]
 
-PLAYBOOK = ("seasons", "strategies", "synergies", "archetypes",
-            "map_playstyle", "heuristics")
+PLAYBOOK = ("seasons", "synergies", "archetypes", "map_playstyle", "strategies")
 
 
 @tool("load_playbook", "Store the authored inputs from the repo: seasons,"
-      " strategy notes, synergies, comp archetypes, map playstyles, and the"
-      " mirror of the markdown heuristics catalog. Whole-truth reloads.",
+      " synergies, comp archetypes, map playstyles, and the mirror of the"
+      " markdown constraints and heuristics (the strategies catalog). Whole-truth reloads.",
       {"only": {"type": "array", "items": {"type": "string",
                                             "enum": list(PLAYBOOK)},
                 "description": "a subset to reload (default: all)"}})
 def load_playbook(ctx, only=None):
-    import importlib
+    from data import playbook
     selected = [p for p in PLAYBOOK if not only or p in only]
     summaries = {}
     with ctx.connect() as cx:
         for name in selected:
-            if name == "heuristics":
+            if name == "strategies":
                 from inference import catalog
                 summaries[name] = catalog.mirror(cx, catalog.load())
             else:
-                module = importlib.import_module(
-                    "data.load.authored." + name)
-                summaries[name] = module.run(cx, log=ctx.log)
+                summaries[name] = playbook.LOADERS[name](cx, log=ctx.log)
     text = "load_playbook: " + "; ".join(
         "%s %s" % (name, ", ".join("%s=%s" % (k, v) for k, v in s.items()
                                     if k != "tables"))
@@ -257,7 +254,7 @@ def db_status(ctx):
         counts, snaps = {}, []
         if tables:
             for t in ("heroes", "abilities", "maps", "hero_meta", "map_meta",
-                      "counters", "synergies", "heuristics", "recommendations",
+                      "counters", "synergies", "strategies", "recommendations",
                       "outcomes"):
                 if cx.execute("select to_regclass(%s)", (t,)).fetchone()[0]:
                     counts[t] = cx.execute("select count(*) from " + t).fetchone()[0]
@@ -293,6 +290,20 @@ def db_init(ctx):
     return "db_init: %d tables, no data" % n, {"tables": n}
 
 
+@tool("db_migrate", "Apply the migrations the ledger has not recorded, in"
+      " place: a populated database catching up with the files without a"
+      " rebuild. Nothing pending is not an error.")
+def db_migrate(ctx):
+    from data.db import schema
+    with ctx.connect() as cx:
+        names = schema.pending(cx)
+        todo = [(p, sql) for p, sql in schema.read_migrations()
+                if os.path.basename(p) in names]
+        schema.apply(cx, todo, quiet=True)
+    return ("db_migrate: applied %d migration(s)%s"
+            % (len(names), ": " + ", ".join(names) if names else ""), {"applied": names})
+
+
 @tool("db_rebuild", "Drop everything, reapply the migrations, run sync_all,"
       " and restore recorded recommendations from the data/raw mirror."
       " The ground truth for structural change.", REFRESH)
@@ -317,7 +328,7 @@ def export_csv(ctx):
 
 
 @tool("db_docs", "Regenerate docs/erd.md, docs/data-dictionary.md and"
-      " docs/heuristics.md from the live schema and the heuristics files.")
+      " docs/strategies.md from the live schema and the strategies files.")
 def db_docs(ctx):
     from data.db import schema
     from inference import catalog
@@ -415,10 +426,10 @@ def facts_tool(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines")
 
 
 @tool("infer", "The INFERENCE LAYER: the optimal six for this board under"
-      " the markdown heuristics in inference/heuristics/ (players assumed"
+      " the markdown strategies in inference/strategies/ (players assumed"
       " to play optimally). Locked blue picks are kept; the rest is"
       " searched. Returns the comp, per-pick reasons with fact citations,"
-      " the heuristic score breakdown, and alternatives.",
+      " the strategy score breakdown, and alternatives.",
       dict(BOARD, top={"type": "integer", "description": "alternatives to"
                                                          " return (default 5)"},
            pool={"type": "integer", "description": "candidates per role the"
@@ -436,8 +447,8 @@ def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6):
     return result.rendered(), result.to_dict()
 
 
-@tool("evaluate", "Score a FULL blue six against the heuristics without"
-      " searching: the breakdown per heuristic, constraint violations, and"
+@tool("evaluate", "Score a FULL blue six against the strategies without"
+      " searching: the breakdown per strategy, constraint violations, and"
       " how it ranks against the optimum.", BOARD, ["blue"])
 def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
     from user.facts import model
@@ -471,12 +482,13 @@ def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6):
     return engine.board_rendered(b), engine.board_dict(b)
 
 
-@tool("heuristics", "The inference layer's catalog: every markdown heuristic"
-      " with its kind, metric, direction, weight and expressions.")
-def heuristics_tool(ctx):
+@tool("strategies", "The inference layer's catalog - STRATEGIES = CONSTRAINTS ∪ HEURISTICS:"
+      " every markdown strategy with its kind (constraint or heuristic), a constraint's form"
+      " (limit, scored, prose), metric, direction, weight and expressions.")
+def strategies_tool(ctx):
     from inference import catalog
     cat = catalog.load()
-    return catalog.render(cat), {"heuristics": [h.to_dict() for h in cat]}
+    return catalog.render(cat), {"strategies": [h.to_dict() for h in cat]}
 
 
 @tool("record", "Persist a decided composition into the INFERENCE tables"
@@ -529,11 +541,11 @@ def record_outcome_tool(ctx, result, blue, map=None, red=(), bans=(), side="",
                counts["draw"]), {"outcome_id": oid, "counts": counts})
 
 
-@tool("tune", "Change one heuristic's frontmatter - its weight, a params dial, or"
+@tool("tune", "Change one strategy's frontmatter - its weight, a params dial, or"
       " a when/require/bonus/penalty expression - validated through the"
       " catalog before it is written, mirrored into the database, and logged"
       " with the reason in inference/tuning-log.md.",
-      {"id": {"type": "string", "description": "the heuristic's id (its filename)"},
+      {"id": {"type": "string", "description": "the strategy's id (its filename)"},
        "field": {"type": "string", "description": "weight | direction | soft | when |"
                                                   " require | bonus | penalty | metric |"
                                                   " params.NAME"},
@@ -552,8 +564,8 @@ def tune_tool(ctx, id, field, value, reason):
                                          change["new"], change["line"]), change
 
 
-@tool("fit_weights", "Fit the goal weights to the recorded outcomes: for every"
-      " decided match, how each goal's metric ran in wins versus losses, and"
+@tool("fit_weights", "Fit the heuristic weights to the recorded outcomes: for every"
+      " decided match, how each heuristic's metric ran in wins versus losses, and"
       " a bounded nudge per weight. A dry run unless apply is true; refuses"
       " to apply below the minimum sample.",
       {"apply": {"type": "boolean", "description": "write the nudges through tune"
@@ -579,7 +591,7 @@ def fit_weights_tool(ctx, apply=False, min_outcomes=None):
     return text, proposal
 
 
-@tool("tuning_log", "The audit trail of every change to the heuristics'"
+@tool("tuning_log", "The audit trail of every change to the strategies'"
       " frontmatter - manual tunes and fitted nudges - newest last.",
       {"lines": {"type": "integer", "description": "how many (default 20)"}})
 def tuning_log_tool(ctx, lines=20):
@@ -588,22 +600,22 @@ def tuning_log_tool(ctx, lines=20):
     return "\n".join(tail) or "no tuning yet", {"lines": tail}
 
 
-class HeuristicResources:
-    """The heuristics files (and the tuning log), readable as MCP resources."""
+class StrategyResources:
+    """The strategies files (and the tuning log), readable as MCP resources."""
 
     def list(self):
         from inference import catalog
-        out = [{"uri": "heuristic://" + h.id, "name": h.name,
+        out = [{"uri": "strategy://" + h.id, "name": h.name,
                 "description": "%s (%s)" % (h.kind, h.category),
                 "mimeType": "text/markdown"} for h in catalog.load()]
-        out.append({"uri": "heuristic://tuning-log", "name": "tuning log",
-                    "description": "every change to the heuristics, with reasons",
+        out.append({"uri": "strategy://tuning-log", "name": "tuning log",
+                    "description": "every change to the strategies, with reasons",
                     "mimeType": "text/markdown"})
         return out
 
     def read(self, uri):
         from inference import catalog, tune
-        hid = uri.replace("heuristic://", "", 1)
+        hid = uri.replace("strategy://", "", 1)
         if hid == "tuning-log":
             return {"uri": uri, "mimeType": "text/markdown",
                     "text": "\n".join(tune.log_tail(1000)) or "no tuning yet"}

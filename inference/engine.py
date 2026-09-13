@@ -4,7 +4,7 @@
 
 returns the optimal six around the locked picks, each pick with the facts
 that justify it (the board the user layer would show for map + red + the
-six), the score broken down per heuristic, and the alternatives.
+six), the score broken down per strategy, and the alternatives.
 board() does it for both seats - blue around its locked picks, red around
 its revealed ones, on opposite sides of a sided map - and scores the
 current blue picks as they stand.
@@ -38,10 +38,10 @@ class Result:
         self.seconds = 0.0
         self.rank = None
         self.playstyle = ""
-        # the strategies with no score to add: what the agent reconciles
-        # the facts against beyond the arithmetic
+        # the prose constraints - no score to add: what the agent reconciles the
+        # facts against beyond the arithmetic
         self.considerations = [{"id": h.id, "name": h.name}
-                               for h in catalog if h.kind == "strategy" and not h.scored]
+                               for h in catalog if h.form == "prose"]
 
     def to_dict(self, include_facts=False):
         counts = {k: sum(1 for h in self.catalog if h.kind == k)
@@ -59,7 +59,7 @@ class Result:
                 "contributions": self.contributions, "violations": self.violations,
                 "alternatives": self.alternatives, "rank": self.rank,
                 "considered": self.considered, "seconds": round(self.seconds, 2),
-                "heuristics": counts, "cited": cited,
+                "strategies": counts, "cited": cited,
                 "considerations": self.considerations,
                 "facts": self.facts.to_dict() if (include_facts and self.facts) else None}
 
@@ -76,11 +76,11 @@ class Result:
         counts = {k: sum(1 for h in self.catalog if h.kind == k)
                   for k in catalog_module.KINDS}
         lines = [head, "  %s%s - score %.2f%s, %d candidates considered in %.1fs"
-                 " under %d constraints, %d goals, %d strategies"
+                 " under %d constraints and %d heuristics"
                  % (", ".join(self.blue), " (%s)" % self.playstyle if self.playstyle else "",
                     self.score, " (rank %d among the feasible field)" % self.rank
                     if self.rank else "", self.considered, self.seconds,
-                    counts["constraint"], counts["goal"], counts["strategy"])]
+                    counts["constraint"], counts["heuristic"])]
         if self.partial:
             lines.append("  PARTIAL: %d of %d picked - sums read low until the team is full"
                          % (len(self.blue), TEAM_SIZE))
@@ -149,7 +149,7 @@ def _fill(result, cand, fs, solver):
     by_id = {h.id: h for h in result.catalog}
     for c in result.contributions:
         h = by_id.get(c["id"])
-        keys = [h.metric] if (h and h.kind == "goal") else []
+        keys = [h.metric] if (h and h.kind == "heuristic") else []
         for e in ((h.require, h.bonus, h.penalty, h.when) if h else ()):
             if e is not None:
                 keys += [n for n in e.names if n.startswith(("team.", "matchup."))]
@@ -218,8 +218,8 @@ def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=Non
     solver = Solver(world, m, red_h, blue_h, catalog, pool_size, bans_h, side)
     ranked = solver.solve(top=max(top, 1) + 1)
     if not ranked:
-        raise ValueError("no composition satisfies the constraints around the"
-                         " locked %s picks - relax a constraint in inference/heuristics/"
+        raise ValueError("no composition satisfies the limits around the"
+                         " locked %s picks - relax a constraint in inference/strategies/"
                          % seat)
     best = ranked[0]
     result.blue = _order(best.heroes)

@@ -10,7 +10,7 @@ import pytest
 import requests
 
 from data import refresh, sources
-from data.sources import wiki
+from data import wiki
 
 
 class FakeResponse:

@@ -1,10 +1,11 @@
 """The solver: the optimal six under the catalog, players playing optimally.
 
-    enumerate  every shape the hard constraints allow, filled around the
+    enumerate  every shape the hard limits allow, filled around the
                locked picks from a per-role pool ranked by a cheap prior
                (six per role by default)
-    score      constraints prune, goals normalise and weigh, scored
-               strategies add. Goals are normalised against a REFERENCE:
+    score      STRATEGIES = CONSTRAINTS ∪ HEURISTICS: limits prune (soft ones charge),
+               heuristics normalise and weigh, scored constraints add; prose constraints are
+               the agent's. Heuristics are normalised against a REFERENCE:
                a seeded sample of random legal sixes for this board (map,
                side, enemies, bans), so infer, evaluate and the current
                comp share one scale and a score means the same thing
@@ -55,15 +56,15 @@ class Solver:
         self.side = side
         self.catalog = catalog
         self.pool_size = pool_size
-        self.constraints = [h for h in catalog if h.kind == "constraint"]
-        self.goals = [h for h in catalog if h.kind == "goal"]
-        self.strategies = [h for h in catalog if h.kind == "strategy" and h.scored]
-        self.goal_keys = {g.id: tuple(g.metric.split(".", 1)) for g in self.goals}
+        self.limits = [h for h in catalog if h.form == "limit"]
+        self.heuristics = [h for h in catalog if h.kind == "heuristic"]
+        self.scored_constraints = [h for h in catalog if h.form == "scored"]
+        self.heuristic_keys = {g.id: tuple(g.metric.split(".", 1)) for g in self.heuristics}
         # the red side's metrics do not change across candidates
         self.red_t = compute.team_metrics(world, self.red, m, ())
         self.static = {"enemy": self.red_t, "map": compute.map_metrics(m, side),
                        "world": compute.world_metrics(world)}
-        self.bounds = {}                     # goal id -> (min, max)
+        self.bounds = {}                     # heuristic id -> (min, max)
         self.considered = 0
 
     # --- namespace and scoring -----------------------------------------------
@@ -83,20 +84,20 @@ class Solver:
         return bool(h.when.eval(sc))
 
     def prepare(self, cand):
-        """Namespace, hard-constraint check, raw goal values."""
+        """Namespace, hard-limit check, raw heuristic values."""
         cand.ns = self.namespace(cand.heroes)
         cand.scope = scope(cand.ns)
         sc = cand.scope
         cand.violations = []
-        for h in self.constraints:
+        for h in self.limits:
             sc["params"] = h.params_section
             if self._holds(h, sc) and not bool(h.require.eval(sc)) and not h.soft:
                 cand.violations.append(h.id)
         raw = {}
-        for g in self.goals:
+        for g in self.heuristics:
             sc["params"] = g.params_section
             if self._holds(g, sc):
-                section, key = self.goal_keys[g.id]
+                section, key = self.heuristic_keys[g.id]
                 value = cand.ns.get(section, {}).get(key)
                 raw[g.id] = float(value or 0)
             else:
@@ -108,7 +109,7 @@ class Solver:
 
     def reference(self, size=REFERENCE_SIZE):
         """A seeded sample of random legal sixes for this board, prepared:
-        what every goal is normalised against. Deterministic for a given
+        what every heuristic is normalised against. Deterministic for a given
         map, side, enemies and bans, and independent of the locked picks
         and the pool, so every call on one board shares a scale."""
         if getattr(self, "_reference", None) is not None:
@@ -135,10 +136,10 @@ class Solver:
         return self._reference
 
     def freeze_bounds(self, candidates=None):
-        """Bounds per goal from the reference sample (default) or from an
+        """Bounds per heuristic from the reference sample (default) or from an
         explicit list of prepared candidates."""
         candidates = self.reference() if candidates is None else candidates
-        for g in self.goals:
+        for g in self.heuristics:
             values = [c.raw[g.id] for c in candidates if c.raw.get(g.id) is not None]
             self.bounds[g.id] = (min(values), max(values)) if values else (0.0, 0.0)
 
@@ -146,21 +147,21 @@ class Solver:
         """Score with the frozen bounds; fills contributions."""
         total, contributions = 0.0, []
         sc = cand.scope
-        for h in self.constraints:
+        for h in self.limits:
             sc["params"] = h.params_section
             applies = self._holds(h, sc)
             ok = bool(h.require.eval(sc)) if applies else True
             penalty = float(h.penalty.eval(sc)) if (h.soft and applies and not ok) else 0.0
             total -= penalty
-            contributions.append({"id": h.id, "kind": h.kind, "applies": applies,
-                                  "ok": ok, "weighted": -penalty,
+            contributions.append({"id": h.id, "kind": "constraint", "form": "limit",
+                                  "applies": applies, "ok": ok, "weighted": -penalty,
                                   "metric": h.require.source})
-        for g in self.goals:
+        for g in self.heuristics:
             raw = cand.raw.get(g.id)
             if raw is None:
-                contributions.append({"id": g.id, "kind": "goal", "applies": False,
-                                      "raw": None, "norm": 0.0, "weighted": 0.0,
-                                      "metric": g.metric})
+                contributions.append({"id": g.id, "kind": "heuristic", "form": "heuristic",
+                                      "applies": False, "raw": None, "norm": 0.0,
+                                      "weighted": 0.0, "metric": g.metric})
                 continue
             lo, hi = self.bounds.get(g.id, (raw, raw))
             if hi > lo:
@@ -172,18 +173,19 @@ class Solver:
                 norm = 1.0 - norm
             weighted = g.weight * norm
             total += weighted
-            contributions.append({"id": g.id, "kind": "goal", "applies": True,
-                                  "raw": raw, "norm": norm, "weighted": weighted,
-                                  "metric": g.metric, "spread": hi > lo})
-        for r in self.strategies:
+            contributions.append({"id": g.id, "kind": "heuristic", "form": "heuristic",
+                                  "applies": True, "raw": raw, "norm": norm,
+                                  "weighted": weighted, "metric": g.metric,
+                                  "spread": hi > lo})
+        for r in self.scored_constraints:
             sc["params"] = r.params_section
             applies = self._holds(r, sc)
             bonus = float(r.bonus.eval(sc)) if (applies and r.bonus is not None) else 0.0
             penalty = float(r.penalty.eval(sc)) if (applies and r.penalty is not None) else 0.0
             weighted = r.weight * (bonus - penalty)
             total += weighted
-            contributions.append({"id": r.id, "kind": "strategy", "applies": applies,
-                                  "bonus": bonus, "penalty": penalty,
+            contributions.append({"id": r.id, "kind": "constraint", "form": "scored",
+                                  "applies": applies, "bonus": bonus, "penalty": penalty,
                                   "weighted": weighted, "metric": r.expressions})
         cand.score = total
         cand.contributions = contributions
@@ -192,13 +194,13 @@ class Solver:
     # --- enumeration ---------------------------------------------------------------
 
     def shapes(self):
-        """(tanks, damage, supports) triples the shape-only hard constraints
+        """(tanks, damage, supports) triples the shape-only hard limits
         allow, that can still seat the locked picks."""
         return self._shapes({r: sum(1 for h in self.locked if h.role == r)
                              for r in ROLE_KEY})
 
     def _shapes(self, locked_counts):
-        shape_rules = [h for h in self.constraints if not h.soft and h.require
+        shape_constraints = [h for h in self.limits if not h.soft and h.require
                        and set(h.require.names) <= SHAPE_KEYS
                        and (h.when is None or set(h.when.names) <= SHAPE_KEYS)]
         out = []
@@ -211,7 +213,7 @@ class Solver:
                 stub = scope({"team": {"tanks": t, "damage": d, "supports": s,
                                        "size": TEAM_SIZE, "open_slots": 0}})
                 ok = True
-                for h in shape_rules:
+                for h in shape_constraints:
                     stub["params"] = h.params_section
                     if self._holds(h, stub) and not bool(h.require.eval(stub)):
                         ok = False

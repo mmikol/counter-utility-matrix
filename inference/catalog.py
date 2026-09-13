@@ -1,30 +1,34 @@
-"""The heuristics catalog: markdown files with frontmatter, read from
-inference/heuristics/, validated against the facts layer's metric
-registry, and mirrored into the `heuristics` table.
+"""The strategies catalog: markdown files with frontmatter, read from
+inference/strategies/, validated against the facts layer's metric
+registry, and mirrored into the `strategies` table.
 
-A heuristic file:
+    STRATEGIES = CONSTRAINTS ∪ HEURISTICS
+
+A strategy file:
 
     ---
     name: Answer every revealed enemy
-    kind: goal                # constraint | goal | strategy
+    kind: heuristic           # constraint | heuristic
     category: matchup
-    direction: maximize       # goals: maximize | minimize
+    direction: maximize       # heuristics: maximize | minimize
     metric: team.coverage_share
     weight: 3
-    when: enemy.size >= 1     # optional guard, any kind
+    when: enemy.size >= 1     # optional guard, either kind
     ---
     prose: what it means, why it is weighted this way, how to read it
 
-Kinds:
-    constraint  `require: <expr>` must hold. Hard by default - a comp that
-                fails is discarded; `soft: true` with `penalty: <number>`
-                subtracts instead.
-    goal        `metric` (a numeric fact key) is min-max normalised against
-                a seeded reference sample of legal sixes for the board and
-                weighted; `direction` says which end is good.
-    strategy    prose the /comp skill reads and the board shows; when it
-                also carries `bonus: <expr>` and/or `penalty: <expr>`, the
-                solver adds `weight x (bonus - penalty)` while `when` holds.
+Two kinds. A HEURISTIC names a numeric fact key (`metric`) that is
+min-max normalised against a seeded reference sample of legal sixes for
+the board and weighted; `direction` says which end is good. A CONSTRAINT
+takes one of three forms, read off its frontmatter (`form`):
+
+    limit    `require: <expr>` must hold. Hard by default - a comp that
+             fails is discarded; `soft: true` with `penalty: <number>`
+             subtracts instead.
+    scored   `bonus: <expr>` and/or `penalty: <expr>`: the solver adds
+             `weight x (bonus - penalty)` while `when` holds.
+    prose    neither: the ground rules the /comp session holds a comp to
+             and the board shows; the solver adds nothing.
 
 `params:` (an indented block of NAME: number) are the dials an expression
 reads as params.NAME - tuning is editing the file.
@@ -37,9 +41,10 @@ from data.common import ROOT
 from user.facts import compute
 from inference.expr import ExprError, Section, compile_expr
 
-HEURISTICS_DIR = os.path.join(ROOT, "inference", "heuristics")
-DOCS_PATH = os.path.join(ROOT, "docs", "heuristics.md")
-KINDS = ("constraint", "goal", "strategy")
+STRATEGIES_DIR = os.path.join(ROOT, "inference", "strategies")
+DOCS_PATH = os.path.join(ROOT, "docs", "strategies.md")
+KINDS = ("constraint", "heuristic")
+FORMS = ("limit", "scored", "prose", "heuristic")
 NOT_HEURISTICS = ("README.md", "tuning-log.md")     # markdown that lives beside the files
 KIND_ORDER = {k: i for i, k in enumerate(KINDS)}
 
@@ -108,9 +113,9 @@ def parse_frontmatter(text):
     return meta, body.strip("\n")
 
 
-# --- the heuristic --------------------------------------------------------------
+# --- the strategy --------------------------------------------------------------
 
-class Heuristic:
+class Strategy:
     def __init__(self, hid, meta, body, raw, path):
         self.id, self.body, self.raw, self.path = hid, body, raw, path
         self.name = str(meta.get("name") or hid.replace("-", " "))
@@ -136,18 +141,26 @@ class Heuristic:
 
     def _check(self):
         known = compute.registry()
-        if self.kind == "goal":
+        if self.kind == "heuristic":
             if self.direction not in ("maximize", "minimize"):
-                raise CatalogError("%s: a goal needs direction maximize|minimize" % self.id)
+                raise CatalogError("%s: a heuristic needs direction maximize|minimize" % self.id)
             if not self.metric or self.metric not in known:
                 raise CatalogError("%s: metric %r is not a registered fact key"
                                    % (self.id, self.metric))
             if self.metric in compute.TEXT_METRICS:
                 raise CatalogError("%s: metric %r is text, not a number" % (self.id, self.metric))
-        if self.kind == "constraint" and self.require is None:
-            raise CatalogError("%s: a constraint needs require:" % self.id)
-        if self.kind == "constraint" and self.soft and self.penalty is None:
-            raise CatalogError("%s: a soft constraint needs penalty:" % self.id)
+        if self.kind == "heuristic" and (self.require is not None or self.bonus is not None):
+            raise CatalogError("%s: a heuristic weighs a metric; require/bonus belong to a constraint"
+                               % self.id)
+        if self.kind == "constraint" and self.metric:
+            raise CatalogError("%s: a constraint has no metric; that is a heuristic" % self.id)
+        if self.require is not None and self.bonus is not None:
+            raise CatalogError("%s: a constraint is a limit (require) or scored (bonus/penalty),"
+                               " not both" % self.id)
+        if self.require is not None and self.soft and self.penalty is None:
+            raise CatalogError("%s: a soft limit needs penalty:" % self.id)
+        if self.require is None and self.soft:
+            raise CatalogError("%s: soft: only means something with require:" % self.id)
         for expr in (self.when, self.require, self.bonus, self.penalty):
             if expr is None:
                 continue
@@ -161,9 +174,20 @@ class Heuristic:
                                        % (self.id, name))
 
     @property
+    def form(self):
+        """heuristic, or a constraint's form: limit (require), scored (bonus/penalty), prose."""
+        if self.kind == "heuristic":
+            return "heuristic"
+        if self.require is not None:
+            return "limit"
+        if self.bonus is not None or self.penalty is not None:
+            return "scored"
+        return "prose"
+
+    @property
     def scored(self):
-        """Whether the solver adds anything for this heuristic."""
-        return self.kind != "strategy" or self.bonus is not None or self.penalty is not None
+        """Whether the solver reads this strategy at all (prose constraints it does not)."""
+        return self.form != "prose"
 
     @property
     def expressions(self):
@@ -175,7 +199,7 @@ class Heuristic:
         return "; ".join(parts)
 
     def to_dict(self):
-        return {"id": self.id, "name": self.name, "kind": self.kind,
+        return {"id": self.id, "name": self.name, "kind": self.kind, "form": self.form,
                 "category": self.category, "direction": self.direction,
                 "metric": self.metric, "weight": self.weight, "soft": self.soft,
                 "when": self.when.source if self.when else None,
@@ -185,10 +209,11 @@ class Heuristic:
                 "params": self.params, "body": self.body}
 
 
-def load(directory=HEURISTICS_DIR):
-    """Every heuristic file, validated, ordered constraint/goal/strategy."""
+def load(directory=STRATEGIES_DIR):
+    """Every strategy file, validated, ordered constraints (limits, scored, prose)
+    then heuristics."""
     if not os.path.isdir(directory):
-        raise CatalogError("no heuristics directory at %s" % directory)
+        raise CatalogError("no strategies directory at %s" % directory)
     out, ids = [], set()
     for name in sorted(os.listdir(directory)):
         if not name.endswith(".md") or name in NOT_HEURISTICS:
@@ -206,23 +231,23 @@ def load(directory=HEURISTICS_DIR):
         if hid in ids:
             raise CatalogError("%s: duplicate id %r" % (name, hid))
         ids.add(hid)
-        out.append(Heuristic(hid, meta, body, raw, path))
+        out.append(Strategy(hid, meta, body, raw, path))
     if not out:
-        raise CatalogError("no heuristics in %s" % directory)
-    out.sort(key=lambda h: (KIND_ORDER[h.kind], h.category, h.id))
+        raise CatalogError("no strategies in %s" % directory)
+    out.sort(key=lambda h: (KIND_ORDER[h.kind], FORMS.index(h.form), h.category, h.id))
     return out
 
 
 def mirror(cx, catalog):
-    """Reload the heuristics table from the files (whole truth)."""
-    from data.sources.authored import AUTHORED
+    """Reload the strategies table from the files (whole truth)."""
+    from data.sources import AUTHORED
     from data.common import now, register_source
     cursor = cx.cursor()
     source_id = register_source(cursor, AUTHORED, now())
-    cursor.execute("DELETE FROM heuristics")
+    cursor.execute("DELETE FROM strategies")
     for h in catalog:
         cursor.execute(
-            "INSERT INTO heuristics (heuristic_id, name, kind, category,"
+            "INSERT INTO strategies (strategy_id, name, kind, category,"
             " direction, metric, weight, expression, params, body, source_id)"
             " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (h.id, h.name, h.kind, h.category, h.direction, h.metric,
@@ -231,55 +256,59 @@ def mirror(cx, catalog):
              h.body, source_id))
     cx.commit()
     counts = {k: sum(1 for h in catalog if h.kind == k) for k in KINDS}
-    return dict(counts, total=len(catalog), tables=["heuristics"])
+    return dict(counts, total=len(catalog), tables=["strategies"])
 
 
 def render(catalog):
     lines = []
     for h in catalog:
-        head = "%-11s %-28s %-9s" % (h.kind, h.id, h.category)
-        if h.kind == "goal":
+        head = "%-5s %-7s %-28s %-9s" % (h.kind, h.form, h.id, h.category)
+        if h.form == "heuristic":
             head += " %s %s x%g" % (h.direction, h.metric, h.weight)
-        elif h.scored:
-            head += " %s%s" % (h.expressions, " x%g" % h.weight if h.kind == "strategy" else "")
+        elif h.form == "limit":
+            head += " %s%s" % (h.expressions, " (soft)" if h.soft else "")
+        elif h.form == "scored":
+            head += " %s x%g" % (h.expressions, h.weight)
         lines.append(head)
     return "\n".join(lines)
 
 
 def write_docs(catalog, path=DOCS_PATH):
-    """docs/heuristics.md, generated from the files."""
+    """docs/strategies.md, generated from the files."""
     counts = {k: sum(1 for h in catalog if h.kind == k) for k in KINDS}
+    forms = {f: sum(1 for h in catalog if h.form == f) for f in FORMS}
     reg = compute.registry()
-    out = ["# The heuristics", "",
-           "The inference layer's brain: %d markdown files in `inference/heuristics/`"
+    out = ["# The strategies", "",
+           "The inference layer's brain: %d markdown files in `inference/strategies/`"
            % len(catalog),
-           "(%d constraints, %d goals, %d strategies). Each file is"
-           % (counts["constraint"], counts["goal"], counts["strategy"]),
+           "(%d constraints - %d limits, %d scored, %d prose - and %d heuristics). Each file is"
+           % (counts["constraint"], forms["limit"], forms["scored"], forms["prose"],
+              counts["heuristic"]),
            "frontmatter a machine scores by and prose a person argues with; the",
            "solver reads the files live, and `load_playbook` mirrors them into the",
-           "`heuristics` table so a recommendation can cite the ids it was scored",
+           "`strategies` table so a recommendation can cite the ids it was scored",
            "under. Tuning is editing a file (the compose stack bind-mounts the",
            "directory, so the `inference` container picks edits up live). This",
            "page is generated: `python -m data.orchestrator docs`. Every change to a",
            "file goes through the `tune` tool (or a `fit_weights` nudge) and is logged",
-           "in [tuning-log.md](../inference/heuristics/tuning-log.md).", "",
+           "in [tuning-log.md](../inference/strategies/tuning-log.md).", "",
            "## How a composition is scored", "",
            "```", "FACTS      = HEROES ∪ MAPS ∪ META",
-           "STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY",
+           "STRATEGIES = CONSTRAINTS ∪ HEURISTICS",
            "COMP       = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
            "For a board (map, red picks, locked blue picks) the solver enumerates",
            "candidate sixes around the locked picks, computes every team, enemy and",
            "matchup metric for each (the same functions the board renders as facts),",
            "then:", "",
-           "- **constraints** discard a candidate whose `require` fails (soft ones",
-           "  subtract their `penalty` instead);",
-           "- **goals** min-max normalise their `metric` to [0, 1] against a seeded",
+           "- **constraints** come in three forms. A *limit* (`require`) discards a",
+           "  candidate that fails it (a soft one subtracts its `penalty` instead);",
+           "  a *scored* constraint adds `weight x (bonus - penalty)` while its `when`",
+           "  holds; a *prose* constraint adds nothing - the session reads it and the",
+           "  board shows it;",
+           "- **heuristics** min-max normalise their `metric` to [0, 1] against a seeded",
            "  reference sample of random legal sixes for the board (flipped for",
            "  `minimize`) and add `weight x norm` - one scale per board, so infer,",
-           "  evaluate and the current comp agree;",
-           "- **strategies** are prose the session reads and the board shows; one",
-           "  that also carries `bonus`/`penalty` adds `weight x (bonus - penalty)`",
-           "  while its `when` holds.", "",
+           "  evaluate and the current comp agree.", "",
            "Score = the sum. Players are assumed to play optimally, so the score is",
            "a comp's ceiling, not a prediction for a given lobby.", "",
            "## Catalog", ""]
@@ -289,18 +318,19 @@ def write_docs(catalog, path=DOCS_PATH):
             continue
         out += ["### %ss" % kind.capitalize(), ""]
         for h in items:
-            out.append("#### %s (`%s`, %s)" % (h.name, h.id, h.category))
+            out.append("#### %s (`%s`, %s%s)" % (
+                h.name, h.id, h.category, ", %s" % h.form if h.kind == "constraint" else ""))
             out.append("")
-            if h.kind == "goal":
+            if h.form == "heuristic":
                 out.append("`%s %s` - %s. weight %g%s" % (
                     h.direction, h.metric, reg.get(h.metric, ""), h.weight,
                     "; when `%s`" % h.when.source if h.when else ""))
-            elif h.kind == "constraint":
+            elif h.form == "limit":
                 out.append("`require %s`%s%s" % (
                     h.require.source, " (soft, penalty `%s`)" % h.penalty.source
                     if h.soft else " (hard)",
                     "; when `%s`" % h.when.source if h.when else ""))
-            elif h.scored:
+            elif h.form == "scored":
                 out.append("weight %g; %s" % (h.weight, "; ".join(
                     "%s `%s`" % (label, expr.source) for label, expr in (
                         ("when", h.when), ("bonus", h.bonus), ("penalty", h.penalty))
@@ -311,7 +341,7 @@ def write_docs(catalog, path=DOCS_PATH):
             body = re.sub(r"^#[^\n]*\n+", "", h.body)      # the header names it
             out += ["", body, ""]
     out += ["## The vocabulary", "",
-            "Every key a heuristic may reference, with its meaning. `enemy.*` are",
+            "Every key a strategy may reference, with its meaning. `enemy.*` are",
             "the `team.*` metrics computed for the red side.", "",
             "| key | meaning |", "| --- | --- |"]
     for key, description in reg.items():

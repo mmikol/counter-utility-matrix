@@ -1,16 +1,23 @@
 """The DATA LAYER: pull, clean, store - and the tools that drive it.
 
-    sources/      where pages come from (blizzard, wiki, counterpick), the
-                  fetch cache and its freshness policy, and the row each
-                  source becomes in the `sources` table
-    extract/      markup -> Python, one package per source
-    transform/    normalising and deriving values
-    load/         storing into Postgres, one module per source and domain,
-                  each a run(cx, ...) the MCP tools call; load/authored/
-                  stores the inputs we write instead of fetch
-    authored/     those inputs: CSVs, strategy notes, recorded transcripts
+One package per source, each owning the whole path from page to table:
+where its pages come from, how they are read, how their values are
+normalised, and a run() per domain that stores them - what the MCP tools
+call, with a main() for the shell.
+
+    blizzard/     the official site: heroes (roster, roles, portraits,
+                  text), meta (rates as dated snapshots)
+    wiki/         the MediaWiki endpoint: heroes (kits, numbers, keywords),
+                  maps, patches, playstyles - and the markup, measurement,
+                  weapon, modifier and name readers the kit data needs
+    counterpick/  counterpick.gg: heroes (counters, best maps, its rates)
+    playbook      the inputs we write instead of fetch - the CSVs in
+                  authored/ - reloaded whole
+    sources       the fetch cache and its freshness policy, shared by all
+    authored/     the CSVs, and the recorded transcripts
     mcp/          the MCP server and its tools (the door to this layer)
-    orchestrator  the verbs (init, inflate, update, rebuild, export, docs)
+    orchestrator  the verbs (init, migrate, inflate, update, rebuild,
+                  export, docs)
     refresh       the daily refresh
     db/           migrations, the ledger, rebuild, restore, generated docs
     common        the plumbing every layer shares

@@ -1,5 +1,5 @@
 """The feedback loop: outcomes recorded under gates and restored from the
-mirror, heuristics tuned through validation with an audit trail, and weights
+mirror, strategies tuned through validation with an audit trail, and weights
 fitted from outcomes only when there is enough evidence."""
 
 import os
@@ -14,10 +14,10 @@ pytestmark = pytest.mark.invariant
 
 @pytest.fixture()
 def catalog_copy(tmp_path):
-    """A private copy of the heuristics to tune without touching the repo."""
-    for name in os.listdir(catalog.HEURISTICS_DIR):
+    """A private copy of the strategies to tune without touching the repo."""
+    for name in os.listdir(catalog.STRATEGIES_DIR):
         if name.endswith(".md") and name not in catalog.NOT_HEURISTICS:
-            shutil.copy(os.path.join(catalog.HEURISTICS_DIR, name), tmp_path / name)
+            shutil.copy(os.path.join(catalog.STRATEGIES_DIR, name), tmp_path / name)
     return str(tmp_path)
 
 
@@ -40,8 +40,8 @@ def test_outcome_is_recorded_with_its_picks_and_becomes_facts(db):
     world = model.load(db)
     assert world.hero("Ana").outcomes["win"] >= 1
     fs = engine.generate(world, "King's Row", [], ["Ana"])
-    assert fs.find("strategy.outcomes") and fs.find("hero.outcomes", "Ana")
-    assert any("WIN with Reinhardt" in f.text for f in fs.find("strategy.outcome"))
+    assert fs.find("playbook.outcomes") and fs.find("hero.outcomes", "Ana")
+    assert any("WIN with Reinhardt" in f.text for f in fs.find("playbook.outcome"))
     assert outcomes.summary(db)["win"] >= 1
     db.rollback()
 
@@ -108,7 +108,7 @@ def test_tune_refuses_bad_changes_and_changes_nothing(catalog_copy):
         tune.tune("coverage", "weight", 50, "test", catalog_copy)
     with pytest.raises(tune.TuneError, match="reason"):
         tune.tune("coverage", "weight", 2, "  ", catalog_copy)
-    with pytest.raises(tune.TuneError, match="no heuristic"):
+    with pytest.raises(tune.TuneError, match="no strategy"):
         tune.tune("nope", "weight", 2, "test", catalog_copy)
     with pytest.raises(tune.TuneError):
         tune.tune("coverage", "when", "team.tanks ===", "test", catalog_copy)
@@ -131,13 +131,13 @@ def test_fit_waits_for_evidence_then_nudges_toward_what_won(db, catalog_copy):
         outcomes.record_outcome(db, "loss", "King's Row", "attack", SIX, RED)
     proposal = fit.propose(db, min_outcomes=6)
     assert proposal["ready"] and proposal["outcomes"] >= 6
-    assert all(fit.MIN_WEIGHT <= g["proposed"] <= fit.MAX_WEIGHT for g in proposal["goals"])
-    assert any(abs(g["change"]) > 0 for g in proposal["goals"])
+    assert all(fit.MIN_WEIGHT <= g["proposed"] <= fit.MAX_WEIGHT for g in proposal["heuristics"])
+    assert any(abs(g["change"]) > 0 for g in proposal["heuristics"])
     assert "ready to apply" in fit.rendered(proposal)
     applied = fit.apply(db, proposal, directory=catalog_copy)
     assert applied and all("fit from" in a["line"] for a in applied)
     tuned = {h.id: h.weight for h in catalog.load(catalog_copy)}
-    for g in proposal["goals"]:
+    for g in proposal["heuristics"]:
         if abs(g["change"]) >= 0.005:
             assert tuned[g["id"]] == g["proposed"]
     db.rollback()
@@ -150,8 +150,8 @@ def test_logistic_evidence_finds_the_goal_that_predicts_wins():
     rng = random.Random(7)
     rows = []
     for i in range(80):
-        a = rng.random()                        # goal "a" decides the game
-        b = rng.random()                        # goal "b" is noise
+        a = rng.random()                        # heuristic "a" decides the game
+        b = rng.random()                        # heuristic "b" is noise
         win = rng.random() < (0.15 + 0.7 * a)
         rows.append(("win" if win else "loss", i % 3, {"a": a, "b": b}))
     ev = fit.logistic_evidence(rows, ["a", "b"])

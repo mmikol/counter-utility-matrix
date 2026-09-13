@@ -1,4 +1,4 @@
-"""A small, safe expression language for heuristic frontmatter.
+"""A small, safe expression language for strategy frontmatter.
 
     team.tanks == 1 and team.damage == 2
     min(team.hitscan, 2) * 1.5
@@ -7,7 +7,7 @@
 Python's grammar, parsed with `ast`, checked once against a whitelist of
 node types - no attribute access beyond dotted metric names, no calls but
 the handful of arithmetic helpers below, no names but the namespaces -
-and then compiled to a code object, so evaluating a heuristic on a
+and then compiled to a code object, so evaluating a strategy on a
 candidate is a native expression, not a tree walk. Names are dotted keys
 into a namespace of dicts ({"team": {...}, "enemy": {...}, "matchup": ...,
 "map": ..., "world": ..., "params": ...}); a key a namespace lacks reads 0.
@@ -75,7 +75,7 @@ class Expr:
             if any(part.startswith("_") for part in name.split(".")):
                 raise ExprError("%r: underscore names are not allowed" % name)
         self._check(self.tree)
-        self.code = compile(ast.Expression(body=self.tree), "<heuristic>", "eval")
+        self.code = compile(ast.Expression(body=self.tree), "<strategy>", "eval")
 
     def __repr__(self):
         return "Expr(%r)" % self.source

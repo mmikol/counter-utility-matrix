@@ -1,17 +1,17 @@
 """The metrics: pure functions over a World.
 
-Every number the board shows as a joint fact and every number a heuristic
+Every number the board shows as a joint fact and every number a strategy
 can reference is computed here, once, in one place - the facts engine
 renders these into sentences and the inference layer's solver scores
 candidate compositions with the same functions. The registries below
 (TEAM_METRICS, MATCHUP_METRICS, MAP_METRICS, WORLD_METRICS) are the
-vocabulary a heuristic's frontmatter may use: `team.<key>`,
+vocabulary a strategy's frontmatter may use: `team.<key>`,
 `enemy.<key>` (the other side's team metrics), `matchup.<key>`,
 `map.<key>`, `world.<key>`.
 
 Unknowns are numeric, never None: a metric that needs a map reads 0 (or
 falls back to the roster-wide figure where that is the honest substitute,
-which the description says) and `map.known` tells a heuristic which.
+which the description says) and `map.known` tells a strategy which.
 """
 
 import statistics
@@ -425,8 +425,8 @@ def namespace(world, m, red, blue, side=""):
             "map": map_metrics(m, side), "world": world_metrics(world)}
 
 
-# Metrics whose value is a name or a list, not a number: a goal may not
-# maximize them, but a strategy may compare them ("team.style_lean == 'dive'").
+# Metrics whose value is a name or a list, not a number: a heuristic may not
+# maximize them, but a constraint may compare them ("team.style_lean == 'dive'").
 TEXT_METRICS = {
     "team.subroles", "team.shape_flags", "team.style_counts", "team.style_top",
     "team.style_lean", "team.weakest", "team.squishies", "team.burst_hero",
@@ -438,7 +438,7 @@ TEXT_METRICS = {
 
 
 def registry():
-    """Every dotted key a heuristic may reference -> its description."""
+    """Every dotted key a strategy may reference -> its description."""
     out = {}
     for prefix, table in (("team", TEAM_METRICS), ("enemy", TEAM_METRICS),
                           ("matchup", MATCHUP_METRICS), ("map", MAP_METRICS),

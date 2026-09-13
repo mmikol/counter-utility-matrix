@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 import psycopg
 
 from data import common
-from data.sources.authored import AUTHORED
+from data.sources import AUTHORED
 from user.facts import engine as facts_engine
 from user.facts import model
 from user.facts.compute import TEAM_SIZE

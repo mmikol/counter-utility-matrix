@@ -25,9 +25,9 @@ connected; they expose the same tools.
    other side and the current blue picks scored - use it when the user asks
    what the enemy should be playing or how their own six rates.)
    It returns the optimal six under the markdown
-   heuristics in inference/heuristics/ (players assumed to play optimally),
+   strategies in inference/strategies/ (players assumed to play optimally),
    each pick with its reasons and the fact ids (F#) that justify it, the
-   score breakdown per heuristic, and alternatives.
+   score breakdown per strategy, and alternatives.
    If the tools are unavailable, the shell equivalent is
    `.venv/bin/python -m data.mcp call infer '{"map": "King's Row", "red": ["Zarya"]}'`
    (prefix `./docker-db` to read the Docker database).
@@ -35,22 +35,23 @@ connected; they expose the same tools.
    behind a number (`{"map": ..., "red": [...], "blue": [<the six>]}`) -
    every fact the database holds about those heroes, the map, each team
    and the matchup, numbered F1.. and citable - FACTS = HEROES ∪ MAPS ∪
-   META, the authoritative data. Below a divider comes the strategy side,
-   numbered S1.. and just as citable: archetypes, the operator's own
-   notes, previous recommendations, recorded outcomes. The game is 6v6
-   Open Queue: six picks, at most two tanks. The heuristics come in three
-   kinds - constraints, goals, strategies (read them with the `heuristics`
-   tool or as MCP resources); the prose-only strategies are the ground
-   rules.
+   META, the authoritative data. Below a divider comes the playbook's
+   record, numbered S1.. and just as citable: archetypes, previous
+   recommendations, recorded outcomes. The game is 6v6 Open Queue: six
+   picks, at most two tanks. The playbook itself - STRATEGIES = CONSTRAINTS ∪
+   HEURISTICS - is two kinds of markdown file (read them with the `strategies`
+   tool or as MCP resources): constraints (a limit, a scored adjustment, or
+   prose) and heuristics (a weighted metric). The prose constraints are the ground
+   constraints.
 4. Decide - you are the agent in COMP = ARGMAX[ STRATEGIES( FACTS ) ],
-   where STRATEGIES = HEURISTICS ∪ PLAYBOOK ∪ HISTORY:
+   where STRATEGIES = CONSTRAINTS ∪ HEURISTICS:
    the solver's optimum is the straw man, and your job is to reconcile the
    facts with the strategies where arithmetic cannot. Adopt the optimum
    and say why, or improve on it and say why - a user's stated problem
-   ("we lose the first fight") can outweigh a goal the solver weighted;
-   the result's "ground rules to reconcile against" are the prose
-   strategies to hold it to. Stay inside the constraints (at most two
-   tanks), keep the locked picks, and respect CAUTION facts.
+   ("we lose the first fight") can outweigh a heuristic the solver weighted;
+   the result's "ground rules to reconcile against" are the prose constraints
+   to hold it to. Stay inside the limits (at most two tanks), keep the
+   locked picks, and respect CAUTION facts.
 5. Answer in chat, tersely: the playstyle, six picks each with one line of
    why and its [F#] tags, then a short overall argument. Note the vintage
    warning if the facts opened with one.

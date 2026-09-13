@@ -27,7 +27,7 @@ def _status(ctx):
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     ctx = tools.Context()
-    server = Server(tools.build(ctx), tools.HeuristicResources())
+    server = Server(tools.build(ctx), tools.StrategyResources())
     if not argv:
         server.serve()
         return 0

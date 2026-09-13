@@ -1,4 +1,4 @@
-"""The daily refresh: the database, the playbook and the heuristics mirror
+"""The daily refresh: the database, the playbook and the strategies mirror
 brought up to date on a schedule, so the board is ready when a game starts.
 
     python -m data.refresh              run daily at OVERWATCH_DB_REFRESH_AT
@@ -10,7 +10,7 @@ brought up to date on a schedule, so the board is ready when a game starts.
 
 A refresh comes in two sizes. The DAILY one refetches what moves day to
 day - the rates and counterpick's counters - then re-mirrors the authored
-playbook and the heuristics and re-exports data/raw. The FULL one is
+playbook and the strategies and re-exports data/raw. The FULL one is
 `sync_all` with refresh on: every page of every source, including the
 hero pages and wiki articles that only change with a patch; it runs when
 the wiki cache is older than OVERWATCH_DB_REFRESH_FULL_DAYS (7). Either

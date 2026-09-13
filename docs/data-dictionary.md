@@ -8,12 +8,12 @@ are on all of them: `source_id` (which source the row came from, see
 
 | domain | tables |
 | --- | --- |
-| **foundation** | `schema_migrations` · `sources` |
+| **foundation** | `schema_migrations` · `sources` · `strategies` |
 | **HEROES** | `abilities` · `ability_kinds` · `ability_modifiers` · `ability_stats` · `heroes` · `perk_ability_effects` · `perk_stats` · `perk_tiers` · `perks` · `roles` · `stat_keys` · `subroles` · `weapon_config_slots` · `weapon_configs` · `weapon_stats` · `weapons` |
 | **MAPS** | `game_modes` · `map_modes` · `map_stages` · `maps` |
 | **META** | `competitive_tiers` · `hero_meta` · `map_meta` · `meta_snapshots` · `patches` · `regions` · `seasons` |
-| **PLAYBOOK** | `comp_archetypes` · `counters` · `heuristics` · `map_playstyle` · `map_strategy` · `playstyle` · `synergies` |
-| **INFERENCE** | `outcome_picks` · `outcomes` · `recommendation_evidence` · `recommendation_picks` · `recommendations` · `strategies` |
+| **PLAYBOOK** | `comp_archetypes` · `counters` · `map_playstyle` · `map_strategy` · `playstyle` · `synergies` |
+| **INFERENCE** | `outcome_picks` · `outcomes` · `recommendation_evidence` · `recommendation_picks` · `recommendations` |
 
 
 ## `abilities`
@@ -152,28 +152,11 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 | `slug` | text | no |  |
 | `name` | text | no |  |
 | `role_id` | integer | no | `roles.role_id` |
-| `subrole_id` | integer | no | `subroles.role_id` |
+| `subrole_id` | integer | no | `subroles.subrole_id` |
 | `health` | smallint | yes |  |
 | `shield` | smallint | yes |  |
 | `armor` | smallint | yes |  |
 | `portrait_url` | text | yes |  |
-
-## `heuristics`
-
-*PLAYBOOK · 38 rows · `007_three_layers.sql`*
-
-| column | type | null | references |
-| --- | --- | --- | --- |
-| `heuristic_id` | text | no |  |
-| `name` | text | no |  |
-| `kind` | text | no |  |
-| `category` | text | no |  |
-| `direction` | text | yes |  |
-| `metric` | text | yes |  |
-| `weight` | numeric | yes |  |
-| `expression` | text | yes |  |
-| `params` | text | yes |  |
-| `body` | text | no |  |
 
 ## `map_meta`
 
@@ -430,7 +413,7 @@ The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a 
 
 ## `schema_migrations`
 
-*foundation · 9 rows · `008_schema_migrations.sql`*
+*foundation · 10 rows · `008_schema_migrations.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -475,14 +458,21 @@ The stat vocabulary. `unit` is the canonical unit for the stat, used when a valu
 
 ## `strategies`
 
-*INFERENCE · 0 rows · `006_inference.sql`*
+*foundation · 38 rows · `010_constraints_and_heuristics.sql`*
 
-Free-form strategy notes, authored as markdown files in data/authored/strategies/ and loaded whole: the model conditions on the prose, so no structure is imposed on it.
+strategies The mirror of the playbook: one row per markdown file in inference/strategies/ - its kind (constraint | heuristic), the frontmatter a machine scores by (metric, direction, weight, expressions, params) and the prose body a person argues with. Reloaded whole by load_playbook so a recommendation can cite the ids it was scored under; the files remain the truth.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
-| `strategy_id` | integer | no |  |
-| `title` | text | no |  |
+| `strategy_id` | text | no |  |
+| `name` | text | no |  |
+| `kind` | text | no |  |
+| `category` | text | no |  |
+| `direction` | text | yes |  |
+| `metric` | text | yes |  |
+| `weight` | numeric | yes |  |
+| `expression` | text | yes |  |
+| `params` | text | yes |  |
 | `body` | text | no |  |
 
 ## `subroles`
