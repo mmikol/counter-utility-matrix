@@ -1,8 +1,8 @@
-"""The USER LAYER's board: a map selector and a red and a blue roster,
+"""The UI LAYER's board: a map selector and a red and a blue roster,
 organised and styled like the game's hero select, over the facts engine
 and the inference layer.
 
-    python -m user.board            # serves http://localhost:8017
+    python -m ui.board            # serves http://localhost:8017
 
 Standard library only. Every click re-reads the database: the facts
 panel is the FactSet for (map, red, blue), the optimal-comp panel is the
@@ -23,9 +23,9 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import psycopg
 
 from data import ROOT, db
-from user.facts import engine as facts_engine
-from user.facts import model
-from user.facts.compute import SIDED_MODES, TEAM_SIZE
+from ui.facts import engine as facts_engine
+from ui.facts import model
+from ui.facts.compute import SIDED_MODES, TEAM_SIZE
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
 from inference import record as record_module
@@ -149,7 +149,7 @@ def api_record(cx, payload):
 # --- the board page ---------------------------------------------------------
 #
 # The page is a shell: the stylesheet and the script are static files under
-# user/static/ (editable and lintable on their own), served by this same
+# ui/static/ (editable and lintable on their own), served by this same
 # handler; TEAM and BANS come from the page so the script has no constant
 # to keep in step.
 
@@ -159,7 +159,7 @@ STATIC_TYPES = {".css": "text/css; charset=utf-8",
 
 
 def static_file(name):
-    """(bytes, content type) for a file under user/static, or None."""
+    """(bytes, content type) for a file under ui/static, or None."""
     ext = os.path.splitext(name)[1]
     if "/" in name or ".." in name or ext not in STATIC_TYPES:
         return None

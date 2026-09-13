@@ -3,7 +3,7 @@
     infer(world, "King's Row", red=["Zarya", "Pharah"], blue=["Ana"], side="attack")
 
 returns the optimal six around the locked picks, each pick with the facts
-that justify it (the board the user layer would show for map + red + the
+that justify it (the board the UI layer would show for map + red + the
 six), the score broken down per strategy, and the alternatives.
 board() does it for both seats - blue around its locked picks, red around
 its revealed ones, on opposite sides of a sided map - and scores the
@@ -12,8 +12,8 @@ current blue picks as they stand.
 
 import time
 
-from user.facts import engine as facts_engine
-from user.facts.compute import TEAM_SIZE, is_sided, opposite
+from ui.facts import engine as facts_engine
+from ui.facts.compute import TEAM_SIZE, is_sided, opposite
 from inference import catalog as catalog_module
 from inference.solver import Candidate, Solver, evaluate_comp
 

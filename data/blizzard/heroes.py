@@ -69,7 +69,7 @@ def parse_subroles(soup):
 
 def parse_icons(soup):
     """{'roles': {code: url}, 'subroles': {code: url}} - the icons the
-    game's own role filter draws, so the user layer can draw the same."""
+    game's own role filter draws, so the UI layer can draw the same."""
     roles, subroles = {}, {}
     for option in soup.select("option.role[data-role]"):
         url = _style_url(option)

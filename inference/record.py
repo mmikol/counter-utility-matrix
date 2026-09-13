@@ -20,9 +20,9 @@ from datetime import datetime, timezone
 
 from data import AUTHORED_DIR, db
 from data.authored import AUTHORED
-from user.facts import engine as facts_engine
-from user.facts import model
-from user.facts.compute import TEAM_SIZE
+from ui.facts import engine as facts_engine
+from ui.facts import model
+from ui.facts.compute import TEAM_SIZE
 
 REC_DIR = os.path.join(AUTHORED_DIR, "recommendations")
 
@@ -111,7 +111,7 @@ def record(cx, question, answer, map_name=None, red=(), blue=(),
     """The whole path: gates, tables, mirror, transcript -> (rec_id, path).
 
     The evidence board is (map, red, the six picks): the facts a pick
-    cites are the ones the user layer shows for that exact board."""
+    cites are the ones the UI layer shows for that exact board."""
     validate_answer(answer)
     world = model.load(cx)
     picks = [p["hero"] for p in answer["picks"]]

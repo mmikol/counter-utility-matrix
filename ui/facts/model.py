@@ -1,5 +1,5 @@
 """The World: the whole database in memory, loaded fresh from Postgres on
-every request so the user layer always reads what the data layer stored.
+every request so the UI layer always reads what the data layer stored.
 
 Loading is a dozen queries and a few thousand rows; cheap enough to do per
 click, and it is what lets the inference layer's solver evaluate thousands

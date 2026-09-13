@@ -10,6 +10,6 @@
     solver        searches compositions under the constraints and heuristics;
                   players are assumed to play optimally
     engine        infer() and evaluate(): the solver plus citations into
-                  the facts the user layer generated
+                  the facts the UI layer generated
     record        the storage gates and the transcript for a decided comp
 """

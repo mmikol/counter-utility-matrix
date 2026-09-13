@@ -3,7 +3,7 @@ the engine returns in-process, and the board forwards to it when told to."""
 
 import pytest
 
-from user import board
+from ui import board
 from inference import serve
 
 pytestmark = pytest.mark.invariant

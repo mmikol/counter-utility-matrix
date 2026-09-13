@@ -3,7 +3,7 @@ solver, evaluation and recording run against the built database."""
 
 import pytest
 
-from user.facts import compute
+from ui.facts import compute
 from inference import catalog, expr
 from inference.expr import Expr, ExprError
 
@@ -79,7 +79,7 @@ def test_catalog_rejects_a_goal_on_an_unknown_metric(tmp_path):
 
 @pytest.fixture(scope="module")
 def world(db):
-    from user.facts import model
+    from ui.facts import model
     w = model.load(db)
     db.rollback()
     return w
@@ -149,7 +149,7 @@ def test_the_tank_limit_is_the_only_shape_constraint(world, tmp_path):
 
 @pytest.mark.invariant
 def test_record_gates_then_rolls_back(db, world):
-    from user.facts import engine as facts_engine
+    from ui.facts import engine as facts_engine
     from inference import record
     picks = ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]
     fs = facts_engine.generate(world, "King's Row", ["Zarya"], picks)

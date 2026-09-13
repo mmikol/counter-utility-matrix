@@ -7,7 +7,7 @@ layers over one PostgreSQL database:
 
 ```
 DATA LAYER        an MCP server pulls every source, cleans it, stores it
-USER LAYER        a map + red/blue hero-select board that turns every click
+UI LAYER        a map + red/blue hero-select board that turns every click
                   into FACTS pulled from the database
 INFERENCE LAYER   a markdown playbook of CONSTRAINTS and HEURISTICS
                   scored over those facts to find the optimal composition
@@ -31,7 +31,7 @@ kinds. A *constraint* is a limit (`require`, hard or soft), a scored
 adjustment (`bonus`/`penalty` while `when` holds) or prose the agent holds
 a comp to; a *heuristic* is a metric to maximise or minimise, weighted.
 History - recorded outcomes, the tuning log - is not a term in the
-equation: it is what tunes the weights. The user layer turns the
+equation: it is what tunes the weights. The UI layer turns the
 authoritative tables into F-numbered facts and carries the playbook's
 record (archetypes, past decisions, outcomes) below them as S-numbered
 notes; the inference layer scores the facts under the constraints and
@@ -61,7 +61,7 @@ One container per layer, from one image:
 | `db` | the database | PostgreSQL 16 (host port 5433 for `./docker-db`) |
 | `data` | DATA LAYER | builds the database when empty or stale, then the MCP server over HTTP at **http://localhost:8020/mcp** |
 | `inference` | INFERENCE ENGINE | **http://localhost:8019** - `/infer`, `/evaluate`, `/strategies`, `/record`, `/health` |
-| `ui` | USER LAYER | the **board** at **http://localhost:8017** |
+| `ui` | UI LAYER | the **board** at **http://localhost:8017** |
 | `refresher` | the data layer's clock | refreshes everything daily (see below) |
 
 Every published port binds to 127.0.0.1, so the board, the engine, the
@@ -93,7 +93,7 @@ macOS and Linux x86_64):
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python -m data.mcp call db_rebuild      # build the database
-.venv/bin/python -m user.board                       # the board, http://localhost:8017
+.venv/bin/python -m ui.board                       # the board, http://localhost:8017
 .venv/bin/python -m pytest -q                # the test suite
 ```
 
@@ -158,9 +158,9 @@ step (Docker's entrypoint and the refresher call them the same way):
 | `python -m data.mcp call db_init` / `db_migrate` | schema on an empty database / pending migrations in place |
 | `python -m data.mcp call export_csv` / `db_docs` | refresh `data/raw/*.csv` / regenerate the generated docs |
 
-## The user layer: the board
+## The UI layer: the board
 
-`user/board.py` serves a map selector (with an attack/defense switch on
+`ui/board.py` serves a map selector (with an attack/defense switch on
 Escort and Hybrid maps - red gets the other side), a bans bar (up to five,
 all optional: each team's two and the lobby's; a banned hero leaves both
 rosters and the search), and two hero-select screens - red for the enemy,
@@ -174,7 +174,7 @@ barriers, cohesion, availability, map fit, coverage of the other team) and
 matchup facts once both teams do (pool and floor differentials, burst vs
 heal, chew time, tempo and poke wars, net answer edges, dive pressure,
 vertical threats, the ult race). Every fact is numbered `F1..` and cites
-its table or formula; `user/facts/compute.py` is the registry of every metric.
+its table or formula; `ui/facts/compute.py` is the registry of every metric.
 
 ## The inference layer: strategies in markdown
 
@@ -275,7 +275,7 @@ data/                DATA LAYER - pulls, cleans, stores; owns the schema
                      cluster/ (gitignored)
   raw/               one CSV per table plus EXPORT.json naming the database
                      they came from (exported, gitignored)
-user/                USER LAYER - every click becomes facts
+ui/                  UI LAYER - every click becomes facts
   facts/             model.py (the World), compute.py (the metrics registry),
                      engine.py (the FactSet)
   board.py           the map selector and the red and blue rosters (a shell)
@@ -293,7 +293,7 @@ inference/           INFERENCE LAYER - facts in, the optimal six out
   fit.py             heuristic weights nudged toward what separated wins from losses
   strategies/tuning-log.md   the audit trail of every change (beside the files, so a
                      tune through a container lands on the host)
-tests/               mirrored: tests/data · tests/user · tests/inference
+tests/               mirrored: tests/data · tests/ui · tests/inference
 stack.py             up · status · refresh · test · down (the `/up` skill)
 compose.yaml         one container per layer: db · data · inference · ui · refresher
 Dockerfile           one image for all of them; docker-entrypoint.sh picks the role

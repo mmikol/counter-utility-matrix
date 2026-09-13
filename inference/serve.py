@@ -9,7 +9,7 @@
     GET  /strategies                   the catalog
     POST /record  {question, map, red, blue, model, answer}   the gates + tables
 
-The same functions user/board.py calls in-process when no INFERENCE_URL is set;
+The same functions ui/board.py calls in-process when no INFERENCE_URL is set;
 standard library only.
 """
 
@@ -23,8 +23,8 @@ from urllib.parse import parse_qs, urlparse
 import psycopg
 
 from data import ROOT, db
-from user.facts import model
-from user.facts.compute import TEAM_SIZE
+from ui.facts import model
+from ui.facts.compute import TEAM_SIZE
 from inference import catalog as catalog_module
 from inference import engine
 from inference import record as record_module

@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from user import board
+from ui import board
 
 pytestmark = pytest.mark.invariant
 

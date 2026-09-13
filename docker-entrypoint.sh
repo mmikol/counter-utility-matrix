@@ -6,7 +6,7 @@
 #               the mounted caches make later builds cheap), then serve the
 #               MCP server over HTTP on 8020
 #   inference   INFERENCE ENGINE: wait for the database, serve on 8019
-#   ui          USER LAYER: wait for the database, serve the board on 8017
+#   ui          UI LAYER: wait for the database, serve the board on 8017
 #   refresh     DATA LAYER's clock: wait for the database, then refresh it
 #               daily (data/refresh.py)
 #
@@ -66,6 +66,6 @@ case "$role" in
         case "$role" in
             inference) exec python -m inference.serve --host 0.0.0.0 --port 8019 ;;
             refresh)   exec python -m data.refresh ;;
-            *)         exec python -m user.board --host 0.0.0.0 --port 8017 ;;
+            *)         exec python -m ui.board --host 0.0.0.0 --port 8017 ;;
         esac ;;
 esac

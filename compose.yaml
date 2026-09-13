@@ -8,7 +8,7 @@
 #               session opens (.mcp.json, server "overwatch-db-docker")
 #   inference   INFERENCE ENGINE: http://localhost:8019 (infer, evaluate,
 #               strategies, record) reading the strategies files live
-#   ui          USER LAYER: the board at http://localhost:8017, reading the
+#   ui          UI LAYER: the board at http://localhost:8017, reading the
 #               database for facts and the inference service for comps
 #   refresher   the data layer's clock: refreshes every source, the playbook
 #               and the strategies mirror daily at OVERWATCH_DB_REFRESH_AT

@@ -86,7 +86,7 @@ class Server:
             "instructions": (
                 "overwatch-db: the data layer (pull_* tools scrape, clean and"
                 " store each source; sync_all does them all in order), the"
-                " user layer (facts: every fact the database holds about a"
+                " UI layer (facts: every fact the database holds about a"
                 " board of map + red + blue picks) and the inference layer"
                 " (infer: the optimal composition under the markdown"
                 " strategies; evaluate: score a full six). Read-only SQL"

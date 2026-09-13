@@ -27,7 +27,7 @@ flowchart LR
         INF["INFERENCE<br/>recorded comps,<br/>outcomes"]
     end
 
-    subgraph USER["USER LAYER - user/facts/ + user/board.py"]
+    subgraph USER["UI LAYER - ui/facts/ + ui/board.py"]
         WORLD["World<br/>the database in memory,<br/>per request"]
         FACTS["FactSet<br/>F1.. hero · map · meta ·<br/>team · matchup<br/>S1.. the playbook's record"]
         BOARD["the board<br/>map + red/blue rosters"]
@@ -51,9 +51,9 @@ flowchart LR
     CHAT["Claude Code session<br/>/comp skill"] <-->|"MCP tools:<br/>pull_*, facts, infer, record"| DATA
 ```
 
-The data layer owns the writes to Postgres. The user layer only reads,
+The data layer owns the writes to Postgres. The UI layer only reads,
 turns every table into facts, and computes every metric in one place
-(`user/facts/compute.py`) so the number on the board and the number the
+(`ui/facts/compute.py`) so the number on the board and the number the
 solver scores are the same function. The inference layer reads the facts,
 never the tables.
 
@@ -88,8 +88,8 @@ a stated problem, a lobby's habits, a patch the rates predate.
 ```mermaid
 sequenceDiagram
     actor You
-    participant Board as user/board.py
-    participant Facts as user/facts/ (World + FactSet)
+    participant Board as ui/board.py
+    participant Facts as ui/facts/ (World + FactSet)
     participant Solver as inference/ (solver)
     participant DB as PostgreSQL
 
@@ -184,7 +184,7 @@ flowchart LR
     subgraph DOCKER["docker compose (one image, four containers)"]
         DATA["data - DATA LAYER<br/>builds when empty or stale,<br/>then MCP over HTTP :8020/mcp"]
         INF["inference - INFERENCE ENGINE<br/>:8019 infer · evaluate ·<br/>strategies · record"]
-        UI["ui - USER LAYER<br/>:8017 the board<br/>facts in-process,<br/>comps via INFERENCE_URL"]
+        UI["ui - UI LAYER<br/>:8017 the board<br/>facts in-process,<br/>comps via INFERENCE_URL"]
         DBC["db - postgres:16<br/>volume pgdata"]
         REF["refresher - the clock<br/>rates + counters daily,<br/>every source weekly,<br/>and on start when stale"]
     end

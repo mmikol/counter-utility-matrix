@@ -22,10 +22,10 @@ person - or the /comp skill - can read them as evidence. Ids are dense and
 stable within a board.
 """
 
-from user.facts import compute
-from user.facts.compute import (RANK_SENSITIVE, SIDES, SPECIALIST_DELTA, TREND_POINTS,
+from ui.facts import compute
+from ui.facts.compute import (RANK_SENSITIVE, SIDES, SPECIALIST_DELTA, TREND_POINTS,
                                 is_sided, opposite)
-from user.facts.model import SQUISHY_POOL
+from ui.facts.model import SQUISHY_POOL
 
 
 class Fact:
