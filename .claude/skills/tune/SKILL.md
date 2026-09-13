@@ -19,7 +19,8 @@ Nothing is edited by hand.
 2. Decide the smallest change that does what they asked: a weight (heuristics
    and scored constraints; keep it within 0.25..5 unless they insist), a
    `params.NAME` dial, or an expression (the vocabulary is every `team.*`,
-   `enemy.*`, `matchup.*`, `map.*`, `world.*` key in docs/strategies.md).
+   `enemy.*`, `matchup.*`, `map.*`, `world.*` key - the `metrics` tool, or the
+   vocabulary in docs/inference.md).
 3. Call `tune`: `{"id": "anti-heal-answer", "field": "weight", "value": 2.5,
    "reason": "user: the solver keeps ignoring anti-heal against double
    support"}`. A metric that does not exist or an expression that does not

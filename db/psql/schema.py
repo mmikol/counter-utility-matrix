@@ -4,7 +4,7 @@ mirror's restore path, and the generated documentation.
     init      apply the migrations to an empty database
     rebuild   drop everything and reapply them
     restore   bring recorded recommendations back from the db/raw mirror
-    docs      regenerate docs/erd.md and docs/data-dictionary.md
+    docs      regenerate the schema sections of docs/db.md (ERD, dictionary)
 """
 
 import glob
@@ -169,6 +169,20 @@ def _migration_tables():
     return out
 
 
+def embed(path, name, text):
+    """Replace the generated section `name` of a markdown file - the text between
+    <!-- generated:name --> and <!-- /generated:name --> - keeping the rest."""
+    with open(path, encoding="utf-8") as handle:
+        doc = handle.read()
+    start, end = "<!-- generated:%s -->" % name, "<!-- /generated:%s -->" % name
+    if start not in doc or end not in doc:
+        raise SchemaError("%s has no %s markers" % (path, name))
+    head = doc[:doc.index(start) + len(start)]
+    tail = doc[doc.index(end):]
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(head + "\n" + text.strip("\n") + "\n" + tail)
+
+
 def generate_docs(connection):
     mig = _migration_tables()
     tables = [r[0] for r in connection.execute(
@@ -200,8 +214,7 @@ def generate_docs(connection):
                 seen.append(line)
         return sorted(seen)
 
-    erd = ["# Entity relationship diagram", "",
-           "Five domains. Three are the authoritative data the sources are pulled",
+    erd = ["Five domains. Three are the authoritative data the sources are pulled",
            "for - which hero (HEROES), on which map (MAPS), performing how well",
            "(META) - and become the FACTS of a board. The other two are the",
            "playbook's record: the authored inputs and the mirror of the constraints and",
@@ -215,15 +228,13 @@ def generate_docs(connection):
            "Those edges are left off - they would connect `sources` to all %d tables"
            % len(tables), "and obscure everything else.", ""]
     for d in ("HEROES", "MAPS", "META", "PLAYBOOK", "INFERENCE"):
-        erd += ["## %s" % d, "", "```mermaid", "erDiagram"] + \
+        erd += ["#### %s" % d, "", "```mermaid", "erDiagram"] + \
                edges(lambda c, d=d: dom.get(c) == d) + ["```", ""]
-    erd += ["## The whole database", "", "```mermaid", "erDiagram"] + \
+    erd += ["#### The whole database", "", "```mermaid", "erDiagram"] + \
            edges(lambda c: True) + ["```", ""]
-    with open(os.path.join(ROOT, "docs", "erd.md"), "w", encoding="utf-8") as fh:
-        fh.write("\n".join(erd))
+    embed(os.path.join(ROOT, "docs", "db.md"), "erd", "\n".join(erd))
 
-    dd = ["# Data dictionary", "", "Generated from the live schema"
-          " (`python -m db.mcp call db_docs`).", "",
+    dd = ["Generated from the live schema (`python -m db.mcp call db_docs`).", "",
           "Every table carries two columns omitted from the lists below, because they",
           "are on all of them: `source_id` (which source the row came from, see",
           "`sources`) and `cao` — \"current as of\", when that row was read.", "",
@@ -234,7 +245,7 @@ def generate_docs(connection):
     dd.append("")
     for t in tables:
         fn, prose = mig.get(t, ("", ""))
-        dd += ["", "## `%s`" % t, "", "*%s · %d rows · `%s`*" % (dom[t], counts[t], fn)]
+        dd += ["", "#### `%s`" % t, "", "*%s · %d rows · `%s`*" % (dom[t], counts[t], fn)]
         if prose:
             dd += ["", prose]
         dd += ["", "| column | type | null | references |", "| --- | --- | --- | --- |"]
@@ -245,7 +256,5 @@ def generate_docs(connection):
             dd.append("| `%s` | %s | %s | %s |" % (
                 name, typ, "yes" if nullable == "YES" else "no",
                 "`%s.%s`" % r if r else ""))
-    with open(os.path.join(ROOT, "docs", "data-dictionary.md"), "w",
-              encoding="utf-8") as fh:
-        fh.write("\n".join(dd) + "\n")
-    return "regenerated docs/erd.md and docs/data-dictionary.md: %d tables" % len(tables)
+    embed(os.path.join(ROOT, "docs", "db.md"), "dictionary", "\n".join(dd))
+    return "regenerated the schema sections of docs/db.md: %d tables" % len(tables)

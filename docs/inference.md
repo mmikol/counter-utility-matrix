@@ -1,51 +1,187 @@
-# The strategies
+# The INFERENCE LAYER - `inference/`
 
-The inference layer's brain: 38 markdown files in `inference/strategies/`
-(18 constraints - 3 limits, 10 scored, 5 prose - and 20 heuristics). Each file is
-frontmatter a machine scores by and prose a person argues with; the
-solver reads the files live, and `load_authored` mirrors them into the
-`strategies` table so a recommendation can cite the ids it was scored
-under. Tuning is editing a file (the compose stack bind-mounts the
-directory, so the `inference` container picks edits up live). This
-page is generated: `python -m db.mcp call db_docs`. Every change to a
-file goes through the `tune` tool (or a `fit_weights` nudge) and is logged
-in [tuning-log.md](../inference/strategies/tuning-log.md).
-
-## How a composition is scored
+Facts in, the optimal composition out. The layer owns the right-hand
+side of the equation:
 
 ```
-FACTS      = HEROES ∪ MAPS ∪ META
-STRATEGIES = CONSTRAINTS ∪ HEURISTICS
-COMP       = ARGMAX[ STRATEGIES( FACTS ) ]
+STRATEGIES = CONSTRAINTS ∪ HEURISTICS       the playbook: markdown files in strategies/
+COMP       = ARGMAX[ STRATEGIES( FACTS ) ]  the solver searches; the agent argues
 ```
 
-For a board (map, red picks, locked blue picks) the solver enumerates
-candidate sixes around the locked picks, computes every team, enemy and
-matchup metric for each (the same functions the board renders as facts),
-then:
+Two things do the inferring, and it matters which is which:
 
-- **constraints** come in three forms. A *limit* (`require`) discards a
-  candidate that fails it (a soft one subtracts its `penalty` instead);
-  a *scored* constraint adds `weight x (bonus - penalty)` while its `when`
-  holds; a *prose* constraint (`prose: true`) adds nothing - the session
-  reads it and the board shows it;
-- **heuristics** min-max normalise their `metric` to [0, 1] against a seeded
-  reference sample of random legal sixes for the board (flipped for
-  `minimize`) and add `weight x norm` - one scale per board, so infer,
-  evaluate and the current comp agree.
+- **The solver** is deterministic arithmetic. It reads the strategy files'
+  frontmatter, scores every candidate six with the facts layer's metrics,
+  and returns the best. No model, no API, no randomness beyond a seeded
+  reference sample. It cannot read prose.
+- **The agent** is a Claude Code session on the `/comp` skill. It reads
+  the same facts and the prose of the same strategies and reconciles them
+  where arithmetic cannot. It runs when you ask it to, never on its own,
+  and it costs nothing beyond your subscription.
 
-Score = the sum. Players are assumed to play optimally, so the score is
-a comp's ceiling, not a prediction for a given lobby.
+## How a strategy file works, and what it does not do
 
-A file with only a name, a kind and prose is a *draft*: shown and served,
-ignored by the solver, until the `/strategy` skill infers its frontmatter
-from the prose and writes it through `infer_strategy`.
+Drop a markdown file into `strategies/` and it is live: the solver reads
+the directory on every call, the board's playbook panel shows it, the
+`strategies` tool and the `strategy://` resources serve it, and
+`load_authored` mirrors it into the `strategies` table so a recorded
+comp can cite it. The frontmatter is the whole contract:
 
-## Catalog
+```markdown
+---
+name: Answer every revealed enemy
+kind: heuristic                 # constraint | heuristic
+category: matchup
+direction: maximize             # heuristics: maximize | minimize
+metric: team.coverage_share     # a key from the metrics registry
+weight: 3
+when: enemy.size >= 1           # optional guard, either kind
+---
+# Answer every revealed enemy
+The share of revealed enemies at least one of our picks answers...
+```
 
-### Constraints
+| kind | form | frontmatter | what the solver does |
+| --- | --- | --- | --- |
+| heuristic | | `metric`, `direction`, `weight` | normalises the metric to [0, 1] against a seeded sample of legal sixes for the board (flipped for minimize) and adds `weight x norm` |
+| constraint | limit | `require: <expr>`, optionally `soft: true` + `penalty: <number>` | discards a candidate that fails (a soft one subtracts the penalty) |
+| constraint | scored | `bonus: <expr>` and/or `penalty: <expr>`, optionally `when` | adds `weight x (bonus - penalty)` while `when` holds |
+| constraint | prose | `prose: true` | nothing - the file is a ground rule the agent holds a comp to and the board shows |
+| either | draft | name, kind and prose only | nothing yet - shown and served, ignored by the solver, until `/strategy` infers the rest |
 
-#### Fliers need a hitscan answer (`anti-air`, matchup, limit)
+**The solver does not infer a formula or a weight from prose; a model
+does - the `/strategy` skill on command, or the engine on its own through
+`derive.py`.** The skill: you give it three things - a name,
+a kind, and two to six sentences of what the strategy means - and the
+session reads the vocabulary (`metrics`), reads the catalog for the house
+style, decides the frontmatter (a heuristic's metric, direction and
+weight; a constraint's `require`, or its `when`, `bonus`, `penalty` and
+`params`; or `prose: true` when nothing is measurable), and stores the
+file through `add_strategy`, which validates it against the catalog
+before it exists, mirrors it into the `strategies` table, and logs it
+with a reason that quotes the prose. A file you drop in yourself with
+only a name, a kind and prose loads as a *draft*: the board and the
+`strategies` tool show it, `infer` results list it as not yet scored,
+and `/strategy` completes it through `infer_strategy`.
+
+**The engine derives drafts on its own, on the subscription.** `derive.py`
+asks Claude Code in print mode (`claude -p`, from a neutral directory, no
+project settings, no tools) for one JSON answer - the same inference the
+skill does, headless - and stores it through the same validated path,
+sending the catalog's objection back once if the first answer is
+refused. It runs wherever the claude CLI is signed in, which is the
+host: `load_authored` derives pending drafts before it mirrors,
+`orchestrator.py up` and `status` derive them and re-mirror the stack's
+database, and the `derive_strategies` tool does it on demand. Inside
+the containers the CLI is absent, so drafts stay pending until the host
+runs. No API key anywhere: the free-only rule holds. Sign the CLI in
+once with `claude login`; until then the engine says so and leaves the
+draft as it was.
+
+Expressions are a whitelist, compiled once and validated against the
+metrics registry when the catalog loads: the `team`, `enemy`, `matchup`,
+`map`, `world` and `params` sections, arithmetic, comparisons, `and`,
+`or`, `not`, `x if c else y`, and `min`, `max`, `abs`, `round`, `len`,
+`int`, `float`, `bool`. A key that is not in the registry, or a `params.NAME`
+not declared under `params:`, is refused at load, so a typo never scores
+silently. `params:` (an indented block of NAME: number) are the dials an
+expression reads as `params.NAME`.
+
+The catalog itself - every file, and the full vocabulary a strategy may
+reference - is generated into the end of this document.
+
+## How the weights move: the feedback loop
+
+```mermaid
+flowchart LR
+    GAME["a match is played"] -->|"/outcome -> record_outcome"| OUT["outcomes +<br/>outcome_picks<br/>(mirrored, restored)"]
+    OUT -->|"facts: per hero, per map,<br/>the last games"| BOARD["the board and<br/>the /comp skill"]
+    OUT -->|"fit_weights: each heuristic's<br/>metric in wins vs losses"| FIT["a bounded nudge<br/>per heuristic weight"]
+    FIT -->|"apply -> tune"| HEUR["inference/strategies/*.md"]
+    USER["'it keeps ignoring anti-heal'<br/>/tune -> tune"] --> HEUR
+    HEUR -->|"validated on load,<br/>mirrored, logged"| LOG["strategies/tuning-log.md"]
+    HEUR --> SOLVER["the solver, next click"]
+```
+
+Every change to the brain is a line in the log with its reason. The fit
+refuses to move a weight before ten decided matches exist, and moves it by
+at most half the evidence, clamped - one bad week cannot flip the engine.
+
+
+Weights do not learn on their own. Two paths change a file, both logged
+in `strategies/tuning-log.md` with a reason and who asked:
+
+- **`tune`** - one validated frontmatter edit: `weight` (0..10),
+  `direction`, `soft`, `when`, `require`, `bonus`, `penalty`, `metric`, or a
+  `params.NAME` dial. The edited file is loaded through the catalog before
+  it is written, so an invalid change never lands. The `/tune` skill is
+  the conversational front: "it keeps ignoring anti-heal" becomes a
+  `tune` call and a re-run of the board to show the effect.
+- **`fit_weights`** - evidence from your own games. `record_outcome` (the
+  `/outcome` skill) stores how a match went; from ten decided matches the
+  fit scores each recorded six on the solver's own scale and asks which
+  heuristics ran higher in wins than in losses; from fifty it fits a ridge
+  logistic regression, demeaned within each map. The proposal is a
+  bounded nudge per weight (up to half the evidence, clamped to 0.25..6),
+  shown as a dry run and applied through `tune` on request. Below the
+  minimum the answer is "not yet".
+
+## Layout
+
+```
+inference/
+  __init__.py      the package's map
+  strategies/      the playbook: one markdown file per constraint or heuristic,
+                   and tuning-log.md
+  catalog.py       reads, validates and mirrors the strategy files
+  expr.py          the expression language the frontmatter uses
+  solver.py        enumerate, prune, normalise, score, refine
+  engine.py        infer(), evaluate(), board(): the solver plus citations
+  record.py        the gates and the transcript for a decided comp
+  outcomes.py      how a match went, stored beside the comp it played
+  tune.py          one validated, logged edit to a strategy file; add and complete
+  derive.py        the engine asking the model for a draft's frontmatter
+  fit.py           weight proposals from recorded outcomes
+  serve.py         the HTTP service the compose stack's ui container calls
+```
+
+| file | purpose |
+| --- | --- |
+| `catalog.py` | Parses each file's frontmatter (a flat dialect plus one `params:` block), builds a `Strategy` with `kind`, `form`, compiled expressions and validation against the metrics registry, orders the catalog (constraints by form, then heuristics), mirrors it into the `strategies` table, and writes the catalog at the end of this document. |
+| `expr.py` | A safe subset of Python expressions: the AST is checked once, compiled, and evaluated over a scope whose missing keys read as zero, so a metric that does not apply to a board never crashes a score. |
+| `solver.py` | For a board: every role shape the hard limits allow around the locked picks; per-role pools ranked by a cheap prior; every candidate prepared (namespace, limit check, raw metric values) and scored with the frozen bounds; local search from the best few. The bounds come from a seeded reference sample of legal sixes for that map, side, enemy and bans, so `infer`, `evaluate` and the current comp share one scale and a score means the same thing across calls. |
+| `engine.py` | `infer` (blue's optimal six around the locked picks), `evaluate` (a full six ranked against the field), `current` (the picks as they stand, partial or full), and `board` (both seats on opposite sides plus the current comp). Each result carries the picks with reasons and `[F#]` citations into the board's FactSet, the score breakdown per strategy, alternatives, and the prose constraints as "ground rules to reconcile against". |
+| `record.py` | Storing a decided comp: the gates (six real heroes, every cited fact one the board showed), the tables (`recommendations`, picks, evidence), and a markdown transcript under `db/data/authored/recommendations/`. |
+| `outcomes.py` | Storing a match result - win, loss or draw, the map and side, both sixes, the bans, the recommendation played - and the summary the fit reads. |
+| `tune.py` | `tune(id, field, value, reason)`: one frontmatter edit; `add(id, name, kind, prose, fields, reason)`: a new file from what the user gave and what `/strategy` inferred; `complete(id, fields, reason)`: a draft's frontmatter in one step. Each is validated by loading the catalog with the new text, then written, re-mirrored and logged. |
+| `derive.py` | `derive()`: for every draft, the prompt (the three inputs, the vocabulary, four catalog files for style), `claude -p` on the subscription, the JSON answer through `tune.complete`, one retry carrying the catalog's objection. `available()` says whether the CLI is here. |
+| `fit.py` | `propose` and `apply`: the two evidence tiers above, and the bounded nudge. |
+| `serve.py` | `/board`, `/infer`, `/evaluate`, `/strategies`, `/health`, `POST /record` - the same functions, over HTTP, for a board that runs in another container. |
+
+## The skills
+
+| skill | does |
+| --- | --- |
+| `/strategy` | asks for a name, a kind and prose, infers the frontmatter from the prose and the vocabulary, stores the file through `add_strategy` (or completes a draft through `infer_strategy`), and shows the effect on a board |
+| `/comp` | the agent: pulls map, side, bans, red and locked blue picks out of what you say, calls `infer` (or `board`), reads `facts`, adopts or improves on the solver's optimum against the prose constraints, answers with `[F#]` citations, and records the result through `record` |
+| `/tune` | a manual tune, or a fit from outcomes, through the `tune` and `fit_weights` tools; shows the effect on the board |
+| `/outcome` | records how a match went through `record_outcome` |
+| `/up` | brings the stack up and current before a game |
+
+All of it runs on the MCP tools the data layer serves (`infer`,
+`evaluate`, `board`, `facts`, `strategies`, `metrics`, `add_strategy`,
+`infer_strategy`, `derive_strategies`, `record`, `record_outcome`, `tune`,
+`fit_weights`, `tuning_log`), which is what makes a session and the board
+see the same numbers.
+
+## The catalog
+
+<!-- generated:catalog -->
+38 files in `inference/strategies/`: 18 constraints (3 limits, 10 scored, 5 prose) and 20 heuristics. Regenerated by `python -m db.mcp call db_docs`.
+
+#### Constraints
+
+##### Fliers need a hitscan answer (`anti-air`, matchup, limit)
 
 `require team.hitscan >= 1` (soft, penalty `2.5`); when `enemy.flyers >= 1`
 
@@ -57,7 +193,7 @@ the weapon configs, so this is measured, not judged.
 Soft, because a barrier-and-brawl comp can sometimes deny the ground a
 flier's team needs - but that argument has to beat a 2.5-point penalty.
 
-#### Do not build on a near-certain ban (`ban-safety`, meta, limit)
+##### Do not build on a near-certain ban (`ban-safety`, meta, limit)
 
 `require team.max_ban_rate < params.BAN_CERTAIN` (soft, penalty `2.5`)
 params: BAN_CERTAIN=35
@@ -70,7 +206,7 @@ still carry the comp, but it pays for the risk up front.
 Pair with `availability`, which prices every pick's ban rate smoothly;
 this file is the cliff, that one is the slope.
 
-#### At most two tanks (`open-queue-tanks`, shape, limit)
+##### At most two tanks (`open-queue-tanks`, shape, limit)
 
 `require team.tanks <= 2` (hard)
 
@@ -85,7 +221,7 @@ the price.
 To search Role Queue's 2-2-2 instead, tighten this file to
 `require: team.tanks == 2 and team.damage == 2 and team.supports == 2`.
 
-#### Do not field a whole team of dive bait (`squish-limit`, durability, scored)
+##### Do not field a whole team of dive bait (`squish-limit`, durability, scored)
 
 weight 1; penalty `max(0, team.squish_count - 4) * 1.0`
 
@@ -93,7 +229,7 @@ Picks at or under 250 pool are one-dive targets. Four of them is the
 standard 2-2-2 shape of a 6v6; every one past that is a target the
 enemy's optimal play will find first.
 
-#### Shut off a heavy heal line (`anti-heal-answer`, matchup, scored)
+##### Shut off a heavy heal line (`anti-heal-answer`, matchup, scored)
 
 weight 1; when `enemy.heal_ratio >= params.HEAL_RATIO`; bonus `min(team.antiheal, 1) * 1.5`
 params: HEAL_RATIO=1.0
@@ -103,7 +239,7 @@ anti-heal pick (a negative healing modifier in the kit - the grenade,
 the discord of healing) is worth more than another damage dealer. One
 is rewarded; two overlap.
 
-#### Bring barrier-piercers when they wall up (`barrier-answer`, matchup, scored)
+##### Bring barrier-piercers when they wall up (`barrier-answer`, matchup, scored)
 
 weight 1; when `matchup.barrier_need >= params.BARRIER_HP`; bonus `min(team.barrier_piercers, 2) * 1.0`
 params: BARRIER_HP=600
@@ -113,7 +249,7 @@ barriers (the wiki's `ignores_barrier` flag and keywords) restore the
 damage math. Up to two are rewarded; a third is redundancy the heuristics
 already price.
 
-#### Punish a one-note enemy comp (`counter-the-lean`, matchup, scored)
+##### Punish a one-note enemy comp (`counter-the-lean`, matchup, scored)
 
 weight 1; when `matchup.style_lean_red == 'dive'`; bonus `min(team.cc_count, 2) * 0.5 + min(team.barrier_count, 1) * 0.5`
 
@@ -123,7 +259,7 @@ The `peel-against-dive` constraint reads engage tools; this one reads the
 judged style, so both fire against a real dive comp and only one
 against a coincidence.
 
-#### Peel when they dive (`peel-against-dive`, matchup, scored)
+##### Peel when they dive (`peel-against-dive`, matchup, scored)
 
 weight 1; when `enemy.mobility_count >= 2`; bonus `min(team.cc_count, 3) * 0.75`
 
@@ -132,7 +268,7 @@ jumped. Crowd control - stuns, sleeps, immobilizes, knockbacks, read
 from the kits' keywords - is what turns a dive into a dead diver. Up
 to three peel tools are rewarded.
 
-#### Have an answer to their all-in (`ult-answers`, matchup, scored)
+##### Have an answer to their all-in (`ult-answers`, matchup, scored)
 
 weight 1; when `matchup.ult_threat >= params.THREAT`; bonus `min(matchup.ult_answers, 2) * 0.75`
 params: THREAT=300
@@ -142,7 +278,7 @@ invulnerability or a cleanse (lamp, suzu, the transcendence of a
 support) is the difference between losing a fight and losing a fight
 plus the next one. Two answers rewarded.
 
-#### A dive comp needs to arrive together (`dive-needs-mobility`, shape, scored)
+##### A dive comp needs to arrive together (`dive-needs-mobility`, shape, scored)
 
 weight 1; when `map.style_top == 'dive' or team.style_lean == 'dive'`; bonus `min(team.mobility_count, 5) * 0.5`
 
@@ -150,7 +286,7 @@ On a map that rewards dive, or when the picks already lean dive, every
 pick with a movement tool is one who arrives with the engage instead of
 watching it from the choke. Five rewarded; the sixth is the anchor.
 
-#### Attackers need to break a hold (`attack-breaks-the-hold`, side, scored)
+##### Attackers need to break a hold (`attack-breaks-the-hold`, side, scored)
 
 weight 1; when `map.side == 'attack'`; bonus `min(team.mobility_count, 4) * 0.5 + min(team.antiheal, 1) * 0.5`
 
@@ -163,7 +299,7 @@ The rates do not split by side, so this is a judgement about the kits,
 not a measured advantage - which is why it is a scored constraint with a small
 bonus rather than a heuristic.
 
-#### Defenders hold ground (`defense-holds-the-ground`, side, scored)
+##### Defenders hold ground (`defense-holds-the-ground`, side, scored)
 
 weight 1; when `map.side == 'defense'`; bonus `min(team.deployables, 2) * 0.5 + min(team.barrier_count, 2) * 0.5 + (0.5 if team.range_median >= 20 else 0)`
 
@@ -175,7 +311,7 @@ Judged from the kits, like its attacking twin, and weighted the same:
 enough to tilt a close call between two comps the heuristics rate alike,
 never enough to override coverage or cohesion.
 
-#### Two supports must actually heal (`under-healed`, sustain, scored)
+##### Two supports must actually heal (`under-healed`, sustain, scored)
 
 weight 1; when `team.supports >= 2 and team.heal_ratio < params.HEAL_MARGIN`; penalty `2`
 params: HEAL_MARGIN=0.75
@@ -185,7 +321,7 @@ two-support bench (twice the median support's peak). Below the margin
 the line is complete and still light - two Zenyattas is a choice, and
 this constraint makes the solver pay for it rather than stumble into it.
 
-#### Locked picks are given, not chosen (`locked-picks`, assumptions, prose)
+##### Locked picks are given, not chosen (`locked-picks`, assumptions, prose)
 
 
 A blue pick that is locked is in the comp. The solver never trades it
@@ -194,7 +330,7 @@ and the WARNING facts say when a revealed enemy answers it - at which
 point the open slots must cover for it, and the score says how well
 they do.
 
-#### What the score is (`objective`, assumptions, prose)
+##### What the score is (`objective`, assumptions, prose)
 
 
 For every candidate six, the solver computes the same team, enemy and
@@ -209,9 +345,9 @@ STRATEGIES = CONSTRAINTS ∪ HEURISTICS; the score is STRATEGIES( FACTS ).
 To tune, edit a file: raise a weight, add a `when`, change a threshold
 under `params`. The catalog is validated on load - a metric name that
 does not exist is an error, not a silent zero - and `db_docs`
-regenerates docs/strategies.md from the files.
+regenerates the catalog in docs/inference.md from the files.
 
-#### Players play optimally (`optimal-play`, assumptions, prose)
+##### Players play optimally (`optimal-play`, assumptions, prose)
 
 
 The central assumption of this layer: every player on both teams plays
@@ -224,7 +360,7 @@ tiers already exist on the board as RANK-SENSITIVE facts) and as
 strategies that read it. Until then, argue against the optimum, not
 against a guess about the players.
 
-#### Rates are Role Queue, console, Americas (`rates-are-a-proxy`, uncertainty, prose)
+##### Rates are Role Queue, console, Americas (`rates-are-a-proxy`, uncertainty, prose)
 
 
 Every win, pick and ban rate was measured on Competitive Role Queue,
@@ -234,7 +370,7 @@ every time rather than assumed away. Lean on rates for direction, not
 decimals; a RANK-SENSITIVE fact means the advice must know its
 audience.
 
-#### When patches shipped since capture, trust the kit (`vintage`, uncertainty, prose)
+##### When patches shipped since capture, trust the kit (`vintage`, uncertainty, prose)
 
 
 The board's first facts state when the rates were captured and warn
@@ -242,9 +378,9 @@ when patches have shipped since. Stale rates argue less: weight the
 kit numbers, keywords and the authored playbook over win rates until
 `pull_rates` runs again. The data layer makes that one tool call.
 
-### Heuristics
+#### Heuristics
 
-#### Bring sustained damage (`damage-floor`, damage)
+##### Bring sustained damage (`damage-floor`, damage)
 
 `maximize team.dps_floor` - summed published per-second damage figures (a floor: misses and healing ignored). weight 1
 
@@ -253,7 +389,7 @@ stated as one: no misses, no falloff, no reloads folded in beyond what
 the wiki's own figure states. It separates comps that can chew a tank
 from comps that poke one.
 
-#### Field more hit points (`effective-hp`, durability)
+##### Field more hit points (`effective-hp`, durability)
 
 `maximize team.pool_total` - team effective HP: sum of health + shield + armor. weight 0.5
 
@@ -262,7 +398,7 @@ the comp absorbs before the first death, ignoring healing. Lightly
 weighted: pool is mostly decided by the shape constraint, and the
 matchup heuristics already price what the enemy does to it.
 
-#### Win on this ground (`map-fit`, map)
+##### Win on this ground (`map-fit`, map)
 
 `maximize team.map_win_mean` - mean win rate on the map (the all-ranks mean without a map). weight 2
 
@@ -272,7 +408,7 @@ board). Map rates are the closest measured thing to "this comp works
 here"; specialists and off-map liabilities are the same numbers seen
 per hero on the board.
 
-#### Take the picks the playbook lists for this map (`playbook-map-picks`, map)
+##### Take the picks the playbook lists for this map (`playbook-map-picks`, map)
 
 `maximize team.map_strategy_hits` - picks counterpick lists among their best maps here. weight 1; when `map.known == 1`
 
@@ -280,7 +416,7 @@ How many of the six appear in counterpick.gg's best-maps list for the
 selected map. A second opinion on `map-fit` from a source that ranks
 rather than counts; alignment with it is a cited argument.
 
-#### Play the style the map rewards (`style-alignment`, map)
+##### Play the style the map rewards (`style-alignment`, map)
 
 `maximize team.style_fit` - share of picks tagged with the map's rewarded style (0 without a map). weight 1.5; when `map.known == 1`
 
@@ -292,7 +428,7 @@ geometry as well as the enemy.
 Judged, not measured - the wiki assigns styles and the operator scores
 maps - which is why `map-fit` (measured) outweighs it.
 
-#### Keep a kill window through their healing (`burst-window`, matchup)
+##### Keep a kill window through their healing (`burst-window`, matchup)
 
 `maximize matchup.burst_vs_heal` - blue's biggest hit minus red's biggest single save. weight 1; when `enemy.size >= 1`
 
@@ -301,7 +437,7 @@ it is positive, one cooldown deletes a target through the save; when it
 is negative, every pick has to stack damage to kill anything, and
 optimal-play enemies do not stand still for that.
 
-#### Chew through them faster (`chew-time`, matchup)
+##### Chew through them faster (`chew-time`, matchup)
 
 `minimize matchup.chew_time_ours` - seconds of blue's floor damage to chew red's pool (999 if unknown). weight 1; when `enemy.size >= 1`
 
@@ -310,7 +446,7 @@ fire to delete the enemy team. Crude and labelled crude on the board -
 no healing, no misses - but a two-to-one asymmetry in the floor is real
 information about who wins a straight trade.
 
-#### Answer every revealed enemy (`coverage`, matchup)
+##### Answer every revealed enemy (`coverage`, matchup)
 
 `maximize team.coverage_share` - coverage / enemies revealed. weight 3; when `enemy.size >= 1`
 
@@ -322,7 +458,7 @@ that answers two is hoping the other four misplay.
 Weighted highest because, under the optimal-play assumption, unanswered
 enemies do not misplay.
 
-#### Answer the dangerous ones twice (`double-coverage`, matchup)
+##### Answer the dangerous ones twice (`double-coverage`, matchup)
 
 `maximize team.double_covered` - enemies answered by two or more picks. weight 1; when `enemy.size >= 2`
 
@@ -330,7 +466,7 @@ Enemies answered by two or more of our picks. Redundant answers survive
 a ban, a swap, or one of ours dying first; single-threaded answers do
 not. Worth a point, not three: breadth (`coverage`) comes first.
 
-#### Walk into no counter already on the field (`exposure`, matchup)
+##### Walk into no counter already on the field (`exposure`, matchup)
 
 `minimize team.exposed_count` - picks answered by at least one enemy. weight 2; when `enemy.size >= 1`
 
@@ -339,7 +475,7 @@ two enemies means less when both of them also answer you; this is the
 other half of `coverage`, and the pair together is the net matchup the
 board shows.
 
-#### Outrange them (`range-war`, matchup)
+##### Outrange them (`range-war`, matchup)
 
 `maximize matchup.range_diff` - blue median reach minus red's. weight 0.75; when `enemy.size >= 1`
 
@@ -348,7 +484,7 @@ fight's opening seconds and forces the approach, and the approach is
 where brawls bleed. Positive means we open at distance; negative means
 we close fast or trade cover.
 
-#### Survive the ban screen (`availability`, meta)
+##### Survive the ban screen (`availability`, meta)
 
 `maximize team.availability` - chance every pick survives the ban screen: product of (1 - ban). weight 1
 
@@ -357,7 +493,7 @@ is playable after bans. Six ten-percent picks lose the full plan nearly
 half the time; the product makes that visible where the individual rates
 hide it.
 
-#### Prefer what is winning right now (`meta-strength`, meta)
+##### Prefer what is winning right now (`meta-strength`, meta)
 
 `maximize team.win_mean` - mean all-ranks win rate. weight 1
 
@@ -366,7 +502,7 @@ weak prior next to the map figure, but it is what breaks ties when the
 map is unknown or a hero's map sample is thin - and it carries the
 snapshot's vintage, so read the WARNING fact when patches shipped since.
 
-#### Five different jobs (`subrole-diversity`, shape)
+##### Five different jobs (`subrole-diversity`, shape)
 
 `maximize team.subrole_diversity` - distinct subroles / size (1.0 = every pick a different job). weight 0.75
 
@@ -375,7 +511,7 @@ overlap jobs even when the role counts look fine; a comp whose every
 pick brings a different job covers more situations with the same six
 slots.
 
-#### Bring sustained healing (`healing-floor`, sustain)
+##### Bring sustained healing (`healing-floor`, sustain)
 
 `maximize team.hps_floor` - summed published per-second healing figures. weight 1
 
@@ -383,7 +519,7 @@ The sum of each kit's best published per-second healing figure - beams,
 streams, auras. The `under-healed` constraint handles the cliff (two
 supports who together heal little); this heuristic rewards the slope.
 
-#### Play heroes the playbook has seen work together (`cohesion`, synergy)
+##### Play heroes the playbook has seen work together (`cohesion`, synergy)
 
 `maximize team.synergy_score` - summed synergy scores among the picks. weight 2.5
 
@@ -396,7 +532,7 @@ the flier.
 Weighted just under coverage: a comp that answers everyone but has never
 been played as a unit still has to invent its own plan mid-match.
 
-#### No pick without a partner (`no-strangers`, synergy)
+##### No pick without a partner (`no-strangers`, synergy)
 
 `minimize team.isolated_count` - picks with no authored partner on the team. weight 1
 
@@ -405,7 +541,7 @@ no documented partner in this comp is a solo act - sometimes fine,
 always worth paying for, because under optimal play the enemy will
 isolate exactly that pick.
 
-#### Cycle cooldowns faster (`tempo`, tempo)
+##### Cycle cooldowns faster (`tempo`, tempo)
 
 `minimize team.cooldown_median` - median cooldown across every ability on the team. weight 0.5
 
@@ -414,7 +550,7 @@ re-engage first and fight constantly; long ones make each fight
 decisive. A mild preference for uptime, because under optimal play the
 side that dictates fight frequency dictates the match.
 
-#### Have a team-fight-ending button (`ult-burst`, tempo)
+##### Have a team-fight-ending button (`ult-burst`, tempo)
 
 `maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 0.5
 
@@ -422,7 +558,7 @@ Summed maximum damage across the team's damage ultimates. The ceiling a
 "we combo our ults" plan actually claims. Zero means the comp wins on
 attrition only, which is a plan, but a slow one.
 
-#### Charge ultimates faster (`ult-economy`, tempo)
+##### Charge ultimates faster (`ult-economy`, tempo)
 
 `minimize team.ult_cost_mean` - mean ultimate charge cost where published. weight 0.5
 
@@ -430,7 +566,7 @@ Mean ultimate charge cost where the wiki publishes it. Cheaper ultimates
 cycle more often; over a long fight sequence the comp with more ult
 cycles gets more fight-ending buttons for the same damage dealt.
 
-## The vocabulary
+#### The vocabulary
 
 Every key a strategy may reference, with its meaning. `enemy.*` are
 the `team.*` metrics computed for the red side.
@@ -558,3 +694,4 @@ the `team.*` metrics computed for the red side.
 | `map.stages` | stage count |
 | `world.heal_bench` | 2 x the median peak heal across the support roster |
 | `world.roster_size` | heroes in the roster |
+<!-- /generated:catalog -->

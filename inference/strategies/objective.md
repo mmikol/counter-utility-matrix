@@ -18,4 +18,4 @@ STRATEGIES = CONSTRAINTS ∪ HEURISTICS; the score is STRATEGIES( FACTS ).
 To tune, edit a file: raise a weight, add a `when`, change a threshold
 under `params`. The catalog is validated on load - a metric name that
 does not exist is an error, not a silent zero - and `db_docs`
-regenerates docs/strategies.md from the files.
+regenerates the catalog in docs/inference.md from the files.

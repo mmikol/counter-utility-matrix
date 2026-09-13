@@ -1,4 +1,4 @@
-# ui - the UI LAYER
+# The UI LAYER - `ui/`
 
 The board in front of you, and the facts behind it. Every click - a map,
 a side, a ban, a hero on either roster - becomes a request, the database
@@ -26,7 +26,6 @@ computes facts in-process and asks the service for comps.
 
 ```
 ui/
-  README.md        this file
   __init__.py      the package's map
   board.py         the page, its JSON endpoints, the recorded-comp pages
   static/
@@ -99,7 +98,7 @@ board renders them as facts and the inference layer's solver scores the
 same functions, so the number on the screen and the number in the score
 are the same function - a change here changes both. Four registries,
 each key with a one-line meaning (`registry()` lists them all, and
-`docs/strategies.md` prints them as the vocabulary a strategy may
+[docs/inference.md](inference.md) prints them as the vocabulary a strategy may
 reference):
 
 | group | count | examples |
@@ -143,6 +142,35 @@ board it was decided on. Below the facts, numbered S1.., rides the
 playbook's record - archetypes, previous recommendations here, recorded
 outcomes, how many constraints and heuristics the catalog holds - citable
 but never mistaken for data, and not the strategies themselves.
+
+## One click on the board
+
+```mermaid
+sequenceDiagram
+    actor You
+    participant Board as ui/board.py
+    participant Facts as ui/facts/ (World + FactSet)
+    participant Solver as inference/ (solver)
+    participant DB as PostgreSQL
+
+    You->>Board: pick the map and your side, set the bans,<br/>click red picks as they reveal, lock your blue picks
+    Board->>Facts: /api/facts (map, side, red, blue, bans)
+    Facts->>DB: load the World (a dozen queries)
+    Facts-->>Board: F1..Fn - every fact about those heroes,<br/>the map, each team, the matchup
+    Board->>Solver: /api/infer (map, side, red, blue, bans)
+    Solver->>Solver: blue's seat: shapes the limits allow · per-role pools ·<br/>every candidate scored · local search
+    Solver->>Solver: red's seat, the other side: the same around their revealed picks
+    Solver->>Solver: the current comp: six locked -> ranked against the field;<br/>fewer -> scored with the optimal search's bounds
+    Solver->>Facts: the FactSet for each (map, side, red, the six)
+    Solver-->>Board: two displays: both optimal sixes with reasons and [F#]<br/>citations, score per strategy, alternatives; the current comp's score
+    You->>Board: "record this comp"
+    Board->>Solver: record: gates (six real heroes,<br/>citations the board showed), tables, transcript
+```
+
+Sides exist on Escort and Hybrid maps only; the rates do not split by
+side, so the side reaches the score through two small scored constraints about the
+kits (engage and anti-heal on attack, deployables, barriers and reach on
+defense) and the facts say so.
 
 ## What reads this package
 

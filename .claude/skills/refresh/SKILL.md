@@ -42,7 +42,7 @@ left half-done: a step that fails is reported, not hidden.
    and may say so in a `tune` to weight 0 with the reason; a strategy
    the tuning log shows moved twice the same way this week is left
    alone. Do not add strategies here - that is the user's `/strategy`.
-6. **Regenerate and mirror.** `db_docs` (docs/strategies.md, the ERD, the
+6. **Regenerate and mirror.** `db_docs` (the catalog in docs/inference.md, the ERD and
    data dictionary), then `export_csv`. `load_authored` with
    `only: ["strategies"]` if anything in step 3 or 5 changed, so the
    table matches the files.

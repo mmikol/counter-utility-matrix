@@ -1,8 +1,32 @@
-# How it all fits together
+# How it fits together
 
-Three layers over one database, and the door between them.
+Three layers over one database, each a folder at the root, each with its own document in `docs/`.
 
-## The three layers
+```
+FACTS      = HEROES ∪ MAPS ∪ META             the data layer's term: pulled from the sources and set
+STRATEGIES = CONSTRAINTS ∪ HEURISTICS         the inference layer's: a markdown playbook, tuned by history
+COMP       = ARGMAX[ STRATEGIES( FACTS ) ]    what the board shows: the solver searches, the agent argues
+```
+
+Everything is free to run - no accounts, no keys, no API billing. The
+board is a local page and the solver is deterministic; the model work
+(comps in chat, strategies inferred from prose, the refresh that re-fits
+the weights) runs in Claude Code on your subscription, before a game,
+never during one.
+
+## The folders
+
+| folder | what it is | read |
+| --- | --- | --- |
+| `db/` | **DATA LAYER** - pulls every source, cleans it, stores it; the MCP server that is the one door to everything; the schema, its migrations and the embedded cluster | [db.md](db.md) |
+| `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet | [ui.md](ui.md) |
+| `inference/` | **INFERENCE LAYER** - the playbook of constraints and heuristics in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
+| `tests/` | one folder per layer: `tests/db`, `tests/ui`, `tests/inference`; `pytest -q` runs them, skipping what needs a built database when there is none | |
+| `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/outcome`, `/tune`, `/strategy`, `/refresh` (below) | |
+| `.github/workflows/` | `ci.yml`: lint, and the tests that need no built database | |
+| `.cache-blizzard/` `.cache-wiki/` `.cache-counterpick/` | the page caches (gitignored): every build after the first costs almost no requests | |
+
+How they fit:
 
 ```mermaid
 flowchart LR
@@ -83,96 +107,20 @@ inference agent (a Claude Code session on the `/comp` skill) reads the same
 facts and the same strategies and reconciles them where arithmetic cannot -
 a stated problem, a lobby's habits, a patch the rates predate.
 
-## One click on the board
+## The files
 
-```mermaid
-sequenceDiagram
-    actor You
-    participant Board as ui/board.py
-    participant Facts as ui/facts/ (World + FactSet)
-    participant Solver as inference/ (solver)
-    participant DB as PostgreSQL
+| file | purpose |
+| --- | --- |
+| `orchestrator.py` | the end-to-end run. `python orchestrator.py` brings the stack up (the data container pulls and ingests when the database is empty or stale), runs the agents headless on the `/refresh` skill (refresh, derive draft strategies, re-fit the weights, regenerate the docs), and leaves the app running. Verbs: `run` (default) · `up` · `agents` · `status` · `refresh` · `test` · `down` |
+| `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock). Every published port binds to 127.0.0.1. Bind mounts keep the caches, `db/raw`, `db/data/authored` and `inference/strategies` on the host, so tuning or authoring needs no rebuild |
+| `Dockerfile` | the one image; `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty or its schema is behind the migrations |
+| `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'` |
+| `.mcp.json` | registers the two MCP servers a Claude Code session sees: `overwatch-db` (stdio, the local cluster) and `overwatch-db-docker` (HTTP, the stack's database) |
+| `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pyflakes, and pgserver (the embedded PostgreSQL a local build uses) |
+| `pytest.ini` | the `invariant` marker for tests that need a built database |
+| `.gitignore` `.dockerignore` | the caches, the cluster, the mirror, the venv |
 
-    You->>Board: pick the map and your side, set the bans,<br/>click red picks as they reveal, lock your blue picks
-    Board->>Facts: /api/facts (map, side, red, blue, bans)
-    Facts->>DB: load the World (a dozen queries)
-    Facts-->>Board: F1..Fn - every fact about those heroes,<br/>the map, each team, the matchup
-    Board->>Solver: /api/infer (map, side, red, blue, bans)
-    Solver->>Solver: blue's seat: shapes the limits allow · per-role pools ·<br/>every candidate scored · local search
-    Solver->>Solver: red's seat, the other side: the same around their revealed picks
-    Solver->>Solver: the current comp: six locked -> ranked against the field;<br/>fewer -> scored with the optimal search's bounds
-    Solver->>Facts: the FactSet for each (map, side, red, the six)
-    Solver-->>Board: two displays: both optimal sixes with reasons and [F#]<br/>citations, score per strategy, alternatives; the current comp's score
-    You->>Board: "record this comp"
-    Board->>Solver: record: gates (six real heroes,<br/>citations the board showed), tables, transcript
-```
-
-Sides exist on Escort and Hybrid maps only; the rates do not split by
-side, so the side reaches the score through two small scored constraints about the
-kits (engage and anti-heal on attack, deployables, barriers and reach on
-defense) and the facts say so.
-
-## The feedback loop
-
-```mermaid
-flowchart LR
-    GAME["a match is played"] -->|"/outcome -> record_outcome"| OUT["outcomes +<br/>outcome_picks<br/>(mirrored, restored)"]
-    OUT -->|"facts: per hero, per map,<br/>the last games"| BOARD["the board and<br/>the /comp skill"]
-    OUT -->|"fit_weights: each heuristic's<br/>metric in wins vs losses"| FIT["a bounded nudge<br/>per heuristic weight"]
-    FIT -->|"apply -> tune"| HEUR["inference/strategies/*.md"]
-    USER["'it keeps ignoring anti-heal'<br/>/tune -> tune"] --> HEUR
-    HEUR -->|"validated on load,<br/>mirrored, logged"| LOG["strategies/tuning-log.md"]
-    HEUR --> SOLVER["the solver, next click"]
-```
-
-Every change to the brain is a line in the log with its reason. The fit
-refuses to move a weight before ten decided matches exist, and moves it by
-at most half the evidence, clamped - one bad week cannot flip the engine.
-
-## The life of the database
-
-```mermaid
-stateDiagram-v2
-    [*] --> Empty: docker compose up<br/>(or pgserver first touch)
-    Empty --> Schema: db_init<br/>9 migrations, 42 tables
-    Schema --> Populated: sync_all<br/>7 pull tools + load_authored
-    Empty --> Populated: db_rebuild<br/>(the entrypoint's move<br/>on an empty database)
-    Populated --> Populated: pull_rates + pull_counters daily,<br/>sync_all weekly (the refresher)<br/>entities upsert in place,<br/>rates APPEND a dated snapshot
-    Populated --> Empty: db_rebuild<br/>drop everything...
-    note right of Populated
-        ...but recorded recommendations
-        are restored from the db/raw
-        mirror after every rebuild -
-        the one thing no tool can
-        re-fetch is never discarded.
-    end note
-```
-
-`python -m db.mcp call <tool>` runs the same tools without a session;
-Docker's `data` container runs `rebuild` on an empty or stale database and
-the `refresher` container refreshes once a day (and on start when the
-cached pages are older than a day): the daily refresh refetches the rates
-and the counters and re-mirrors the playbook and the strategies; once the
-wiki cache is older than `OVERWATCH_DB_REFRESH_FULL_DAYS` (7) it runs
-`sync_all` with refresh on, every page of every source. A page that fails
-to refetch keeps its cached copy, so a bad day at a source degrades to
-yesterday's numbers rather than an empty table.
-
-## Where every kind of data lives
-
-Any data in the database is just data: every row carries its `source_id`,
-and that is the only distinction the schema draws. What differs is how a
-row gets there - and therefore what a rebuild can and cannot recover.
-
-```mermaid
-flowchart TD
-    Q{"Can a pull tool<br/>re-fetch it?"}
-    Q -->|"yes"| F["pulled<br/>blizzard · wiki · counterpick<br/>one package per source: page -> table"]
-    Q -->|"no - we wrote it"| A["authored<br/>db/data/authored/: synergies, archetypes,<br/>map playstyles, seasons, notes<br/>+ inference/strategies/*.md (the brain)"]
-    Q -->|"no - the inference<br/>layer decided it"| R["recorded<br/>recommendations + transcripts,<br/>mirrored to db/raw, restored<br/>after every rebuild"]
-```
-
-## Deployment: one container per layer
+## Deployment
 
 ```mermaid
 flowchart LR
@@ -209,3 +157,32 @@ Local-only works identically: without `DATABASE_URL`, everything runs in
 one process against the embedded pgserver cluster at `db/psql/cluster` - the
 MCP server over stdio, the board with the engine in-process - same tools,
 same facts, same strategies.
+
+## The skills
+
+Open the repo in a [Claude Code](https://claude.com/claude-code) session
+and the `.claude/skills/` are yours; each is a playbook over the MCP tools
+in [db.md](db.md#mcp---the-door).
+
+| skill | does |
+| --- | --- |
+| `/up` | brings the stack up and current, and proves it: URLs, health, the rates' capture date |
+| `/comp` | "comp for King's Row, they have Zarya and Pharah, I'm on Ana": calls `infer` and `facts`, argues against the solver's optimum under the prose constraints, answers with `[F#]` citations, records the result |
+| `/outcome` | records how a match went, so the fit can learn from it |
+| `/tune` | changes a weight, a dial or an expression through `tune`, or fits the weights to recorded outcomes through `fit_weights` |
+| `/strategy` | asks for a name, a kind and prose, infers the frontmatter and stores the strategy through `add_strategy` |
+| `/refresh` | the agents' run, the one `orchestrator.py agents` executes headless: refresh, derive drafts, re-fit, re-infer with restraint, regenerate, report |
+
+No API key, no per-token bill: the skills run on your subscription.
+
+## Scope, honestly
+
+Open Queue Competitive is the target; no source publishes Open Queue rates,
+so META is Competitive Role Queue on console (Americas), stated on every
+snapshot fact rather than assumed away. Rates carry the patch and season
+they were captured under, and the board warns when patches shipped since.
+Judgements (counters, synergies, playstyles) are tier- and region-agnostic
+by design, and a table is a table: every row carries its source, and that
+is the only distinction drawn between measured, judged and hand-written
+data. Players are assumed to play optimally - the central assumption,
+named in [inference/strategies/optimal-play.md](../inference/strategies/optimal-play.md).

@@ -337,8 +337,9 @@ def export_csv(ctx):
             {"tables": dict(counts)})
 
 
-@tool("db_docs", "Regenerate docs/erd.md, docs/data-dictionary.md and"
-      " docs/strategies.md from the live schema and the strategies files.")
+@tool("db_docs", "Regenerate the generated sections of the docs: the ERD and data"
+      " dictionary in docs/db.md from the live schema, the catalog and vocabulary in"
+      " docs/inference.md from the strategies files.")
 def db_docs(ctx):
     from db.psql import schema
     from inference import catalog
@@ -353,7 +354,7 @@ READ_ONLY_STARTS = ("select", "with", "explain", "show", "table", "values")
 
 @tool("query", "Run read-only SQL against the database (SELECT/WITH only,"
       " one statement, first 200 rows). Every table is documented in"
-      " docs/data-dictionary.md.",
+      " the data dictionary in docs/db.md.",
       {"sql": {"type": "string", "description": "the statement"}}, ["sql"])
 def query(ctx, sql):
     body = sql.strip().rstrip(";").strip()

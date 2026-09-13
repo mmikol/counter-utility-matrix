@@ -13,7 +13,7 @@
     refresh       the daily refresh
     raw/          the CSV mirror the tools export (gitignored)
 
-README.md here walks the tree. This file holds what the whole layer must
+docs/db.md walks the tree. This file holds what the whole layer must
 agree on: where things live, and the scope every rates snapshot is pinned
 to.
 
