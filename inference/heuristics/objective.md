@@ -5,7 +5,7 @@ category: assumptions
 ---
 # What the score is
 
-For every candidate five, the solver computes the same team, enemy and
+For every candidate six, the solver computes the same team, enemy and
 matchup metrics the board shows as facts, then sums: each goal's weight
 times its metric normalised to [0, 1] across the candidates (flipped
 for minimize), plus each scored strategy's weight times its bonus minus

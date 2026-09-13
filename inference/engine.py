@@ -2,14 +2,15 @@
 
     infer(world, "King's Row", red=["Zarya", "Pharah"], blue=["Ana"])
 
-returns the optimal five around the locked picks, each pick with the facts
+returns the optimal six around the locked picks, each pick with the facts
 that justify it (the board the user layer would show for map + red + the
-five), the score broken down per heuristic, and the alternatives.
+six), the score broken down per heuristic, and the alternatives.
 """
 
 import time
 
 from user.facts import engine as facts_engine
+from user.facts.compute import TEAM_SIZE
 from inference import catalog as catalog_module
 from inference.solver import Solver, evaluate_comp
 
@@ -176,12 +177,12 @@ def _cited_fact(fs, keys):
     return None
 
 
-def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=8, catalog=None):
+def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=None):
     started = time.time()
     catalog = catalog or catalog_module.load()
     m, red_h, blue_h = world.resolve(map_name, red, blue)
-    if len(blue_h) > 5:
-        raise ValueError("more than five blue picks")
+    if len(blue_h) > TEAM_SIZE:
+        raise ValueError("more than %d blue picks" % TEAM_SIZE)
     result = Result("infer", m.name if m else None, [h.name for h in red_h], [],
                     [h.name for h in blue_h], catalog)
     solver = Solver(world, m, red_h, blue_h, catalog, pool_size)
@@ -200,12 +201,13 @@ def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=8, catalog=Non
     return result
 
 
-def evaluate(world, map_name=None, red=(), blue=(), pool_size=8, catalog=None):
+def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None):
     started = time.time()
     catalog = catalog or catalog_module.load()
     m, red_h, blue_h = world.resolve(map_name, red, blue)
-    if len(blue_h) != 5:
-        raise ValueError("evaluate needs exactly five blue picks (got %d)" % len(blue_h))
+    if len(blue_h) != TEAM_SIZE:
+        raise ValueError("evaluate needs exactly %d blue picks (got %d)"
+                         % (TEAM_SIZE, len(blue_h)))
     result = Result("evaluate", m.name if m else None, [h.name for h in red_h],
                     [h.name for h in blue_h], [], catalog)
     target, field, rank, solver = evaluate_comp(world, m, red_h, blue_h, catalog,

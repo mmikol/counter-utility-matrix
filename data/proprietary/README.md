@@ -40,5 +40,5 @@ The inference layer's own brain - the heuristics - lives in
 mirrored to `data/raw` and restored after every rebuild. Both come from
 one write path, `inference/record.py`, whose gates hold whoever decided
 the comp - the solver, the board's "record this comp" button, or the
-`/comp` skill: exactly five real heroes, each citing fact ids the board
-for (map, red, the five) actually shows.
+`/comp` skill: exactly six real heroes, each citing fact ids the board
+for (map, red, the six) actually shows.

@@ -55,7 +55,7 @@ def test_shipped_catalog_is_valid_and_references_real_metrics():
         for e in (h.when, h.require, h.bonus, h.penalty):
             for name in (e.names if e else []):
                 assert name in registry or name[7:] in h.params, (h.id, name)
-    assert any(h.id == "role-queue-shape" for h in cat)
+    assert any(h.id == "open-queue-tanks" for h in cat)
 
 
 def test_catalog_rejects_a_goal_on_an_unknown_metric(tmp_path):
@@ -82,12 +82,12 @@ def world(db):
 
 
 @pytest.mark.invariant
-def test_infer_keeps_locked_picks_and_the_role_queue_shape(world):
+def test_infer_keeps_locked_picks_and_the_open_queue_shape(world):
     from inference import engine
     r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
-    assert len(r.blue) == 5 and "Ana" in r.blue
+    assert len(r.blue) == 6 and "Ana" in r.blue
     roles = [world.hero(n).role for n in r.blue]
-    assert sorted(roles) == ["damage", "damage", "support", "support", "tank"]
+    assert roles.count("tank") <= 2
     assert r.considered > 100 and r.score > 0
     assert any(p["hero"] == "Ana" and p["locked"] for p in r.picks)
     # every pick cites facts the board for (map, red, the five) shows
@@ -113,26 +113,32 @@ def test_infer_honours_a_hitscan_answer_to_a_flier(world):
 def test_evaluate_ranks_a_full_five_against_the_field(world):
     from inference import engine
     r = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"],
-                        ["Reinhardt", "Widowmaker", "Bastion", "Ana", "Lúcio"])
-    assert r.rank >= 1 and r.kind == "evaluate" and len(r.picks) == 5
-    with pytest.raises(ValueError, match="exactly five"):
+                        ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"])
+    assert r.rank >= 1 and r.kind == "evaluate" and len(r.picks) == 6
+    with pytest.raises(ValueError, match="exactly 6"):
         engine.evaluate(world, None, [], ["Ana"])
 
 
 @pytest.mark.invariant
-def test_a_relaxed_shape_constraint_widens_the_search(world, tmp_path):
+def test_the_tank_limit_is_the_only_shape_constraint(world, tmp_path):
     from inference import engine
     import shutil, os
+    # two tanks is allowed by default; a third is not
+    r = engine.infer(world, "King's Row", ["Zarya"], ["Winston", "D.Va"], pool_size=4)
+    assert {"Winston", "D.Va"} <= set(r.blue)
+    with pytest.raises(ValueError, match="no composition satisfies"):
+        engine.infer(world, "King's Row", [], ["Winston", "D.Va", "Reinhardt"], pool_size=4)
+    # a stricter authored constraint narrows the search the same way
     for name in os.listdir(catalog.HEURISTICS_DIR):
-        if name != "role-queue-shape.md":
+        if name != "open-queue-tanks.md":
             shutil.copy(os.path.join(catalog.HEURISTICS_DIR, name), tmp_path / name)
     (tmp_path / "shape.md").write_text(
-        "---\nname: open queue\nkind: constraint\nrequire: team.supports >= 1\n---\nx\n",
-        "utf-8")
+        "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and"
+        " team.damage == 2 and team.supports == 2\n---\nx\n", "utf-8")
     cat = catalog.load(str(tmp_path))
-    r = engine.infer(world, "King's Row", ["Zarya"], ["Winston", "D.Va"], pool_size=4,
-                     catalog=cat)
-    assert {"Winston", "D.Va"} <= set(r.blue)          # double tank now allowed
+    r = engine.infer(world, "King's Row", ["Zarya"], ["Ana"], pool_size=4, catalog=cat)
+    roles = sorted(world.hero(n).role for n in r.blue)
+    assert roles == ["damage", "damage", "support", "support", "tank", "tank"]
 
 
 # --- recording -------------------------------------------------------------------
@@ -141,18 +147,18 @@ def test_a_relaxed_shape_constraint_widens_the_search(world, tmp_path):
 def test_record_gates_then_rolls_back(db, world):
     from user.facts import engine as facts_engine
     from inference import record
-    picks = ["Reinhardt", "Widowmaker", "Bastion", "Ana", "Lúcio"]
+    picks = ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]
     fs = facts_engine.generate(world, "King's Row", ["Zarya"], picks)
     answer = {"playstyle": "brawl", "reasoning": "test",
               "picks": [{"hero": h, "why": "w", "evidence": [fs.find("hero.identity", h)[0].id]}
                         for h in picks]}
     rec_id = record.persist(db, "q", answer, fs, world.map("King's Row").id, "P", "m", "{}")
     assert db.execute("select count(*) from recommendation_picks where rec_id=%s",
-                      (rec_id,)).fetchone()[0] == 5
+                      (rec_id,)).fetchone()[0] == 6
     db.rollback()
     bad = dict(answer, picks=[dict(p, evidence=["F99999"]) for p in answer["picks"]])
     with pytest.raises(ValueError, match="never showed"):
         record.persist(db, "q", bad, fs, None, "P", "m", "{}")
     db.rollback()
-    with pytest.raises(ValueError, match="five picks"):
+    with pytest.raises(ValueError, match="exactly 6 picks"):
         record.validate_answer(dict(answer, picks=answer["picks"][:4]))

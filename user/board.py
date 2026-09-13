@@ -7,7 +7,7 @@ and the inference layer.
 Standard library only. Every click re-reads the database: the facts
 panel is the FactSet for (map, red, blue), the optimal-comp panel is the
 inference layer's answer around the locked blue picks (or the evaluation
-of a full five), and the playbook panel is the heuristics catalog as it
+of a full six), and the playbook panel is the heuristics catalog as it
 sits on disk. JSON endpoints under /api/ serve the same three things.
 """
 
@@ -25,6 +25,7 @@ import psycopg
 from data import common
 from user.facts import engine as facts_engine
 from user.facts import model
+from user.facts.compute import TEAM_SIZE
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
 from inference import record as record_module
@@ -101,7 +102,7 @@ def api_infer(cx, query):
         return remote("/infer", {"map": map_name or "", "red": red, "blue": blue})
     world = model.load(cx)
     try:
-        if len(blue) == 5:
+        if len(blue) == TEAM_SIZE:
             result = inference_engine.evaluate(world, map_name, red, blue)
         else:
             result = inference_engine.infer(world, map_name, red, blue)
@@ -250,8 +251,8 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .inf-head { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
 .inf-head h3 { margin:0; font-size:24px; color:var(--gold); }
 .inf-head .score { font-family:"Bebas Neue",Impact,sans-serif; font-size:24px; }
-.comp { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:12px 0; }
-@media (max-width:900px) { .comp { grid-template-columns:repeat(2,1fr); } }
+.comp { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin:12px 0; }
+@media (max-width:900px) { .comp { grid-template-columns:repeat(3,1fr); } }
 .card { background:#10141c; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
 .card .pic { aspect-ratio:3/4; position:relative; background:#0b0e14;
   border-bottom:2px solid var(--blue); }
@@ -295,6 +296,7 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 
 SCRIPT = r"""
 var el = function (id) { return document.getElementById(id); };
+var TEAM = __TEAM_SIZE__;
 var ROSTER = null, st = { map: '', red: [], blue: [] };
 try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
       if (saved && saved.red && saved.blue) st = saved; } catch (e) {}
@@ -311,7 +313,7 @@ function portrait(h, cls) {
 
 function buildTeam(team) {
   var slots = '';
-  for (var i = 0; i < 5; i++) slots += "<div class='slot' data-team='" + team + "' data-i='" + i + "'></div>";
+  for (var i = 0; i < TEAM; i++) slots += "<div class='slot' data-team='" + team + "' data-i='" + i + "'></div>";
   el(team + 'slots').innerHTML = slots;
   var cols = '';
   ['tank', 'damage', 'support'].forEach(function (role) {
@@ -328,8 +330,8 @@ function buildTeam(team) {
 function toggle(team, name) {
   var arr = st[team], at = arr.indexOf(name);
   if (at >= 0) arr.splice(at, 1);
-  else if (arr.length < 5) arr.push(name);
-  else { flash((team === 'red' ? 'red' : 'blue') + ' already has five - click a lit hero to free the slot'); return; }
+  else if (arr.length < TEAM) arr.push(name);
+  else { flash((team === 'red' ? 'red' : 'blue') + ' already has ' + TEAM + ' - click a lit hero to free the slot'); return; }
   save(); paint(); refresh();
 }
 
@@ -337,7 +339,7 @@ function paint() {
   ['red', 'blue'].forEach(function (team) {
     var other = team === 'red' ? 'blue' : 'red';
     var slots = el(team + 'slots').children;
-    for (var i = 0; i < 5; i++) {
+    for (var i = 0; i < TEAM; i++) {
       var name = st[team][i], s = slots[i];
       if (name) { var h = hero(name); s.className = 'slot full'; s.setAttribute('data-h', name);
         s.innerHTML = portrait(h) + "<span class='nm'>" + esc(name) + '</span>'; }
@@ -348,7 +350,7 @@ function paint() {
       var n = tiles[t].getAttribute('data-h');
       tiles[t].className = 'tile' + (st[team].indexOf(n) >= 0 ? ' on' : '') + (st[other].indexOf(n) >= 0 ? ' other' : '');
     }
-    el(team + 'count').textContent = st[team].length + '/5';
+    el(team + 'count').textContent = st[team].length + '/' + TEAM;
   });
   el('mapsel').value = st.map;
   var m = ROSTER.maps.filter(function (x) { return x.name === st.map; })[0];
@@ -427,7 +429,7 @@ function bars(contribs) {
 function renderInf() {
   var d = INF;
   if (!d || d.error) { el('inf').innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
-  var title = d.kind === 'infer' ? 'optimal comp' : 'your five, evaluated';
+  var title = d.kind === 'infer' ? 'optimal comp' : 'your six, evaluated';
   var out = "<div class='inf-head'><h3>" + title + "</h3><span class='score'>score " + (+d.score).toFixed(2) + "</span><span class='legend'>" +
     (d.rank ? 'rank ' + d.rank + ' among the feasible field · ' : '') + d.considered + ' candidates · ' + d.seconds + 's · ' +
     d.heuristics.constraint + ' constraints, ' + d.heuristics.goal + ' goals, ' + d.heuristics.strategy + ' strategies' +
@@ -550,7 +552,8 @@ def view_board():
             " the /comp skill and the inference layer read exactly these.</p></section>"
             "<section class='panel' id='tab-inf'><div id='inf'></div></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
-            "</main><script>" + SCRIPT + "</script>")
+            "</main><script>" + SCRIPT.replace("__TEAM_SIZE__", str(TEAM_SIZE))
+            + "</script>")
 
 
 # --- recorded recommendations -------------------------------------------------

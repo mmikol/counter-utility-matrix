@@ -40,10 +40,10 @@ def test_facts_endpoint_returns_the_board(db):
 
 def test_infer_endpoint_searches_or_evaluates(db):
     data, code = board.api_infer(db, {"map": ["King's Row"], "red": ["Zarya"], "blue": ["Ana"]})
-    assert code == 200 and data["kind"] == "infer" and len(data["blue"]) == 5
+    assert code == 200 and data["kind"] == "infer" and len(data["blue"]) == 6
     assert data["cited"] and all(p["evidence"] for p in data["picks"])
-    data, code = board.api_infer(db, {"blue": ["Reinhardt", "Widowmaker", "Bastion", "Ana",
-                                            "Lúcio"]})
+    data, code = board.api_infer(db, {"blue": ["Reinhardt", "Zarya", "Widowmaker", "Bastion",
+                                               "Ana", "Lúcio"]})
     assert code == 200 and data["kind"] == "evaluate" and data["rank"] >= 1
     db.rollback()
 

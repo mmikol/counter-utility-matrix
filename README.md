@@ -172,14 +172,15 @@ when: enemy.size >= 1
 The share of revealed enemies at least one of our picks answers...
 ```
 
-The solver keeps the locked blue picks, enumerates the rest from per-role
-pools, prunes with the constraints, normalises each goal across the
-candidates, adds the scored strategies, and refines the best few by local
-search -
+The solver keeps the locked blue picks, enumerates the rest of the six
+from per-role pools (6v6 Open Queue: any mix, at most two tanks - the one
+constraint shipped), prunes with the constraints, normalises each goal
+across the candidates, adds the scored strategies, and refines the best
+few by local search -
 players assumed to play optimally, so the score is a comp's ceiling. The
-board's **optimal comp** panel shows the five with per-pick reasons and
+board's **optimal comp** panel shows the six with per-pick reasons and
 fact citations, the score broken down per heuristic, and alternatives;
-with five blue picks locked it evaluates yours against the field instead.
+with six blue picks locked it evaluates yours against the field instead.
 Tuning is editing a file; the catalog is validated on load and rendered
 to [docs/heuristics.md](docs/heuristics.md). The engine runs in-process
 for a local board and as its own service (`python -m inference.serve`,
@@ -219,7 +220,7 @@ user/                USER LAYER - every click becomes facts
   facts/             model.py (the World), compute.py (the metrics registry),
                      engine.py (the FactSet)
   board.py           the map selector and the red and blue rosters
-inference/           INFERENCE LAYER - facts in, the optimal five out
+inference/           INFERENCE LAYER - facts in, the optimal six out
   heuristics/        one markdown file per heuristic (the brain)
   catalog.py         reads, validates, mirrors and documents the heuristics
   expr.py            the safe expression language the frontmatter uses

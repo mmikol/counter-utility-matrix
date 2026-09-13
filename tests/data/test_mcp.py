@@ -126,7 +126,7 @@ def test_facts_and_infer_through_the_tools(ctx):
     with pytest.raises(ToolError, match="unknown heroes"):
         tools.run_tool(ctx, "facts", red=["Goku"])
     text, data = tools.run_tool(ctx, "infer", map="King's Row", red=["Zarya"], blue=["Ana"])
-    assert len(data["blue"]) == 5 and "Ana" in data["blue"]
+    assert len(data["blue"]) == 6 and "Ana" in data["blue"]
     assert "optimal comp" in text
 
 

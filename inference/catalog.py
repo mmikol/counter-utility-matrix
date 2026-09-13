@@ -262,7 +262,7 @@ def write_docs(catalog, path=DOCS_PATH):
            "## How a composition is scored", "",
            "```", "COMP = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
            "For a board (map, red picks, locked blue picks) the solver enumerates",
-           "candidate fives around the locked picks, computes every team, enemy and",
+           "candidate sixes around the locked picks, computes every team, enemy and",
            "matchup metric for each (the same functions the board renders as facts),",
            "then:", "",
            "- **constraints** discard a candidate whose `require` fails (soft ones",

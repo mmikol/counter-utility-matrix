@@ -4,9 +4,9 @@ transcript.
 The one write path for recommendations, whoever decided them - the solver
 (`infer`) or a Claude Code session following the /comp skill. Two gates:
 
-  shape    exactly five picks, each with a hero, a why, and evidence
+  shape    exactly six picks, each with a hero, a why, and evidence
   meaning  heroes must exist, and every cited fact id must be one the
-           board for (map, red, the five picks) actually shows - a
+           board for (map, red, the six picks) actually shows - a
            citation of nothing is refused, not stored
 
     python -m inference.record < answer.json        # {"question", "map",
@@ -27,6 +27,7 @@ from data.common import ROOT
 from data.proprietary.pipeline import USER
 from user.facts import engine as facts_engine
 from user.facts import model
+from user.facts.compute import TEAM_SIZE
 
 REC_DIR = os.path.join(ROOT, "data", "proprietary", "recommendations")
 
@@ -36,9 +37,9 @@ def validate_answer(answer):
     for key in ("playstyle", "reasoning", "picks"):
         if not answer.get(key):
             raise ValueError("answer is missing %r" % key)
-    if len(answer["picks"]) != 5:
-        raise ValueError("a composition is exactly five picks, got %d"
-                         % len(answer["picks"]))
+    if len(answer["picks"]) != TEAM_SIZE:
+        raise ValueError("a composition is exactly %d picks, got %d"
+                         % (TEAM_SIZE, len(answer["picks"])))
     for pick in answer["picks"]:
         for key in ("hero", "why", "evidence"):
             if not pick.get(key):
@@ -111,7 +112,7 @@ def record(cx, question, answer, map_name=None, red=(), blue=(),
            model_name="claude-code-session"):
     """The whole path: gates, tables, mirror, transcript -> (rec_id, path).
 
-    The evidence board is (map, red, the five picks): the facts a pick
+    The evidence board is (map, red, the six picks): the facts a pick
     cites are the ones the user layer shows for that exact board."""
     validate_answer(answer)
     world = model.load(cx)

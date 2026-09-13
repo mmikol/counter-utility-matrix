@@ -133,9 +133,10 @@ def test_playbook_styles_share_one_vocabulary(rows):
         assert not off, "%s uses unknown styles: %s" % (table, off)
 
 
-def test_archetypes_describe_a_full_five_stack(rows):
+def test_archetypes_describe_a_full_six_stack(rows):
+    from user.facts.compute import TEAM_SIZE
     for style, total in rows("select style, sum(slots) from comp_archetypes group by 1"):
-        assert total == 5, "%s describes %d slots" % (style, total)
+        assert total == TEAM_SIZE, "%s describes %d slots" % (style, total)
 
 
 def test_synergies_are_canonical_pairs(one):

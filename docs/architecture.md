@@ -86,13 +86,13 @@ sequenceDiagram
     Facts-->>Board: F1..Fn - every fact about those heroes,<br/>the map, each team, the matchup
     Board->>Solver: /api/infer (map, red, blue)
     Solver->>Solver: shapes the constraints allow · per-role pools ·<br/>every candidate scored · local search
-    Solver->>Facts: the FactSet for (map, red, the optimal five)
-    Solver-->>Board: the five with reasons and [F#] citations,<br/>score per heuristic, alternatives
+    Solver->>Facts: the FactSet for (map, red, the optimal six)
+    Solver-->>Board: the six with reasons and [F#] citations,<br/>score per heuristic, alternatives
     You->>Board: "record this comp"
-    Board->>Solver: record: gates (five real heroes,<br/>citations the board showed), tables, transcript
+    Board->>Solver: record: gates (six real heroes,<br/>citations the board showed), tables, transcript
 ```
 
-With five blue picks locked the same endpoint evaluates your five against
+With six blue picks locked the same endpoint evaluates your six against
 the field the solver would have searched, and says where it ranks.
 
 ## The life of the database

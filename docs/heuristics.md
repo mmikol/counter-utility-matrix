@@ -16,7 +16,7 @@ COMP = ARGMAX[ STRATEGIES( FACTS ) ]
 ```
 
 For a board (map, red picks, locked blue picks) the solver enumerates
-candidate fives around the locked picks, computes every team, enemy and
+candidate sixes around the locked picks, computes every team, enemy and
 matchup metric for each (the same functions the board renders as facts),
 then:
 
@@ -60,20 +60,20 @@ still carry the comp, but it pays for the risk up front.
 Pair with `availability`, which prices every pick's ban rate smoothly;
 this file is the cliff, that one is the slope.
 
-#### One tank, two damage, two supports (`role-queue-shape`, shape)
+#### At most two tanks (`open-queue-tanks`, shape)
 
-`require team.tanks == 1 and team.damage == 2 and team.supports == 2` (hard)
+`require team.tanks <= 2` (hard)
 
-The shape Competitive Role Queue enforces, and the shape every rate in
-META was measured under. A composition that is not 1-2-2 is not
-comparable to the numbers the other heuristics lean on, so the solver
-does not consider one.
+The game is 6v6 Open Queue: six picks, any mix of roles, with the one
+limit the queue itself enforces - no more than two tanks. That limit is
+the only shape constraint the solver applies. Everything else about a
+comp's shape (no support, four damage, a single frontline) is scored, not
+forbidden: the shape flags on the board name it, `under-healed` and
+`squish-limit` charge for it, and the goals decide whether it is worth
+the price.
 
-Open Queue allows other shapes. To search them, relax this file - for
-example `require: team.supports >= 1 and team.tanks <= 2` - and expect
-the solver to return shapes the rates cannot vouch for. The shape flags
-on the board (TANKLESS, triple DPS, solo heal) keep naming what such a
-comp gives up.
+To search Role Queue's 2-2-2 instead, tighten this file to
+`require: team.tanks == 2 and team.damage == 2 and team.supports == 2`.
 
 ### Goals
 
@@ -99,7 +99,7 @@ matchup goals already price what the enemy does to it.
 
 `maximize team.map_win_mean` - mean win rate on the map (the all-ranks mean without a map). weight 2
 
-Mean all-ranks win rate of the five on the selected map (the roster-wide
+Mean all-ranks win rate of the six on the selected map (the roster-wide
 win rate when no map is set, so the goal still ranks comps on a blank
 board). Map rates are the closest measured thing to "this comp works
 here"; specialists and off-map liabilities are the same numbers seen
@@ -109,7 +109,7 @@ per hero on the board.
 
 `maximize team.map_strategy_hits` - picks the playbook lists among their best maps here. weight 1; when `map.known == 1`
 
-How many of the five appear in counterpick.gg's best-maps list for the
+How many of the six appear in counterpick.gg's best-maps list for the
 selected map. A second opinion on `map-fit` from a source that ranks
 rather than counts; alignment with it is a cited argument.
 
@@ -119,7 +119,7 @@ rather than counts; alignment with it is a cited argument.
 
 Share of picks tagged with the playstyle the map rewards most (the
 authored `map_playstyle.csv`, top score). King's Row rewards brawl, so
-a five of brawl heroes fits it fully; a poke comp there fights the
+a six of brawl heroes fits it fully; a poke comp there fights the
 geometry as well as the enemy.
 
 Judged, not measured - the wiki assigns styles and the operator scores
@@ -149,8 +149,8 @@ information about who wins a straight trade.
 
 The share of revealed enemies at least one of our picks answers, from
 the playbook's counters table. The single strongest lever the database
-holds: a comp that answers all five has a plan for every fight, and one
-that answers two is hoping the other three misplay.
+holds: a comp that answers all six has a plan for every fight, and one
+that answers two is hoping the other four misplay.
 
 Weighted highest because, under the optimal-play assumption, unanswered
 enemies do not misplay.
@@ -185,10 +185,10 @@ we close fast or trade cover.
 
 `maximize team.availability` - chance every pick survives the ban screen: product of (1 - ban). weight 1
 
-The product over the five of (1 - ban rate): the chance the whole comp
-is playable after bans. Five ten-percent picks lose the full plan four
-matches in ten; the product makes that visible where the individual
-rates hide it.
+The product over the six of (1 - ban rate): the chance the whole comp
+is playable after bans. Six ten-percent picks lose the full plan nearly
+half the time; the product makes that visible where the individual rates
+hide it.
 
 #### Prefer what is winning right now (`meta-strength`, meta)
 
@@ -205,7 +205,7 @@ snapshot's vintage, so read the WARNING fact when patches shipped since.
 
 Distinct subroles divided by picks. Two flankers or two survivors
 overlap jobs even when the role counts look fine; a comp whose every
-pick brings a different job covers more situations with the same five
+pick brings a different job covers more situations with the same six
 slots.
 
 #### Bring sustained healing (`healing-floor`, sustain)
@@ -220,7 +220,7 @@ supports who together heal little); this goal rewards the slope.
 
 `maximize team.synergy_score` - summed synergy scores among the picks. weight 2.5
 
-The summed scores of authored synergy pairs among the five, from
+The summed scores of authored synergy pairs among the six, from
 `data/proprietary/synergies.csv`. Every pair carries the author's
 reasoning, so a high score is not a vibe - it is a stack of documented
 interactions: nano on the dive tank, speed on the brawl core, pocket on
@@ -277,7 +277,7 @@ they do.
 #### What the score is (`objective`, assumptions)
 
 
-For every candidate five, the solver computes the same team, enemy and
+For every candidate six, the solver computes the same team, enemy and
 matchup metrics the board shows as facts, then sums: each goal's weight
 times its metric normalised to [0, 1] across the candidates (flipped
 for minimize), plus each scored strategy's weight times its bonus minus
@@ -305,11 +305,11 @@ against a guess about the players.
 
 #### Do not field a whole team of dive bait (`squish-limit`, durability)
 
-weight 1; penalty `max(0, team.squish_count - 3) * 1.0`
+weight 1; penalty `max(0, team.squish_count - 4) * 1.0`
 
-Picks at or under 250 pool are one-dive targets. Three of them is the
-standard shape; every one past that is a target the enemy's optimal
-play will find first.
+Picks at or under 250 pool are one-dive targets. Four of them is the
+standard 2-2-2 shape of a 6v6; every one past that is a target the
+enemy's optimal play will find first.
 
 #### Shut off a heavy heal line (`anti-heal-answer`, matchup)
 
@@ -362,11 +362,11 @@ plus the next one. Two answers rewarded.
 
 #### A dive comp needs to arrive together (`dive-needs-mobility`, shape)
 
-weight 1; when `map.style_top == 'dive' or team.style_lean == 'dive'`; bonus `min(team.mobility_count, 4) * 0.5`
+weight 1; when `map.style_top == 'dive' or team.style_lean == 'dive'`; bonus `min(team.mobility_count, 5) * 0.5`
 
 On a map that rewards dive, or when the picks already lean dive, every
 pick with a movement tool is one who arrives with the engage instead of
-watching it from the choke. Four rewarded; the fifth is the anchor.
+watching it from the choke. Five rewarded; the sixth is the anchor.
 
 #### Two supports must actually heal (`under-healed`, sustain)
 
@@ -383,7 +383,7 @@ this strategy makes the solver pay for it rather than stumble into it.
 
 Every win, pick and ban rate was measured on Competitive Role Queue,
 console, Americas, under the patch and season on the snapshot fact.
-That is the closest published proxy for Open Queue and it is stated
+That is the closest published proxy for 6v6 Open Queue and it is stated
 every time rather than assumed away. Lean on rates for direction, not
 decimals; a RANK-SENSITIVE fact means the advice must know its
 audience.
@@ -404,7 +404,7 @@ the `team.*` metrics computed for the red side.
 | key | meaning |
 | --- | --- |
 | `team.size` | picks locked on this team |
-| `team.open_slots` | slots still open (5 - size) |
+| `team.open_slots` | slots still open (6 - size) |
 | `team.tanks` | tank count |
 | `team.damage` | damage count |
 | `team.supports` | support count |

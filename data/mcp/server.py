@@ -89,7 +89,7 @@ class Server:
                 " user layer (facts: every fact the database holds about a"
                 " board of map + red + blue picks) and the inference layer"
                 " (infer: the optimal composition under the markdown"
-                " heuristics; evaluate: score a full five). Read-only SQL"
+                " heuristics; evaluate: score a full six). Read-only SQL"
                 " via query."),
         }
 

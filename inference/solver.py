@@ -1,7 +1,9 @@
-"""The solver: the optimal five under the catalog, players playing optimally.
+"""The solver: the optimal six under the catalog, players playing optimally.
 
     enumerate  every shape the hard constraints allow, filled around the
                locked picks from a per-role pool ranked by a cheap prior
+               (six per role by default: about a second for a live click;
+               eight is five times the field for a few points more)
     score      constraints prune, goals normalise and weigh, scored
                strategies add
     refine     local search from the best few: swap any slot for any
@@ -11,6 +13,7 @@
 import itertools
 
 from user.facts import compute
+from user.facts.compute import TEAM_SIZE
 from inference.expr import lookup
 
 SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size",
@@ -37,7 +40,7 @@ class Candidate:
 
 
 class Solver:
-    def __init__(self, world, m, red, locked, catalog, pool_size=8):
+    def __init__(self, world, m, red, locked, catalog, pool_size=6):
         self.world, self.m, self.red = world, m, list(red)
         self.locked = list(locked)
         self.catalog = catalog
@@ -142,14 +145,14 @@ class Solver:
                        and set(h.require.names) <= SHAPE_KEYS
                        and (h.when is None or set(h.when.names) <= SHAPE_KEYS)]
         out = []
-        for t in range(6):
-            for d in range(6 - t):
-                s = 5 - t - d
+        for t in range(TEAM_SIZE + 1):
+            for d in range(TEAM_SIZE + 1 - t):
+                s = TEAM_SIZE - t - d
                 if (t < locked_counts["tank"] or d < locked_counts["damage"]
                         or s < locked_counts["support"]):
                     continue
                 stub = {"team": {"tanks": t, "damage": d, "supports": s,
-                                 "size": 5, "open_slots": 0}}
+                                 "size": TEAM_SIZE, "open_slots": 0}}
                 if all(not self._holds(h, dict(stub, params=h.params))
                        or bool(h.require.eval(dict(stub, params=h.params)))
                        for h in shape_rules):
@@ -253,8 +256,8 @@ class Solver:
         return out if improved_any else ranked
 
 
-def evaluate_comp(world, m, red, heroes, catalog, pool_size=8):
-    """Score one full five against the field the solver would search."""
+def evaluate_comp(world, m, red, heroes, catalog, pool_size=6):
+    """Score one full six against the field the solver would search."""
     solver = Solver(world, m, red, [], catalog, pool_size)
     field = [solver.prepare(c) for c in solver.enumerate()]
     solver.considered = len(field)

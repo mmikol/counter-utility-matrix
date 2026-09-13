@@ -3,8 +3,8 @@
     python -m inference.serve --port 8019
 
     GET  /health                       the catalog size and the database state
-    GET  /infer?map=&red=&blue=[&top=&pool=]   the optimal five
-    GET  /evaluate?map=&red=&blue=     a full five scored against the field
+    GET  /infer?map=&red=&blue=[&top=&pool=]   the optimal six
+    GET  /evaluate?map=&red=&blue=     a full six scored against the field
     GET  /heuristics                   the catalog
     POST /record  {question, map, red, blue, model, answer}   the gates + tables
 
@@ -23,6 +23,7 @@ import psycopg
 
 from data import common
 from user.facts import model
+from user.facts.compute import TEAM_SIZE
 from inference import catalog as catalog_module
 from inference import engine
 from inference import record as record_module
@@ -40,10 +41,10 @@ def board(query):
 def handle_infer(cx, query):
     map_name, red, blue = board(query)
     top = int((query.get("top") or ["5"])[0])
-    pool = int((query.get("pool") or ["8"])[0])
+    pool = int((query.get("pool") or ["6"])[0])
     world = model.load(cx)
     try:
-        if len(blue) == 5:
+        if len(blue) == TEAM_SIZE:
             result = engine.evaluate(world, map_name, red, blue, pool_size=pool)
         else:
             result = engine.infer(world, map_name, red, blue, top=top, pool_size=pool)

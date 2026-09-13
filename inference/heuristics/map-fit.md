@@ -8,7 +8,7 @@ weight: 2
 ---
 # Win on this ground
 
-Mean all-ranks win rate of the five on the selected map (the roster-wide
+Mean all-ranks win rate of the six on the selected map (the roster-wide
 win rate when no map is set, so the goal still ranks comps on a blank
 board). Map rates are the closest measured thing to "this comp works
 here"; specialists and off-map liabilities are the same numbers seen

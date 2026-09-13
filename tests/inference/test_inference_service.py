@@ -12,12 +12,12 @@ pytestmark = pytest.mark.invariant
 def test_service_infers_evaluates_and_lists(db):
     data, code = serve.handle_infer(db, {"map": ["King's Row"], "red": ["Zarya"],
                                          "blue": ["Ana"]})
-    assert code == 200 and data["kind"] == "infer" and len(data["blue"]) == 5
-    data, code = serve.handle_infer(db, {"blue": ["Reinhardt", "Widowmaker", "Bastion",
-                                                  "Ana", "Lúcio"]})
+    assert code == 200 and data["kind"] == "infer" and len(data["blue"]) == 6
+    data, code = serve.handle_infer(db, {"blue": ["Reinhardt", "Zarya", "Widowmaker",
+                                                  "Bastion", "Ana", "Lúcio"]})
     assert code == 200 and data["kind"] == "evaluate"
     data, code = serve.handle_evaluate(db, {"blue": ["Ana"]})
-    assert code == 400 and "five" in data["error"]
+    assert code == 400 and "exactly 6" in data["error"]
     data, code = serve.handle_heuristics()
     assert code == 200 and len(data["heuristics"]) >= 30
     data, code = serve.handle_record(db, {"answer": {"picks": []}})

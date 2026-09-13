@@ -19,6 +19,7 @@ from collections import Counter, OrderedDict
 
 from user.facts.model import ROLES, SQUISHY_POOL
 
+TEAM_SIZE = 6             # 6v6 Open Queue
 SPECIALIST_DELTA = 2.5
 RANK_SENSITIVE = 6.0
 TREND_POINTS = 1.5
@@ -26,7 +27,7 @@ TREND_POINTS = 1.5
 TEAM_METRICS = OrderedDict([
     # shape
     ("size", "picks locked on this team"),
-    ("open_slots", "slots still open (5 - size)"),
+    ("open_slots", "slots still open (%d - size)" % TEAM_SIZE),
     ("tanks", "tank count"), ("damage", "damage count"), ("supports", "support count"),
     ("subrole_diversity", "distinct subroles / size (1.0 = every pick a different job)"),
     ("subroles", "the subroles present"),
@@ -171,7 +172,7 @@ def team_metrics(world, heroes, m=None, enemies=()):
     heroes = list(heroes)
     n = len(heroes)
     t = {}
-    t["size"], t["open_slots"] = n, max(0, 5 - n)
+    t["size"], t["open_slots"] = n, max(0, TEAM_SIZE - n)
     for role in ROLES:
         t[{"tank": "tanks", "damage": "damage", "support": "supports"}[role]] = \
             sum(1 for h in heroes if h.role == role)

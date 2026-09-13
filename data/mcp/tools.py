@@ -406,7 +406,7 @@ def facts_tool(ctx, map=None, red=(), blue=(), format="lines"):
     return text, payload
 
 
-@tool("infer", "The INFERENCE LAYER: the optimal five for this board under"
+@tool("infer", "The INFERENCE LAYER: the optimal six for this board under"
       " the markdown heuristics in inference/heuristics/ (players assumed"
       " to play optimally). Locked blue picks are kept; the rest is"
       " searched. Returns the comp, per-pick reasons with fact citations,"
@@ -414,8 +414,8 @@ def facts_tool(ctx, map=None, red=(), blue=(), format="lines"):
       dict(BOARD, top={"type": "integer", "description": "alternatives to"
                                                          " return (default 5)"},
            pool={"type": "integer", "description": "candidates per role the"
-                                                   " search keeps (default 10)"}))
-def infer_tool(ctx, map=None, red=(), blue=(), top=5, pool=10):
+                                                   " search keeps (default 6)"}))
+def infer_tool(ctx, map=None, red=(), blue=(), top=5, pool=6):
     from user.facts import model
     from inference import engine
     with ctx.connect() as cx:
@@ -428,7 +428,7 @@ def infer_tool(ctx, map=None, red=(), blue=(), top=5, pool=10):
     return result.rendered(), result.to_dict()
 
 
-@tool("evaluate", "Score a FULL blue five against the heuristics without"
+@tool("evaluate", "Score a FULL blue six against the heuristics without"
       " searching: the breakdown per heuristic, constraint violations, and"
       " how it ranks against the optimum.", BOARD, ["blue"])
 def evaluate_tool(ctx, map=None, red=(), blue=()):
@@ -452,7 +452,7 @@ def heuristics_tool(ctx):
 
 
 @tool("record", "Persist a decided composition into the INFERENCE tables"
-      " and a markdown transcript, under the storage gates: exactly five"
+      " and a markdown transcript, under the storage gates: exactly six"
       " real heroes, each citing fact ids (F#) the board actually showed.",
       dict(BOARD, question={"type": "string"},
            model={"type": "string", "description": "who decided (default"

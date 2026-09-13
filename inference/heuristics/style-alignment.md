@@ -11,7 +11,7 @@ when: map.known == 1
 
 Share of picks tagged with the playstyle the map rewards most (the
 authored `map_playstyle.csv`, top score). King's Row rewards brawl, so
-a five of brawl heroes fits it fully; a poke comp there fights the
+a six of brawl heroes fits it fully; a poke comp there fights the
 geometry as well as the enemy.
 
 Judged, not measured - the wiki assigns styles and the operator scores
