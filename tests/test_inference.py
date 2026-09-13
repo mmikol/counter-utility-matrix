@@ -375,3 +375,41 @@ def test_catalog_parity_the_table_matches_the_code(db):
         " AND tag LIKE 'derived:%'").fetchall()}
     assert in_code == in_table, (in_code ^ in_table)
     db.rollback()
+
+
+def test_antiheal_names_the_grenade(db):
+    lines = _derived(db, "King's Row", ["Ana", "Zarya"], allies=["Mercy"])
+    anti = [t for tab, t in lines if tab == "derived:antiheal"]
+    assert anti and "Ana" in anti[0] and "-100" in anti[0], anti
+    db.rollback()
+
+
+def test_kit_arithmetic_over_the_locked_picks(db):
+    lines = _derived(db, "King's Row", ["Zarya"], allies=["Ana", "Reinhardt"])
+    tabs = dict((tab, t) for tab, t in lines)
+    assert "weakest link: Ana at 250" in tabs["derived:weakestlink"]
+    assert "derived:teampool" in tabs and "derived:cdtempo" in tabs
+    assert "derived:availability" in tabs and "derived:pickmass" in tabs
+    # Ana and Reinhardt are an authored pair: 1 of 1 possible edges
+    assert "1 of 1" in tabs["derived:cohesion"], tabs["derived:cohesion"]
+    assert "derived:isolated" not in tabs
+    db.rollback()
+
+
+def test_burst_windows_run_both_directions(db):
+    lines = _derived(db, "King's Row", ["Zarya", "Pharah"],
+                     allies=["Ana", "Reinhardt"])
+    tabs = {tab for tab, _ in lines}
+    assert "derived:burstsurvive" in tabs and "derived:burstceiling" in tabs
+    db.rollback()
+
+
+def test_the_wide_tranche_emits_for_a_full_question(db):
+    lines = _derived(db, "King's Row", ["Zarya", "Pharah"],
+                     allies=["Ana", "Reinhardt"])
+    tabs = {tab for tab, _ in lines}
+    for tag in ("derived:dmgmix", "derived:hitscan", "derived:rangeprofile",
+                "derived:ultcensus", "derived:coverbreadth",
+                "derived:banproof", "derived:synreach"):
+        assert tag in tabs, tag
+    db.rollback()

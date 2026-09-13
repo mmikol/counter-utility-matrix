@@ -36,7 +36,7 @@ pipeline, scraping the sources once (a few polite minutes; page caches land
 in `.cache-*/` so later builds cost almost no requests). Then the UI serves
 at **http://localhost:8017**: a dashboard of the whole database, a **live
 evidence board** built for use during a match - click heroes onto their
-team and yours as picks reveal themselves, choose the map, and the ~150
+team and yours as picks reveal themselves, choose the map, and the ~190
 cited lines a comp decision rests on rebuild on every click, including the
 `derived:` analytics the database computes itself (role-shape flags,
 healing supply, coverage, net matchup, draft skeletons; the 100-formula

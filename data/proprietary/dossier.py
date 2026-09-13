@@ -250,7 +250,29 @@ def build(cx, map_name=None, enemies=(), allies=()):
     for ally_id in ctx["ally_ids"]:
         name = _rows(cx, "select name from heroes where hero_id=%s",
                      ally_id)[0][0]
-        ev.add("heroes", "your locked pick: " + _hero_card(cx, ally_id, name))
+        card = _hero_card(cx, ally_id, name)
+        rates = _rows(cx, """
+            select m.win_rate, m.pick_rate from hero_meta m
+            join competitive_tiers t on t.tier_id=m.tier_id
+            join meta_snapshots s using(snapshot_id)
+            join sources src on src.source_id=s.source_id
+            where m.hero_id=%s and t.code='all' and src.code='blizzard'
+            and m.win_rate is not null limit 1""", ally_id)
+        if rates:
+            card += "; wins %.1f%% picks %.1f%%" % rates[0]
+        spread = _rank_sensitivity(cx, ally_id)
+        if spread:
+            card += "; RANK-SENSITIVE %.1f%%-%.1f%% by rank" % spread
+        ev.add("heroes", "your locked pick: " + card)
+        _enemy_depth(ev, cx, ally_id, name)
+        answers = [a for a, in _rows(cx, """
+            select e.name from counters c
+            join heroes e on e.hero_id = c.hero_id
+            where c.countered_by_id=%s and c.hero_id = any(%s)
+            order by e.name""", ally_id, list(enemy_set) or [0])]
+        if answers:
+            ev.add("counters", "your %s answers enemy %s"
+                   % (name, ", ".join(answers)))
         partners = _rows(cx, """
             select case when s.hero_id=%s then o.name else h.name end,
                    s.score, s.note from synergies s
@@ -612,6 +634,8 @@ def _derived_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
 
     _team_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
                      ally_mark, tune)
+    _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
+                        tune)
 
     # what the enemy comp leans toward
     if len(enemy_set) >= 2:
@@ -624,6 +648,294 @@ def _derived_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
                           for s, n in lean),
                 " - leans %s" % lean[0][0]
                 if lean[0][1] > len(enemy_set) / 2 else ""))
+
+
+def _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
+                        tune):
+    """The wide tranche of the catalog: kit arithmetic, matchup algebra,
+    synergy-graph structure, and map/meta screens - one line each, exact
+    definitions in the heuristics table rows they are numbered by."""
+    E, A = list(enemy_set), list(ally_ids)
+
+    def kit_max(ids, key):
+        """{hero_id: max value of `key` across ability and weapon stats}."""
+        if not ids:
+            return {}
+        return dict(_rows(cx, """
+            select hero_id, max(v) from (
+                select a.hero_id, s.value v from ability_stats s
+                join abilities a using(ability_id)
+                join stat_keys k using(stat_key_id)
+                where k.code = %s and s.value is not null
+                  and a.hero_id = any(%s)
+                union all
+                select w.hero_id, s.value from weapon_stats s
+                join weapon_configs c on c.config_id = s.config_id
+                join weapons w on w.weapon_id = c.weapon_id
+                join stat_keys k on k.stat_key_id = s.stat_key_id
+                where k.code = %s and s.value is not null
+                  and w.hero_id = any(%s)) t group by 1""",
+            key, ids, key, ids))
+
+    pools = dict(_rows(cx, """select hero_id, coalesce(health,0)
+        + coalesce(shield,0) + coalesce(armor,0) from heroes
+        where hero_id = any(%s)""", list(dict.fromkeys(A + E + cand_ids))))
+
+    # --- enemy-facing kit arithmetic ------------------------------------
+    if E:
+        antiheal = _rows(cx, """
+            select h.name, a.name, min(s.value) from ability_stats s
+            join abilities a using(ability_id)
+            join heroes h on h.hero_id = a.hero_id
+            join stat_keys k using(stat_key_id)
+            where k.code='healing_mod' and s.value < 0 and a.hero_id = any(%s)
+            group by 1, 2""", E)
+        if antiheal:
+            ev.add("derived:antiheal", "anti-heal on the field: %s - a"
+                   " sustain comp answers this or dies to it" % "; ".join(
+                       "%s's %s (%g%% healing)" % r for r in antiheal))
+        ebig = kit_max(E, "damage")
+        if ebig and A:
+            top_e = max(ebig, key=lambda h: ebig[h])
+            weakest = min(A, key=lambda h: pools.get(h, 0))
+            ev.add("derived:burstsurvive",
+                   "focus-fire check: your weakest locked pool is %s at %d"
+                   " vs %s's biggest damage figure %g"
+                   % (names[weakest], pools.get(weakest, 0), names[top_e],
+                      ebig[top_e]))
+            dead = [names[h] for h in A if pools.get(h, 0) <= ebig[top_e]]
+            if dead:
+                ev.add("derived:oneshot", "one-shot exposure: %s can be"
+                       " deleted by a single %g-damage window from %s"
+                       % (", ".join(dead), ebig[top_e], names[top_e]))
+        if A:
+            abig = kit_max(A, "damage")
+            if abig:
+                top_a = max(abig, key=lambda h: abig[h])
+                soft = min(E, key=lambda h: pools.get(h, 9999))
+                ev.add("derived:burstceiling",
+                       "your burst ceiling: %s's %g vs their softest pool"
+                       " %s at %d - %s"
+                       % (names[top_a], abig[top_a], names[soft],
+                          pools.get(soft, 0),
+                          "a kill window exists"
+                          if abig[top_a] >= pools.get(soft, 0)
+                          else "no solo kill window; stack damage"))
+
+    # --- locked-team kit arithmetic --------------------------------------
+    if A:
+        subs = _rows(cx, """select sr.name, count(*) from heroes h
+            join subroles sr using(subrole_id)
+            where h.hero_id = any(%s) group by 1 order by 2 desc, 1""", A)
+        ev.add("derived:shape", "subrole balance: %d distinct jobs across"
+               " %d locked picks (%s)" % (len(subs), len(A), ", ".join(
+                   "%s x%d" % s if s[1] > 1 else s[0] for s in subs)))
+        ev.add("derived:teampool", "team effective HP locked in: %d across"
+               " %d picks" % (sum(pools.get(h, 0) for h in A), len(A)))
+        squishy = [names[h] for h in A if pools.get(h, 0) <= 225]
+        if squishy:
+            ev.add("derived:squish", "squish index: %d/%d locked picks at"
+                   " 225 pool or less (%s) - dive bait if unprotected"
+                   % (len(squishy), len(A), ", ".join(squishy)))
+        weakest = min(A, key=lambda h: pools.get(h, 0))
+        ev.add("derived:weakestlink", "weakest link: %s at %d pool - focus"
+               " fire finds the minimum, not the average"
+               % (names[weakest], pools.get(weakest, 0)))
+        over = kit_max(A, "overhealth")
+        if over:
+            ev.add("derived:overhealth", "overhealth supply: %g of burst"
+                   " insurance the healing number does not see (%s)"
+                   % (sum(float(v) for v in over.values()), ", ".join(
+                       "%s %g" % (names[h], v) for h, v in over.items())))
+        wt = _rows(cx, """select w.hero_id, c.weapon_type from weapon_configs c
+            join weapons w using(weapon_id)
+            where w.hero_id = any(%s) and c.weapon_type is not null""", A)
+        mix = {}
+        for h, t in wt:
+            kind = ("hitscan" if "hitscan" in t else
+                    "beam" if "beam" in t else
+                    "melee" if "melee" in t else "projectile")
+            mix.setdefault(kind, set()).add(h)
+        if mix:
+            ev.add("derived:dmgmix", "damage identity locked in: %s"
+                   % "; ".join("%s: %s" % (k, ", ".join(
+                       sorted(names[h] for h in v)))
+                       for k, v in sorted(mix.items())))
+            hs = mix.get("hitscan", set())
+            ev.add("derived:hitscan", "hitscan census: %d locked (%s) - the"
+                   " measured proxy for anti-air" % (len(hs), ", ".join(
+                       sorted(names[h] for h in hs)) or "none"))
+        rng = kit_max(A, "range")
+        if rng:
+            vals = sorted(float(v) for v in rng.values())
+            med = vals[len(vals) // 2]
+            ev.add("derived:rangeprofile", "range profile: %s - median %gm"
+                   " reads as %s" % ("; ".join(
+                       "%s %gm" % (names[h], v) for h, v in rng.items()),
+                       med, "poke" if med >= 20 else "brawl"))
+        cds = _rows(cx, """select s.value from ability_stats s
+            join abilities a using(ability_id)
+            join stat_keys k using(stat_key_id)
+            where k.code='cooldown' and s.value is not null
+              and a.hero_id = any(%s)""", A)
+        if cds:
+            vals = sorted(float(v) for v, in cds)
+            med = vals[len(vals) // 2]
+            ev.add("derived:cdtempo", "cooldown tempo: median %gs across %d"
+                   " locked cooldowns - %s" % (med, len(vals),
+                   "high-uptime brawl tempo" if med <= 8
+                   else "cooldown-bound; pick your fights"))
+        ults = _rows(cx, """
+            select h.name, a.name, max(s.value) from abilities a
+            join ability_kinds k using(kind_id)
+            join heroes h on h.hero_id = a.hero_id
+            left join ability_stats s on s.ability_id = a.ability_id
+                and s.stat_key_id = (select stat_key_id from stat_keys
+                                     where code='damage')
+            where k.code='ultimate' and a.hero_id = any(%s)
+            group by 1, 2""", A)
+        dmg_ults = [(h, u, v) for h, u, v in ults if v is not None]
+        ev.add("derived:ultcensus", "damage-ult census: %d of %d locked"
+               " ultimates carry damage%s" % (len(dmg_ults), len(ults),
+               " (%s)" % ", ".join("%s's %s" % (h, u)
+                                   for h, u, _ in dmg_ults)
+               if dmg_ults else ""))
+        if dmg_ults:
+            ev.add("derived:ultburst", "ult burst stack: %g total - the"
+                   " ceiling a coordinated all-in is actually claiming"
+                   % sum(float(v) for _, _, v in dmg_ults))
+        bans = dict(_rows(cx, """
+            select m.hero_id, m.ban_rate from hero_meta m
+            join competitive_tiers t on t.tier_id=m.tier_id
+            join meta_snapshots s using(snapshot_id)
+            join sources src on src.source_id=s.source_id
+            where t.code='all' and src.code='blizzard'
+              and m.hero_id = any(%s)""", A))
+        avail = 1.0
+        for h in A:
+            avail *= 1.0 - float(bans.get(h) or 0) / 100.0
+        ev.add("derived:availability", "expected availability: %.0f%% chance"
+               " every locked pick survives the ban screen" % (avail * 100))
+        picks_ = _rows(cx, """
+            select coalesce(sum(m.pick_rate), 0) from hero_meta m
+            join competitive_tiers t on t.tier_id=m.tier_id
+            join meta_snapshots s using(snapshot_id)
+            join sources src on src.source_id=s.source_id
+            where t.code='all' and src.code='blizzard'
+              and m.hero_id = any(%s)""", A)
+        ev.add("derived:pickmass", "pick-rate mass: %.1f summed - %s"
+               % (float(picks_[0][0]),
+                  "meta-shaped; expect practiced answers"
+                  if float(picks_[0][0]) >= 30
+                  else "off-meta lean; surprise value"))
+
+    # --- synergy-graph structure over the locked picks --------------------
+    if len(A) >= 2:
+        edges = _rows(cx, """select h.name, o.name, s.score from synergies s
+            join heroes h on h.hero_id=s.hero_id
+            join heroes o on o.hero_id=s.other_id
+            where s.hero_id = any(%s) and s.other_id = any(%s)""", A, A)
+        possible = len(A) * (len(A) - 1) // 2
+        score_sum = sum(int(sc) for _, _, sc in edges if sc is not None)
+        ev.add("derived:cohesion", "cohesion: %d of %d possible synergy"
+               " edges among locked picks (density %.2f, score sum %d)%s"
+               % (len(edges), possible, len(edges) / possible, score_sum,
+                  " - " + "; ".join("%s+%s" % (a, b) for a, b, _ in edges)
+                  if edges else ""))
+        paired = {n for a, b, _ in edges for n in (a, b)}
+        loners = [names[h] for h in A if names[h] not in paired]
+        if loners:
+            ev.add("derived:isolated", "isolated pick: %s has no documented"
+                   " partner among your locked picks - a solo act, name the"
+                   " plan for them" % ", ".join(loners))
+    if A and cand_ids:
+        reach = _rows(cx, """
+            select c.h, count(*) from (
+                select case when s.hero_id = any(%s) then s.other_id
+                            else s.hero_id end h
+                from synergies s
+                where (s.hero_id = any(%s)) <> (s.other_id = any(%s))) c
+            where c.h = any(%s) group by 1 order by 2 desc limit 6""",
+            A, A, A, cand_ids)
+        if reach:
+            ev.add("derived:synreach", "candidates who plug into your locked"
+                   " picks: %s" % ", ".join(
+                       "%s (%d edge%s)" % (names[h], n, "" if n == 1 else "s")
+                       for h, n in reach))
+
+    # --- coverage algebra beyond the raw counts ---------------------------
+    if E and A:
+        cover = _rows(cx, """select c.hero_id, c.countered_by_id from counters c
+            where c.hero_id = any(%s) and c.countered_by_id = any(%s)""",
+            E, A)
+        if cover:
+            distinct = {e for e, _ in cover}
+            ev.add("derived:coverbreadth", "counter diversity: %d distinct"
+                   " enemies answered through %d answer-edges - redundancy"
+                   " is the difference" % (len(distinct), len(cover)))
+            twice = sorted(names[e] for e in distinct
+                           if sum(1 for x, _ in cover if x == e) >= 2)
+            if twice:
+                ev.add("derived:doublecover", "double-covered: %s answered"
+                       " by two or more of your picks - ban-proof and"
+                       " swap-proof" % ", ".join(twice))
+            bans = dict(_rows(cx, """
+                select m.hero_id, m.ban_rate from hero_meta m
+                join competitive_tiers t on t.tier_id=m.tier_id
+                join meta_snapshots s using(snapshot_id)
+                join sources src on src.source_id=s.source_id
+                where t.code='all' and src.code='blizzard'
+                  and m.hero_id = any(%s)""", [a for _, a in cover]))
+            answerers = {a for _, a in cover}
+            if answerers:
+                risky = max(answerers, key=lambda h: float(bans.get(h) or 0))
+                left = {e for e, a in cover if a != risky}
+                ev.add("derived:banproof", "ban-resilient coverage: without"
+                       " %s (your highest-ban answer, %.0f%%) you still"
+                       " answer %d/%d named enemies"
+                       % (names[risky], float(bans.get(risky) or 0),
+                          len(left), len(E)))
+
+    # --- map and meta screens over the pool --------------------------------
+    if ctx["map_id"]:
+        top2 = _rows(cx, """select style, score from map_playstyle
+            where map_id=%s and score is not null
+            order by score desc limit 2""", ctx["map_id"])
+        if len(top2) == 2:
+            margin = int(top2[0][1]) - int(top2[1][1])
+            ev.add("derived:styleconsensus", "style consensus: %s by %d over"
+                   " %s - %s" % (top2[0][0], margin, top2[1][0],
+                   "bind the skeleton to it" if margin >= 2
+                   else "contested read; argue the style choice"))
+        offmap = _rows(cx, """
+            select h.name, mm.win_rate, hm.win_rate from map_meta mm
+            join hero_meta hm on hm.hero_id = mm.hero_id
+            join competitive_tiers t on t.tier_id = mm.tier_id
+            join competitive_tiers t2 on t2.tier_id = hm.tier_id
+            join meta_snapshots s on s.snapshot_id = hm.snapshot_id
+            join sources src on src.source_id = s.source_id
+            join heroes h on h.hero_id = mm.hero_id
+            where mm.map_id=%s and t.code='all' and t2.code='all'
+              and src.code='blizzard' and mm.hero_id = any(%s)
+              and mm.win_rate is not null and hm.win_rate is not null
+              and mm.win_rate <= hm.win_rate - %s
+            order by hm.win_rate - mm.win_rate desc limit 6""",
+            ctx["map_id"], cand_ids, tune["SPECIALIST_DELTA"])
+        for name, mwin, owin in offmap:
+            ev.add("derived:offmap", "off-map liability: %s runs %.1f%% here"
+                   " vs %.1f%% overall - comfort is measurably underperforming"
+                   % (name, mwin, owin))
+        overrated = _rows(cx, """
+            select h.name, m.win_rate, m.pick_rate from map_meta m
+            join competitive_tiers t on t.tier_id=m.tier_id
+            join heroes h using(hero_id)
+            where m.map_id=%s and t.code='all' and m.win_rate < 50
+              and m.pick_rate >= %s order by m.pick_rate desc limit 5""",
+            ctx["map_id"], 2 * tune["SLEEPER_PICK"])
+        for name, win, pick in overrated:
+            ev.add("derived:overrated", "over-picked underperformer: %s at"
+                   " %.1f%% pick but %.1f%% win here - do not copy the lobby"
+                   % (name, pick, win))
 
 
 def _team_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
