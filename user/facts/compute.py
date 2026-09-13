@@ -106,7 +106,7 @@ TEAM_METRICS = OrderedDict([
     ("map_pick_mass", "summed pick rate on the map"),
     ("map_specialists", "picks running %g+ points over their own baseline here" % SPECIALIST_DELTA),
     ("map_offmap", "picks running %g+ points under their own baseline here" % SPECIALIST_DELTA),
-    ("map_strategy_hits", "picks the playbook lists among their best maps here"),
+    ("map_strategy_hits", "picks counterpick lists among their best maps here"),
     # versus the other team (all 0 when the other team is empty)
     ("coverage", "enemies answered by at least one pick"),
     ("coverage_share", "coverage / enemies revealed"),

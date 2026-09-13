@@ -8,12 +8,12 @@ are on all of them: `source_id` (which source the row came from, see
 
 | domain | tables |
 | --- | --- |
-| **foundation** | `schema_migrations` · `sources` · `strategies` |
+| **foundation** | `schema_migrations` · `sources` |
 | **HEROES** | `abilities` · `ability_kinds` · `ability_modifiers` · `ability_stats` · `heroes` · `perk_ability_effects` · `perk_stats` · `perk_tiers` · `perks` · `roles` · `stat_keys` · `subroles` · `weapon_config_slots` · `weapon_configs` · `weapon_stats` · `weapons` |
 | **MAPS** | `game_modes` · `map_modes` · `map_stages` · `maps` |
 | **META** | `competitive_tiers` · `hero_meta` · `map_meta` · `meta_snapshots` · `patches` · `regions` · `seasons` |
 | **PLAYBOOK** | `comp_archetypes` · `counters` · `map_playstyle` · `map_strategy` · `playstyle` · `synergies` |
-| **INFERENCE** | `outcome_picks` · `outcomes` · `recommendation_evidence` · `recommendation_picks` · `recommendations` |
+| **INFERENCE** | `outcome_picks` · `outcomes` · `recommendation_evidence` · `recommendation_picks` · `recommendations` · `strategies` |
 
 
 ## `abilities`
@@ -458,7 +458,7 @@ The stat vocabulary. `unit` is the canonical unit for the stat, used when a valu
 
 ## `strategies`
 
-*foundation · 38 rows · `010_constraints_and_heuristics.sql`*
+*INFERENCE · 38 rows · `010_constraints_and_heuristics.sql`*
 
 strategies The mirror of the playbook: one row per markdown file in inference/strategies/ - its kind (constraint | heuristic), the frontmatter a machine scores by (metric, direction, weight, expressions, params) and the prose body a person argues with. Reloaded whole by load_playbook so a recommendation can cite the ids it was scored under; the files remain the truth.
 

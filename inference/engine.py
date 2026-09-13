@@ -122,7 +122,7 @@ def _reasons(fs, hero_name, locked):
             why.append("map specialist (%+.1f)" % f.value)
             evidence.append(f.id)
     cite("hero.map_style_fit", lambda f: "fits the %s style" % f.value)
-    cite("hero.map_strategy", lambda f: "playbook top-%d here" % f.value)
+    cite("hero.map_strategy", lambda f: "counterpick top-%d here" % f.value)
     cite("hero.vs_answered_by", lambda f: "CAUTION: answered by %s" % ", ".join(f.value))
     if not evidence:
         cite("hero.rate", lambda f: "wins %.1f%% across all ranks" % f.value["win"])

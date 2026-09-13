@@ -399,7 +399,7 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
                value={"map": world.maps[mid].name, "win": win}, source="map_meta",
                team=team)
     for position, mid in enumerate(h.best_maps, start=1):
-        fs.add("hero", name, "hero.best_map", "the playbook rates %s a top-%d pick on %s"
+        fs.add("hero", name, "hero.best_map", "counterpick rates %s a top-%d pick on %s"
                % (name, position, world.maps[mid].name), value=world.maps[mid].name,
                source="map_strategy", team=team)
     answered_by = sorted(world.heroes[x].name for x in world.answered_by.get(h.id, ()))
@@ -441,7 +441,7 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
                        " overall %.1f%% - %s" % (name, delta, m.name, h.win, label),
                        value=delta, source="derived:hero.map_delta", team=team)
         if m.id in h.best_maps:
-            fs.add("hero", name, "hero.map_strategy", "the playbook lists %s as a top-%d"
+            fs.add("hero", name, "hero.map_strategy", "counterpick lists %s as a top-%d"
                    " pick on this map" % (name, h.best_maps.index(m.id) + 1),
                    value=h.best_maps.index(m.id) + 1, source="map_strategy", team=team)
         if m.style_top and m.style_top in h.styles:
@@ -595,7 +595,7 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
         add("map_win_mean", "%s on %s: mean win rate %.1f%% (pick mass %.1f)"
             % (label, m.name, t["map_win_mean"], t["map_pick_mass"]), "%")
         add("map_specialists", "%s map fit on %s: %d specialist(s), %d off-map, %d listed"
-            " by the playbook here" % (label, m.name, t["map_specialists"], t["map_offmap"],
+            " by counterpick here" % (label, m.name, t["map_specialists"], t["map_offmap"],
                                        t["map_strategy_hits"]))
     if enemies:
         add("coverage", "%s coverage: answers %d/%d %s picks%s" % (

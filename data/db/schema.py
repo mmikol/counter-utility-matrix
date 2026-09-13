@@ -23,7 +23,7 @@ DOC_DOMAIN = {"001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES"
               "007_three_layers.sql": "PLAYBOOK",
               "008_schema_migrations.sql": "foundation",
               "009_outcomes.sql": "INFERENCE",
-              "010_rules_and_goals.sql": "INFERENCE"}
+              "010_constraints_and_heuristics.sql": "INFERENCE"}
 
 
 class SchemaError(Exception):
