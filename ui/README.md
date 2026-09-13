@@ -104,7 +104,7 @@ reference):
 
 | group | count | examples |
 | --- | --- | --- |
-| `team.*` | 91 | shape (`tanks`, `damage`, `supports`, `shape_flags`), sustain (`hps_peak`, `heal_ratio`), damage (`dps_floor`, `burst`), durability (`effective_hp`, `squish_count`), tools (`mobility_count`, `cc_count`, `hitscan`, `antiheal`, `barrier_count`), coverage of the enemy (`coverage_share`), cohesion (`synergy_score`), map fit (`map_specialists`, `map_strategy_hits`), style (`style_lean`) |
+| `team.*` | 91 | shape (`tanks`, `damage`, `supports`, `shape_flags`), sustain (`heal_peak_total`, `heal_ratio`), damage (`dps_floor`, `burst_max`), durability (`pool_total`, `squish_count`), tools (`mobility_count`, `cc_count`, `hitscan`, `antiheal`, `barrier_count`), coverage of the enemy (`coverage_share`), cohesion (`synergy_score`), map fit (`map_specialists`, `map_strategy_hits`), style (`style_lean`) |
 | `matchup.*` | 21 | the differences and ratios between the two teams: `dps_diff`, `burst_vs_heal`, `tempo_diff`, `ult_threat`, `style_lean_red` |
 | `map.*` | 7 | `known`, `mode`, `sided`, `side`, `style_top`, `style_margin`, `stages` |
 | `world.*` | 2 | `heal_bench`, `roster_size` |
