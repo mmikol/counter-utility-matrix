@@ -7,6 +7,7 @@ requests>=2.31
 pytest>=7.0
 pyflakes>=3.0        # unused imports and dead names
 
-# The default build target (db/ at the repo root) is an embedded Postgres.
-# With --dsn or DATABASE_URL pointing at your own server, this is optional.
-pgserver
+# The default local build target (db/cluster) is an embedded Postgres.
+# Skipped where no wheel exists (linux/arm64 - i.e. inside the Docker image,
+# which talks to a real postgres service via DATABASE_URL instead).
+pgserver; sys_platform == "darwin" or platform_machine in "x86_64 AMD64"

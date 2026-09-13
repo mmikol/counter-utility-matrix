@@ -1,0 +1,44 @@
+# docker compose up  ->  builds the database on first run, then serves the UI
+# at http://localhost:8017. Fully functional with an empty .env - the API key
+# only powers the optional, paid Recommend button.
+#
+# The app talks to a real postgres service (pgserver ships no linux/arm64
+# wheel, and a proper service is the better container shape anyway). Mounts
+# keep the expensive and the authored parts on the host: page caches make
+# rebuilds cheap, data/raw receives the CSV exports, data/proprietary is
+# where you author synergies/strategies and where transcripts land.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: overwatch
+      POSTGRES_PASSWORD: overwatch
+      POSTGRES_DB: overwatch
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U overwatch -d overwatch"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    ports:
+      - "8017:8017"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://overwatch:overwatch@db/overwatch
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./.cache-blizzard:/app/.cache-blizzard
+      - ./.cache-wiki:/app/.cache-wiki
+      - ./.cache-counterpick:/app/.cache-counterpick
+      - ./data/raw:/app/data/raw
+      - ./data/proprietary:/app/data/proprietary
+
+volumes:
+  pgdata:

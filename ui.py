@@ -271,8 +271,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(form(cx, v, error=str(error)))
         except Exception as error:
             kind = type(error).__name__
-            msg = ("no Claude API credentials - export ANTHROPIC_API_KEY or"
-                   " run `ant auth login`, then restart ui.py"
+            msg = ("no Claude API credentials - put ANTHROPIC_API_KEY in"
+                   " .env (copy .env.example), then restart ui.py"
                    if "Authentication" in kind or "api_key" in str(error)
                    else "%s: %s" % (kind, error))
             with psycopg.connect(dsn()) as cx:
@@ -280,8 +280,11 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print("overwatch-db ui: http://localhost:%d" % PORT)
+    import orchestrator
+    orchestrator.load_env()
+    host = os.environ.get("OVERWATCH_DB_UI_HOST", "127.0.0.1")
+    server = ThreadingHTTPServer((host, PORT), Handler)
+    print("overwatch-db ui: http://%s:%d" % (host, PORT))
     server.serve_forever()
 
 

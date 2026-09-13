@@ -75,9 +75,18 @@ python -m data.proprietary.recommend --map "King's Row" \
 ```
 
 `dossier.py` (deterministic, model-free, tested) assembles numbered evidence
-lines — E1, E2, ... — from the whole database: what the map rewards, who
-answers each enemy, the archetype slot shapes, every authored synergy, ban
-pressure. `recommend.py` shows that dossier to Claude (`claude-opus-5`;
+lines — E1, E2, ... — from the whole database, ~90–140 lines per question
+across 16+ tables: its own vintage first (capture date, patch, season, and a
+loud warning when patches shipped since), the map with its stages, styles,
+leaders and strugglers, each enemy profiled to kit depth (HP pools, ultimates,
+cooldowns, which abilities pierce barriers/matrix/deflect), the
+COUNTER = MAX[...] intersections pre-joined (`counters+map_meta`,
+`playstyle+map_meta`), a ranked candidate pool with full profiles,
+rank-sensitivity spreads and CAUTION lines where a known enemy answers the
+candidate, role passives, archetype slot shapes, every authored synergy and
+strategy note, meta leaders and ban pressure — and what this layer itself
+recommended before on the same map. `recommend.py` shows that dossier to
+Claude (`claude-opus-5`;
 override with `--model` or `OVERWATCH_DB_MODEL`) beside the strategy notes
 from `strategies/*.md`, and requires a schema-valid answer in which every
 pick cites the tags that justify it. Citations of evidence never shown, and

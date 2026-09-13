@@ -87,6 +87,27 @@ def build_parser(description, cache_dir=None):
     return parser
 
 
+def load_env():
+    """Read ROOT/.env into the environment, without overriding what is set.
+
+    Keeps local secrets (ANTHROPIC_API_KEY) and knobs (OVERWATCH_DB_MODEL)
+    out of the shell and out of git - .env is gitignored, .env.example is
+    the committed template. Deliberately minimal: KEY=VALUE lines, # comments,
+    optional single/double quotes. Not a dotenv dependency.
+    """
+    path = os.path.join(ROOT, ".env")
+    if not os.path.exists(path):
+        return
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            value = value.strip().strip("'\"")
+            os.environ.setdefault(key.strip(), value)
+
+
 def resolve_dsn(args):
     """Where to write: --local-server, --dsn, $DATABASE_URL, or db/ at the root."""
     explicit = args.dsn or os.environ.get("DATABASE_URL")
@@ -439,6 +460,7 @@ def qualified():
 
 
 def main():
+    load_env()
     parser = build_parser(__doc__)
     parser.add_argument(
         "command", nargs="?", default="update",

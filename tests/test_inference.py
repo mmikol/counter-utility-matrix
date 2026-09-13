@@ -146,3 +146,96 @@ def test_strategy_notes_are_citable_evidence(db):
     assert notes and "operator note 'test note': never overextend through chokes" \
         in notes[0][1]
     db.rollback()          # the note was test-only
+
+
+# --- the whole-database dossier --------------------------------------------
+
+def test_dossier_opens_with_its_own_vintage(db):
+    ev, _ = dossier.build(db)
+    first_tables = [t for _, t, _ in ev.lines[:4]]
+    assert "meta_snapshots" in first_tables
+    assert any("captured" in text and "Patch" in text
+               for _, t, text in ev.lines if t == "meta_snapshots")
+    db.rollback()
+
+
+def test_dossier_warns_when_rates_predate_a_patch(db):
+    src = db.execute("select source_id from sources limit 1").fetchone()[0]
+    db.execute("insert into patches (name, released, source_id)"
+               " values ('Test Future Patch', current_date, %s)", (src,))
+    ev, _ = dossier.build(db)
+    assert any("WARNING" in text and "pre-patch" in text
+               for _, t, text in ev.lines if t == "patches")
+    db.rollback()
+
+
+def test_enemy_kit_depth_reaches_cooldowns_and_ultimate(db):
+    ev, _ = dossier.build(db, None, ["Zarya"])
+    texts = [text for _, _, text in ev.lines]
+    assert any(text.startswith("enemy Zarya - Tank") and "ult " in text
+               for text in texts)
+    assert any("Zarya cooldowns:" in text for text in texts)
+    db.rollback()
+
+
+def test_candidates_are_profiled_with_rates(db):
+    ev, _ = dossier.build(db, "King's Row", ["Zarya"])
+    cards = [text for _, t, text in ev.lines if t == "candidates"]
+    assert len(cards) >= 10
+    assert all("wins " in c and " - " in c for c in cards)
+    assert any("RANK-SENSITIVE" in c for c in cards)
+    db.rollback()
+
+
+def test_caution_flags_candidates_the_enemy_already_answers(db):
+    # A candidate only exists if some enemy's answer-list pooled them, so the
+    # test mirrors the real shape: victim answers enemy A (pooled via A) and
+    # is answered by enemy B (cautioned via B) - real edges, not luck.
+    triples = db.execute("""
+        select v.name, a.name, b.name from counters pool
+        join counters threat on threat.hero_id = pool.countered_by_id
+        join heroes v on v.hero_id = pool.countered_by_id
+        join heroes a on a.hero_id = pool.hero_id
+        join heroes b on b.hero_id = threat.countered_by_id
+        join hero_meta m on m.hero_id = v.hero_id
+        join competitive_tiers t on t.tier_id = m.tier_id
+        where t.code = 'all' and m.win_rate is not null
+          and pool.hero_id <> threat.countered_by_id
+        order by m.win_rate desc limit 5""").fetchall()
+    assert triples, "no victim/A/B counter triple exists in the data"
+    for victim, a, b in triples:
+        ev, _ = dossier.build(db, None, [a, b])
+        cards = [t for _, tab, t in ev.lines if tab == "candidates"]
+        if not any(c.startswith(victim + " - ") for c in cards):
+            continue                    # fell outside the top-18 pool cut
+        cautions = [t for _, _, t in ev.lines if t.startswith("CAUTION")]
+        assert any(victim in c and b in c for c in cautions), (victim, a, b)
+        break
+    else:
+        raise AssertionError("no triple's victim survived the pool cut")
+    db.rollback()
+
+
+def test_map_section_includes_strugglers(db):
+    ev, _ = dossier.build(db, "King's Row")
+    assert any(text.startswith("struggle on King's Row")
+               for _, _, text in ev.lines)
+    db.rollback()
+
+
+def test_role_passives_are_evidence(db):
+    ev, _ = dossier.build(db)
+    assert sum(1 for _, t, _ in ev.lines if t == "subroles") >= 5
+    db.rollback()
+
+
+def test_prior_recommendations_become_evidence(db, one):
+    ev0, ctx = dossier.build(db, "Ilios")
+    heroes = [r[0] for r in db.execute(
+        "select name from heroes order by name limit 5")]
+    rec_id = persist(db, "history test", _fake_answer(ev0, heroes),
+                     ev0, ctx["map_id"], "P", "m", "{}")
+    ev, _ = dossier.build(db, "Ilios")
+    assert any("previously recommended (#%d" % rec_id in text
+               for _, t, text in ev.lines if t == "recommendations")
+    db.rollback()

@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+db/cluster
+.cache-blizzard
+.cache-wiki
+.cache-counterpick
+data/raw
+__pycache__
+**/__pycache__
+.pytest_cache
+.claude

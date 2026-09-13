@@ -27,7 +27,14 @@ import psycopg
 from data.proprietary import dossier, pipeline
 from data.proprietary.pipeline import USER
 
-DEFAULT_MODEL = os.environ.get("OVERWATCH_DB_MODEL", "claude-opus-5")
+# Claude Fable 5.1 at maximum reasoning. Thinking is always on for this
+# model (the parameter is omitted by design - explicit configs are rejected);
+# depth is driven by output_config.effort = "max". Server-side refusal
+# fallbacks are enabled by default per Anthropic's guidance for this model:
+# on a policy decline the API re-runs the request on a fallback model inside
+# the same call, routed by refusal category.
+DEFAULT_MODEL = os.environ.get("OVERWATCH_DB_MODEL", "claude-fable-5-1")
+EFFORT = os.environ.get("OVERWATCH_DB_EFFORT", "max")
 
 REC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        "recommendations")
@@ -87,6 +94,16 @@ Ground rules:
   them for direction, not decimals.
 - Respect ban pressure: if a hero is banned in a large share of lobbies, the
   comp must not depend on them; prefer a stable core.
+- The dossier opens with its own vintage; if it warns that patches shipped
+  since capture, say so and lean harder on kit facts and the playbook.
+- `candidates` lines are full profiles - kit, rates, RANK-SENSITIVE spreads.
+  A CAUTION line means a known enemy answers that candidate: picking them
+  anyway needs an argument, not silence.
+- Use enemy cooldown and pierces-defenses lines to justify HOW a pick wins,
+  not just that it does.
+
+When your analysis is complete, call the propose_composition tool exactly
+once with your final comp - the tool call IS the answer.
 """
 
 
@@ -107,20 +124,32 @@ def ask(cx, question, map_name=None, enemies=(), model=DEFAULT_MODEL):
     prompt = "\n\n".join(parts)
 
     client = anthropic.Anthropic()
-    with client.messages.stream(
+    # Fable 5.1 rejects forced tool_choice ("any"/"tool" return 400), so the
+    # tool call is requested by instruction under "auto"; strict: true on the
+    # tool still guarantees schema-valid arguments when it is called.
+    with client.beta.messages.stream(
         model=model,
-        max_tokens=16000,
+        max_tokens=32000,
+        betas=["server-side-fallback-2026-07-01"],
+        fallbacks="default",
+        output_config={"effort": EFFORT},
         system=SYSTEM,
         tools=[COMP_TOOL],
-        tool_choice={"type": "tool", "name": "propose_composition"},
+        tool_choice={"type": "auto"},
         messages=[{"role": "user", "content": prompt}],
     ) as stream:
         response = stream.get_final_message()
 
     if response.stop_reason == "refusal":
-        raise RuntimeError("the model declined: %s" % (
+        raise RuntimeError("the model (and its fallbacks) declined: %s" % (
             response.stop_details and response.stop_details.explanation))
-    answer = next(b.input for b in response.content if b.type == "tool_use")
+    answer = next((b.input for b in response.content if b.type == "tool_use"),
+                  None)
+    if answer is None:
+        text = " ".join(b.text for b in response.content
+                        if b.type == "text")[:300]
+        raise RuntimeError("the model answered without calling"
+                           " propose_composition: %s" % text)
     return answer, ev, prompt, response
 
 
@@ -201,15 +230,21 @@ def main():
     parser.add_argument("--model", default=DEFAULT_MODEL)
     args = parser.parse_args()
 
+    import orchestrator
+    orchestrator.load_env()
     with psycopg.connect(pipeline.resolve_dsn(args)) as cx:
         answer, ev, prompt, response = ask(
             cx, args.ask, args.map_name, args.enemy, args.model)
         _, ctx = dossier.build(cx, args.map_name, args.enemy)
+        served_by = response.model
         rec_id = persist(cx, args.ask, answer, ev, ctx["map_id"], prompt,
-                         args.model, json.dumps(answer))
+                         served_by, json.dumps(answer))
         cx.commit()
         path = transcript(rec_id, args.ask, args.map_name, args.enemy,
-                          answer, ev, args.model)
+                          answer, ev, served_by)
+        if served_by != args.model:
+            print("note: %s declined; served by fallback %s"
+                  % (args.model, served_by))
 
     print("comp (%s):" % answer["playstyle"])
     for p in answer["picks"]:
@@ -230,6 +265,6 @@ if __name__ == "__main__":
     except Exception as error:                      # SDK/auth errors, plainly
         kind = type(error).__name__
         if "Authentication" in kind or "apiKey" in str(error) or "api_key" in str(error):
-            sys.exit("error: no Claude API credentials - export"
-                     " ANTHROPIC_API_KEY or run `ant auth login`")
+            sys.exit("error: no Claude API credentials - put ANTHROPIC_API_KEY"
+                     " in .env (copy .env.example) or run `ant auth login`")
         sys.exit("error (%s): %s" % (kind, error))
