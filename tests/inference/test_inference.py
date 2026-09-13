@@ -235,7 +235,9 @@ def test_a_constraint_is_a_limit_or_scored_or_prose_never_a_heuristic(tmp_path):
         return catalog.load(str(tmp_path))[0]
     assert load_one("---\nname: l\nkind: constraint\nrequire: team.tanks <= 2\n---\nx\n").form == "limit"
     assert load_one("---\nname: s\nkind: constraint\nbonus: team.tanks\n---\nx\n").form == "scored"
-    assert load_one("---\nname: p\nkind: constraint\n---\nx\n").form == "prose"
+    assert load_one("---\nname: p\nkind: constraint\nprose: true\n---\nx\n").form == "prose"
+    assert load_one("---\nname: d\nkind: constraint\n---\nx\n").form == "draft"     # awaiting /strategy
+    assert load_one("---\nname: d\nkind: heuristic\n---\nx\n").pending
     assert load_one("---\nname: g\nkind: heuristic\ndirection: maximize\nmetric: team.tanks\n"
                     "---\nx\n").form == "heuristic"
     for bad in ("---\nname: b\nkind: constraint\nrequire: team.tanks <= 2\nbonus: 1\n---\nx\n",

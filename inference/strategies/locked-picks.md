@@ -2,6 +2,7 @@
 name: Locked picks are given, not chosen
 kind: constraint
 category: assumptions
+prose: true
 ---
 # Locked picks are given, not chosen
 

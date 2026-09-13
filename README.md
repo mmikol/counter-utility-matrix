@@ -144,7 +144,8 @@ same tools, which are the only door.
 | `load_authored` | the inputs we write: seasons, synergies, archetypes, map playstyles, and the mirror of the constraints and heuristics |
 | `sync_all` | all of the above in dependency order, then the CSV mirror; `refresh: true` fetches every page again |
 | `db_status` · `db_init` · `db_migrate` · `db_rebuild` · `export_csv` · `db_docs` · `query` | the database's life (`db_migrate` applies pending migrations in place), and read-only SQL |
-| `roster` · `facts` · `infer` · `evaluate` · `board` · `strategies` · `record` | the user and inference layers through the same door (`board` solves both seats and scores the current comp) |
+| `roster` · `facts` · `infer` · `evaluate` · `board` · `strategies` · `record` | the UI and inference layers through the same door (`board` solves both seats and scores the current comp) |
+| `metrics` · `add_strategy` · `infer_strategy` | the vocabulary a strategy may reference, and storing a strategy from a name, a kind, prose and the frontmatter the `/strategy` skill inferred (a bare file is a draft until it does) |
 
 The same tools run from a shell, so there is no second script to keep in
 step (Docker's entrypoint and the refresher call them the same way):
@@ -223,6 +224,7 @@ three skills that drive them from a session):
 | tool / skill | does |
 | --- | --- |
 | `record_outcome` · `/outcome` | records how a match went - result, map and side, both sixes, bans, the recommendation played. Outcomes are facts on the board (per hero, per map), mirrored to `db/raw`, restored after every rebuild. |
+| `add_strategy` · `infer_strategy` · `/strategy` | you give a name, a kind and prose; the skill reads the vocabulary (`metrics`) and the catalog, infers the frontmatter - a heuristic's metric, direction and weight, a constraint's limit or its when/bonus/penalty and params, or `prose: true` - and stores the file, validated before it exists, mirrored, logged. A bare file you drop in is a draft the solver ignores until the skill completes it. |
 | `tune` · `/tune` | changes one strategy's weight, a `params` dial or an expression - validated through the catalog before the file is written, re-mirrored, logged with the reason in [inference/strategies/tuning-log.md](inference/strategies/tuning-log.md). |
 | `fit_weights` · `/tune` | scores every decided outcome's blue six on the solver's own scale and asks which heuristics ran higher in wins than losses: a mean difference from ten decided matches, a ridge logistic regression demeaned within each map from fifty; proposes a bounded nudge per weight (dry run), applies it through `tune` on request. |
 | `tuning_log` | the audit trail: every change, when, what, why, by whom. |

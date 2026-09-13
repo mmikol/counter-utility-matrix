@@ -159,3 +159,61 @@ def test_logistic_evidence_finds_the_goal_that_predicts_wins():
     assert fit.logistic_evidence([], ["a"]) == {}
     diff, w, l = fit.mean_difference(rows, "a")
     assert diff > 0.15 and w > l
+
+
+# --- authoring: name, kind and prose in; the rest inferred and stored ------------------
+
+def test_a_bare_file_is_a_draft_the_solver_ignores(catalog_copy):
+    path = os.path.join(catalog_copy, "heal-line.md")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("---\nname: Shut off a heavy heal line\nkind: heuristic\n---\n"
+                     "# Shut off a heavy heal line\n\nOne anti-heal pick is worth more.\n")
+    cat = catalog.load(catalog_copy)
+    draft = next(h for h in cat if h.id == "heal-line")
+    assert draft.form == "draft" and draft.pending and not draft.scored
+    assert all(h.form == "prose" and not h.pending for h in cat
+               if h.id in ("vintage", "objective", "locked-picks"))
+    with pytest.raises(catalog.CatalogError, match="prose: true means nothing to score"):
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write("---\nname: x\nkind: heuristic\nprose: true\nmetric: team.tanks\n"
+                         "direction: maximize\n---\nx\n")
+        catalog.load(catalog_copy)
+
+
+def test_add_stores_a_validated_strategy_and_complete_finishes_a_draft(catalog_copy):
+    prose = ("When their support line heals at or above the roster bench, one\n"
+             "anti-heal pick is worth more than another damage dealer.")
+    added = tune.add("shut-off-heals", "Shut off a heavy heal line", "constraint", prose,
+                     {"when": "enemy.heal_ratio >= params.HEAL_RATIO",
+                      "bonus": "min(team.antiheal, 1) * 1.5", "params": {"HEAL_RATIO": 1.0}},
+                     "user: one anti-heal against a heavy heal line", directory=catalog_copy)
+    assert added["form"] == "scored"
+    text = open(added["path"], encoding="utf-8").read()
+    assert text.startswith("---\nname: Shut off a heavy heal line\nkind: constraint\n")
+    assert "when: enemy.heal_ratio >= params.HEAL_RATIO" in text and "  HEAL_RATIO: 1" in text
+    assert text.rstrip().endswith("another damage dealer.") and "# Shut off a heavy heal line" in text
+    assert "`shut-off-heals` added as constraint/scored" in tune.log_tail(
+        1, os.path.join(catalog_copy, "tuning-log.md"))[0]
+    # a draft: name, kind, prose - then completed in one validated step
+    draft = tune.add("sustain-first", "Prefer a team that can heal", "heuristic",
+                     "More healing keeps a fight going.", None, "user", directory=catalog_copy)
+    assert draft["form"] == "draft"
+    done = tune.complete("sustain-first", {"metric": "team.heal_peak_total",
+                                           "direction": "maximize", "weight": 2},
+                         "healing keeps a fight going -> peak heal, maximize",
+                         directory=catalog_copy)
+    assert done["form"] == "heuristic" and done["set"]["weight"] == "2"
+    cat = catalog.load(catalog_copy)
+    assert next(h for h in cat if h.id == "sustain-first").scored
+    # refusals leave nothing behind
+    with pytest.raises(tune.TuneError, match="exists"):
+        tune.add("sustain-first", "again", "heuristic", "x", None, "r", directory=catalog_copy)
+    with pytest.raises(tune.TuneError, match="not a registered fact key"):
+        tune.add("bad-metric", "Bad", "heuristic", "x",
+                 {"metric": "team.nope", "direction": "maximize"}, "r", directory=catalog_copy)
+    assert not os.path.exists(os.path.join(catalog_copy, "bad-metric.md"))
+    with pytest.raises(tune.TuneError, match="lowercase-kebab"):
+        tune.add("Bad Id", "Bad", "constraint", "x", None, "r", directory=catalog_copy)
+    with pytest.raises(tune.TuneError, match="nothing to set"):
+        tune.complete("sustain-first", {}, "r", directory=catalog_copy)
+

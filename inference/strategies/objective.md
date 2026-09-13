@@ -2,6 +2,7 @@
 name: What the score is
 kind: constraint
 category: assumptions
+prose: true
 ---
 # What the score is
 

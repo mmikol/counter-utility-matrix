@@ -42,6 +42,8 @@ class Result:
         # facts against beyond the arithmetic
         self.considerations = [{"id": h.id, "name": h.name}
                                for h in catalog if h.form == "prose"]
+        # drafts: name, kind and prose only - shown, not scored, until /strategy
+        self.pending = [h.id for h in catalog if h.pending]
 
     def to_dict(self, include_facts=False):
         counts = {k: sum(1 for h in self.catalog if h.kind == k)
@@ -60,7 +62,7 @@ class Result:
                 "alternatives": self.alternatives, "rank": self.rank,
                 "considered": self.considered, "seconds": round(self.seconds, 2),
                 "strategies": counts, "cited": cited,
-                "considerations": self.considerations,
+                "considerations": self.considerations, "pending": self.pending,
                 "facts": self.facts.to_dict() if (include_facts and self.facts) else None}
 
     def rendered(self):
@@ -97,6 +99,8 @@ class Result:
         if self.considerations:
             lines.append("  ground rules to reconcile against: " + ", ".join(
                 c["id"] for c in self.considerations))
+        if self.pending:
+            lines.append("  drafts not yet scored (run /strategy): " + ", ".join(self.pending))
         return "\n".join(lines)
 
 

@@ -490,7 +490,11 @@ def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6):
 def strategies_tool(ctx):
     from inference import catalog
     cat = catalog.load()
-    return catalog.render(cat), {"strategies": [h.to_dict() for h in cat]}
+    pending = [h.id for h in cat if h.pending]
+    text = catalog.render(cat)
+    if pending:
+        text += "\n\n%d draft(s) awaiting /strategy: %s" % (len(pending), ", ".join(pending))
+    return text, {"strategies": [h.to_dict() for h in cat], "pending": pending}
 
 
 @tool("record", "Persist a decided composition into the INFERENCE tables"
@@ -564,6 +568,82 @@ def tune_tool(ctx, id, field, value, reason):
         raise ToolError(str(error))
     return "tuned %s: %s %s -> %s\n%s" % (change["id"], change["field"], change["old"],
                                          change["new"], change["line"]), change
+
+
+@tool("metrics", "The vocabulary a strategy may reference: every metric key with its"
+      " meaning - team.*, enemy.* (the same for the red side), matchup.*, map.*,"
+      " world.* - and which are text. What /strategy reads to infer a heuristic's"
+      " metric or a constraint's expression from prose.")
+def metrics_tool(ctx):
+    from ui.facts import compute
+    reg = compute.registry()
+    numeric = {k: v for k, v in reg.items() if k not in compute.TEXT_METRICS}
+    lines = ["%-32s %s%s" % (k, v, "  (text)" if k in compute.TEXT_METRICS else "")
+             for k, v in reg.items() if not k.startswith("enemy.")]
+    return "\n".join(lines), {"metrics": reg, "numeric": sorted(numeric),
+                              "text": sorted(compute.TEXT_METRICS)}
+
+
+STRATEGY_FIELDS = {
+    "metric": {"type": "string", "description": "heuristics: a numeric key from `metrics`"},
+    "direction": {"type": "string", "enum": ["maximize", "minimize"]},
+    "weight": {"type": "number", "description": "0..10; 1-4 is the working range"},
+    "when": {"type": "string", "description": "a guard expression; optional"},
+    "require": {"type": "string", "description": "constraints: a limit expression"},
+    "soft": {"type": "boolean", "description": "with require: charge `penalty` instead of discarding"},
+    "bonus": {"type": "string", "description": "constraints: an expression added while `when` holds"},
+    "penalty": {"type": "string", "description": "constraints: an expression (or a number with soft) subtracted"},
+    "params": {"type": "object", "description": "NAME: number dials the expressions read as params.NAME"},
+    "prose": {"type": "boolean", "description": "true: a ground rule with nothing to score"},
+    "category": {"type": "string"},
+}
+
+
+@tool("add_strategy", "Store a new strategy in inference/strategies/ from its name,"
+      " kind and prose plus the frontmatter /strategy inferred - a heuristic's"
+      " metric/direction/weight, or a constraint's require or when/bonus/penalty"
+      " and params, or prose: true for a ground rule. Validated through the"
+      " catalog before the file exists, mirrored into the database, logged."
+      " Left with nothing inferred it lands as a draft the solver ignores.",
+      dict({"id": {"type": "string", "description": "lowercase-kebab, becomes the filename"},
+            "name": {"type": "string"},
+            "kind": {"type": "string", "enum": ["constraint", "heuristic"]},
+            "body": {"type": "string", "description": "the prose: what it means and why"},
+            "reason": {"type": "string", "description": "why it was added, in a sentence"}},
+           **STRATEGY_FIELDS),
+      ["id", "name", "kind", "body"])
+def add_strategy(ctx, id, name, kind, body, reason="", **fields):
+    from inference import catalog, tune
+    try:
+        category = fields.pop("category", "general")
+        added = tune.add(id, name, kind, body, fields, reason, category=category)
+        with ctx.connect() as cx:
+            catalog.mirror(cx, catalog.load())
+    except (tune.TuneError, ValueError) as error:
+        raise ToolError(str(error))
+    note = ("\nstored as a DRAFT: the solver ignores it until /strategy infers its frontmatter"
+            if added["form"] == "draft" else "")
+    return "added %s as %s/%s -> %s\n%s%s" % (
+        id, kind, added["form"], os.path.relpath(added["path"], ROOT), added["line"], note), added
+
+
+@tool("infer_strategy", "Complete a draft (or rewrite a strategy's scoring): set several"
+      " frontmatter fields at once - metric/direction/weight, when/require/bonus/"
+      "penalty, params, prose - validated as a whole, mirrored, logged as one line.",
+      dict({"id": {"type": "string"},
+            "reason": {"type": "string", "description": "how the fields follow from the prose"}},
+           **STRATEGY_FIELDS),
+      ["id", "reason"])
+def infer_strategy(ctx, id, reason, **fields):
+    from inference import catalog, tune
+    try:
+        done = tune.complete(id, fields, reason)
+        with ctx.connect() as cx:
+            catalog.mirror(cx, catalog.load())
+    except (tune.TuneError, ValueError) as error:
+        raise ToolError(str(error))
+    return "%s is now %s: %s\n%s" % (id, done["form"], ", ".join(
+        "%s=%s" % kv for kv in done["set"].items()), done["line"]), done
 
 
 @tool("fit_weights", "Fit the heuristic weights to the recorded outcomes: for every"

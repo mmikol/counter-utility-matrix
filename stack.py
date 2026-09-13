@@ -87,8 +87,10 @@ def verdict(h):
             lines.append("inference: no strategies visible (a stale bind mount -"
                          " run `docker compose up -d --force-recreate`)")
         else:
-            lines.append("inference: %d strategies, %d heroes"
-                         % (inf["strategies"], inf.get("heroes", 0)))
+            lines.append("inference: %d strategies, %d heroes%s"
+                         % (inf["strategies"], inf.get("heroes", 0),
+                            " - %d draft(s) awaiting /strategy" % inf["pending"]
+                            if inf.get("pending") else ""))
     ui = h.get("ui")
     if not ui or "heroes" not in ui:
         ok = False

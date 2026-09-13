@@ -98,7 +98,8 @@ def handle_record(cx, payload):
 
 
 def handle_health():
-    out = {"status": "ok", "strategies": len(catalog_module.load())}
+    cat = catalog_module.load()
+    out = {"status": "ok", "strategies": len(cat), "pending": sum(1 for h in cat if h.pending)}
     try:
         with psycopg.connect(psql.default_dsn()) as cx:
             out["heroes"] = cx.execute("select count(*) from heroes").fetchone()[0]

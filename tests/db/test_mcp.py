@@ -206,3 +206,10 @@ def test_http_transport_guards_get_origin_and_health(http_server):
 def test_db_migrate_is_idle_when_the_ledger_is_current(ctx):
     text, data = tools.run_tool(ctx, "db_migrate")
     assert data["applied"] == [] and text.startswith("db_migrate: applied 0")
+
+
+def test_metrics_tool_serves_the_vocabulary(ctx):
+    text, data = tools.run_tool(ctx, "metrics")
+    assert "team.coverage_share" in data["metrics"] and "team.coverage_share" in data["numeric"]
+    assert "map.side" in data["text"] and "map.side" not in data["numeric"]
+    assert text.splitlines()[0].startswith("team.")

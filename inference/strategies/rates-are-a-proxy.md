@@ -2,6 +2,7 @@
 name: Rates are Role Queue, console, Americas
 kind: constraint
 category: uncertainty
+prose: true
 ---
 # Rates are Role Queue, console, Americas
 

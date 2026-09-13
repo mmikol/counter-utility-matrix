@@ -27,8 +27,8 @@ then:
 - **constraints** come in three forms. A *limit* (`require`) discards a
   candidate that fails it (a soft one subtracts its `penalty` instead);
   a *scored* constraint adds `weight x (bonus - penalty)` while its `when`
-  holds; a *prose* constraint adds nothing - the session reads it and the
-  board shows it;
+  holds; a *prose* constraint (`prose: true`) adds nothing - the session
+  reads it and the board shows it;
 - **heuristics** min-max normalise their `metric` to [0, 1] against a seeded
   reference sample of random legal sixes for the board (flipped for
   `minimize`) and add `weight x norm` - one scale per board, so infer,
@@ -36,6 +36,10 @@ then:
 
 Score = the sum. Players are assumed to play optimally, so the score is
 a comp's ceiling, not a prediction for a given lobby.
+
+A file with only a name, a kind and prose is a *draft*: shown and served,
+ignored by the solver, until the `/strategy` skill infers its frontmatter
+from the prose and writes it through `infer_strategy`.
 
 ## Catalog
 

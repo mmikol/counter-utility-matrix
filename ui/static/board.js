@@ -233,10 +233,11 @@ function renderPlaybook(d) {
     var meta = h.form === 'heuristic' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight
              : h.form === 'limit' ? 'require ' + h.require + (h.soft ? ' · soft, penalty ' + h.penalty : ' · hard') + (h.when ? ' · when ' + h.when : '')
              : h.form === 'scored' ? [h.when ? 'when ' + h.when : '', h.bonus ? 'bonus ' + h.bonus : '', h.penalty ? 'penalty ' + h.penalty : ''].filter(Boolean).join(' · ') + ' · weight ' + h.weight
+             : h.form === 'draft' ? 'draft - name, kind and prose only; /strategy infers the rest, not scored until then'
              : 'prose - read by the session, shown here, not scored';
     var params = Object.keys(h.params || {}).map(function (k) { return k + '=' + h.params[k]; }).join(', ');
     var body = h.body.replace(/^#[^\n]*\n/, '').split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.replace(/\s+/g, ' ')) + '</p>'; }).join('');
-    out += "<div class='hcard'><span class='kind " + h.kind + "'>" + h.kind + (h.kind === 'constraint' ? ' · ' + h.form : '') + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
+    out += "<div class='hcard'><span class='kind " + h.kind + "'>" + h.kind + (h.form !== 'heuristic' ? ' · ' + h.form : '') + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
       "<div class='legend'>inference/strategies/" + esc(h.id) + '.md · ' + esc(h.category) + '</div></div>';
   });
   el('playbook').innerHTML = out + '</div>';

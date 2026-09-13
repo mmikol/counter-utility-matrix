@@ -46,17 +46,23 @@ The share of revealed enemies at least one of our picks answers...
 | heuristic | | `metric`, `direction`, `weight` | normalises the metric to [0, 1] against a seeded sample of legal sixes for the board (flipped for minimize) and adds `weight x norm` |
 | constraint | limit | `require: <expr>`, optionally `soft: true` + `penalty: <number>` | discards a candidate that fails (a soft one subtracts the penalty) |
 | constraint | scored | `bonus: <expr>` and/or `penalty: <expr>`, optionally `when` | adds `weight x (bonus - penalty)` while `when` holds |
-| constraint | prose | none of the above | nothing - the file is a ground rule the agent holds a comp to and the board shows |
+| constraint | prose | `prose: true` | nothing - the file is a ground rule the agent holds a comp to and the board shows |
+| either | draft | name, kind and prose only | nothing yet - shown and served, ignored by the solver, until `/strategy` infers the rest |
 
-**The engine does not infer a formula or a weight from the prose.** A
-file with a name, a kind and a body is a prose constraint: served,
-shown, cited, read by the agent, and worth exactly zero in the score.
-To make it count, the frontmatter has to say how - a metric to weigh, a
-limit to require, or a bonus to add - in the expression language below.
-That can be written by hand, or asked of the `/tune` skill, which reads
-the prose, proposes the frontmatter, and writes it through the `tune`
-tool. Either way a person or a session decides; nothing here derives a
-formula unasked.
+**The solver does not infer a formula or a weight from prose; the
+`/strategy` skill does, on command.** You give it three things - a name,
+a kind, and two to six sentences of what the strategy means - and the
+session reads the vocabulary (`metrics`), reads the catalog for the house
+style, decides the frontmatter (a heuristic's metric, direction and
+weight; a constraint's `require`, or its `when`, `bonus`, `penalty` and
+`params`; or `prose: true` when nothing is measurable), and stores the
+file through `add_strategy`, which validates it against the catalog
+before it exists, mirrors it into the `strategies` table, and logs it
+with a reason that quotes the prose. A file you drop in yourself with
+only a name, a kind and prose loads as a *draft*: the board and the
+`strategies` tool show it, `infer` results list it as not yet scored,
+and `/strategy` completes it through `infer_strategy`. Either way a
+person or a session decides; nothing here derives a formula unasked.
 
 Expressions are a whitelist, compiled once and validated against the
 metrics registry when the catalog loads: the `team`, `enemy`, `matchup`,
@@ -118,7 +124,7 @@ inference/
 | `engine.py` | `infer` (blue's optimal six around the locked picks), `evaluate` (a full six ranked against the field), `current` (the picks as they stand, partial or full), and `board` (both seats on opposite sides plus the current comp). Each result carries the picks with reasons and `[F#]` citations into the board's FactSet, the score breakdown per strategy, alternatives, and the prose constraints as "ground rules to reconcile against". |
 | `record.py` | Storing a decided comp: the gates (six real heroes, every cited fact one the board showed), the tables (`recommendations`, picks, evidence), and a markdown transcript under `db/data/authored/recommendations/`. |
 | `outcomes.py` | Storing a match result - win, loss or draw, the map and side, both sixes, the bans, the recommendation played - and the summary the fit reads. |
-| `tune.py` | `tune(id, field, value, reason)`: edit the frontmatter, validate by loading the catalog with the edited file, write, re-mirror, log. |
+| `tune.py` | `tune(id, field, value, reason)`: one frontmatter edit; `add(id, name, kind, prose, fields, reason)`: a new file from what the user gave and what `/strategy` inferred; `complete(id, fields, reason)`: a draft's frontmatter in one step. Each is validated by loading the catalog with the new text, then written, re-mirrored and logged. |
 | `fit.py` | `propose` and `apply`: the two evidence tiers above, and the bounded nudge. |
 | `serve.py` | `/board`, `/infer`, `/evaluate`, `/strategies`, `/health`, `POST /record` - the same functions, over HTTP, for a board that runs in another container. |
 
@@ -126,12 +132,14 @@ inference/
 
 | skill | does |
 | --- | --- |
+| `/strategy` | asks for a name, a kind and prose, infers the frontmatter from the prose and the vocabulary, stores the file through `add_strategy` (or completes a draft through `infer_strategy`), and shows the effect on a board |
 | `/comp` | the agent: pulls map, side, bans, red and locked blue picks out of what you say, calls `infer` (or `board`), reads `facts`, adopts or improves on the solver's optimum against the prose constraints, answers with `[F#]` citations, and records the result through `record` |
 | `/tune` | a manual tune, or a fit from outcomes, through the `tune` and `fit_weights` tools; shows the effect on the board |
 | `/outcome` | records how a match went through `record_outcome` |
 | `/up` | brings the stack up and current before a game |
 
 All of it runs on the MCP tools the data layer serves (`infer`,
-`evaluate`, `board`, `facts`, `strategies`, `record`, `record_outcome`,
-`tune`, `fit_weights`, `tuning_log`), which is what makes a session and
-the board see the same numbers.
+`evaluate`, `board`, `facts`, `strategies`, `metrics`, `add_strategy`,
+`infer_strategy`, `record`, `record_outcome`, `tune`, `fit_weights`,
+`tuning_log`), which is what makes a session and the board see the same
+numbers.

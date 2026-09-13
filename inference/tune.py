@@ -5,17 +5,25 @@ mirrored, and logged with its reason.
     tune("under-healed", "params.HEAL_MARGIN", 0.8, "two-support lines felt thin")
     tune("anti-air", "when", "enemy.flyers >= 1 and map.known == 1", "...")
 
-Fields: weight, direction, soft, when, require, bonus, penalty, params.NAME.
-The edited file is loaded through the catalog before it is written, so a
-metric that does not exist or an expression that does not parse is refused
-and nothing changes. Every accepted change is one line in
-inference/strategies/tuning-log.md - the audit trail of how the brain came
-to be. The log lives beside the files on purpose: the compose stack
-bind-mounts that directory, so a tune made through a container lands on
-the host and in git like the file it changed.
+    add("shut-off-heals", "Shut off a heavy heal line", "constraint", prose,
+        {"when": "enemy.heal_ratio >= params.HEAL_RATIO",
+         "bonus": "min(team.antiheal, 1) * 1.5", "params": {"HEAL_RATIO": 1.0}},
+        "user: one anti-heal pick against a heavy heal line")
+    complete("a-draft", {"metric": "team.dps_floor", "direction": "maximize",
+                         "weight": 2}, "inferred from the prose")
+
+Fields: weight, direction, soft, when, require, bonus, penalty, metric,
+prose, category, params.NAME. The edited (or new) file is loaded through
+the catalog before it is written, so a metric that does not exist or an
+expression that does not parse is refused and nothing changes. Every
+accepted change is one line in inference/strategies/tuning-log.md - the
+audit trail of how the brain came to be. The log lives beside the files on
+purpose: the compose stack bind-mounts that directory, so a change made
+through a container lands on the host and in git like the file it changed.
 """
 
 import os
+import re
 import shutil
 import tempfile
 from datetime import datetime, timezone
@@ -23,8 +31,10 @@ from datetime import datetime, timezone
 from inference import catalog as catalog_module
 
 LOG_PATH = os.path.join(catalog_module.STRATEGIES_DIR, "tuning-log.md")
-SCALARS = ("weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric")
+SCALARS = ("weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric",
+           "prose", "category")
 WEIGHT_RANGE = (0.0, 10.0)
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
 class TuneError(ValueError):
@@ -95,16 +105,8 @@ def validate(directory, hid, new_text):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def tune(hid, field, value, reason, directory=None, by="claude-code-session",
-         log_path=None):
-    """Apply one change -> {"id", "field", "old", "new", "line"}."""
-    directory = directory or catalog_module.STRATEGIES_DIR
-    log_path = log_path or os.path.join(directory, "tuning-log.md")
-    if not reason or not reason.strip():
-        raise TuneError("a tuning change needs a reason")
-    path = os.path.join(directory, hid + ".md")
-    if not os.path.exists(path):
-        raise TuneError("no strategy %r" % hid)
+def _coerce(field, value):
+    """The value a field accepts, or a TuneError."""
     if field == "weight":
         try:
             value = float(value)
@@ -112,28 +114,130 @@ def tune(hid, field, value, reason, directory=None, by="claude-code-session",
             raise TuneError("weight must be a number")
         if not WEIGHT_RANGE[0] <= value <= WEIGHT_RANGE[1]:
             raise TuneError("weight must be within %g..%g" % WEIGHT_RANGE)
-    if field.startswith("params."):
+    elif field.startswith("params."):
         try:
             value = float(value)
         except (TypeError, ValueError):
             raise TuneError("a param must be a number")
-    with open(path, encoding="utf-8") as handle:
-        text = handle.read()
-    new_text, old = edit_frontmatter(text, field, value)
-    validate(directory, hid, new_text)
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(new_text)
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
-    line = "- %s `%s` %s: %s -> %s (%s) [%s]" % (
-        stamp, hid, field, old if old is not None else "unset", _format(value),
-        " ".join(reason.split()), by)
+    elif field in ("soft", "prose"):
+        if not isinstance(value, bool):
+            raise TuneError("%s must be true or false" % field)
+    return value
+
+
+def _flatten(fields):
+    """{"params": {"A": 1}, "weight": 2} -> [("params.A", 1), ("weight", 2)]."""
+    out = []
+    for field, value in (fields or {}).items():
+        if field == "params":
+            for name, v in (value or {}).items():
+                out.append(("params." + name, v))
+        else:
+            out.append((field, value))
+    return out
+
+
+def _log(log_path, line):
     if not os.path.exists(log_path):
         with open(log_path, "w", encoding="utf-8") as handle:
             handle.write("# Tuning log\n\nEvery change to a strategy's frontmatter,"
                          " newest last: when, what, why, and who.\n\n")
     with open(log_path, "a", encoding="utf-8") as handle:
         handle.write(line + "\n")
+
+
+def _stamp():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+
+
+def _where(directory, log_path):
+    directory = directory or catalog_module.STRATEGIES_DIR
+    return directory, log_path or os.path.join(directory, "tuning-log.md")
+
+
+def tune(hid, field, value, reason, directory=None, by="claude-code-session",
+         log_path=None):
+    """Apply one change -> {"id", "field", "old", "new", "line"}."""
+    directory, log_path = _where(directory, log_path)
+    if not reason or not reason.strip():
+        raise TuneError("a tuning change needs a reason")
+    path = os.path.join(directory, hid + ".md")
+    if not os.path.exists(path):
+        raise TuneError("no strategy %r" % hid)
+    value = _coerce(field, value)
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    new_text, old = edit_frontmatter(text, field, value)
+    validate(directory, hid, new_text)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(new_text)
+    line = "- %s `%s` %s: %s -> %s (%s) [%s]" % (
+        _stamp(), hid, field, old if old is not None else "unset", _format(value),
+        " ".join(reason.split()), by)
+    _log(log_path, line)
     return {"id": hid, "field": field, "old": old, "new": _format(value), "line": line}
+
+
+def complete(hid, fields, reason, directory=None, by="claude-code-session", log_path=None):
+    """Set several frontmatter fields at once - what /strategy infers for a
+    draft - validated as a whole, logged as one line -> {"id", "form", "set", "line"}."""
+    directory, log_path = _where(directory, log_path)
+    if not reason or not reason.strip():
+        raise TuneError("an inferred strategy needs a reason")
+    path = os.path.join(directory, hid + ".md")
+    if not os.path.exists(path):
+        raise TuneError("no strategy %r" % hid)
+    pairs = [(f, _coerce(f, v)) for f, v in _flatten(fields)]
+    if not pairs:
+        raise TuneError("nothing to set")
+    with open(path, encoding="utf-8") as handle:
+        text = handle.read()
+    for field, value in pairs:
+        text, _ = edit_frontmatter(text, field, value)
+    loaded = validate(directory, hid, text)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    form = next(h.form for h in loaded if h.id == hid)
+    line = "- %s `%s` inferred -> %s: %s (%s) [%s]" % (
+        _stamp(), hid, form, ", ".join("%s=%s" % (f, _format(v)) for f, v in pairs),
+        " ".join(reason.split()), by)
+    _log(log_path, line)
+    return {"id": hid, "form": form, "set": dict((f, _format(v)) for f, v in pairs),
+            "line": line}
+
+
+def add(hid, name, kind, body, fields=None, reason="", directory=None,
+        by="claude-code-session", log_path=None, category="general"):
+    """A new strategy file from its name, kind, prose and (inferred) fields,
+    validated through the catalog before it exists -> {"id", "form", "path", "line"}."""
+    directory, log_path = _where(directory, log_path)
+    if not ID_RE.match(hid or ""):
+        raise TuneError("id must be lowercase-kebab, got %r" % hid)
+    if kind not in catalog_module.KINDS:
+        raise TuneError("kind must be one of %s" % "/".join(catalog_module.KINDS))
+    if not (name or "").strip() or not (body or "").strip():
+        raise TuneError("a strategy needs a name and its prose")
+    path = os.path.join(directory, hid + ".md")
+    if os.path.exists(path):
+        raise TuneError("%r exists; tune or infer_strategy changes it, delete is a human's" % hid)
+    pairs = [(f, _coerce(f, v)) for f, v in _flatten(fields)]
+    body = body.strip("\n")
+    if not body.startswith("#"):
+        body = "# %s\n\n%s" % (name.strip(), body)
+    text = "---\nname: %s\nkind: %s\ncategory: %s\n---\n%s\n" % (
+        name.strip(), kind, (category or "general").strip(), body)
+    for field, value in pairs:
+        text, _ = edit_frontmatter(text, field, value)
+    loaded = validate(directory, hid, text)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    form = next(h.form for h in loaded if h.id == hid)
+    line = "- %s `%s` added as %s/%s%s (%s) [%s]" % (
+        _stamp(), hid, kind, form,
+        ": " + ", ".join("%s=%s" % (f, _format(v)) for f, v in pairs) if pairs else "",
+        " ".join((reason or "added").split()), by)
+    _log(log_path, line)
+    return {"id": hid, "form": form, "path": path, "line": line}
 
 
 def log_tail(n=20, log_path=LOG_PATH):
