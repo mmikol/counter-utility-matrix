@@ -394,3 +394,26 @@ def build(cx, map_name=None, enemies=()):
                % (rec_id, playstyle, picks, _trim(reasoning, 90)))
 
     return ev, ctx
+
+
+def main():
+    """Print the rendered dossier - the skill's and humans' window into it.
+
+        python -m data.proprietary.dossier --map "King's Row" --enemy Zarya
+    """
+    import psycopg
+    import orchestrator
+    from data.proprietary import pipeline
+
+    orchestrator.load_env()
+    parser = pipeline.build_parser(main.__doc__)
+    parser.add_argument("--map", dest="map_name")
+    parser.add_argument("--enemy", action="append", default=[])
+    args = parser.parse_args()
+    with psycopg.connect(pipeline.resolve_dsn(args)) as cx:
+        ev, _ = build(cx, args.map_name, args.enemy)
+    print(ev.rendered())
+
+
+if __name__ == "__main__":
+    main()
