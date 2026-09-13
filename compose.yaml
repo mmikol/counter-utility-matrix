@@ -1,6 +1,7 @@
-# docker compose up  ->  builds the database on first run, then serves the UI
-# at http://localhost:8017. Fully functional with an empty .env - the API key
-# only powers the optional, paid Recommend button.
+# docker compose up  ->  inflates the database on first run (the entrypoint
+# builds it when empty), then serves the UI at http://localhost:8017. No keys,
+# no accounts - compositions come from chatting with the /comp skill in a
+# Claude Code session, which queries this database via ./docker-db.
 #
 # The app talks to a real postgres service (pgserver ships no linux/arm64
 # wheel, and a proper service is the better container shape anyway). Mounts
@@ -14,6 +15,8 @@ services:
       POSTGRES_USER: overwatch
       POSTGRES_PASSWORD: overwatch
       POSTGRES_DB: overwatch
+    ports:
+      - "5433:5432"        # host-side tools (the /comp skill) via ./docker-db
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -26,8 +29,6 @@ services:
     build: .
     ports:
       - "8017:8017"
-    env_file:
-      - .env
     environment:
       DATABASE_URL: postgresql://overwatch:overwatch@db/overwatch
     depends_on:

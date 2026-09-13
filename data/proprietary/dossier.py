@@ -402,10 +402,8 @@ def main():
         python -m data.proprietary.dossier --map "King's Row" --enemy Zarya
     """
     import psycopg
-    import orchestrator
     from data.proprietary import pipeline
 
-    orchestrator.load_env()
     parser = pipeline.build_parser(main.__doc__)
     parser.add_argument("--map", dest="map_name")
     parser.add_argument("--enemy", action="append", default=[])

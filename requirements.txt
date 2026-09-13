@@ -1,4 +1,3 @@
-anthropic>=1.0        # the inference layer (data/proprietary/recommend.py)
 beautifulsoup4>=4.12
 psycopg[binary]>=3.1
 requests>=2.31

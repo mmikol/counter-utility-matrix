@@ -1,0 +1,14 @@
+#!/bin/sh
+# Run any command against the Docker database instead of the local cluster:
+#
+#     ./docker-db .venv/bin/python -m data.proprietary.dossier --map Ilios
+#     ./docker-db .venv/bin/python -m orchestrator update
+#     ./docker-db .venv/bin/python -m pytest -q
+#
+# Every entry point honors DATABASE_URL, so this one export is the whole
+# bridge. The port pairs with compose.yaml's db service mapping. The database
+# itself is inflated by the container on `docker compose up` (the entrypoint
+# builds it when empty); this script is how host-side tools - notably the
+# /comp skill in a Claude Code session - query what Docker built.
+export DATABASE_URL="postgresql://overwatch:overwatch@localhost:5433/overwatch"
+exec "$@"

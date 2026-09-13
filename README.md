@@ -15,8 +15,10 @@ all into cited team-composition recommendations:
 COUNTER = MAX[ HEROES ∩ MAPS ∩ META ]
 ```
 
-Everything is free to run - no accounts, no keys. The one optional paid
-feature is the final model opinion (see "The paid button" below).
+Everything is free to run - no accounts, no keys, no API billing.
+Compositions come from chatting: open the repo in a Claude Code session and
+ask (the `/comp` skill turns the session into the agent - it reads the
+evidence, decides, cites, and records).
 
 ## Install & run (Docker - recommended)
 
@@ -26,16 +28,15 @@ Requires [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 ```bash
 git clone git@github.com:mmikol/overwatch-db.git
 cd overwatch-db
-cp .env.example .env      # fine to leave as is - the key is optional
 docker compose up
 ```
 
 The first run builds the database from scratch - migrations, then every
 pipeline, scraping the sources once (a few polite minutes; page caches land
 in `.cache-*/` so later builds cost almost no requests). Then the UI serves
-at **http://localhost:8017**: a dashboard of the whole database, and an
-"ask for a comp" form whose *evidence preview* shows the ~90-140 cited lines
-the model would reason over - free, no key.
+at **http://localhost:8017**: a dashboard of the whole database, an evidence
+explorer showing the ~90-140 cited lines a comp decision rests on, and a
+viewer for every recorded recommendation.
 
 Every later `docker compose up` skips straight to serving (the database
 persists in a named volume). Other things to run in the same image:
@@ -57,7 +58,6 @@ macOS and Linux x86_64):
 git clone git@github.com:mmikol/overwatch-db.git
 cd overwatch-db
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-cp .env.example .env
 .venv/bin/python -m orchestrator rebuild     # build the database
 .venv/bin/python ui.py                       # serve http://localhost:8017
 .venv/bin/python -m pytest -q                # 82 tests against the build
@@ -73,17 +73,20 @@ The orchestrator's verbs, each refusing the state it is not for:
 | `python -m orchestrator export` / `docs` | refresh `data/raw/*.csv` / regenerate the ERD & data dictionary |
 | `--type heuristic`, `--only authoritative.wiki.maps` | partial updates |
 
-## The paid button
+## Chat with it
 
-The **Recommend (calls Claude)** button / `recommend.py` sends the evidence
-dossier to the Anthropic API - billed per token at
-[console.anthropic.com](https://console.anthropic.com); a Claude subscription
-does **not** cover it. With `ANTHROPIC_API_KEY` blank, the app says so
-politely and everything else works. With a key: Claude Fable 5.1 at maximum
-reasoning by default (`OVERWATCH_DB_MODEL` / `OVERWATCH_DB_EFFORT` in `.env`
-dial cost down), server-side refusal fallbacks enabled, and every stored
-recommendation records the full prompt, the evidence cited per pick, and
-which model actually answered.
+Open this repo in a [Claude Code](https://claude.com/claude-code) session and
+just ask - "comp for King's Row, they have Zarya and Pharah". The `/comp`
+skill (in `.claude/skills/`) makes the session the inference layer: it runs
+the evidence dossier, reasons under the same ground rules every time, answers
+with per-pick citations, and records the result through the same validation
+gates and tables - so session comps become part of the database's own history
+evidence. Covered by a Claude subscription; no API key, no per-token bill.
+
+Chatting against the Docker database instead of a local build: prefix
+commands with the bridge script, e.g.
+`./docker-db .venv/bin/python -m data.proprietary.dossier --map Ilios` -
+the skill knows to do this.
 
 ## Layout
 
@@ -95,8 +98,8 @@ data/
   authoritative/     what a source measured    extract -> transform -> load
   heuristic/         what a source judges      extract -> transform -> load
   proprietary/       what WE judge: authored CSVs (synergies, archetypes,
-                     map_playstyle, seasons), strategy notes, the dossier
-                     and recommend inference layer, and its transcripts
+                     map_playstyle, seasons), strategy notes, the evidence
+                     dossier, the recommendation store, and its transcripts
   raw/               one CSV per table (exported, gitignored)
 db/
   migrations/        001 sources · 002 heroes · 003 maps · 004 meta ·

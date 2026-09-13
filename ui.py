@@ -1,16 +1,16 @@
-"""A local UI over the built database and the inference layer.
+"""A local UI over the built database: dashboard, evidence explorer, and
+recorded-recommendation viewer.
 
     python ui.py            # serves http://localhost:8017
 
 Standard library only - no framework, no new dependencies. Reads the same
 database every other entry point does (db/cluster by default; DATABASE_URL
-overrides) and drives the same code paths: the dossier for evidence previews,
-recommend.ask/persist for real recommendations. The UI adds no logic of its
-own - it is a window, not a second implementation.
+overrides - ./docker-db points it at the compose database). The chat that
+actually decides comps lives in a Claude Code session via the /comp skill;
+this UI is the free window onto the same evidence and the same records.
 """
 
 import html
-import json
 import os
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlparse
 
 import psycopg
 
-from data.proprietary import dossier, recommend
+from data.proprietary import dossier
 
 PORT = int(os.environ.get("OVERWATCH_DB_UI_PORT", "8017"))
 
@@ -81,7 +81,7 @@ def page(title, body):
             "<title>%s</title><style>%s</style><main>"
             "<h1><a href='/'>overwatch-db</a></h1>"
             "<p class='sub'>COUNTER = MAX[ HEROES ∩ MAPS ∩ META ]"
-            " &nbsp;·&nbsp; <a href='/recommend'>ask for a comp</a></p>"
+            " &nbsp;·&nbsp; <a href='/recommend'>explore evidence</a> &nbsp;·&nbsp; comps: /comp in a Claude Code session</p>"
             "%s</main>" % (html.escape(title), STYLE, body))
 
 
@@ -136,7 +136,7 @@ def view_home(cx):
         "<td>%s</td></tr>" % (r, r, d, esc(req[:70]), esc(ps))
         for r, d, req, ps in recs) or \
         "<tr><td colspan=4 class='sub'>none yet - " \
-        "<a href='/recommend'>ask for one</a></td></tr>"
+        "ask /comp in a Claude Code session</td></tr>"
 
     return page("overwatch-db", """
         <h2>The database</h2><div class='cards'>%s</div>
@@ -164,20 +164,17 @@ def form(cx, values=None, error=None, evidence=None):
                        "<tr><td class='tag'>[%s]</td><td>%s</td><td class='sub'>%s</td></tr>"
                        % (t, esc(x), esc(tb)) for t, tb, x in evidence.lines)
                    + "</table>")
-    return page("ask for a comp", """
+    return page("explore evidence", """
         %s<form method='post' action='/recommend'>
-        <label>Question</label>
-        <textarea name='ask' placeholder='we keep losing the first fight...'
-        >%s</textarea>
         <label>Map</label><select name='map'>%s</select>
         <label>Known enemy heroes (comma separated)</label>
         <input type='text' name='enemies' list='roster' value='%s'
                placeholder='Zarya, Mei'>
         <datalist id='roster'>%s</datalist>
-        <button name='do' value='recommend'>Recommend (calls Claude)</button>
-        <button name='do' value='preview' class='ghost'>Preview evidence
-        (free, no model)</button></form>%s""" % (
-        err, esc(v.get("ask", "")), opts, esc(v.get("enemies", "")),
+        <button name='do' value='preview'>Show the evidence</button>
+        <span class='badge'>for a decided comp: /comp in a Claude Code
+        session reads these same lines</span></form>%s""" % (
+        err, opts, esc(v.get("enemies", "")),
         "".join("<option>%s</option>" % esc(h) for h in heroes), ev_html))
 
 
@@ -245,38 +242,16 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         fields = parse_qs(self.rfile.read(length).decode("utf-8"))
         v = {k: vals[0].strip() for k, vals in fields.items()}
-        ask_text = v.get("ask") or "recommend a strong comp"
         map_name = v.get("map") or None
         enemies = [e.strip() for e in v.get("enemies", "").split(",")
                    if e.strip()]
         try:
             with psycopg.connect(dsn()) as cx:
-                if v.get("do") == "preview":
-                    ev, _ = dossier.build(cx, map_name, enemies)
-                    return self._send(form(cx, v, evidence=ev))
-                answer, ev, prompt, _ = recommend.ask(
-                    cx, ask_text, map_name, enemies)
-                _, ctx = dossier.build(cx, map_name, enemies)
-                rec_id = recommend.persist(
-                    cx, ask_text, answer, ev, ctx["map_id"], prompt,
-                    recommend.DEFAULT_MODEL, json.dumps(answer))
-                cx.commit()
-                recommend.transcript(rec_id, ask_text, map_name, enemies,
-                                     answer, ev, recommend.DEFAULT_MODEL)
-                self.send_response(303)
-                self.send_header("Location", "/rec/%d" % rec_id)
-                self.end_headers()
+                ev, _ = dossier.build(cx, map_name, enemies)
+                self._send(form(cx, v, evidence=ev))
         except ValueError as error:
             with psycopg.connect(dsn()) as cx:
                 self._send(form(cx, v, error=str(error)))
-        except Exception as error:
-            kind = type(error).__name__
-            msg = ("no Claude API credentials - put ANTHROPIC_API_KEY in"
-                   " .env (copy .env.example), then restart ui.py"
-                   if "Authentication" in kind or "api_key" in str(error)
-                   else "%s: %s" % (kind, error))
-            with psycopg.connect(dsn()) as cx:
-                self._send(form(cx, v, error=msg))
 
 
 def main():

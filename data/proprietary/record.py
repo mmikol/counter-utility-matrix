@@ -1,6 +1,6 @@
 """Record a composition decided OUTSIDE the API path - e.g. by the /comp
-skill in a Claude Code session - into the same inference tables and
-transcript the API path uses, under the same validation gates: citations of
+skill in a Claude Code session - into the inference tables and transcript,
+under the storage gates: citations of
 evidence never shown and heroes that do not exist are refused, not stored.
 
 Reads the answer as JSON on stdin:
@@ -18,13 +18,11 @@ import sys
 
 import psycopg
 
-import orchestrator
 from data.proprietary import dossier, pipeline
-from data.proprietary.recommend import persist, transcript
+from data.proprietary.store import persist, transcript, validate_answer
 
 
 def main():
-    orchestrator.load_env()
     parser = pipeline.build_parser(__doc__)
     args = parser.parse_args()
     payload = json.load(sys.stdin)
@@ -33,6 +31,7 @@ def main():
     enemies = payload.get("enemies", [])
     model = payload.get("model", "claude-code-session")
 
+    validate_answer(payload["answer"])
     with psycopg.connect(pipeline.resolve_dsn(args)) as cx:
         # the same dossier the answer was reasoned over, rebuilt for the gates
         ev, ctx = dossier.build(cx, map_name, enemies)

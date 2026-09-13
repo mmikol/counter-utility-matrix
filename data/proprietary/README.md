@@ -85,23 +85,21 @@ COUNTER = MAX[...] intersections pre-joined (`counters+map_meta`,
 rank-sensitivity spreads and CAUTION lines where a known enemy answers the
 candidate, role passives, archetype slot shapes, every authored synergy and
 strategy note, meta leaders and ban pressure — and what this layer itself
-recommended before on the same map. `recommend.py` shows that dossier to
-Claude (`claude-fable-5-1` at `effort: max` by default; `OVERWATCH_DB_MODEL`
-and `OVERWATCH_DB_EFFORT` in `.env` override; server-side refusal fallbacks
-enabled, and the stored recommendation records which model actually
-answered). Calling the model is the one paid, optional feature - with no
-ANTHROPIC_API_KEY the layer degrades to the free evidence preview. The
-strategy notes from `strategies/*.md` ride inside the dossier as citable
-lines, and the answer must be schema-valid, every pick citing the tags that
-justify it. Citations of evidence never shown, and
-heroes that do not exist, are errors — not stored rows.
+recommended before on the same map. The model that reads it is the Claude
+Code session itself: the `/comp` skill (`.claude/skills/comp`) turns any
+session in this repo into the inference layer - subscription-covered, no API
+key, no per-token bill. The session runs the dossier CLI, decides under the
+skill's ground rules, answers in chat with per-pick citations, and records
+through `record.py` -> `store.py`, where two gates hold whoever the author
+is: the shape (exactly five picks, each with a why and evidence) and the
+meaning (an invented hero or a citation of evidence never shown is refused,
+not stored). Strategy notes from `strategies/*.md` ride inside the dossier
+as citable lines.
 
 Every exchange lands twice: in the INFERENCE tables (`recommendations`,
 `recommendation_picks`, `recommendation_evidence` — queryable, wiped by
 rebuild like any session state) and as a markdown transcript in
-`recommendations/` (committed, durable). Credentials resolve as the SDK
-always does: `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, or an
-`ant auth login` profile.
+`recommendations/` (committed, durable).
 
 The three needs sketched here originally all now exist: free-form strategy
 input (`strategies/*.md` → the strategies table), the full

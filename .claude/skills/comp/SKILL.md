@@ -17,8 +17,10 @@ five-hero composition, fast.
        .venv/bin/python -m data.proprietary.dossier --map "King's Row" \
            --enemy Zarya --enemy Mei
 
-   Inside the Docker container use `docker compose run app python -m ...`.
-   If it errors that the database is empty, run
+   Against the Docker database (after `docker compose up` has inflated it),
+   prefix any host command with the bridge: `./docker-db .venv/bin/python
+   -m ...` - or run inside the image: `docker compose run -T app python -m
+   ...`. If the local cluster is empty instead, run
    `.venv/bin/python -m orchestrator rebuild` first.
 3. Read every line. Then decide the comp under the ground rules below.
 4. Answer in chat, tersely: the playstyle, five picks each with one line of
@@ -31,12 +33,12 @@ five-hero composition, fast.
 
    Shape: {"question", "map", "enemies", "model": "claude-code-session",
    "answer": {"playstyle", "reasoning", "picks": [{"hero", "why",
-   "evidence": ["E7", ...]}]}}. The recorder enforces the same gates as the
-   API path - an invented hero or a citation of nothing is refused.
+   "evidence": ["E7", ...]}]}}. The recorder validates shape and
+   meaning - an invented hero or a citation of nothing is refused.
 6. Follow-ups ("what if they swap to Pharah?") re-run step 2 with the new
    context - the dossier is cheap and always current.
 
-## Ground rules (identical to the API path)
+## Ground rules
 
 - Exactly five picks, only heroes named in the evidence or roster.
 - Every pick cites the tags that genuinely justify it - no citation padding.

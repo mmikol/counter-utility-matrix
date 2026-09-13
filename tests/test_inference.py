@@ -9,7 +9,7 @@ import pytest
 
 from data.proprietary import dossier
 from data.proprietary.load.user.strategies import read_files
-from data.proprietary.recommend import COMP_TOOL, persist
+from data.proprietary.store import persist, validate_answer
 
 pytestmark = pytest.mark.invariant
 
@@ -24,19 +24,20 @@ def test_strategy_files_load_whole_and_skip_the_readme(tmp_path):
     assert read_files(str(tmp_path)) == [("anti dive", "# Anti dive\nPeel hard.")]
 
 
-def test_comp_tool_schema_is_strict():
-    # strict tool use requires additionalProperties: false + required at
-    # every level, or the guarantee silently is not one
-    def check(schema):
-        if schema.get("type") == "object":
-            assert schema["additionalProperties"] is False
-            assert "required" in schema
-            for sub in schema["properties"].values():
-                check(sub)
-        if schema.get("type") == "array":
-            check(schema["items"])
-    assert COMP_TOOL["strict"] is True
-    check(COMP_TOOL["input_schema"])
+def test_validate_answer_enforces_the_shape():
+    good = {"playstyle": "brawl", "reasoning": "r",
+            "picks": [{"hero": "H%d" % i, "why": "w", "evidence": ["E1"]}
+                      for i in range(5)]}
+    assert validate_answer(good) is good
+    import copy, pytest as pt
+    four = copy.deepcopy(good); four["picks"].pop()
+    with pt.raises(ValueError, match="five picks"):
+        validate_answer(four)
+    bare = copy.deepcopy(good); bare["picks"][2]["evidence"] = []
+    with pt.raises(ValueError, match="missing 'evidence'"):
+        validate_answer(bare)
+    with pt.raises(ValueError, match="missing 'playstyle'"):
+        validate_answer({"reasoning": "r", "picks": good["picks"]})
 
 
 # --- the dossier ----------------------------------------------------------
