@@ -19,12 +19,12 @@ flowchart LR
         DBT["db_* · query · export_csv"]
     end
 
-    subgraph PG["PostgreSQL - 40 tables"]
+    subgraph PG["PostgreSQL - 42 tables"]
         HEROES["HEROES<br/>roster, kits, stats,<br/>keywords, portraits"]
         MAPS["MAPS"]
         META["META<br/>dated snapshots"]
         PLAYBOOK["PLAYBOOK<br/>counters, synergies,<br/>styles, heuristics mirror"]
-        INF["INFERENCE<br/>recorded comps"]
+        INF["INFERENCE<br/>recorded comps,<br/>outcomes"]
     end
 
     subgraph USER["USER LAYER - user/facts/ + user/board.py"]
@@ -99,12 +99,29 @@ side, so the side reaches the score through two small strategies about the
 kits (engage and anti-heal on attack, deployables, barriers and reach on
 defense) and the facts say so.
 
+## The feedback loop
+
+```mermaid
+flowchart LR
+    GAME["a match is played"] -->|"/outcome -> record_outcome"| OUT["outcomes +<br/>outcome_picks<br/>(mirrored, restored)"]
+    OUT -->|"facts: per hero, per map,<br/>the last games"| BOARD["the board and<br/>the /comp skill"]
+    OUT -->|"fit_weights: each goal's<br/>metric in wins vs losses"| FIT["a bounded nudge<br/>per goal weight"]
+    FIT -->|"apply -> tune"| HEUR["inference/heuristics/*.md"]
+    USER["'it keeps ignoring anti-heal'<br/>/tune -> tune"] --> HEUR
+    HEUR -->|"validated on load,<br/>mirrored, logged"| LOG["tuning-log.md"]
+    HEUR --> SOLVER["the solver, next click"]
+```
+
+Every change to the brain is a line in the log with its reason. The fit
+refuses to move a weight before ten decided matches exist, and moves it by
+at most half the evidence, clamped - one bad week cannot flip the engine.
+
 ## The life of the database
 
 ```mermaid
 stateDiagram-v2
     [*] --> Empty: docker compose up<br/>(or pgserver first touch)
-    Empty --> Schema: db_init<br/>8 migrations, 40 tables
+    Empty --> Schema: db_init<br/>9 migrations, 42 tables
     Schema --> Populated: sync_all<br/>7 pull tools + load_playbook
     Empty --> Populated: db_rebuild<br/>(the entrypoint's move<br/>on an empty database)
     Populated --> Populated: sync_all / any pull_*<br/>(the refresher, daily)<br/>entities upsert in place,<br/>rates APPEND a dated snapshot

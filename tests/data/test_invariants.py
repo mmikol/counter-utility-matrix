@@ -218,6 +218,12 @@ def test_heuristics_table_mirrors_the_files(rows):
     assert table == files
 
 
+def test_outcomes_tables_exist_and_are_consistent(one):
+    assert one("select count(*) from outcomes where result not in ('win','loss','draw')") == 0
+    assert one("""select count(*) from outcome_picks p
+        where not exists (select 1 from outcomes o where o.outcome_id = p.outcome_id)""") == 0
+
+
 def test_the_migration_ledger_matches_the_files(rows):
     import os
     from data.db import schema

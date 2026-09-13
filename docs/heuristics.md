@@ -7,7 +7,9 @@ solver reads the files live, and `load_playbook` mirrors them into the
 `heuristics` table so a recommendation can cite the ids it was scored
 under. Tuning is editing a file (the compose stack bind-mounts the
 directory, so the `inference` container picks edits up live). This
-page is generated: `python -m data.orchestrator docs`.
+page is generated: `python -m data.orchestrator docs`. Every change to a
+file goes through the `tune` tool (or a `fit_weights` nudge) and is logged
+in [tuning-log.md](../inference/tuning-log.md).
 
 ## How a composition is scored
 

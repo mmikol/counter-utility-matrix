@@ -40,7 +40,8 @@ def test_initialize_then_list_tools_over_stdio():
     assert replies[0]["result"]["serverInfo"]["name"] == "overwatch-db"
     names = {t["name"] for t in replies[1]["result"]["tools"]}
     assert {"pull_heroes", "pull_rates", "sync_all", "db_rebuild", "query",
-            "facts", "infer", "evaluate", "record", "load_playbook"} <= names
+            "facts", "infer", "evaluate", "board", "record", "load_playbook",
+            "record_outcome", "tune", "fit_weights", "tuning_log"} <= names
     for t in replies[1]["result"]["tools"]:
         assert t["inputSchema"]["type"] == "object" and t["description"]
     assert replies[2] == {"jsonrpc": "2.0", "id": 3, "result": {}}
@@ -58,7 +59,7 @@ def test_tools_call_without_a_database_and_unknown_method():
     assert replies[0]["result"]["isError"] is False
     assert replies[1]["error"]["code"] == -32601
     uris = {r["uri"] for r in replies[2]["result"]["resources"]}
-    assert "heuristic://coverage" in uris
+    assert "heuristic://coverage" in uris and "heuristic://tuning-log" in uris
 
 
 def test_bad_json_is_a_parse_error_not_a_crash():

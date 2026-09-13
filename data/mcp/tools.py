@@ -257,7 +257,8 @@ def db_status(ctx):
         counts, snaps = {}, []
         if tables:
             for t in ("heroes", "abilities", "maps", "hero_meta", "map_meta",
-                      "counters", "synergies", "heuristics", "recommendations"):
+                      "counters", "synergies", "heuristics", "recommendations",
+                      "outcomes"):
                 if cx.execute("select to_regclass(%s)", (t,)).fetchone()[0]:
                     counts[t] = cx.execute("select count(*) from " + t).fetchone()[0]
             if cx.execute("select to_regclass('meta_snapshots')").fetchone()[0]:
@@ -501,18 +502,111 @@ def record_tool(ctx, question, answer, map=None, red=(), blue=(), bans=(), side=
             {"rec_id": rec_id, "transcript": path})
 
 
+# --- the feedback loop: outcomes in, weights out ---------------------------
+
+@tool("record_outcome", "Record what happened after a match: the result, the map"
+      " and blue's side, both sixes and the bans, and the recommendation it"
+      " followed (rec_id) if any. Outcomes are what fit_weights learns from"
+      " and are restored after every rebuild.",
+      dict(BOARD, result={"type": "string", "enum": ["win", "loss", "draw"]},
+           rec_id={"type": "integer", "description": "the recommendation that was"
+                                                     " played, if any"},
+           note={"type": "string", "description": "what decided it, in a line"}),
+      ["result", "blue"])
+def record_outcome_tool(ctx, result, blue, map=None, red=(), bans=(), side="",
+                        rec_id=None, note=None):
+    from inference import outcomes
+    try:
+        with ctx.connect() as cx:
+            oid = outcomes.record_outcome(cx, result, map, side, list(blue), list(red),
+                                          list(bans), rec_id, note)
+            outcomes.commit_and_mirror(cx)
+            counts = outcomes.summary(cx)
+    except ValueError as error:
+        raise ToolError(str(error))
+    return ("recorded outcome %d (%s); %d recorded so far: %d-%d-%d"
+            % (oid, result, counts["total"], counts["win"], counts["loss"],
+               counts["draw"]), {"outcome_id": oid, "counts": counts})
+
+
+@tool("tune", "Change one heuristic's frontmatter - its weight, a params dial, or"
+      " a when/require/bonus/penalty expression - validated through the"
+      " catalog before it is written, mirrored into the database, and logged"
+      " with the reason in inference/tuning-log.md.",
+      {"id": {"type": "string", "description": "the heuristic's id (its filename)"},
+       "field": {"type": "string", "description": "weight | direction | soft | when |"
+                                                  " require | bonus | penalty | metric |"
+                                                  " params.NAME"},
+       "value": {"description": "the new value: a number, a boolean, or an expression"},
+       "reason": {"type": "string", "description": "why, in a sentence"}},
+      ["id", "field", "value", "reason"])
+def tune_tool(ctx, id, field, value, reason):
+    from inference import catalog, tune
+    try:
+        change = tune.tune(id, field, value, reason)
+        with ctx.connect() as cx:
+            catalog.mirror(cx, catalog.load())
+    except (tune.TuneError, ValueError) as error:
+        raise ToolError(str(error))
+    return "tuned %s: %s %s -> %s\n%s" % (change["id"], change["field"], change["old"],
+                                         change["new"], change["line"]), change
+
+
+@tool("fit_weights", "Fit the goal weights to the recorded outcomes: for every"
+      " decided match, how each goal's metric ran in wins versus losses, and"
+      " a bounded nudge per weight. A dry run unless apply is true; refuses"
+      " to apply below the minimum sample.",
+      {"apply": {"type": "boolean", "description": "write the nudges through tune"
+                                                   " (default false: propose only)"},
+       "min_outcomes": {"type": "integer", "description": "decided matches required"
+                                                          " before weights move"
+                                                          " (default 10)"}})
+def fit_weights_tool(ctx, apply=False, min_outcomes=None):
+    from inference import catalog, fit
+    kwargs = {"min_outcomes": min_outcomes} if min_outcomes else {}
+    with ctx.connect() as cx:
+        proposal = fit.propose(cx, **kwargs)
+        text = fit.rendered(proposal)
+        if apply:
+            try:
+                applied = fit.apply(cx, proposal)
+            except ValueError as error:
+                raise ToolError(str(error))
+            catalog.mirror(cx, catalog.load())
+            text += "\napplied %d nudge(s):\n" % len(applied) + "\n".join(
+                a["line"] for a in applied)
+            proposal["applied"] = applied
+    return text, proposal
+
+
+@tool("tuning_log", "The audit trail of every change to the heuristics'"
+      " frontmatter - manual tunes and fitted nudges - newest last.",
+      {"lines": {"type": "integer", "description": "how many (default 20)"}})
+def tuning_log_tool(ctx, lines=20):
+    from inference import tune
+    tail = tune.log_tail(lines)
+    return "\n".join(tail) or "no tuning yet", {"lines": tail}
+
+
 class HeuristicResources:
-    """The heuristics files, readable as MCP resources."""
+    """The heuristics files (and the tuning log), readable as MCP resources."""
 
     def list(self):
         from inference import catalog
-        return [{"uri": "heuristic://" + h.id, "name": h.name,
-                 "description": "%s (%s)" % (h.kind, h.category),
-                 "mimeType": "text/markdown"} for h in catalog.load()]
+        out = [{"uri": "heuristic://" + h.id, "name": h.name,
+                "description": "%s (%s)" % (h.kind, h.category),
+                "mimeType": "text/markdown"} for h in catalog.load()]
+        out.append({"uri": "heuristic://tuning-log", "name": "tuning log",
+                    "description": "every change to the heuristics, with reasons",
+                    "mimeType": "text/markdown"})
+        return out
 
     def read(self, uri):
-        from inference import catalog
+        from inference import catalog, tune
         hid = uri.replace("heuristic://", "", 1)
+        if hid == "tuning-log":
+            return {"uri": uri, "mimeType": "text/markdown",
+                    "text": "\n".join(tune.log_tail(1000)) or "no tuning yet"}
         for h in catalog.load():
             if h.id == hid:
                 return {"uri": uri, "mimeType": "text/markdown", "text": h.raw}

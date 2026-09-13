@@ -58,6 +58,9 @@ connected; they expose the same tools.
    to check them; an invented hero or a citation of nothing is refused.
 7. Follow-ups ("what if they swap to Pharah?") re-run step 2 with the new
    red picks - inference is cheap and always current.
+8. After the game, when the user says how it went, record it with the
+   `/outcome` skill (the `record_outcome` tool) against the rec_id from
+   step 6 - that is what `/tune` fits the weights from.
 
 ## Ground rules
 

@@ -12,7 +12,7 @@ COMP  = ARGMAX[ STRATEGIES( FACTS ) ]
 ```
 
 Every table also carries `source_id` → `sources` and a `cao` timestamp.
-Those edges are left off - they would connect `sources` to all 40 tables
+Those edges are left off - they would connect `sources` to all 42 tables
 and obscure everything else.
 
 ## HEROES
@@ -88,9 +88,13 @@ erDiagram
 
 ```mermaid
 erDiagram
+    heroes ||--o{ outcome_picks : "hero_id"
     heroes ||--o{ recommendation_evidence : "hero_id"
     heroes ||--o{ recommendation_picks : "hero_id"
+    maps ||--o{ outcomes : "map_id"
     maps ||--o{ recommendations : "map_id"
+    outcomes ||--o{ outcome_picks : "outcome_id"
+    recommendations ||--o{ outcomes : "rec_id"
     recommendations ||--o{ recommendation_evidence : "rec_id"
     recommendations ||--o{ recommendation_picks : "rec_id"
 ```
@@ -112,6 +116,7 @@ erDiagram
     heroes ||--o{ hero_meta : "hero_id"
     heroes ||--o{ map_meta : "hero_id"
     heroes ||--o{ map_strategy : "hero_id"
+    heroes ||--o{ outcome_picks : "hero_id"
     heroes ||--o{ perks : "hero_id"
     heroes ||--o{ playstyle : "hero_id"
     heroes ||--o{ recommendation_evidence : "hero_id"
@@ -125,13 +130,16 @@ erDiagram
     maps ||--o{ map_playstyle : "map_id"
     maps ||--o{ map_stages : "map_id"
     maps ||--o{ map_strategy : "map_id"
+    maps ||--o{ outcomes : "map_id"
     maps ||--o{ recommendations : "map_id"
     meta_snapshots ||--o{ hero_meta : "snapshot_id"
     meta_snapshots ||--o{ map_meta : "snapshot_id"
+    outcomes ||--o{ outcome_picks : "outcome_id"
     patches ||--o{ meta_snapshots : "patch_id"
     perk_tiers ||--o{ perks : "tier_id"
     perks ||--o{ perk_ability_effects : "perk_id"
     perks ||--o{ perk_stats : "perk_id"
+    recommendations ||--o{ outcomes : "rec_id"
     recommendations ||--o{ recommendation_evidence : "rec_id"
     recommendations ||--o{ recommendation_picks : "rec_id"
     regions ||--o{ hero_meta : "region_id"

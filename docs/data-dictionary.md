@@ -13,7 +13,7 @@ are on all of them: `source_id` (which source the row came from, see
 | **MAPS** | `game_modes` · `map_modes` · `map_stages` · `maps` |
 | **META** | `competitive_tiers` · `hero_meta` · `map_meta` · `meta_snapshots` · `patches` · `regions` · `seasons` |
 | **PLAYBOOK** | `comp_archetypes` · `counters` · `heuristics` · `map_playstyle` · `map_strategy` · `playstyle` · `synergies` |
-| **INFERENCE** | `recommendation_evidence` · `recommendation_picks` · `recommendations` · `strategies` |
+| **INFERENCE** | `outcome_picks` · `outcomes` · `recommendation_evidence` · `recommendation_picks` · `recommendations` · `strategies` |
 
 
 ## `abilities`
@@ -125,7 +125,7 @@ Who answers whom: one row means countered_by_id answers hero_id. The source publ
 
 ## `hero_meta`
 
-*META · 1060 rows · `004_meta.sql`*
+*META · 530 rows · `004_meta.sql`*
 
 Rates by region and tier. All rates are percentages as published (47.9 means 47.9%). These rows are across all maps.
 
@@ -151,8 +151,8 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 | `hero_id` | integer | no |  |
 | `slug` | text | no |  |
 | `name` | text | no |  |
-| `role_id` | integer | no | `subroles.role_id` |
-| `subrole_id` | integer | no | `subroles.subrole_id` |
+| `role_id` | integer | no | `roles.role_id` |
+| `subrole_id` | integer | no | `subroles.role_id` |
 | `health` | smallint | yes |  |
 | `shield` | smallint | yes |  |
 | `armor` | smallint | yes |  |
@@ -177,7 +177,7 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 
 ## `map_meta`
 
-*META · 3180 rows · `004_meta.sql`*
+*META · 1590 rows · `004_meta.sql`*
 
 Rates per map, and per tier within a map. The source's filters compose, so a hero's rates on King's Row in Bronze are a different figure from the same hero's rates on King's Row overall - and both are published. tier_id 'all' is the unfiltered figure for that map, which keeps the dimension key non-nullable. Region is not broken out here: map x tier is already 240 requests, and map x tier x region would be 720.
 
@@ -254,7 +254,7 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 
 ## `meta_snapshots`
 
-*META · 4 rows · `004_meta.sql`*
+*META · 2 rows · `004_meta.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -265,6 +265,33 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 | `input` | text | yes |  |
 | `patch_id` | integer | yes | `patches.patch_id` |
 | `season_id` | integer | yes | `seasons.season_id` |
+
+## `outcome_picks`
+
+*INFERENCE · 97 rows · `009_outcomes.sql`*
+
+team is 'blue', 'red' or 'ban'; position orders the picks within a team.
+
+| column | type | null | references |
+| --- | --- | --- | --- |
+| `outcome_id` | integer | no | `outcomes.outcome_id` |
+| `team` | text | no |  |
+| `position` | smallint | no |  |
+| `hero_id` | integer | no | `heroes.hero_id` |
+
+## `outcomes`
+
+*INFERENCE · 8 rows · `009_outcomes.sql`*
+
+| column | type | null | references |
+| --- | --- | --- | --- |
+| `outcome_id` | integer | no |  |
+| `played_at` | timestamp with time zone | no |  |
+| `rec_id` | integer | yes | `recommendations.rec_id` |
+| `map_id` | integer | yes | `maps.map_id` |
+| `side` | text | yes |  |
+| `result` | text | no |  |
+| `note` | text | yes |  |
 
 ## `patches`
 
@@ -403,7 +430,7 @@ The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a 
 
 ## `schema_migrations`
 
-*foundation · 8 rows · `008_schema_migrations.sql`*
+*foundation · 9 rows · `008_schema_migrations.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |

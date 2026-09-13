@@ -192,6 +192,33 @@ to [docs/heuristics.md](docs/heuristics.md). The engine runs in-process
 for a local board and as its own service (`python -m inference.serve`,
 the `inference` container) when the board is given `INFERENCE_URL`.
 
+## The feedback loop: outcomes, tuning, fitting
+
+The engine is as good as its heuristics, and the heuristics are files -
+so the loop that improves them is three tools on the same MCP server (and
+three skills that drive them from a session):
+
+| tool / skill | does |
+| --- | --- |
+| `record_outcome` · `/outcome` | records how a match went - result, map and side, both sixes, bans, the recommendation played. Outcomes are facts on the board (per hero, per map), mirrored to `data/raw`, restored after every rebuild. |
+| `tune` · `/tune` | changes one heuristic's weight, a `params` dial or an expression - validated through the catalog before the file is written, re-mirrored, logged with the reason in [inference/tuning-log.md](inference/tuning-log.md). |
+| `fit_weights` · `/tune` | for every decided outcome, how each goal's metric ran in wins versus losses; proposes a bounded nudge per weight (dry run), applies it through `tune` on request, and only past ten decided matches. |
+| `tuning_log` | the audit trail: every change, when, what, why, by whom. |
+
+A weight of zero silences a goal; deleting a file is a human decision.
+The fit is a bounded, explainable step toward what separated wins from
+losses in your own games - not a learner that rewrites the brain overnight.
+
+## Running it from a session
+
+`python stack.py up` (the `/up` skill) builds the image, starts one
+container per layer, waits for every layer's health, and prints a verdict
+with the URLs and the rates' capture date; `status`, `refresh`, `test` and
+`down` are the other verbs. With the stack up, a Claude Code session has
+the `overwatch-db-docker` MCP server for everything above, the `/comp`
+skill for comps, `/outcome` after a game, `/tune` to adjust the engine,
+and `/up` to check it is all current before the next one.
+
 ## Chat with it
 
 Open this repo in a [Claude Code](https://claude.com/claude-code) session and
@@ -222,7 +249,7 @@ data/                DATA LAYER - pulls, cleans, stores; owns the schema
   authored/          the inputs we write: CSVs, strategy notes, recorded transcripts
   db/                migrations/ (001 sources · 002 heroes · 003 maps · 004 meta ·
                      005 playbook · 006 inference · 007 three layers · 008 the
-                     ledger), schema.py, cluster/ (the local build, gitignored)
+                     ledger · 009 outcomes), schema.py, cluster/ (gitignored)
   common.py          the plumbing every layer shares
   raw/               one CSV per table (exported, gitignored)
 user/                USER LAYER - every click becomes facts
@@ -237,7 +264,12 @@ inference/           INFERENCE LAYER - facts in, the optimal six out
   engine.py          infer() and evaluate(), with fact citations
   record.py          the storage gates and the transcript
   serve.py           the engine as a service (the `inference` container)
+  outcomes.py        recording what happened - the matches the fit learns from
+  tune.py            one validated, logged change to a heuristic's frontmatter
+  fit.py             goal weights nudged toward what separated wins from losses
+  tuning-log.md      the audit trail of every change
 tests/               mirrored: tests/data · tests/user · tests/inference
+stack.py             up · status · refresh · test · down (the `/up` skill)
 compose.yaml         one container per layer: db · data · inference · ui · refresher
 Dockerfile           one image for all of them; docker-entrypoint.sh picks the role
 docs/                architecture.md · heuristics.md · erd.md · data-dictionary.md

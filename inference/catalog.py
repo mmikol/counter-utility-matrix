@@ -40,6 +40,7 @@ from inference.expr import ExprError, compile_expr
 HEURISTICS_DIR = os.path.join(ROOT, "inference", "heuristics")
 DOCS_PATH = os.path.join(ROOT, "docs", "heuristics.md")
 KINDS = ("constraint", "goal", "strategy")
+NOT_HEURISTICS = ("README.md", "tuning-log.md")     # markdown that lives beside the files
 KIND_ORDER = {k: i for i, k in enumerate(KINDS)}
 
 
@@ -189,7 +190,7 @@ def load(directory=HEURISTICS_DIR):
         raise CatalogError("no heuristics directory at %s" % directory)
     out, ids = [], set()
     for name in sorted(os.listdir(directory)):
-        if not name.endswith(".md") or name == "README.md":
+        if not name.endswith(".md") or name in NOT_HEURISTICS:
             continue
         path = os.path.join(directory, name)
         with open(path, encoding="utf-8") as handle:
@@ -258,7 +259,9 @@ def write_docs(catalog, path=DOCS_PATH):
            "`heuristics` table so a recommendation can cite the ids it was scored",
            "under. Tuning is editing a file (the compose stack bind-mounts the",
            "directory, so the `inference` container picks edits up live). This",
-           "page is generated: `python -m data.orchestrator docs`.", "",
+           "page is generated: `python -m data.orchestrator docs`. Every change to a",
+           "file goes through the `tune` tool (or a `fit_weights` nudge) and is logged",
+           "in [tuning-log.md](../inference/tuning-log.md).", "",
            "## How a composition is scored", "",
            "```", "COMP = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
            "For a board (map, red picks, locked blue picks) the solver enumerates",

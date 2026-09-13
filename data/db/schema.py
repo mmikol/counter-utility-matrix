@@ -21,7 +21,8 @@ DOC_DOMAIN = {"001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES"
               "003_maps.sql": "MAPS", "004_meta.sql": "META",
               "005_playbook.sql": "PLAYBOOK", "006_inference.sql": "INFERENCE",
               "007_three_layers.sql": "PLAYBOOK",
-              "008_schema_migrations.sql": "foundation"}
+              "008_schema_migrations.sql": "foundation",
+              "009_outcomes.sql": "INFERENCE"}
 
 
 class SchemaError(Exception):
@@ -109,35 +110,41 @@ def rebuild(connection, quiet=False):
 # --- restoring what no source can re-fetch ---------------------------------
 
 RECORD_TABLES = ("recommendations", "recommendation_picks",
-                 "recommendation_evidence")
+                 "recommendation_evidence", "outcomes", "outcome_picks")
+SEQUENCED = (("recommendations", "rec_id"), ("outcomes", "outcome_id"))
 
 
 def restore_recommendations(connection, raw_dir=RAW_DIR):
-    """Re-import recorded recommendations from the data/raw mirror.
+    """Re-import recorded recommendations and outcomes from the data/raw
+    mirror.
 
-    Recorded comps are the inference layer's own output - the one thing no
-    pull tool can re-scrape - and the mirror CSVs are their backup. Never
-    merges: a database that already holds recommendations keeps them.
+    They are the inference layer's own output and the matches that followed
+    - the one thing no pull tool can re-scrape - and the mirror CSVs are
+    their backup. Never merges: a database that already holds
+    recommendations keeps them. A mirror that predates the outcomes tables
+    restores what it has.
     """
     cursor = connection.cursor()
     if cursor.execute("SELECT count(*) FROM recommendations").fetchone()[0]:
         return 0
-    paths = [os.path.join(raw_dir, t + ".csv") for t in RECORD_TABLES]
-    if not all(os.path.exists(p) for p in paths):
+    paths = [(t, os.path.join(raw_dir, t + ".csv")) for t in RECORD_TABLES]
+    paths = [(t, p) for t, p in paths if os.path.exists(p)]
+    if not any(t == "recommendations" for t, _ in paths):
         return 0
     restored = 0
     try:
-        for table, path in zip(RECORD_TABLES, paths):
+        for table, path in paths:
             with open(path, encoding="utf-8") as handle:
                 with cursor.copy("COPY %s FROM STDIN WITH (FORMAT csv,"
                                  " HEADER true)" % table) as copy:
                     copy.write(handle.read())
             restored += cursor.execute(
                 "SELECT count(*) FROM " + table).fetchone()[0]
-        cursor.execute(
-            "SELECT setval(pg_get_serial_sequence('recommendations',"
-            " 'rec_id'), greatest((SELECT coalesce(max(rec_id), 0)"
-            " FROM recommendations), 1))")
+        for table, column in SEQUENCED:
+            cursor.execute(
+                "SELECT setval(pg_get_serial_sequence('%s', '%s'),"
+                " greatest((SELECT coalesce(max(%s), 0) FROM %s), 1))"
+                % (table, column, column, table))
         connection.commit()
     except psycopg.Error as error:
         connection.rollback()
