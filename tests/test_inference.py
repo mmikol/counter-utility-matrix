@@ -267,3 +267,48 @@ def test_unknown_ally_is_refused(db):
     with pytest.raises(ValueError, match="unknown heroes"):
         dossier.build(db, None, [], allies=["Goku"])
     db.rollback()
+
+
+# --- the derived-insight formulas (documented in docs/insights.md) ----------
+
+def _derived(db, *args, **kw):
+    ev, _ = dossier.build(db, *args, **kw)
+    return [(tab, t) for _, tab, t in ev.lines if tab.startswith("derived:")]
+
+
+def test_coverage_finds_multi_enemy_answers(db):
+    lines = _derived(db, "King's Row", ["Zarya", "Pharah"])
+    cov = [t for tab, t in lines if tab == "derived:coverage"]
+    assert any("Widowmaker" in c and "2/2" in c for c in cov), cov
+    db.rollback()
+
+
+def test_skeleton_drafts_around_the_locked_ally(db):
+    lines = _derived(db, "King's Row", ["Zarya"], allies=["Ana"])
+    sk = [t for tab, t in lines if tab == "derived:skeleton"]
+    assert sk and any("Ana*" in s for s in sk), sk
+    # a skeleton never drafts a hero into two slots
+    for s in sk:
+        drafted = [n.strip(" *") for part in
+                   s.split(": ", 1)[1].split(" - ")[0].split(" | ")
+                   for n in part.split(" ", 1)[1].split(", ")]
+        assert len(drafted) == len(set(drafted)), s
+    db.rollback()
+
+
+def test_safe_picks_contradict_no_caution(db):
+    ev, _ = dossier.build(db, "King's Row", ["Zarya", "Pharah"])
+    safe = next((t for _, tab, t in ev.lines if tab == "derived:safe"), "")
+    cautioned = {t.split("CAUTION: ")[1].split(" is answered")[0]
+                 for _, _, t in ev.lines if t.startswith("CAUTION")}
+    named = {n.strip() for n in safe.split(": ", 1)[1].split(",")} if safe else set()
+    assert not (named & cautioned), (named & cautioned)
+    db.rollback()
+
+
+def test_specialists_and_lean_emit_on_a_real_map(db):
+    lines = _derived(db, "King's Row", ["Zarya", "Pharah"])
+    tables = {tab for tab, _ in lines}
+    assert "derived:specialists" in tables
+    assert "derived:lean" in tables
+    db.rollback()

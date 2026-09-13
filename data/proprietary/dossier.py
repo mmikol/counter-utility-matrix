@@ -16,6 +16,14 @@ notes, and what this layer has recommended before.
 
 from data.heuristic.transform.counterpick.names import match_key
 
+# Thresholds for the derived insights - every formula is documented in
+# docs/insights.md; change a constant there and here together.
+COVERAGE_MIN = 2          # answers at least this many named enemies
+SPECIALIST_DELTA = 2.5    # on-map win minus own baseline, percentage points
+SLEEPER_WIN = 51.0        # wins at least this much on the map...
+SLEEPER_PICK = 6.0        # ...while picked at most this much
+PAIRING_LIMIT = 6
+
 
 class Evidence:
     """The numbered lines, in order, with where each came from."""
@@ -352,6 +360,9 @@ def build(cx, map_name=None, enemies=(), allies=()):
             ev.add("counters", "CAUTION: %s is answered by enemy %s"
                    % (name, ", ".join(threats)))
 
+    _derived_insights(ev, cx, ctx, [h for h, *_ in ranked],
+                      enemy_set, ctx["ally_ids"])
+
     # --- who plays which style, roster-wide -----------------------------
     for style, names in _rows(cx, """
             select style, string_agg(h.name, ', ' order by h.name)
@@ -428,6 +439,160 @@ def build(cx, map_name=None, enemies=(), allies=()):
                % (rec_id, playstyle, picks, _trim(reasoning, 90)))
 
     return ev, ctx
+
+
+def _derived_insights(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
+    """Analytics the database computes so the model does not have to.
+
+    Every line here is DERIVED - a formula over tables, not a row from one -
+    and tagged `derived:<name>`. The formulas live in docs/insights.md.
+    """
+    avail = list(dict.fromkeys(list(ally_ids) + cand_ids))
+    if not avail:
+        return
+    names = dict(_rows(cx, "select hero_id, name from heroes"))
+    ally_mark = {h: "*" for h in ally_ids}
+
+    # coverage: how many of the named enemies each available hero answers
+    if len(enemy_set) >= COVERAGE_MIN:
+        cover = _rows(cx, """
+            select c.countered_by_id, count(distinct c.hero_id),
+                   string_agg(distinct e.name, ', ')
+            from counters c join heroes e on e.hero_id = c.hero_id
+            where c.hero_id = any(%s) and c.countered_by_id = any(%s)
+            group by 1 having count(distinct c.hero_id) >= %s
+            order by 2 desc""", list(enemy_set), avail, COVERAGE_MIN)
+        for hid, k, covered in cover[:6]:
+            ev.add("derived:coverage", "coverage: %s%s answers %d/%d named"
+                   " enemies (%s)" % (names[hid], ally_mark.get(hid, ""),
+                                      k, len(enemy_set), covered))
+
+    # safe picks: candidates no named enemy answers
+    if enemy_set:
+        answered = {h for h, in _rows(cx, """
+            select distinct hero_id from counters
+            where hero_id = any(%s) and countered_by_id = any(%s)""",
+            avail, list(enemy_set))}
+        safe = [names[h] for h in cand_ids if h not in answered][:10]
+        if safe:
+            ev.add("derived:safe", "unanswered by this enemy comp: %s"
+                   % ", ".join(safe))
+
+    # strongest pairings actually available to this draft
+    pairs = _rows(cx, """
+        select s.hero_id, s.other_id, s.score, s.note from synergies s
+        where s.hero_id = any(%s) and s.other_id = any(%s)
+        order by s.score desc nulls last limit %s""",
+        avail, avail, PAIRING_LIMIT)
+    for a, b, score, note in pairs:
+        ev.add("derived:pairings", "available pairing: %s%s + %s%s (%s/3): %s"
+               % (names[a], ally_mark.get(a, ""), names[b],
+                  ally_mark.get(b, ""), score, _trim(note or "", 60)))
+
+    # draft skeletons: greedy archetype fill from what is actually available
+    prof = {}
+    for hid, role, win_all in _rows(cx, """
+        select h.hero_id, r.name, m.win_rate from heroes h
+        join roles r using(role_id)
+        left join hero_meta m on m.hero_id = h.hero_id
+        left join competitive_tiers t on t.tier_id = m.tier_id
+            and t.code = 'all'
+        left join meta_snapshots ms on ms.snapshot_id = m.snapshot_id
+        left join sources src on src.source_id = ms.source_id
+            and src.code = 'blizzard'
+        where h.hero_id = any(%s)""", avail):
+        cur = prof.setdefault(hid, [role, set(), None, None])
+        if win_all is not None:
+            cur[2] = max(cur[2] or 0, float(win_all))
+    for hid, style in _rows(cx,
+            "select hero_id, style from playstyle where hero_id = any(%s)",
+            avail):
+        if hid in prof:
+            prof[hid][1].add(style)
+    if ctx["map_id"]:
+        for hid, w in _rows(cx, """select m.hero_id, m.win_rate from map_meta m
+            join competitive_tiers t on t.tier_id=m.tier_id
+            where m.map_id=%s and t.code='all' and m.hero_id = any(%s)""",
+            ctx["map_id"], avail):
+            if w is not None:
+                prof[hid][3] = float(w)
+
+    if ctx["map_id"]:
+        styles = [s for s, in _rows(cx, """select style from map_playstyle
+            where map_id=%s order by score desc nulls last""", ctx["map_id"])]
+    else:
+        styles = [s for s, in _rows(
+            cx, "select distinct style from comp_archetypes order by 1")]
+    for style in styles:
+        slots = _rows(cx, """select r.name, a.slots from comp_archetypes a
+            join roles r using(role_id) where a.style=%s""", style)
+        if not slots:
+            continue
+        used, parts, wins, gap = set(), [], [], False
+        for role, n in slots:
+            chosen = [h for h in ally_ids
+                      if prof.get(h, [None])[0] == role][:n]
+            rest = sorted(
+                (h for h in cand_ids
+                 if h not in used and h not in chosen
+                 and prof.get(h, [None])[0] == role),
+                key=lambda h: (style in prof[h][1],
+                               prof[h][3] if prof[h][3] is not None
+                               else (prof[h][2] or 0)),
+                reverse=True)
+            chosen += rest[:n - len(chosen)]
+            used.update(chosen)
+            if len(chosen) < n:
+                gap = True
+            parts.append("%s %s" % (role, ", ".join(
+                names[h] + ally_mark.get(h, "") for h in chosen) or "(gap)"))
+            wins += [prof[h][3] if prof[h][3] is not None else prof[h][2]
+                     for h in chosen if prof.get(h)]
+        wins = [w for w in wins if w is not None]
+        avg = " - avg win %.1f%%" % (sum(wins) / len(wins)) if wins else ""
+        ev.add("derived:skeleton", "draft skeleton (%s): %s%s%s"
+               % (style, " | ".join(parts), avg,
+                  " [has gaps]" if gap else ""))
+
+    # map specialists and sleepers: this ground vs their own baseline
+    if ctx["map_id"]:
+        for name, delta in _rows(cx, """
+            select h.name, round(m.win_rate - hm.win_rate, 1) from map_meta m
+            join heroes h using(hero_id)
+            join competitive_tiers t on t.tier_id=m.tier_id and t.code='all'
+            join hero_meta hm on hm.hero_id = m.hero_id
+            join competitive_tiers t2 on t2.tier_id=hm.tier_id and t2.code='all'
+            join meta_snapshots ms2 on ms2.snapshot_id = hm.snapshot_id
+            join sources s2 on s2.source_id = ms2.source_id
+                and s2.code='blizzard'
+            where m.map_id=%s and m.win_rate is not null
+              and hm.win_rate is not null
+              and m.win_rate - hm.win_rate >= %s
+            order by 2 desc limit 6""", ctx["map_id"], SPECIALIST_DELTA):
+            ev.add("derived:specialists", "map specialist: %s runs %+.1f here"
+                   " vs their own overall baseline" % (name, delta))
+        for name, win, pick in _rows(cx, """
+            select h.name, m.win_rate, m.pick_rate from map_meta m
+            join heroes h using(hero_id)
+            join competitive_tiers t on t.tier_id=m.tier_id and t.code='all'
+            where m.map_id=%s and m.win_rate >= %s and m.pick_rate <= %s
+            order by m.win_rate desc limit 5""",
+            ctx["map_id"], SLEEPER_WIN, SLEEPER_PICK):
+            ev.add("derived:sleepers", "sleeper here: %s wins %.1f%% while"
+                   " picked only %.1f%% - the lobby underrates this"
+                   % (name, win, pick))
+
+    # what the enemy comp leans toward
+    if len(enemy_set) >= 2:
+        lean = _rows(cx, """select style, count(*) from playstyle
+            where hero_id = any(%s) group by 1 order by 2 desc""",
+            list(enemy_set))
+        if lean:
+            ev.add("derived:lean", "enemy comp style profile: %s%s" % (
+                ", ".join("%s %d/%d" % (s, n, len(enemy_set))
+                          for s, n in lean),
+                " - leans %s" % lean[0][0]
+                if lean[0][1] > len(enemy_set) / 2 else ""))
 
 
 def main():

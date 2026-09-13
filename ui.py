@@ -170,11 +170,14 @@ def form(cx, values=None, error=None, evidence=None):
         <label>Known enemy heroes (comma separated)</label>
         <input type='text' name='enemies' list='roster' value='%s'
                placeholder='Zarya, Mei'>
+        <label>Your locked picks (comma separated)</label>
+        <input type='text' name='allies' list='roster' value='%s'
+               placeholder='Ana, Reinhardt'>
         <datalist id='roster'>%s</datalist>
         <button name='do' value='preview'>Show the evidence</button>
         <span class='badge'>for a decided comp: /comp in a Claude Code
         session reads these same lines</span></form>%s""" % (
-        err, opts, esc(v.get("enemies", "")),
+        err, opts, esc(v.get("enemies", "")), esc(v.get("allies", "")),
         "".join("<option>%s</option>" % esc(h) for h in heroes), ev_html))
 
 
@@ -245,9 +248,11 @@ class Handler(BaseHTTPRequestHandler):
         map_name = v.get("map") or None
         enemies = [e.strip() for e in v.get("enemies", "").split(",")
                    if e.strip()]
+        allies = [a.strip() for a in v.get("allies", "").split(",")
+                  if a.strip()]
         try:
             with psycopg.connect(dsn()) as cx:
-                ev, _ = dossier.build(cx, map_name, enemies)
+                ev, _ = dossier.build(cx, map_name, enemies, allies)
                 self._send(form(cx, v, evidence=ev))
         except ValueError as error:
             with psycopg.connect(dsn()) as cx:

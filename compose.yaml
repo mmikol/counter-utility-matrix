@@ -44,10 +44,11 @@ services:
   # The cron: refreshes the data on a schedule (default: daily). Each run is
   # an orchestrator `update` - entities refreshed in place, a new dated
   # snapshot appended, CSVs re-exported - through the same bind-mounted
-  # caches, so a quiet day costs almost no requests against the sources.
-  # Tune with OVERWATCH_DB_UPDATE_INTERVAL (seconds) or `docker compose
-  # stop updater` to go manual.
+  # caches. CODED BUT DISABLED by default (profile "cron"): enable with
+  #   docker compose --profile cron up -d
+  # Tune with OVERWATCH_DB_UPDATE_INTERVAL (seconds).
   updater:
+    profiles: ["cron"]
     build: .
     environment:
       DATABASE_URL: postgresql://overwatch:overwatch@db/overwatch

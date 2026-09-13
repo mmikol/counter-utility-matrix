@@ -9,13 +9,17 @@ five-hero composition, fast.
 
 ## Workflow
 
-1. Pull map / known enemy heroes / the actual question out of what the user
+1. Pull map / known enemy heroes / the user's LOCKED FRIENDLY PICKS / the
+   actual question out of what the user
    said. Missing pieces are fine - the dossier just says less. Don't
    interrogate; one clarifying question only if the request is truly empty.
 2. Run the dossier (deterministic evidence from the whole database):
 
        .venv/bin/python -m data.proprietary.dossier --map "King's Row" \
-           --enemy Zarya --enemy Mei
+           --enemy Zarya --enemy Mei --ally Ana
+
+   Locked picks are constraints: profiled, given proven partners, WARNed
+   when an enemy answers them - and the comp must include them.
 
    Against the Docker database (after `docker compose up` has inflated it),
    prefix any host command with the bridge: `./docker-db .venv/bin/python
@@ -31,7 +35,7 @@ five-hero composition, fast.
 
        .venv/bin/python -m data.proprietary.record < /tmp/comp.json
 
-   Shape: {"question", "map", "enemies", "model": "claude-code-session",
+   Shape: {"question", "map", "enemies", "allies", "model": "claude-code-session",
    "answer": {"playstyle", "reasoning", "picks": [{"hero", "why",
    "evidence": ["E7", ...]}]}}. The recorder validates shape and
    meaning - an invented hero or a citation of nothing is refused.
@@ -51,3 +55,7 @@ five-hero composition, fast.
 - Respect ban pressure: never build a comp that dies with a likely ban.
 - If the dossier warned that patches shipped since capture, weight kit facts
   and the playbook over rates, and tell the user.
+- `derived:` lines are pre-computed analytics (formulas in docs/insights.md):
+  coverage and safe-picks tell you the leverage slots, the draft skeleton is
+  a straw man to argue against - improve on it and say why, or adopt it and
+  say why. Cite them like any other line.

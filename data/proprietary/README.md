@@ -84,8 +84,11 @@ COUNTER = MAX[...] intersections pre-joined (`counters+map_meta`,
 `playstyle+map_meta`), a ranked candidate pool with full profiles,
 rank-sensitivity spreads and CAUTION lines where a known enemy answers the
 candidate, role passives, archetype slot shapes, every authored synergy and
-strategy note, meta leaders and ban pressure — and what this layer itself
-recommended before on the same map. The model that reads it is the Claude
+strategy note, meta leaders and ban pressure, a block of `derived:`
+analytics computed by formula (multi-enemy coverage, safe picks, available
+pairings, greedy draft skeletons around your locked picks, map specialists,
+sleepers, enemy style lean — see docs/insights.md) — and what this layer
+itself recommended before on the same map. The model that reads it is the Claude
 Code session itself: the `/comp` skill (`.claude/skills/comp`) turns any
 session in this repo into the inference layer - subscription-covered, no API
 key, no per-token bill. The session runs the dossier CLI, decides under the
