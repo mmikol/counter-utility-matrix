@@ -40,7 +40,7 @@ def test_initialize_then_list_tools_over_stdio():
     assert replies[0]["result"]["serverInfo"]["name"] == "overwatch-db"
     names = {t["name"] for t in replies[1]["result"]["tools"]}
     assert {"pull_heroes", "pull_rates", "sync_all", "db_rebuild", "query",
-            "facts", "infer", "evaluate", "board", "record", "load_playbook",
+            "facts", "infer", "evaluate", "board", "record", "load_authored",
             "record_outcome", "tune", "fit_weights", "tuning_log"} <= names
     for t in replies[1]["result"]["tools"]:
         assert t["inputSchema"]["type"] == "object" and t["description"]

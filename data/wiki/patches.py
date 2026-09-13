@@ -6,7 +6,7 @@ have patches to link to.
 """
 
 
-from data import common, sources
+from data import db, fetch
 from data.wiki import WIKI, cargo_query
 
 CARGO_TABLE = "Patches"
@@ -15,11 +15,11 @@ CARGO_FIELDS = ("_pageName=name", "date", "platform", "source")
 
 
 def run(connection, cache_dir=None, session=None, log=print):
-    session = sources.session(session)
+    session = fetch.session(session)
     rows = cargo_query(session, CARGO_TABLE, CARGO_FIELDS, cache_dir)
 
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, WIKI, common.now())
+    source_id = db.register_source(cursor, WIKI, db.now())
     loaded, skipped = 0, 0
     for row in rows:
         name, released = row.get("name"), row.get("date")

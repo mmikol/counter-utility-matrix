@@ -16,9 +16,9 @@ The page carries its rows as JSON on a blz-data-table element, and its filter
 vocabularies as ordinary select options.
 """
 
-from data.sources import cache_key, cached_get
-from data import common, sources
-from data.common import current_patch, current_season
+from data import INPUT_DEVICE, PLATFORM, REGION, db, fetch
+from data.db import current_patch, current_season
+from data.fetch import cache_key, cached_get
 from data.blizzard import BLIZZARD, RATES_URL
 import json
 from bs4 import BeautifulSoup
@@ -76,12 +76,11 @@ RETRY_BACKOFF = 5.0
 QUEUE_NAME = "competitive_role_queue"
 QUEUE_LABEL = "Competitive - Role Queue"
 INPUT_PARAM = "Console"
-PLATFORM_NAME = sources.PLATFORM
+PLATFORM_NAME = PLATFORM
 # Derived, not published: console supports no input but a controller.
-INPUT_DEVICE = sources.INPUT_DEVICE
 ALL_TIER = "All"
 REGION_PARAM = "Americas"
-REGION_CODE = sources.REGION
+REGION_CODE = REGION
 REGION_NAME = "Americas"
 
 
@@ -104,7 +103,7 @@ def competitive_rq(session, cache_dir):
     return codes[0]
 
 
-def fetch(session, params, cache_dir, rq):
+def fetch_slice(session, params, cache_dir, rq):
     """One rates page for a given filter combination."""
     query = dict(params, rq=rq, input=INPUT_PARAM, region=REGION_PARAM)
     return cached_get(
@@ -116,17 +115,17 @@ def fetch(session, params, cache_dir, rq):
 
 
 def run(connection, cache_dir=None, session=None, log=print):
-    session = sources.session(session)
-    cao = common.now()
+    session = fetch.session(session)
+    cao = db.now()
 
     rq = competitive_rq(session, cache_dir)
-    baseline = fetch(session, {}, cache_dir, rq)
+    baseline = fetch_slice(session, {}, cache_dir, rq)
     tiers = parse_filter_options(baseline, "filter-tier-select")
     maps = [m for m in parse_filter_options(baseline, "filter-map-select")
             if m[0] != "all-maps"]
 
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, BLIZZARD, cao)
+    source_id = db.register_source(cursor, BLIZZARD, cao)
     cursor.execute(
         "INSERT INTO regions (code, name, source_id) VALUES (%s, %s, %s)"
         " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name"
@@ -155,8 +154,8 @@ def run(connection, cache_dir=None, session=None, log=print):
     )
     snapshot_id = cursor.fetchone()[0]
 
-    hero_ids = common.lookup_ids(cursor, "heroes", "name", "hero_id")
-    map_ids = common.lookup_ids(cursor, "maps", "name", "map_id")
+    hero_ids = db.lookup_ids(cursor, "heroes", "name", "hero_id")
+    map_ids = db.lookup_ids(cursor, "maps", "name", "map_id")
     unmatched = set()
 
     def load_hero_slice(html, tier_code):
@@ -181,7 +180,7 @@ def run(connection, cache_dir=None, session=None, log=print):
     rows = load_hero_slice(baseline, ALL_TIER)
     for code, _ in tiers:
         if code != ALL_TIER:
-            rows += load_hero_slice(fetch(session, {"tier": code}, cache_dir, rq),
+            rows += load_hero_slice(fetch_slice(session, {"tier": code}, cache_dir, rq),
                                     code)
     log("hero/tier rows: %d" % rows)
 
@@ -196,7 +195,7 @@ def run(connection, cache_dir=None, session=None, log=print):
             skipped_maps.append(label)
             continue
         for name, win, pick, ban in parse_rows(
-            fetch(session, {"map": slug}, cache_dir, rq)
+            fetch_slice(session, {"map": slug}, cache_dir, rq)
         ):
             hero_id = hero_ids.get(name.lower())
             if hero_id is None:

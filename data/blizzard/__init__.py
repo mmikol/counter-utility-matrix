@@ -4,7 +4,7 @@
              perk text (Blizzard publishes prose and no numbers)
     meta     the rates page: win, pick and ban rates as a dated snapshot
 
-Ordinary web pages fetched with data.sources.cached_get; the endpoints and
+Ordinary web pages fetched with data.fetch.cached_get; the endpoints and
 the `sources` row its pages become are named here, once.
 """
 

@@ -5,10 +5,8 @@ rejection here must be loud, name the line, and leave nothing half-loaded."""
 
 import pytest
 
-from data.playbook import AuthoredError, read_archetypes
-from data.playbook import read_map_playstyle
-from data.playbook import read_seasons
-from data.playbook import read_synergies
+from data.authored import (AuthoredError, read_archetypes, read_map_playstyle,
+                           read_seasons, read_synergies)
 
 
 def write(tmp_path, text):

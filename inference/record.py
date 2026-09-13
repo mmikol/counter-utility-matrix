@@ -18,13 +18,13 @@ import re
 from datetime import datetime, timezone
 
 
-from data import common
-from data.sources import AUTHORED
+from data import AUTHORED_DIR, db
+from data.authored import AUTHORED
 from user.facts import engine as facts_engine
 from user.facts import model
 from user.facts.compute import TEAM_SIZE
 
-REC_DIR = os.path.join(common.AUTHORED_DIR, "recommendations")
+REC_DIR = os.path.join(AUTHORED_DIR, "recommendations")
 
 
 def validate_answer(answer):
@@ -46,8 +46,8 @@ def persist(cx, question, answer, fs, map_id, prompt, model_name, raw_json):
     """Store the exchange; returns rec_id. Raises on citations of nothing.
     Does not commit - the caller owns the transaction."""
     cursor = cx.cursor()
-    source_id = common.register_source(cursor, AUTHORED, common.now())
-    hero_ids = common.lookup_ids(cursor, "heroes", "name", "hero_id")
+    source_id = db.register_source(cursor, AUTHORED, db.now())
+    hero_ids = db.lookup_ids(cursor, "heroes", "name", "hero_id")
     by_tag = {f.id: f for f in fs.facts}
     unknown_heroes = [p["hero"] for p in answer["picks"]
                       if p["hero"].lower() not in hero_ids]
@@ -121,7 +121,7 @@ def record(cx, question, answer, map_name=None, red=(), blue=(),
                      "facts rebuilt at record time:\n\n" + fs.rendered(),
                      model_name, json.dumps(answer))
     cx.commit()
-    common.export(cx)
+    db.export(cx)
     path = transcript(rec_id, question, map_name, list(red), list(blue), answer,
                       fs, model_name, list(bans), side)
     return rec_id, path

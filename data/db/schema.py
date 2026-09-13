@@ -13,7 +13,7 @@ import re
 
 import psycopg
 
-from data.common import RAW_DIR, ROOT
+from data import RAW_DIR, ROOT
 
 MIGRATIONS_DIR = os.path.join(ROOT, "data", "db", "migrations")
 

@@ -22,7 +22,7 @@ import os
 import re
 import time
 import requests
-from data.sources import is_stale, keep_stale
+from data.fetch import is_stale, keep_stale
 
 
 WIKI_API = "https://overwatch.fandom.com/api.php"

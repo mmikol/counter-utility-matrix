@@ -2,7 +2,8 @@
 
 Everything else in the database is fetched by a pull tool. These files are
 written by hand, so they are committed, loaded whole-truth by
-`load_playbook`, and never discarded by a rebuild.
+`load_authored`, and never discarded by a rebuild. The loader is this
+folder's own `__init__.py`.
 
 - `synergies.csv` - `hero,other,score,note`: one PAIR per row, written once
   in either order, stored once. The note is the reasoning the board shows

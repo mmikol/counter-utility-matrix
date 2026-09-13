@@ -14,7 +14,7 @@ import pytest
 
 pytestmark = pytest.mark.invariant
 
-from data.common import RAW_DIR as RAW
+from data import RAW_DIR as RAW
 
 
 def _tables(rows):
@@ -23,9 +23,9 @@ def _tables(rows):
 
 @pytest.fixture(autouse=True)
 def _same_database(db):
-    from data import common
-    mark = common.export_mark()
-    if mark and mark["system_identifier"] != common.database_identity(db):
+    from data.db import database_identity, export_mark
+    mark = export_mark()
+    if mark and mark["system_identifier"] != database_identity(db):
         pytest.skip("data/raw was exported from a different database (%s); run"
                     " `python -m data.mcp call export_csv` against this one"
                     % mark["exported_at"])
@@ -55,9 +55,9 @@ def test_row_counts_match_the_database(rows, one):
 
 
 def test_the_mirror_names_its_database(db):
-    from data import common
-    mark = common.export_mark()
+    from data.db import database_identity, export_mark
+    mark = export_mark()
     if mark is None:
         pytest.skip("data/raw not exported yet")
-    assert mark["system_identifier"] == common.database_identity(db)
+    assert mark["system_identifier"] == database_identity(db)
     assert mark["tables"] == len(_tables(lambda sql: db.execute(sql).fetchall()))

@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import psycopg
 
-from data import common
+from data import ROOT, db
 from user.facts import engine as facts_engine
 from user.facts import model
 from user.facts.compute import SIDED_MODES, TEAM_SIZE
@@ -38,7 +38,7 @@ INFERENCE_URL = os.environ.get("INFERENCE_URL", "").rstrip("/")
 
 
 def dsn():
-    return common.default_dsn()
+    return db.default_dsn()
 
 
 def remote(path, query=None, payload=None):
@@ -143,7 +143,7 @@ def api_record(cx, payload):
             payload.get("bans", []), payload.get("side", ""))
     except (ValueError, KeyError) as error:
         return {"error": str(error)}, 400
-    return {"rec_id": rec_id, "transcript": os.path.relpath(path, common.ROOT)}, 200
+    return {"rec_id": rec_id, "transcript": os.path.relpath(path, ROOT)}, 200
 
 
 # --- the board page ---------------------------------------------------------

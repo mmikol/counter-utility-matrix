@@ -3,7 +3,7 @@
 The inference layer's brain: 38 markdown files in `inference/strategies/`
 (18 constraints - 3 limits, 10 scored, 5 prose - and 20 heuristics). Each file is
 frontmatter a machine scores by and prose a person argues with; the
-solver reads the files live, and `load_playbook` mirrors them into the
+solver reads the files live, and `load_authored` mirrors them into the
 `strategies` table so a recommendation can cite the ids it was scored
 under. Tuning is editing a file (the compose stack bind-mounts the
 directory, so the `inference` container picks edits up live). This

@@ -9,7 +9,7 @@ Extracting team-composition playstyles from the wiki.
 A hero appears under every playstyle they suit, so the lists overlap by design.
 """
 
-from data import common, sources
+from data import db, fetch
 from data.wiki import WIKI, WikiError, fetch_wikitext, markup
 import re
 
@@ -44,13 +44,13 @@ def parse_playstyles(text):
 # --- store ---------------------------------------------------------------------
 
 def run(connection, cache_dir=None, session=None, log=print):
-    session = sources.session(session)
+    session = fetch.session(session)
     playstyles = parse_playstyles(fetch_wikitext(session, COMPOSITION_PAGE, cache_dir))
 
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, WIKI, common.now())
+    source_id = db.register_source(cursor, WIKI, db.now())
     cursor.execute("DELETE FROM playstyle")
-    hero_ids = common.lookup_ids(cursor, "heroes", "name", "hero_id")
+    hero_ids = db.lookup_ids(cursor, "heroes", "name", "hero_id")
     links, unmatched = 0, []
     for code, name, heroes in playstyles:
         for hero_name in heroes:

@@ -28,17 +28,15 @@ step with the tools.
 data/
   README.md          this file
   __init__.py        the package's own map, in one docstring
-  common.py          the plumbing every layer shares
-  sources.py         the fetch cache and its freshness policy; the scope
+  fetch.py           the page cache and its freshness policy
   names.py           matching hero, map and ability names across sources
-  playbook.py        the authored CSVs, reloaded whole
   refresh.py         the daily refresh (the refresher container's process)
   blizzard/          overwatch.blizzard.com, page to table
   wiki/              overwatch.fandom.com, page to table
   counterpick/       counterpick.gg, page to table
   mcp/               the MCP server and the tools
-  db/                the schema: migrations, the ledger, rebuild, restore
-  authored/          the inputs we write by hand
+  db/                the database: where it is, the schema, the ledger
+  authored/          the inputs we write by hand, and their loader
   raw/               one CSV per table, the mirror (exported, gitignored)
 ```
 
@@ -46,11 +44,10 @@ data/
 
 | file | purpose |
 | --- | --- |
-| `common.py` | Where the repo, the caches, the authored inputs and the mirror live; how the database is found (`DATABASE_URL`, or the embedded cluster at `db/cluster`); how a source registers itself and how names look up ids; the CSV export and its `EXPORT.json` mark naming the database it came from. Knows no particular source or table. |
-| `sources.py` | `cached_get`: one page, from the cache if it is there and fresh. `set_max_age`: the freshness policy - a build keeps every cached page, the refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. The project's scope - console, controller, Americas - declared once. `AUTHORED`: the `sources` row for what we write instead of fetch. |
+| `__init__.py` | What the whole layer must agree on: where the repo, the caches, the authored inputs and the mirror live, and the scope every rates snapshot is pinned to - console, controller, Americas - declared once. |
+| `fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `set_max_age`: the freshness policy - a build keeps every cached page, the refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `prepare_cache`: the cache directory a tool hands a pull. |
 | `names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. Two keys because they solve two problems. |
-| `playbook.py` | Loads `authored/*.csv` - seasons, synergies, archetypes, map playstyles - each a whole-truth reload with loud errors on a malformed row or an unknown name. The `load_playbook` tool runs them, then mirrors the strategies catalog. |
-| `refresh.py` | The clock. Daily at `OVERWATCH_DB_REFRESH_AT` it refetches what moves between patches (rates, counters), re-mirrors the playbook and the strategies, re-exports the mirror; once the wiki cache is older than `OVERWATCH_DB_REFRESH_FULL_DAYS` it runs `sync_all` on every source. Refreshes on start when the caches are older than a day. |
+| `refresh.py` | The clock. Daily at `OVERWATCH_DB_REFRESH_AT` it refetches what moves between patches (rates, counters), re-mirrors the authored inputs and the strategies, re-exports the mirror; once the wiki cache is older than `OVERWATCH_DB_REFRESH_FULL_DAYS` it runs `sync_all` on every source. Refreshes on start when the caches are older than a day. |
 
 ### One package per source
 
@@ -80,13 +77,14 @@ them.
 | file | purpose |
 | --- | --- |
 | `server.py` | A dependency-free MCP server: JSON-RPC over stdio, and the same surface over Streamable HTTP (`POST /mcp`, `GET /health`). `initialize`, `tools/list`, `tools/call`, `resources/*`. Dependency-free because the official SDK needs Python 3.10 and the project runs on 3.9. |
-| `tools.py` | The tools. `pull_*` (one source and domain each), `load_playbook`, `sync_all`; the database's life (`db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, read-only `query`); and, through the same door, the user and inference layers' tools (`roster`, `facts`, `infer`, `evaluate`, `board`, `strategies`, `record`, `record_outcome`, `tune`, `fit_weights`, `tuning_log`). The strategies are also served as `strategy://` resources. |
+| `tools.py` | The tools. `pull_*` (one source and domain each), `load_authored`, `sync_all`; the database's life (`db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, read-only `query`); and, through the same door, the user and inference layers' tools (`roster`, `facts`, `infer`, `evaluate`, `board`, `strategies`, `record`, `record_outcome`, `tune`, `fit_weights`, `tuning_log`). The strategies are also served as `strategy://` resources. |
 | `__main__.py` | `python -m data.mcp` serves over stdio (what `.mcp.json` launches); `--http HOST:PORT` serves over HTTP (the `data` container); `list` and `call NAME [JSON]` are the shell. |
 
 ### `db/` - the schema
 
 | file | purpose |
 | --- | --- |
+| `__init__.py` | Where the database is (`DATABASE_URL`, or the embedded cluster at `db/cluster`); how a source registers the `sources` row its rows carry; how names look up ids; what a capture is stamped with (now, the current patch and season); the CSV export and its `EXPORT.json` mark naming the database it came from. Knows no particular source or table. |
 | `schema.py` | Applies migrations and records them in the `schema_migrations` ledger; `pending` says which files the database has not seen; `rebuild` drops everything and reapplies; `restore` brings recorded recommendations and outcomes back from the mirror after a rebuild; `generate_docs` writes `docs/erd.md` and `docs/data-dictionary.md` from the live schema. |
 | `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` outcomes, `010` constraints and heuristics (the `strategies` table). A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
 | `cluster/` | The embedded Postgres cluster `pgserver` creates on first touch (gitignored). The compose stack uses its own `postgres` container instead, reachable from the host through `./docker-db`. |
@@ -96,8 +94,12 @@ them.
 The inputs that are ours rather than fetched: `synergies.csv`,
 `archetypes.csv`, `map_playstyle.csv`, `seasons.csv`, each documented in
 [`authored/README.md`](authored/README.md), and `recommendations/`, one
-markdown transcript per recorded composition. They are committed, loaded
-whole-truth by `load_playbook`, and never discarded by a rebuild. The
+markdown transcript per recorded composition. The folder's `__init__.py`
+is their loader - seasons, synergies, archetypes, map playstyles, each a
+whole-truth reload with loud errors on a malformed row or an unknown
+name - and declares the `sources` row they become, as every source
+package does. They are committed, loaded by `load_authored`, and never
+discarded by a rebuild. The
 strategies themselves - the constraints and heuristics - are not here;
 they are the inference layer's, in `inference/strategies/`.
 
@@ -113,7 +115,7 @@ themselves when the mirror came from the other database.
 
 `sync_all` runs the pulls in dependency order - `blizzard.heroes`,
 `wiki.heroes`, `wiki.maps`, `wiki.patches`, `blizzard.meta`,
-`wiki.playstyles`, `counterpick.heroes` - then `load_playbook`, then
+`wiki.playstyles`, `counterpick.heroes` - then `load_authored`, then
 `restore`, then `export_csv`. Entity tables refresh in place; each rates
 pull appends a dated snapshot, the series the trend facts difference. The
 page caches (`.cache-blizzard/`, `.cache-wiki/`, `.cache-counterpick/` at

@@ -21,7 +21,7 @@ grouping them into weapons is weapons.py's job.
 
 import collections
 import requests
-from data import common, sources
+from data import db, fetch
 from data.wiki import (
     WIKI,
     WikiError,
@@ -431,7 +431,7 @@ def load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
 
 def run(connection, cache_dir=None, session=None, supplement=True, log=print):
     """Pull the Cargo table (and each hero article), clean, store."""
-    session = sources.session(session)
+    session = fetch.session(session)
 
     rows = cargo_query(session, CARGO_TABLE, CARGO_FIELDS, cache_dir)
     by_hero = parse_rows(rows)
@@ -451,7 +451,7 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
         log("supplemented stats: %d  (fields Cargo does not expose)" % supplemented)
 
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, WIKI, common.now())
+    source_id = db.register_source(cursor, WIKI, db.now())
     for table in ("ability_modifiers", "perk_ability_effects", "perk_stats",
                   "weapon_stats", "ability_stats", "weapon_configs", "weapons"):
         cursor.execute("DELETE FROM " + table)
@@ -461,7 +461,7 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
         for entry in weapons + abilities + perks:
             all_codes.update(entry["stats"])
     key_ids = stat_key_ids(cursor, all_codes, source_id)
-    hero_ids = common.lookup_ids(cursor, "heroes", "name", "hero_id")
+    hero_ids = db.lookup_ids(cursor, "heroes", "name", "hero_id")
 
     tally = collections.Counter()
     unknown_heroes = []

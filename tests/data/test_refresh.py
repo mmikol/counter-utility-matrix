@@ -9,7 +9,7 @@ from datetime import datetime
 import pytest
 import requests
 
-from data import refresh, sources
+from data import fetch, refresh
 from data import wiki
 
 
@@ -43,7 +43,7 @@ class FakeSession:
 @pytest.fixture(autouse=True)
 def forever_after():
     yield
-    sources.set_max_age(None)          # never leak a policy into other tests
+    fetch.set_max_age(None)          # never leak a policy into other tests
 
 
 def _old_file(path, text, hours=48):
@@ -55,40 +55,40 @@ def _old_file(path, text, hours=48):
 def test_a_fresh_cache_is_read_without_fetching(tmp_path):
     _old_file(tmp_path / "k.html", "cached")
     session = FakeSession()
-    assert sources.cached_get(session, "u", str(tmp_path), "k", delay=0) == "cached"
+    assert fetch.cached_get(session, "u", str(tmp_path), "k", delay=0) == "cached"
     assert session.calls == 0
 
 
 def test_refresh_refetches_a_stale_page_and_rewrites_the_cache(tmp_path):
     _old_file(tmp_path / "k.html", "cached")
-    sources.set_max_age(0)
+    fetch.set_max_age(0)
     session = FakeSession("new page")
-    assert sources.cached_get(session, "u", str(tmp_path), "k", delay=0) == "new page"
+    assert fetch.cached_get(session, "u", str(tmp_path), "k", delay=0) == "new page"
     assert session.calls == 1
     assert (tmp_path / "k.html").read_text(encoding="utf-8") == "new page"
     # the rewritten page is fresh under any finite policy but the refresh one
-    sources.set_max_age(3600)
-    assert not sources.is_stale(str(tmp_path / "k.html"))
-    sources.set_max_age(None)
-    assert not sources.is_stale(str(tmp_path / "k.html"))
+    fetch.set_max_age(3600)
+    assert not fetch.is_stale(str(tmp_path / "k.html"))
+    fetch.set_max_age(None)
+    assert not fetch.is_stale(str(tmp_path / "k.html"))
 
 
 def test_a_failed_refetch_keeps_the_cached_copy(tmp_path, capsys):
     _old_file(tmp_path / "k.html", "yesterday")
-    sources.set_max_age(0)
+    fetch.set_max_age(0)
     session = FakeSession(fail=True)
-    assert sources.cached_get(session, "u", str(tmp_path), "k", delay=0,
+    assert fetch.cached_get(session, "u", str(tmp_path), "k", delay=0,
                               retries=2, backoff=0) == "yesterday"
     assert "keeping the cached copy" in capsys.readouterr().err
-    with pytest.raises(sources.FetchError):     # nothing cached: the failure surfaces
-        sources.cached_get(FakeSession(fail=True), "u", str(tmp_path), "other",
+    with pytest.raises(fetch.FetchError):     # nothing cached: the failure surfaces
+        fetch.cached_get(FakeSession(fail=True), "u", str(tmp_path), "other",
                            delay=0, backoff=0)
 
 
 def test_wiki_cargo_and_wikitext_keep_stale_copies_too(tmp_path):
     _old_file(tmp_path / "cargo_abilities.json", '[{"a": 1}]')
     _old_file(tmp_path / "Ana.wikitext", "{{Infobox}}")
-    sources.set_max_age(0)
+    fetch.set_max_age(0)
     down = FakeSession(fail=True)
     assert wiki.cargo_query(down, "Abilities", ("a",), str(tmp_path)) == [{"a": 1}]
     assert wiki.fetch_wikitext(down, "Ana", str(tmp_path)) == "{{Infobox}}"
@@ -154,7 +154,7 @@ def test_daily_refresh_touches_only_what_moves(monkeypatch):
     ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"),
                                  lambda m: None, full=False)
     assert ok and calls == [("pull_rates", True), ("pull_counters", True),
-                            ("load_playbook", None), ("export_csv", None)]
+                            ("load_authored", None), ("export_csv", None)]
     calls.clear()
     ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"),
                                  lambda m: None, full=True)

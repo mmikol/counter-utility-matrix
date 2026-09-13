@@ -1,4 +1,6 @@
-"""The authored inputs - data/authored/*.csv - reloaded whole.
+"""The inputs we write instead of fetch - the CSVs in this folder - and the
+loader that reloads them whole. Like every source package, this one
+declares the `sources` row its rows become.
 
     seasons        the coarse delineator of rates snapshots (the wiki's
                    season pages are lore with no dates); loading recomputes
@@ -13,7 +15,7 @@
 
 Every input follows one contract: the file is the whole truth, a malformed
 row or an unknown name is a loud error to fix in the file (nothing is
-dropped), and loading replaces the table. The `load_playbook` tool runs
+dropped), and loading replaces the table. The `load_authored` tool runs
 them all (or a subset) and then mirrors the strategies catalog.
 """
 
@@ -22,8 +24,12 @@ import os
 from datetime import date
 
 
-from data import common
-from data.sources import AUTHORED
+from data import AUTHORED_DIR, db
+
+# The sources row these files become. There is nothing to download - the
+# "url" is the directory - but every row still names its source. The code
+# stays `user` for continuity with databases built before the rename.
+AUTHORED = ("user", "Hand-authored inputs", "data/authored/")
 
 
 class AuthoredError(Exception):
@@ -42,7 +48,7 @@ def _csv(path, expected):
 
 
 def _path(name):
-    return os.path.join(common.AUTHORED_DIR, name + ".csv")
+    return os.path.join(AUTHORED_DIR, name + ".csv")
 
 
 # --- seasons -------------------------------------------------------------------
@@ -67,7 +73,7 @@ def read_seasons(path):
 def load_seasons(connection, path=None, log=print):
     rows = read_seasons(path or _path("seasons"))
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, AUTHORED, common.now())
+    source_id = db.register_source(cursor, AUTHORED, db.now())
     cursor.execute("UPDATE meta_snapshots SET season_id = NULL")
     cursor.execute("DELETE FROM seasons")
     for name, started, note in rows:
@@ -110,8 +116,8 @@ def read_synergies(path):
 def load_synergies(connection, path=None, log=print):
     rows = read_synergies(path or _path("synergies"))
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, AUTHORED, common.now())
-    hero_ids = common.lookup_ids(cursor, "heroes", "name", "hero_id")
+    source_id = db.register_source(cursor, AUTHORED, db.now())
+    hero_ids = db.lookup_ids(cursor, "heroes", "name", "hero_id")
     unknown = sorted({name for pair in rows for name in pair[:2]
                       if name.lower() not in hero_ids})
     if unknown:
@@ -147,8 +153,8 @@ def read_archetypes(path):
 def load_archetypes(connection, path=None, log=print):
     rows = read_archetypes(path or _path("archetypes"))
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, AUTHORED, common.now())
-    role_ids = common.lookup_ids(cursor, "roles", "code", "role_id")
+    source_id = db.register_source(cursor, AUTHORED, db.now())
+    role_ids = db.lookup_ids(cursor, "roles", "code", "role_id")
     unknown = sorted({r for _, r, _, _ in rows if r not in role_ids})
     if unknown:
         raise AuthoredError("unknown role codes (fix archetypes.csv): %s"
@@ -185,8 +191,8 @@ def read_map_playstyle(path):
 def load_map_playstyle(connection, path=None, log=print):
     rows = read_map_playstyle(path or _path("map_playstyle"))
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, AUTHORED, common.now())
-    map_ids = common.lookup_ids(cursor, "maps", "name", "map_id")
+    source_id = db.register_source(cursor, AUTHORED, db.now())
+    map_ids = db.lookup_ids(cursor, "maps", "name", "map_id")
     unknown = sorted({m for m, *_ in rows if m.lower() not in map_ids})
     if unknown:
         raise AuthoredError("maps not in the pool (fix map_playstyle.csv): %s"

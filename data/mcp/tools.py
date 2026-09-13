@@ -16,8 +16,7 @@ from datetime import datetime
 
 import psycopg
 
-from data import common, sources
-from data.common import CACHE_DIRS
+from data import CACHE_DIRS, ROOT, db, fetch
 from data.mcp.server import Tool, ToolError
 
 
@@ -32,14 +31,14 @@ class Context:
     @property
     def dsn(self):
         if self._dsn is None:
-            self._dsn = common.default_dsn()
+            self._dsn = db.default_dsn()
         return self._dsn
 
     def connect(self):
         return psycopg.connect(self.dsn)
 
     def cache(self, source):
-        return common.prepare_cache(self.caches[source])
+        return fetch.prepare_cache(self.caches[source])
 
 
 # --- the registry ----------------------------------------------------------
@@ -119,13 +118,13 @@ def _pull(ctx, source, module_path, refresh=False, **options):
     module = importlib.import_module(module_path)
     cache = ctx.cache(source)
     # refresh: every cached page counts as stale and is fetched again; the
-    # cached copy survives a failed fetch (see data.sources.keep_stale)
-    sources.set_max_age(0 if refresh else None)
+    # cached copy survives a failed fetch (see data.fetch.keep_stale)
+    fetch.set_max_age(0 if refresh else None)
     try:
         with ctx.connect() as cx:
             summary = module.run(cx, cache, log=ctx.log, **options)
     finally:
-        sources.set_max_age(None)
+        fetch.set_max_age(None)
     return summary
 
 
@@ -193,18 +192,18 @@ PULLS = [("pull_heroes", "blizzard"), ("pull_kits", "wiki"),
          ("pull_rates", "blizzard"), ("pull_playstyles", "wiki"),
          ("pull_counters", "counterpick")]
 
-PLAYBOOK = ("seasons", "synergies", "archetypes", "map_playstyle", "strategies")
+AUTHORED_INPUTS = ("seasons", "synergies", "archetypes", "map_playstyle", "strategies")
 
 
-@tool("load_playbook", "Store the authored inputs from the repo: seasons,"
+@tool("load_authored", "Store the inputs we write instead of fetch: seasons,"
       " synergies, comp archetypes, map playstyles, and the mirror of the"
       " markdown constraints and heuristics (the strategies catalog). Whole-truth reloads.",
       {"only": {"type": "array", "items": {"type": "string",
-                                            "enum": list(PLAYBOOK)},
+                                            "enum": list(AUTHORED_INPUTS)},
                 "description": "a subset to reload (default: all)"}})
-def load_playbook(ctx, only=None):
-    from data import playbook
-    selected = [p for p in PLAYBOOK if not only or p in only]
+def load_authored(ctx, only=None):
+    from data import authored
+    selected = [p for p in AUTHORED_INPUTS if not only or p in only]
     summaries = {}
     with ctx.connect() as cx:
         for name in selected:
@@ -212,8 +211,8 @@ def load_playbook(ctx, only=None):
                 from inference import catalog
                 summaries[name] = catalog.mirror(cx, catalog.load())
             else:
-                summaries[name] = playbook.LOADERS[name](cx, log=ctx.log)
-    text = "load_playbook: " + "; ".join(
+                summaries[name] = authored.LOADERS[name](cx, log=ctx.log)
+    text = "load_authored: " + "; ".join(
         "%s %s" % (name, ", ".join("%s=%s" % (k, v) for k, v in s.items()
                                     if k != "tables"))
         for name, s in summaries.items())
@@ -221,7 +220,7 @@ def load_playbook(ctx, only=None):
 
 
 @tool("sync_all", "Every pull_* tool in dependency order, then the authored"
-      " playbook, then the CSV mirror: the whole database from its sources."
+      " inputs, then the CSV mirror: the whole database from its sources."
       " On a populated database this is an update (entities refresh in"
       " place, rates append a snapshot).", REFRESH)
 def sync_all(ctx, refresh=False):
@@ -229,8 +228,8 @@ def sync_all(ctx, refresh=False):
     for name, _ in PULLS:
         ctx.log("=== %s ===" % name)
         results[name] = run_tool(ctx, name, refresh=refresh)[1]
-    ctx.log("=== load_playbook ===")
-    results["load_playbook"] = run_tool(ctx, "load_playbook")[1]
+    ctx.log("=== load_authored ===")
+    results["load_authored"] = run_tool(ctx, "load_authored")[1]
     # Recorded comps come back from the mirror BEFORE the mirror is
     # rewritten - a no-op on a database that already holds them.
     from data.db import schema
@@ -323,7 +322,7 @@ def db_rebuild(ctx, refresh=False):
       " database's mirror and the recorded recommendations' backup.")
 def export_csv(ctx):
     with ctx.connect() as cx:
-        counts = common.export(cx)
+        counts = db.export(cx)
     return ("export_csv: %d tables mirrored to data/raw" % len(counts),
             {"tables": dict(counts)})
 
@@ -336,7 +335,7 @@ def db_docs(ctx):
     with ctx.connect() as cx:
         text = schema.generate_docs(cx)
     path = catalog.write_docs(catalog.load())
-    return text + "; wrote " + os.path.relpath(path, common.ROOT), {}
+    return text + "; wrote " + os.path.relpath(path, ROOT), {}
 
 
 READ_ONLY_STARTS = ("select", "with", "explain", "show", "table", "values")
@@ -511,7 +510,7 @@ def record_tool(ctx, question, answer, map=None, red=(), blue=(), bans=(), side=
     except ValueError as error:
         raise ToolError(str(error))
     return ("recorded as recommendation %d; transcript %s"
-            % (rec_id, os.path.relpath(path, common.ROOT)),
+            % (rec_id, os.path.relpath(path, ROOT)),
             {"rec_id": rec_id, "transcript": path})
 
 

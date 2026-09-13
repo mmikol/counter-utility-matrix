@@ -37,7 +37,7 @@ reads as params.NAME - tuning is editing the file.
 import os
 import re
 
-from data.common import ROOT
+from data import ROOT
 from user.facts import compute
 from inference.expr import ExprError, Section, compile_expr
 
@@ -240,8 +240,8 @@ def load(directory=STRATEGIES_DIR):
 
 def mirror(cx, catalog):
     """Reload the strategies table from the files (whole truth)."""
-    from data.sources import AUTHORED
-    from data.common import now, register_source
+    from data.authored import AUTHORED
+    from data.db import now, register_source
     cursor = cx.cursor()
     source_id = register_source(cursor, AUTHORED, now())
     cursor.execute("DELETE FROM strategies")
@@ -285,7 +285,7 @@ def write_docs(catalog, path=DOCS_PATH):
            % (counts["constraint"], forms["limit"], forms["scored"], forms["prose"],
               counts["heuristic"]),
            "frontmatter a machine scores by and prose a person argues with; the",
-           "solver reads the files live, and `load_playbook` mirrors them into the",
+           "solver reads the files live, and `load_authored` mirrors them into the",
            "`strategies` table so a recommendation can cite the ids it was scored",
            "under. Tuning is editing a file (the compose stack bind-mounts the",
            "directory, so the `inference` container picks edits up live). This",

@@ -141,7 +141,7 @@ same tools, which are the only door.
 | tool | does |
 | --- | --- |
 | `pull_heroes` · `pull_kits` · `pull_maps` · `pull_patches` · `pull_rates` · `pull_playstyles` · `pull_counters` | one source and domain each: fetch (cached), clean, upsert |
-| `load_playbook` | the authored inputs: seasons, synergies, archetypes, map playstyles, and the mirror of the constraints and heuristics |
+| `load_authored` | the inputs we write: seasons, synergies, archetypes, map playstyles, and the mirror of the constraints and heuristics |
 | `sync_all` | all of the above in dependency order, then the CSV mirror; `refresh: true` fetches every page again |
 | `db_status` · `db_init` · `db_migrate` · `db_rebuild` · `export_csv` · `db_docs` · `query` | the database's life (`db_migrate` applies pending migrations in place), and read-only SQL |
 | `roster` · `facts` · `infer` · `evaluate` · `board` · `strategies` · `record` | the user and inference layers through the same door (`board` solves both seats and scores the current comp) |
@@ -265,15 +265,14 @@ data/                DATA LAYER - pulls, cleans, stores; owns the schema
   wiki/              heroes.py, maps.py, patches.py, playstyles.py, and the
                      markup, measurements, weapons, modifiers and names readers
   counterpick/       heroes.py, names.py
-  playbook.py        the authored CSVs, reloaded whole
-  sources.py         the fetch cache, its freshness policy, the project's scope
+  fetch.py           the page cache and its freshness policy
   names.py           matching hero, map and ability names across sources
-  authored/          the inputs we write: CSVs, recorded transcripts
-  db/                migrations/ (001 sources · 002 heroes · 003 maps · 004 meta ·
+  authored/          the inputs we write: CSVs and their loader, recorded transcripts
+  db/                where the database is and the helpers every writer needs;
+                     migrations/ (001 sources · 002 heroes · 003 maps · 004 meta ·
                      005 playbook · 006 inference · 007 three layers · 008 the
                      ledger · 009 outcomes · 010 constraints and heuristics), schema.py,
                      cluster/ (gitignored)
-  common.py          the plumbing every layer shares
   raw/               one CSV per table plus EXPORT.json naming the database
                      they came from (exported, gitignored)
 user/                USER LAYER - every click becomes facts

@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, urlparse
 
 import psycopg
 
-from data import common
+from data import ROOT, db
 from user.facts import model
 from user.facts.compute import TEAM_SIZE
 from inference import catalog as catalog_module
@@ -93,13 +93,13 @@ def handle_record(cx, payload):
             payload.get("bans", []), payload.get("side", ""))
     except (ValueError, KeyError) as error:
         return {"error": str(error)}, 400
-    return {"rec_id": rec_id, "transcript": os.path.relpath(path, common.ROOT)}, 200
+    return {"rec_id": rec_id, "transcript": os.path.relpath(path, ROOT)}, 200
 
 
 def handle_health():
     out = {"status": "ok", "strategies": len(catalog_module.load())}
     try:
-        with psycopg.connect(common.default_dsn()) as cx:
+        with psycopg.connect(db.default_dsn()) as cx:
             out["heroes"] = cx.execute("select count(*) from heroes").fetchone()[0]
     except psycopg.Error as error:
         out["status"], out["error"] = "degraded", str(error)
@@ -126,7 +126,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(*handle_health())
             if path == "/strategies":
                 return self._json(*handle_heuristics())
-            with psycopg.connect(common.default_dsn()) as cx:
+            with psycopg.connect(db.default_dsn()) as cx:
                 if path == "/board":
                     return self._json(*handle_board(cx, query))
                 if path == "/infer":
@@ -143,7 +143,7 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
             payload = json.loads(self.rfile.read(length) or b"{}")
             if parsed.path == "/record":
-                with psycopg.connect(common.default_dsn()) as cx:
+                with psycopg.connect(db.default_dsn()) as cx:
                     return self._json(*handle_record(cx, payload))
             self._json({"error": "nothing here"}, 404)
         except Exception as error:

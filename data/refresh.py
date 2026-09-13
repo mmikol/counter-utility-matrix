@@ -10,7 +10,7 @@ brought up to date on a schedule, so the board is ready when a game starts.
 
 A refresh comes in two sizes. The DAILY one refetches what moves day to
 day - the rates and counterpick's counters - then re-mirrors the authored
-playbook and the strategies and re-exports data/raw. The FULL one is
+inputs and the strategies and re-exports data/raw. The FULL one is
 `sync_all` with refresh on: every page of every source, including the
 hero pages and wiki articles that only change with a patch; it runs when
 the wiki cache is older than OVERWATCH_DB_REFRESH_FULL_DAYS (7). Either
@@ -24,7 +24,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-from data import common
+from data import CACHE_DIRS, db
 from data.mcp import tools
 
 DEFAULT_AT = os.environ.get("OVERWATCH_DB_REFRESH_AT", "05:00")
@@ -60,7 +60,7 @@ def cache_age_hours(cache_dirs=None):
     """Hours since the newest cached page across the sources; None if there
     is no cache at all (a first build)."""
     newest = None
-    for path in (cache_dirs or common.CACHE_DIRS.values()):
+    for path in (cache_dirs or CACHE_DIRS.values()):
         if not os.path.isdir(path):
             continue
         for name in os.listdir(path):
@@ -74,13 +74,13 @@ def cache_age_hours(cache_dirs=None):
 def full_due(full_days=DEFAULT_FULL_DAYS, cache_dirs=None):
     """A full refresh is due when the slow-moving caches (the wiki's) are
     older than `full_days`, or absent."""
-    dirs = cache_dirs or [common.CACHE_DIRS["wiki"], common.CACHE_DIRS["blizzard"]]
+    dirs = cache_dirs or [CACHE_DIRS["wiki"], CACHE_DIRS["blizzard"]]
     age = cache_age_hours(dirs)
     return age is None or age > full_days * 24
 
 
 def refresh_once(ctx, log=print, full=None, full_days=DEFAULT_FULL_DAYS):
-    """One refresh -> (ok, text): daily (rates, counters, playbook, export)
+    """One refresh -> (ok, text): daily (rates, counters, authored inputs, export)
     or full (every source) - decided by full_due() unless `full` is given.
     Never raises: the loop must survive a bad day at the sources."""
     started = time.time()
@@ -95,7 +95,7 @@ def refresh_once(ctx, log=print, full=None, full_days=DEFAULT_FULL_DAYS):
             parts = []
             for name in DAILY:
                 parts.append(tools.run_tool(ctx, name, refresh=True)[0].splitlines()[0])
-            parts.append(tools.run_tool(ctx, "load_playbook")[0].split(";")[0])
+            parts.append(tools.run_tool(ctx, "load_authored")[0].split(";")[0])
             parts.append(tools.run_tool(ctx, "export_csv")[0])
             text = "; ".join(parts)
     except Exception as error:      # a failed refresh leaves yesterday's data in place
@@ -124,7 +124,7 @@ def run_forever(ctx, at=DEFAULT_AT, max_age_hours=DEFAULT_MAX_AGE_HOURS, log=pri
 
 
 def main():
-    parser = common.build_parser(__doc__)
+    parser = db.build_parser(__doc__)
     parser.add_argument("--now", action="store_true", help="refresh once and exit")
     parser.add_argument("--at", default=DEFAULT_AT, help="daily time, HH:MM (default %s)"
                         % DEFAULT_AT)
@@ -133,7 +133,7 @@ def main():
     parser.add_argument("--full", action="store_true",
                         help="with --now: every source, not just the daily set")
     args = parser.parse_args()
-    ctx = tools.Context(dsn=common.resolve_dsn(args), log=print)
+    ctx = tools.Context(dsn=db.resolve_dsn(args), log=print)
     if args.now:
         ok, _ = refresh_once(ctx, full=True if args.full else None)
         sys.exit(0 if ok else 1)

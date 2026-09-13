@@ -1,4 +1,4 @@
-"""The fetch cache and its freshness policy - shared by every source.
+"""Fetching: the page cache and its freshness policy, shared by every source.
 
     cached_get       one page, from the cache if it is there and fresh
     set_max_age      the policy: None keeps a page forever (a build from
@@ -6,14 +6,8 @@
                      page that fails to refetch keeps its cached copy, so
                      a flaky source degrades to yesterday's numbers rather
                      than an empty table
-    AUTHORED         the `sources` row for the inputs we write instead of
-                     fetch (data/authored/); the code stays `user` for
-                     continuity with databases built before the rename
-
     session          a requests session that identifies this project
-    PLATFORM, INPUT_DEVICE, REGION
-                     the project's scope - console, controller, Americas -
-                     declared once; every rates snapshot carries it
+    prepare_cache    the cache directory a tool hands a pull
 
 Each source package (blizzard, wiki, counterpick) names its own endpoints
 and its own `sources` row, so provenance lives with the source. Fetching
@@ -123,13 +117,6 @@ def cached_get(session, url, cache_dir, key, params=None, suffix=".html",
 
 USER_AGENT = "overwatch-db/0.1 (personal project; contact via repo)"
 
-# The scope every rates snapshot is pinned to. The sites spell these their
-# own way (Blizzard's input=Console, counterpick's platform=console); these
-# are the codes the database stores.
-PLATFORM = "console"
-INPUT_DEVICE = "controller"
-REGION = "americas"
-
 
 def session(existing=None):
     """A requests session (the given one, or a new one) that says who we are."""
@@ -138,6 +125,8 @@ def session(existing=None):
     return s
 
 
-# The inputs we write rather than fetch. There is nothing to download - the
-# "url" is the directory - but every row they become still names its source.
-AUTHORED = ("user", "Hand-authored inputs", "data/authored/")
+def prepare_cache(path):
+    """Create a page cache directory; '' or None disables caching."""
+    if path and not os.path.isdir(path):
+        os.makedirs(path)
+    return path or None

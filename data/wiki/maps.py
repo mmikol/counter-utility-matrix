@@ -9,7 +9,7 @@ Only the "Standard Play" section is read; Former Standard Play (Assault,
 Clash), Stadium, Arcade and seasonal modes are out of scope.
 """
 
-from data import common, sources
+from data import db, fetch
 from data.wiki import WIKI, WikiError, fetch_wikitext, markup
 import re
 
@@ -109,12 +109,12 @@ MAPS_PAGE = "Maps"
 
 
 def run(connection, cache_dir=None, session=None, log=print):
-    session = sources.session(session)
+    session = fetch.session(session)
 
     modes = parse_modes_and_maps(fetch_wikitext(session, MAPS_PAGE, cache_dir))
 
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, WIKI, common.now())
+    source_id = db.register_source(cursor, WIKI, db.now())
     map_ids, combinations = {}, 0
     for code, name, maps in modes:
         cursor.execute(

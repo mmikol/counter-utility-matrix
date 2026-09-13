@@ -15,7 +15,7 @@ flowchart LR
 
     subgraph DATA["DATA LAYER - data/mcp/ (an MCP server)"]
         PULL["pull_* tools<br/>fetch (cached) -> clean -> store"]
-        PLAY["load_playbook<br/>the authored inputs +<br/>the strategies mirror"]
+        PLAY["load_authored<br/>the authored inputs +<br/>the strategies mirror"]
         DBT["db_* · query · export_csv"]
     end
 
@@ -135,7 +135,7 @@ at most half the evidence, clamped - one bad week cannot flip the engine.
 stateDiagram-v2
     [*] --> Empty: docker compose up<br/>(or pgserver first touch)
     Empty --> Schema: db_init<br/>9 migrations, 42 tables
-    Schema --> Populated: sync_all<br/>7 pull tools + load_playbook
+    Schema --> Populated: sync_all<br/>7 pull tools + load_authored
     Empty --> Populated: db_rebuild<br/>(the entrypoint's move<br/>on an empty database)
     Populated --> Populated: pull_rates + pull_counters daily,<br/>sync_all weekly (the refresher)<br/>entities upsert in place,<br/>rates APPEND a dated snapshot
     Populated --> Empty: db_rebuild<br/>drop everything...

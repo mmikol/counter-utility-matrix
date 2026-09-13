@@ -13,8 +13,8 @@ supplies.
 """
 
 from bs4 import BeautifulSoup
-from data.sources import cache_key, cached_get
-from data import common, sources
+from data.fetch import cache_key, cached_get
+from data import db, fetch
 from data.blizzard import BASE_URL, BLIZZARD, HEROES_URL
 import re
 
@@ -184,7 +184,7 @@ ROLE_NAMES = {"tank": "Tank", "damage": "Damage", "support": "Support"}
 def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
          cao):
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, BLIZZARD, cao)
+    source_id = db.register_source(cursor, BLIZZARD, cao)
 
     role_ids = {}
     for code in ("tank", "damage", "support"):
@@ -275,7 +275,7 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
 def run(connection, cache_dir=None, session=None, log=print):
     """Pull the roster and every hero page, clean them, store them.
     Returns a summary dict."""
-    session = sources.session(session)
+    session = fetch.session(session)
 
     roster_soup = BeautifulSoup(cached_get(session, HEROES_URL, cache_dir,
                                            cache_key(HEROES_URL)), "html.parser")
@@ -297,7 +297,7 @@ def run(connection, cache_dir=None, session=None, log=print):
                len(abilities_by_slug[slug]), len(perks_by_slug[slug])))
 
     load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
-         common.now())
+         db.now())
     return {
         "heroes": len(heroes),
         "subroles": len(subroles),

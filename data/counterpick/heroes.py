@@ -24,15 +24,14 @@ are kept separately because the site does not treat them as inverses: of 354
 pairings, 114 appear in one direction only.
 """
 
-from data.sources import cache_key, cached_get
-from data import common, sources
-from data.common import current_patch, current_season
+from data import INPUT_DEVICE, PLATFORM, db, fetch
+from data.db import current_patch, current_season
+from data.fetch import cache_key, cached_get
 from data.names import index, name_key
 from data.counterpick import (
     COUNTERPICK,
     BASE_URL,
     GAMEMODE,
-    PLATFORM,
     REGIONS,
 )
 import re
@@ -97,13 +96,12 @@ def parse_table(html):
 # The site never says which queue its competitive games were, and this
 # model must not mistake an unlabelled snapshot for open queue.
 QUEUE = "competitive_unspecified_queue"
-PLATFORM_NAME = sources.PLATFORM
-INPUT_DEVICE = sources.INPUT_DEVICE
+PLATFORM_NAME = PLATFORM
 
 
 def run(connection, cache_dir=None, session=None, log=print):
-    session = sources.session(session)
-    cao = common.now()
+    session = fetch.session(session)
+    cao = db.now()
 
     pages = {}
     for their_region, our_region in REGIONS.items():
@@ -116,7 +114,7 @@ def run(connection, cache_dir=None, session=None, log=print):
         log("  %-14s %d heroes" % (their_region, len(pages[our_region])))
 
     cursor = connection.cursor()
-    source_id = common.register_source(cursor, COUNTERPICK, cao)
+    source_id = db.register_source(cursor, COUNTERPICK, cao)
     cursor.execute("INSERT INTO meta_snapshots (captured_at, queue, platform, input,"
                    " patch_id, season_id, source_id)"
                    " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING snapshot_id",
@@ -124,9 +122,9 @@ def run(connection, cache_dir=None, session=None, log=print):
                     current_patch(cursor), current_season(cursor), source_id))
     snapshot_id = cursor.fetchone()[0]
 
-    hero_ids = index(common.lookup_ids(cursor, "heroes", "name", "hero_id"))
-    map_ids = index(common.lookup_ids(cursor, "maps", "name", "map_id"))
-    region_ids = common.lookup_ids(cursor, "regions", "code", "region_id")
+    hero_ids = index(db.lookup_ids(cursor, "heroes", "name", "hero_id"))
+    map_ids = index(db.lookup_ids(cursor, "maps", "name", "map_id"))
+    region_ids = db.lookup_ids(cursor, "regions", "code", "region_id")
     all_tier = cursor.execute(
         "SELECT tier_id FROM competitive_tiers WHERE code = 'all'").fetchone()
     if all_tier is None:
