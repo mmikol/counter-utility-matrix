@@ -240,3 +240,30 @@ def test_prior_recommendations_become_evidence(db, one):
     assert any("previously recommended (#%d" % rec_id in text
                for _, t, text in ev.lines if t == "recommendations")
     db.rollback()
+
+
+# --- locked friendly picks are constraints -----------------------------------
+
+def test_allies_are_profiled_with_partners_and_excluded_from_candidates(db):
+    ev, ctx = dossier.build(db, "King's Row", ["Zarya"], allies=["Ana"])
+    texts = [t for _, _, t in ev.lines]
+    assert any(t.startswith("your locked pick: Ana") for t in texts)
+    assert any(t.startswith("proven partners for Ana") for t in texts)
+    assert len(ctx["ally_ids"]) == 1
+    cards = [t for _, tab, t in ev.lines if tab == "candidates"]
+    assert not any(c.startswith("Ana - ") for c in cards)
+    db.rollback()
+
+
+def test_ally_answered_by_enemy_raises_a_warning_line(db):
+    # Zarya answers Ana in the counters data - a locked Ana must be flagged
+    ev, _ = dossier.build(db, None, ["Zarya"], allies=["Ana"])
+    assert any(t.startswith("WARNING: your Ana is answered by enemy Zarya")
+               for _, _, t in ev.lines)
+    db.rollback()
+
+
+def test_unknown_ally_is_refused(db):
+    with pytest.raises(ValueError, match="unknown heroes"):
+        dossier.build(db, None, [], allies=["Goku"])
+    db.rollback()

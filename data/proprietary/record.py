@@ -29,12 +29,13 @@ def main():
     question = payload["question"]
     map_name = payload.get("map")
     enemies = payload.get("enemies", [])
+    allies = payload.get("allies", [])
     model = payload.get("model", "claude-code-session")
 
     validate_answer(payload["answer"])
     with psycopg.connect(pipeline.resolve_dsn(args)) as cx:
         # the same dossier the answer was reasoned over, rebuilt for the gates
-        ev, ctx = dossier.build(cx, map_name, enemies)
+        ev, ctx = dossier.build(cx, map_name, enemies, allies)
         rec_id = persist(cx, question, payload["answer"], ev, ctx["map_id"],
                          "recorded from a session; dossier rebuilt at record"
                          " time:\n\n" + ev.rendered(),
@@ -44,7 +45,7 @@ def main():
         # must follow, or export parity is silently broken
         pipeline.export_raw(cx, args, ("recommendations", "recommendation_picks", "recommendation_evidence"))
     path = transcript(rec_id, question, map_name, enemies,
-                      payload["answer"], ev, model)
+                      payload["answer"], ev, model, allies)
     print("recorded as recommendation %d; transcript: %s" % (rec_id, path))
 
 

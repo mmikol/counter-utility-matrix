@@ -130,21 +130,25 @@ def _rank_sensitivity(cx, hero_id):
     return None
 
 
-def build(cx, map_name=None, enemies=()):
+def build(cx, map_name=None, enemies=(), allies=()):
     """-> (Evidence, context dict) for one recommendation request.
 
+    allies are your locked picks: they get their own profiles and proven
+    partners, are excluded from the candidate pool (they are not candidates,
+    they are constraints), and draw WARNINGs when a known enemy answers them.
     Unknown names raise ValueError - a question about a hero we do not know
     is a question we must not quietly half-answer.
     """
     ev = Evidence()
-    ctx = {"map_id": None, "map_name": None, "enemy_ids": []}
+    ctx = {"map_id": None, "map_name": None, "enemy_ids": [], "ally_ids": []}
 
     heroes = {match_key(n): (i, n) for n, i in _rows(
         cx, "select name, hero_id from heroes")}
     maps = {match_key(n): (i, n) for n, i in _rows(
         cx, "select name, map_id from maps")}
 
-    unknown = [e for e in enemies if match_key(e) not in heroes]
+    unknown = [e for e in list(enemies) + list(allies)
+               if match_key(e) not in heroes]
     if unknown:
         raise ValueError("unknown heroes: %s" % ", ".join(unknown))
     if map_name is not None:
@@ -152,7 +156,9 @@ def build(cx, map_name=None, enemies=()):
             raise ValueError("unknown map: %s" % map_name)
         ctx["map_id"], ctx["map_name"] = maps[match_key(map_name)]
     ctx["enemy_ids"] = [heroes[match_key(e)][0] for e in enemies]
+    ctx["ally_ids"] = [heroes[match_key(a)][0] for a in allies]
     enemy_set = set(ctx["enemy_ids"])
+    ally_set = set(ctx["ally_ids"])
 
     _vintage(ev, cx)
 
@@ -225,6 +231,34 @@ def build(cx, map_name=None, enemies=()):
                 ev.add("hero_meta", "%s is banned in %.0f%% of lobbies -"
                        " may not stay on the enemy team" % (name, rate))
 
+    # --- your locked picks: constraints, not candidates ------------------
+    for ally_id in ctx["ally_ids"]:
+        name = _rows(cx, "select name from heroes where hero_id=%s",
+                     ally_id)[0][0]
+        ev.add("heroes", "your locked pick: " + _hero_card(cx, ally_id, name))
+        partners = _rows(cx, """
+            select case when s.hero_id=%s then o.name else h.name end,
+                   s.score, s.note from synergies s
+            join heroes h on h.hero_id=s.hero_id
+            join heroes o on o.hero_id=s.other_id
+            where %s in (s.hero_id, s.other_id)
+            order by s.score desc nulls last limit 6""", ally_id, ally_id)
+        partners = [(n, sc, nt) for n, sc, nt in partners
+                    if n != name]
+        if partners:
+            ev.add("synergies", "proven partners for %s: %s" % (name,
+                   "; ".join("%s (%s/3: %s)" % (n, sc, _trim(nt or "", 50))
+                             for n, sc, nt in partners)))
+        threats = [t for t, in _rows(cx, """
+            select h.name from counters c
+            join heroes h on h.hero_id=c.countered_by_id
+            where c.hero_id=%s and c.countered_by_id = any(%s)""",
+            ally_id, list(enemy_set) or [0])]
+        if threats:
+            ev.add("counters", "WARNING: your %s is answered by enemy %s -"
+                   " the rest of the comp must cover for that"
+                   % (name, ", ".join(threats)))
+
     # --- the playbook, intersected with the map and the enemy -----------
     #
     # The model's question is a join, so the dossier performs the join:
@@ -291,7 +325,7 @@ def build(cx, map_name=None, enemies=()):
     for hid, in _rows(cx, "select hero_id from synergies union"
                           " select other_id from synergies"):
         pool.setdefault(hid, True)
-    pool = [h for h in pool if h not in enemy_set]
+    pool = [h for h in pool if h not in enemy_set and h not in ally_set]
 
     ranked = _rows(cx, """
         select m.hero_id, h.name, m.win_rate, m.pick_rate from hero_meta m
@@ -407,10 +441,19 @@ def main():
     parser = pipeline.build_parser(main.__doc__)
     parser.add_argument("--map", dest="map_name")
     parser.add_argument("--enemy", action="append", default=[])
+    parser.add_argument("--ally", action="append", default=[],
+                        help="a locked friendly pick (repeatable)")
+    parser.add_argument("--json", action="store_true",
+                        help="machine-readable evidence instead of lines")
     args = parser.parse_args()
     with psycopg.connect(pipeline.resolve_dsn(args)) as cx:
-        ev, _ = build(cx, args.map_name, args.enemy)
-    print(ev.rendered())
+        ev, _ = build(cx, args.map_name, args.enemy, args.ally)
+    if args.json:
+        import json
+        print(json.dumps([{"tag": t, "table": tb, "text": x}
+                          for t, tb, x in ev.lines], ensure_ascii=False))
+    else:
+        print(ev.rendered())
 
 
 if __name__ == "__main__":

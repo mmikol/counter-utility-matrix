@@ -79,7 +79,8 @@ def persist(cx, question, answer, ev, ctx_map_id, prompt, model, raw_json):
     return rec_id
 
 
-def transcript(rec_id, question, map_name, enemies, answer, ev, model):
+def transcript(rec_id, question, map_name, enemies, answer, ev, model,
+               allies=()):
     """The durable record: a committed markdown file per recommendation."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     slug = re.sub(r"[^a-z0-9]+", "-", (map_name or "any-map").lower()).strip("-")
@@ -89,8 +90,10 @@ def transcript(rec_id, question, map_name, enemies, answer, ev, model):
                    key=lambda t: int(t[1:]))
     lines = ["# Recommendation %d" % rec_id, "",
              "**Question:** %s" % question,
-             "**Map:** %s   **Enemies:** %s   **Model:** %s"
-             % (map_name or "-", ", ".join(enemies) or "-", model), "",
+             "**Map:** %s   **Enemies:** %s   **Allies locked:** %s"
+             "   **Model:** %s"
+             % (map_name or "-", ", ".join(enemies) or "-",
+                ", ".join(allies) or "-", model), "",
              "## Comp - %s" % answer["playstyle"], ""]
     for p in answer["picks"]:
         lines.append("- **%s** - %s _(%s)_"

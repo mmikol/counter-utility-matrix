@@ -41,5 +41,34 @@ services:
       - ./data/raw:/app/data/raw
       - ./data/proprietary:/app/data/proprietary
 
+  # The cron: refreshes the data on a schedule (default: daily). Each run is
+  # an orchestrator `update` - entities refreshed in place, a new dated
+  # snapshot appended, CSVs re-exported - through the same bind-mounted
+  # caches, so a quiet day costs almost no requests against the sources.
+  # Tune with OVERWATCH_DB_UPDATE_INTERVAL (seconds) or `docker compose
+  # stop updater` to go manual.
+  updater:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://overwatch:overwatch@db/overwatch
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./.cache-blizzard:/app/.cache-blizzard
+      - ./.cache-wiki:/app/.cache-wiki
+      - ./.cache-counterpick:/app/.cache-counterpick
+      - ./data/raw:/app/data/raw
+      - ./data/proprietary:/app/data/proprietary
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        interval="$${OVERWATCH_DB_UPDATE_INTERVAL:-86400}"
+        echo "updater: every $${interval}s (first run after one interval)"
+        while sleep "$$interval"; do
+          echo "updater: running orchestrator update"
+          python -m orchestrator update || echo "updater: update failed;"            " will retry next interval"
+        done
+
 volumes:
   pgdata:
