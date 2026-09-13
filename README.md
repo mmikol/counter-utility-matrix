@@ -36,11 +36,15 @@ pipeline, scraping the sources once (a few polite minutes; page caches land
 in `.cache-*/` so later builds cost almost no requests). Then the UI serves
 at **http://localhost:8017**: a dashboard of the whole database, a **live
 evidence board** built for use during a match - click heroes onto their
-team and yours as picks reveal themselves, choose the map, and the ~190
-cited lines a comp decision rests on rebuild on every click, including the
+team and yours as picks reveal themselves, choose the map, and the
+cited evidence rebuilds on every click - every named character brings
+100+ independent facts (kit numbers, perks, rates by rank and map), and
+the joins (counters, synergies, intersections) multiply as the board
+fills, up to ~1,600 lines for a fully named 5v5, including the
 `derived:` analytics the database computes itself (role-shape flags,
-healing supply, coverage, net matchup, draft skeletons; the 100-formula
-catalog in docs/heuristics.md, tunable via the playbook). The board
+healing supply, coverage, net matchup, draft skeletons,
+and whole-board differentials - chew-time, poke war, burst-vs-heal; the
+112-formula catalog in docs/heuristics.md, tunable via the playbook). The board
 survives reloads mid-game and surfaces any comp the /comp skill records
 while you play. A viewer shows every recorded recommendation with its
 citations.
@@ -123,7 +127,7 @@ tests/               108 tests: unit, invariants, export parity, UI, validation
 - [docs/architecture.md](docs/architecture.md) - **start here**: the whole machine in five diagrams - sources to pipelines to Postgres to dossier to the /comp skill and back
 - [docs/erd.md](docs/erd.md) - entity relationships, by domain and whole-db
 - [docs/data-dictionary.md](docs/data-dictionary.md) - every table & column, generated from the live schema
-- [docs/heuristics.md](docs/heuristics.md) - the 100-consideration catalog behind the `derived:` evidence lines, stored and tuned in the playbook
+- [docs/heuristics.md](docs/heuristics.md) - the 112-consideration catalog behind the `derived:` evidence lines, stored and tuned in the playbook
 - [docs/scaling.md](docs/scaling.md) - how region/rank/platform/stage granularity widens
 - [data/proprietary/README.md](data/proprietary/README.md) - the authored inputs and the inference layer
 

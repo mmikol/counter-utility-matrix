@@ -133,6 +133,109 @@ def _enemy_depth(ev, cx, hero_id, name):
             "%s ignores %s" % (a, c[8:]) for a, c in flags[:6])))
 
 
+def _fact_value(value, unit_num, unit_den, den_value, condition, value_text):
+    """One stat rendered the way the wiki stored it, units and caveats kept."""
+    if value is not None:
+        txt = "%g" % value
+        if unit_num:
+            txt += " " + unit_num
+        if unit_den:
+            txt += " per " + ("%g " % den_value
+                              if den_value not in (None, 1) else "") + unit_den
+    else:
+        txt = value_text or "?"
+    if condition:
+        txt += " (%s)" % condition
+    return txt
+
+
+def _hero_insights(ev, cx, hero_id, name):
+    """Every independent fact the database holds about ONE hero, itemized.
+
+    No joins to other heroes here: these are the single-character insights -
+    kit, numbers, perks, rates by rank and by map, playbook map ratings.
+    The multi-character information (counters, synergies, intersections,
+    derived heuristics) multiplies separately as the board fills. Every
+    hero on the roster clears 100 such lines from stored rows alone,
+    which a test enforces.
+    """
+    for aname, kind, desc in _rows(cx, """
+            select a.name, k.code, a.description from abilities a
+            join ability_kinds k using(kind_id)
+            where a.hero_id=%s order by a.position""", hero_id):
+        ev.add("abilities", "%s - %s (%s): %s"
+               % (name, aname, kind, _trim(desc or "", 90)))
+    for aname, key, *rest in _rows(cx, """
+            select a.name, k.code, s.value, s.unit_numerator,
+                   s.unit_denominator, s.denominator_value, s.condition,
+                   s.value_text
+            from ability_stats s join abilities a using(ability_id)
+            join stat_keys k using(stat_key_id)
+            where a.hero_id=%s order by a.position, k.code""", hero_id):
+        ev.add("ability_stats", "%s's %s %s: %s"
+               % (name, aname, key.replace("_", " "), _fact_value(*rest)))
+    for wname, cname, wtype in _rows(cx, """
+            select w.name, c.name, c.weapon_type from weapon_configs c
+            join weapons w using(weapon_id)
+            where w.hero_id=%s order by w.position, c.position""", hero_id):
+        ev.add("weapon_configs", "%s weapon: %s%s%s"
+               % (name, wname,
+                  " - " + cname if cname and cname != wname else "",
+                  " [%s]" % wtype if wtype else ""))
+    for wname, key, *rest in _rows(cx, """
+            select coalesce(c.name, w.name), k.code, s.value,
+                   s.unit_numerator, s.unit_denominator, s.denominator_value,
+                   s.condition, s.value_text
+            from weapon_stats s
+            join weapon_configs c on c.config_id = s.config_id
+            join weapons w on w.weapon_id = c.weapon_id
+            join stat_keys k using(stat_key_id)
+            where w.hero_id=%s order by w.position, c.position, k.code""",
+            hero_id):
+        ev.add("weapon_stats", "%s's %s %s: %s"
+               % (name, wname, key.replace("_", " "), _fact_value(*rest)))
+    for pname, desc in _rows(cx, """select name, description from perks
+            where hero_id=%s order by position""", hero_id):
+        ev.add("perks", "%s perk - %s: %s"
+               % (name, pname, _trim(desc or "", 90)))
+    for pname, key, *rest in _rows(cx, """
+            select p.name, k.code, s.value, s.unit_numerator,
+                   s.unit_denominator, s.denominator_value, s.condition,
+                   s.value_text
+            from perk_stats s join perks p using(perk_id)
+            join stat_keys k using(stat_key_id)
+            where p.hero_id=%s order by p.position, k.code""", hero_id):
+        ev.add("perk_stats", "%s's perk %s %s: %s"
+               % (name, pname, key.replace("_", " "), _fact_value(*rest)))
+    for tier, win, pick, ban in _rows(cx, """
+            select distinct on (t.tier_id) t.code, m.win_rate, m.pick_rate,
+                   m.ban_rate
+            from hero_meta m
+            join competitive_tiers t on t.tier_id = m.tier_id
+            join meta_snapshots s using(snapshot_id)
+            join sources src on src.source_id = s.source_id
+            where m.hero_id=%s and src.code='blizzard'
+              and m.win_rate is not null
+            order by t.tier_id, s.captured_at desc""", hero_id):
+        ev.add("hero_meta", "%s in %s lobbies: wins %.1f%%, picked %.1f%%%s"
+               % (name, tier, win, pick,
+                  ", banned %.1f%%" % ban if ban is not None else ""))
+    for mname, win, pick in _rows(cx, """
+            select mp.name, m.win_rate, m.pick_rate from map_meta m
+            join maps mp using(map_id)
+            join competitive_tiers t on t.tier_id = m.tier_id
+            where m.hero_id=%s and t.code='all' and m.win_rate is not null
+            order by m.win_rate desc""", hero_id):
+        ev.add("map_meta", "%s on %s: wins %.1f%%, picked %.1f%%"
+               % (name, mname, win, pick))
+    for mname, pos in _rows(cx, """
+            select mp.name, ms.position from map_strategy ms
+            join maps mp using(map_id)
+            where ms.hero_id=%s order by ms.position""", hero_id):
+        ev.add("map_strategy", "the playbook rates %s a top-%d pick on %s"
+               % (name, pos, mname))
+
+
 def _rank_sensitivity(cx, hero_id):
     row = _rows(cx, """select min(m.win_rate), max(m.win_rate)
         from hero_meta m join competitive_tiers t on t.tier_id=m.tier_id
@@ -222,6 +325,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
                                 enemy_id)[0][0]
         ev.add("heroes", "enemy " + _hero_card(cx, enemy_id, name))
         _enemy_depth(ev, cx, enemy_id, name)
+        _hero_insights(ev, cx, enemy_id, name)
         answers = [a for a, in _rows(cx, """
                 select cb.name from counters c
                 join heroes cb on cb.hero_id=c.countered_by_id
@@ -265,6 +369,7 @@ def build(cx, map_name=None, enemies=(), allies=()):
             card += "; RANK-SENSITIVE %.1f%%-%.1f%% by rank" % spread
         ev.add("heroes", "your locked pick: " + card)
         _enemy_depth(ev, cx, ally_id, name)
+        _hero_insights(ev, cx, ally_id, name)
         answers = [a for a, in _rows(cx, """
             select e.name from counters c
             join heroes e on e.hero_id = c.hero_id
@@ -636,6 +741,7 @@ def _derived_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
                      ally_mark, tune)
     _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
                         tune)
+    _mirror_heuristics(ev, cx, ctx, enemy_set, ally_ids, names, tune)
 
     # what the enemy comp leans toward
     if len(enemy_set) >= 2:
@@ -650,6 +756,248 @@ def _derived_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids):
                 if lean[0][1] > len(enemy_set) / 2 else ""))
 
 
+def _kit_max(cx, ids, key):
+    """{hero_id: max value of `key` across ability and weapon stats}."""
+    if not ids:
+        return {}
+    return dict(_rows(cx, """
+        select hero_id, max(v) from (
+            select a.hero_id, s.value v from ability_stats s
+            join abilities a using(ability_id)
+            join stat_keys k using(stat_key_id)
+            where k.code = %s and s.value is not null
+              and a.hero_id = any(%s)
+            union all
+            select w.hero_id, s.value from weapon_stats s
+            join weapon_configs c on c.config_id = s.config_id
+            join weapons w on w.weapon_id = c.weapon_id
+            join stat_keys k on k.stat_key_id = s.stat_key_id
+            where k.code = %s and s.value is not null
+              and w.hero_id = any(%s)) t group by 1""",
+        key, ids, key, ids))
+
+
+def _dps_figures(cx, ids):
+    """{hero_id: best published per-second damage rate} - sparse, honest."""
+    if not ids:
+        return {}
+    return dict(_rows(cx, """
+        select hero_id, max(v) from (
+            select a.hero_id,
+                   s.value / nullif(coalesce(s.denominator_value, 1), 0) v
+            from ability_stats s join abilities a using(ability_id)
+            join stat_keys k using(stat_key_id)
+            where k.code='damage' and s.unit_denominator='seconds'
+              and s.value is not null and a.hero_id = any(%s)
+            union all
+            select w.hero_id,
+                   s.value / nullif(coalesce(s.denominator_value, 1), 0)
+            from weapon_stats s
+            join weapon_configs c on c.config_id = s.config_id
+            join weapons w on w.weapon_id = c.weapon_id
+            join stat_keys k on k.stat_key_id = s.stat_key_id
+            where k.code='damage' and s.unit_denominator='seconds'
+              and s.value is not null and w.hero_id = any(%s)) t
+        group by 1""", ids, ids))
+
+
+def _mirror_heuristics(ev, cx, ctx, enemy_set, ally_ids, names, tune):
+    """The mirror tranche (catalog 101-112): the enemy board aggregated with
+    the same arithmetic your side gets, then the head-to-head differentials
+    that only exist once BOTH boards hold picks."""
+    E, A = list(enemy_set), list(ally_ids)
+    if not E:
+        return
+    pools = dict(_rows(cx, """select hero_id, coalesce(health,0)
+        + coalesce(shield,0) + coalesce(armor,0) from heroes
+        where hero_id = any(%s)""", E + A))
+    role_of = dict(_rows(cx, """select h.hero_id, r.code from heroes h
+        join roles r using(role_id) where h.hero_id = any(%s)""", E))
+
+    # 101: their shape, same flags as yours
+    counts = {"tank": 0, "damage": 0, "support": 0}
+    for h in E:
+        counts[role_of[h]] += 1
+    flags = []
+    if counts["tank"] == 0:
+        flags.append("TANKLESS - no one makes space for them")
+    if counts["damage"] >= 3:
+        flags.append("triple+ DPS - starve them into attrition")
+    if counts["support"] == 0:
+        flags.append("NO SUPPORT - every chip wound sticks")
+    elif counts["support"] == 1:
+        flags.append("solo heal - kill the healer, win the fight")
+    ev.add("derived:enemyshape",
+           "their shape: %d tank / %d dps / %d support across %d revealed%s"
+           % (counts["tank"], counts["damage"], counts["support"], len(E),
+              " - " + "; ".join(flags) if flags else ""))
+
+    # 102: their healing supply against the same roster bench
+    e_sup = [h for h in E if role_of[h] == "support"]
+    if e_sup:
+        supply = _kit_max(cx, e_sup, "heal")
+        roster = [h for h, in _rows(cx, """select h.hero_id from heroes h
+            join roles r using(role_id) where r.code='support'""")]
+        allv = sorted(float(v) for v in _kit_max(cx, roster, "heal").values())
+        bench = (allv[len(allv) // 2] if allv else 0) * 2
+        total = sum(float(supply.get(h, 0)) for h in e_sup)
+        ev.add("derived:enemyhealing",
+               "their healing supply: %s (peak single heal) = %.0f vs the"
+               " ~%.0f two-support bench%s"
+               % (", ".join("%s %.0f" % (names[h], supply.get(h, 0))
+                            for h in e_sup), total, bench,
+                  " - under-healed: attrition favors you"
+                  if len(e_sup) >= 2 and total < bench * tune["HEAL_MARGIN"]
+                  else ""))
+
+    # 103: their frontline
+    e_tanks = _rows(cx, """select h.name, coalesce(h.health,0)
+        +coalesce(h.shield,0)+coalesce(h.armor,0), coalesce(h.armor,0)
+        from heroes h join roles r using(role_id)
+        where r.code='tank' and h.hero_id = any(%s)""", E)
+    if e_tanks:
+        ev.add("derived:enemyfrontline", "their frontline: %s - the pool"
+               " your damage plan must budget for"
+               % "; ".join("%s %dhp (%d armor)" % t for t in e_tanks))
+
+    # 104: their damage identity
+    wt = _rows(cx, """select w.hero_id, c.weapon_type from weapon_configs c
+        join weapons w using(weapon_id)
+        where w.hero_id = any(%s) and c.weapon_type is not null""", E)
+    mix = {}
+    for h, t in wt:
+        kind = ("hitscan" if "hitscan" in t else "beam" if "beam" in t
+                else "melee" if "melee" in t else "projectile")
+        mix.setdefault(kind, set()).add(h)
+    if mix:
+        ev.add("derived:enemydmgmix", "their damage identity: %s"
+               % "; ".join("%s: %s" % (k, ", ".join(
+                   sorted(names[h] for h in v)))
+                   for k, v in sorted(mix.items())))
+
+    # 108: their cohesion
+    if len(E) >= 2:
+        edges = _rows(cx, """select h.name, o.name from synergies s
+            join heroes h on h.hero_id=s.hero_id
+            join heroes o on o.hero_id=s.other_id
+            where s.hero_id = any(%s) and s.other_id = any(%s)""", E, E)
+        possible = len(E) * (len(E) - 1) // 2
+        ev.add("derived:enemycohesion", "their cohesion: %d of %d possible"
+               " synergy edges (density %.2f)%s"
+               % (len(edges), possible, len(edges) / possible,
+                  " - " + "; ".join("%s+%s" % e for e in edges) if edges
+                  else " - five strangers; pick them apart"))
+
+    # 109: their ult threat
+    e_ults = _rows(cx, """
+        select h.name, a.name, max(s.value) from abilities a
+        join ability_kinds k using(kind_id)
+        join heroes h on h.hero_id = a.hero_id
+        left join ability_stats s on s.ability_id = a.ability_id
+            and s.stat_key_id = (select stat_key_id from stat_keys
+                                 where code='damage')
+        where k.code='ultimate' and a.hero_id = any(%s)
+        group by 1, 2""", E)
+    e_dmg_ults = [(h, u, v) for h, u, v in e_ults if v is not None]
+    if e_dmg_ults:
+        ev.add("derived:enemyults", "their ult threat: %d damage ultimate%s"
+               " totalling %g (%s) - the all-in your plan must survive"
+               % (len(e_dmg_ults), "" if len(e_dmg_ults) == 1 else "s",
+                  sum(float(v) for _, _, v in e_dmg_ults),
+                  ", ".join("%s's %s" % (h, u) for h, u, _ in e_dmg_ults)))
+
+    if not A:
+        return
+
+    # 105: pool differential
+    a_pool = sum(pools.get(h, 0) for h in A)
+    e_pool = sum(pools.get(h, 0) for h in E)
+    ev.add("derived:pooldiff", "pool differential: your %d picks carry %d hp"
+           " vs their %d picks' %d - %+d raw material"
+           % (len(A), a_pool, len(E), e_pool, a_pool - e_pool))
+
+    # 106: burst vs heal, both directions
+    a_sup = [h for h, in _rows(cx, """select h.hero_id from heroes h
+        join roles r using(role_id)
+        where r.code='support' and h.hero_id = any(%s)""", A)]
+    e_burst = _kit_max(cx, E, "damage")
+    a_burst = _kit_max(cx, A, "damage")
+    a_heal = _kit_max(cx, a_sup, "heal")
+    e_heal = _kit_max(cx, e_sup, "heal")
+    if e_burst and a_heal:
+        eb = max(float(v) for v in e_burst.values())
+        ah = max(float(v) for v in a_heal.values())
+        ev.add("derived:sustaindiff", "burst-vs-heal: their best hit %g vs"
+               " your best single save %g - %s" % (eb, ah,
+               "their burst outruns your save; do not trade in the open"
+               if eb > ah else "your saves keep pace with their burst"))
+    if a_burst and e_heal:
+        ab = max(float(v) for v in a_burst.values())
+        eh = max(float(v) for v in e_heal.values())
+        ev.add("derived:sustaindiff", "burst-vs-heal, your way: your best"
+               " hit %g vs their best save %g - %s" % (ab, eh,
+               "a kill window exists through their healing" if ab > eh
+               else "their saves absorb your burst; stack or poke instead"))
+
+    # 107: chew-time proxy, both directions
+    a_dps = _dps_figures(cx, A)
+    e_dps = _dps_figures(cx, E)
+    if a_dps and e_pool:
+        rate = sum(float(v) for v in a_dps.values())
+        ev.add("derived:ttk", "chew-time floor: their %d pool / your"
+               " published %g per second = %.1fs of unmitigated fire"
+               " (healing and misses not counted; %d of %d of your kits"
+               " publish a rate)" % (e_pool, round(rate, 1), e_pool / rate,
+                                     len(a_dps), len(A)))
+    if e_dps and a_pool:
+        rate = sum(float(v) for v in e_dps.values())
+        ev.add("derived:ttk", "chew-time floor, their way: your %d pool /"
+               " their %g per second = %.1fs" % (a_pool, round(rate, 1),
+                                                 a_pool / rate))
+
+    # 110/111: tempo and range wars
+    def med(vals):
+        vals = sorted(vals)
+        return vals[len(vals) // 2] if vals else None
+    a_cd = med([float(v) for v, in _rows(cx, """select s.value
+        from ability_stats s join abilities a using(ability_id)
+        join stat_keys k using(stat_key_id)
+        where k.code='cooldown' and s.value is not null
+          and a.hero_id = any(%s)""", A)])
+    e_cd = med([float(v) for v, in _rows(cx, """select s.value
+        from ability_stats s join abilities a using(ability_id)
+        join stat_keys k using(stat_key_id)
+        where k.code='cooldown' and s.value is not null
+          and a.hero_id = any(%s)""", E)])
+    if a_cd is not None and e_cd is not None:
+        ev.add("derived:tempodiff", "tempo war: your median cooldown %gs vs"
+               " their %gs - %s" % (a_cd, e_cd,
+               "you re-engage first; force fight frequency" if a_cd < e_cd
+               else "they re-engage first; make each fight decisive"
+               if e_cd < a_cd else "even tempo"))
+    a_rng = med([float(v) for v in _kit_max(cx, A, "range").values()])
+    e_rng = med([float(v) for v in _kit_max(cx, E, "range").values()])
+    if a_rng is not None and e_rng is not None:
+        ev.add("derived:rangediff", "poke war: your median reach %gm vs"
+               " their %gm - %s" % (a_rng, e_rng,
+               "you outrange them; open fights at distance" if a_rng > e_rng
+               else "they outrange you; close fast or trade cover"
+               if e_rng > a_rng else "even reach"))
+
+    # 112: whole-board net matchup
+    ours = _rows(cx, """select count(*) from counters
+        where hero_id = any(%s) and countered_by_id = any(%s)""", E, A)
+    theirs = _rows(cx, """select count(*) from counters
+        where hero_id = any(%s) and countered_by_id = any(%s)""", A, E)
+    o, t = ours[0][0], theirs[0][0]
+    ev.add("derived:boardnet", "board net matchup: %d answer-edges yours"
+           " into them vs %d theirs into you (%+d) - %s"
+           % (o, t, o - t,
+              "the draft is ahead" if o > t else
+              "the draft is behind; the open slots must swing it"
+              if t > o else "dead even"))
+
+
 def _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
                         tune):
     """The wide tranche of the catalog: kit arithmetic, matchup algebra,
@@ -658,24 +1006,7 @@ def _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
     E, A = list(enemy_set), list(ally_ids)
 
     def kit_max(ids, key):
-        """{hero_id: max value of `key` across ability and weapon stats}."""
-        if not ids:
-            return {}
-        return dict(_rows(cx, """
-            select hero_id, max(v) from (
-                select a.hero_id, s.value v from ability_stats s
-                join abilities a using(ability_id)
-                join stat_keys k using(stat_key_id)
-                where k.code = %s and s.value is not null
-                  and a.hero_id = any(%s)
-                union all
-                select w.hero_id, s.value from weapon_stats s
-                join weapon_configs c on c.config_id = s.config_id
-                join weapons w on w.weapon_id = c.weapon_id
-                join stat_keys k on k.stat_key_id = s.stat_key_id
-                where k.code = %s and s.value is not null
-                  and w.hero_id = any(%s)) t group by 1""",
-            key, ids, key, ids))
+        return _kit_max(cx, ids, key)
 
     pools = dict(_rows(cx, """select hero_id, coalesce(health,0)
         + coalesce(shield,0) + coalesce(armor,0) from heroes
@@ -765,6 +1096,26 @@ def _breadth_heuristics(ev, cx, ctx, cand_ids, enemy_set, ally_ids, names,
             ev.add("derived:hitscan", "hitscan census: %d locked (%s) - the"
                    " measured proxy for anti-air" % (len(hs), ", ".join(
                        sorted(names[h] for h in hs)) or "none"))
+        shields = dict(_rows(cx, """select hero_id, coalesce(shield, 0)
+            from heroes where hero_id = any(%s)""", A))
+        sh_total, pool_total = (sum(shields.values()),
+                                sum(pools.get(h, 0) for h in A))
+        if sh_total and pool_total:
+            ev.add("derived:shieldshare", "shield-regen reliance: %d of %d"
+                   " total pool is recharging shields (%.0f%%, on %s) -"
+                   " rewards disengages and poke maps"
+                   % (sh_total, pool_total, 100.0 * sh_total / pool_total,
+                      ", ".join(sorted(names[h] for h, v in shields.items()
+                                       if v))))
+        dps = sorted(_dps_figures(cx, A).items())
+        if dps:
+            ev.add("derived:dpsproxy", "sustained damage proxy: %g/s summed"
+                   " across the %d of %d locked kits that publish a"
+                   " per-second figure (%s) - a floor, not the team's true"
+                   " output" % (sum(round(float(v), 1) for _, v in dps),
+                                len(dps), len(A), ", ".join(
+                       "%s %g/s" % (names[h], round(float(v), 1))
+                       for h, v in dps)))
         rng = kit_max(A, "range")
         if rng:
             vals = sorted(float(v) for v in rng.values())

@@ -410,6 +410,41 @@ def test_the_wide_tranche_emits_for_a_full_question(db):
     tabs = {tab for tab, _ in lines}
     for tag in ("derived:dmgmix", "derived:hitscan", "derived:rangeprofile",
                 "derived:ultcensus", "derived:coverbreadth",
-                "derived:banproof", "derived:synreach"):
+                "derived:banproof", "derived:synreach",
+                "derived:dpsproxy"):
+        assert tag in tabs, tag
+    db.rollback()
+
+
+def test_every_named_character_gets_a_hundred_independent_facts(db):
+    # Tracer is the roster's sparsest kit - if she clears 100, everyone does
+    ev, _ = dossier.build(db, "King's Row", ["Tracer"], allies=["Ana"])
+    for hero in ("Tracer", "Ana"):
+        n = sum(1 for _, _, t in ev.lines if hero in t)
+        assert n >= 100, (hero, n)
+    # unnamed heroes get no itemized dump - depth is opt-in by selection
+    zarya = sum(1 for _, _, t in ev.lines if "Zarya" in t)
+    assert zarya < 40, zarya
+    db.rollback()
+
+
+def test_the_mirror_tranche_aggregates_their_side_too(db):
+    # enemy-side aggregates need only their board...
+    ev, _ = dossier.build(db, "King's Row",
+                          ["Zarya", "Pharah", "Mercy", "Reinhardt", "Ashe"])
+    tabs = {tab for _, tab, _ in ev.lines}
+    for tag in ("derived:enemyshape", "derived:enemyhealing",
+                "derived:enemyfrontline", "derived:enemycohesion",
+                "derived:enemyults"):
+        assert tag in tabs, tag
+    # ...but the differentials only exist once BOTH boards hold picks
+    assert "derived:pooldiff" not in tabs
+    ev, _ = dossier.build(db, "King's Row",
+                          ["Zarya", "Pharah", "Mercy", "Reinhardt", "Ashe"],
+                          allies=["Ana", "Winston", "Tracer"])
+    tabs = {tab for _, tab, _ in ev.lines}
+    for tag in ("derived:pooldiff", "derived:sustaindiff", "derived:ttk",
+                "derived:tempodiff", "derived:rangediff",
+                "derived:boardnet"):
         assert tag in tabs, tag
     db.rollback()

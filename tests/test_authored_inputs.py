@@ -124,10 +124,12 @@ def test_heuristic_params_reject_a_wordy_value(tmp_path):
         read_params(write(tmp_path, "code,value,note\nHEAL_MARGIN,plenty,x\n"))
 
 
-def test_the_shipped_catalog_is_exactly_one_hundred():
+def test_the_shipped_catalog_holds_the_promised_hundred_plus():
+    # 100 was the founding promise; the mirror tranche grew it past that,
+    # and the numbering must stay contiguous so every row is citable by id
     rows = read_heuristics(CATALOG_PATH)
-    assert len(rows) == 100
-    assert [r[0] for r in rows] == list(range(1, 101))
+    assert len(rows) >= 100
+    assert [r[0] for r in rows] == list(range(1, len(rows) + 1))
 
 
 def test_every_dossier_default_has_a_shipped_dial():

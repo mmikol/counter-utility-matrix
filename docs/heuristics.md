@@ -1,4 +1,4 @@
-# The heuristics: 100 considerations, mathematically encoded
+# The heuristics: 112 considerations, mathematically encoded
 
 Choosing a five-hero composition is a hundred small judgements. This
 catalog writes every one of them down as a formula over the database -
@@ -9,7 +9,7 @@ leans on is inspectable, reproducible, and tunable.
 
 The catalog is DATA, not just documentation. It lives in the playbook:
 
-- **`heuristics`** - the 100 rows below, loaded from
+- **`heuristics`** - the 112 rows below, loaded from
   `data/proprietary/heuristics.csv` by the `user.heuristics` pipeline.
 - **`heuristic_params`** - the dials. Every threshold a live formula uses
   is a row here, loaded from `data/proprietary/heuristic_params.csv`.
@@ -21,9 +21,9 @@ The catalog is DATA, not just documentation. It lives in the playbook:
 Each formula carries an honest status:
 
 - **live** - the dossier emits it today, under the evidence tag in its
-  `tag` column. 65 formulas.
+  `tag` column. 79 formulas.
 - **ready** - computable from the current schema, not yet wired into the
-  dossier. 22 formulas. This is the implementation queue.
+  dossier. 20 formulas. This is the implementation queue.
 - **blocked** - its inputs are missing; the row names exactly what -
   a column the schema lacks, or (for the stage formulas) a column that
   exists but the scrape's page budget leaves empty. 13 formulas. This
@@ -279,7 +279,7 @@ One entry per consideration; the same rows, verbatim, sit in the
 `MIN pool(h) over picks`
 *Inputs:* heroes.health/shield/armor. *Why:* focus fire finds the minimum, not the average
 
-**29. shield-regen reliance** (ready, `derived:shieldshare`)
+**29. shield-regen reliance** (live, `derived:shieldshare`)
 `SUM shield / SUM pool over picks`
 *Inputs:* heroes.shield. *Why:* shields recharge out of fight: a high share rewards disengage-heavy playstyles and poke maps
 
@@ -305,7 +305,7 @@ One entry per consideration; the same rows, verbatim, sit in the
 `MAX single damage stat over the comp's abilities and weapons`
 *Inputs:* ability_stats, weapon_stats, stat_keys.damage. *Why:* whether the comp can delete a 250hp target through one heal window
 
-**35. sustained damage proxy** (ready, `derived:dpsproxy`)
+**35. sustained damage proxy** (live, `derived:dpsproxy`)
 `SUM over picks of MAX damage stat carrying a per-second unit (unit_denominator = second)`
 *Inputs:* weapon_stats/ability_stats units. *Why:* the schema stores per-second figures where the wiki does; summing only those keeps the units honest
 
@@ -580,6 +580,56 @@ One entry per consideration; the same rows, verbatim, sit in the
 **100. the objective** (ready, `derived:argmax`)
 `COUNTER = argmax over 5-subsets of C of w1*coverage + w2*cohesion + w3*map fit + w4*meta - w5*exposure`
 *Inputs:* every table above; weights would live in heuristic_params. *Why:* the whole database in one line; the skeleton greedily approximates it, and an exact solver is the roadmap
+
+### Mirror and differentials
+
+**101. enemy role census** (live, `derived:enemyshape`)
+`T, D, S over E, with the same flags as formulas 2-6 (TANKLESS, triple+ DPS, no/solo support)`
+*Inputs:* heroes.role_id over the named enemies. *Why:* the shape that decides games decides them on both sides; name theirs before arguing counters
+
+**102. enemy healing supply** (live, `derived:enemyhealing`)
+`peak(h) = MAX heal-keyed stat per enemy support; supply = SUM peak vs the same 2 x roster-median bench as formula 12`
+*Inputs:* ability_stats, weapon_stats, roles over E. *Why:* an under-healed enemy line is an attrition invitation; an over-healed one demands burst or anti-heal
+
+**103. enemy frontline pool** (live, `derived:enemyfrontline`)
+`SUM pool over enemy tanks, each with its armor share - the mirror of formulas 21-22`
+*Inputs:* heroes.health/shield/armor over E. *Why:* the hit points standing between you and their backline is the number your damage plan must budget for
+
+**104. enemy damage identity** (live, `derived:enemydmgmix`)
+`weapon-type census over E (hitscan / projectile / beam / melee), the mirror of formula 31`
+*Inputs:* weapon_configs.weapon_type over E. *Why:* an all-projectile enemy rewards range and strafing; a hitscan-heavy one punishes sky and sightlines
+
+**105. pool differential** (live, `derived:pooldiff`)
+`SUM pool(A) - SUM pool(E), stated with how many picks each side has locked`
+*Inputs:* heroes pools, both boards. *Why:* raw material advantage; only meaningful with side sizes stated, so the line states them
+
+**106. burst-versus-heal check** (live, `derived:sustaindiff`)
+`MAX single damage figure(E) vs MAX single heal(A supports), and the reverse - can one side burst through the other's best save`
+*Inputs:* ability_stats, weapon_stats, both boards. *Why:* fights end where burst outruns the save; both directions of that race, from the kits' own numbers
+
+**107. chew-time proxy** (live, `derived:ttk`)
+`SUM pool(E) / SUM per-second damage figures(A), and the reverse - seconds of unmitigated fire to chew the other side`
+*Inputs:* heroes pools, per-seconds damage stats, both boards. *Why:* crude and labeled crude: no healing, no misses - but a 2x asymmetry in the floor is real information
+
+**108. enemy cohesion** (live, `derived:enemycohesion`)
+`synergy edges among E out of C(|E|,2), with density - the mirror of formulas 52-53`
+*Inputs:* synergies over E. *Why:* a documented-machine enemy comp punishes solo answers; five strangers can be picked apart
+
+**109. enemy ult threat** (live, `derived:enemyults`)
+`damage-carrying ultimates among E: count and summed max damage - the mirror of formulas 81-82`
+*Inputs:* abilities.kind_id, ability_stats over E. *Why:* the all-in the enemy is saving for; its ceiling is what your defensive plan must survive
+
+**110. tempo differential** (live, `derived:tempodiff`)
+`median kit cooldown of A vs E; the shorter side re-engages first`
+*Inputs:* ability_stats.cooldown, both boards. *Why:* uptime wars are won before the fight: the low-cooldown side dictates when fights happen
+
+**111. range differential** (live, `derived:rangediff`)
+`median max-range of A vs E; the longer side wins the poke war and forces the approach`
+*Inputs:* range stats, both boards. *Why:* whoever outranges chooses the fight's opening seconds; the approach is where brawls bleed
+
+**112. board net matchup** (live, `derived:boardnet`)
+`|{(e,a) in counters : e in E, a in A}| vs |{(a,e) in counters : a in A, e in E}| - whole-board directed answer totals`
+*Inputs:* counters, both boards. *Why:* formula 44 per candidate, summed across the whole board: who is answering whom, on net, right now
 
 ## Other computed lines (documented for completeness)
 

@@ -33,7 +33,7 @@ flowchart LR
         INF["INFERENCE<br/>recommendations,<br/>picks, evidence"]
     end
 
-    DOS["dossier.py<br/>~190 numbered [E#] lines:<br/>facts, intersections,<br/>65 live derived: formulas"]
+    DOS["dossier.py<br/>numbered [E#] lines:<br/>100+ facts per named character,<br/>79 live derived: formulas,<br/>joins multiplying as the board fills"]
 
     subgraph CHAT["Claude Code session (your subscription, $0 API)"]
         SKILL["/comp skill<br/>reads every line, argues,<br/>picks five heroes"]
@@ -85,13 +85,13 @@ sequenceDiagram
 
     You->>Board: select map, click enemy picks as they reveal
     Board->>Dossier: GET /api/dossier (map, enemies, allies)
-    Dossier->>DB: deterministic SQL + 65 live heuristics
-    DB-->>Board: ~190 [E#] evidence lines, live on every click
+    Dossier->>DB: deterministic SQL + 79 live heuristics
+    DB-->>Board: [E#] evidence lines, live on every click<br/>(100+ facts per named character)
 
     You->>Claude: "/comp - King's Row, they have Zarya + Pharah,<br/>I'm locked on Ana. What do we play?"
     Claude->>Dossier: python -m data.proprietary.dossier<br/>--map ... --enemy ... --ally ...
     Dossier->>DB: the same SQL, the same lines
-    DB-->>Claude: the same ~190 [E#] lines
+    DB-->>Claude: the same [E#] lines - up to ~1,600 for a full 5v5
     Claude->>Claude: reads every line, argues against<br/>the skeleton, decides five heroes
     Claude->>DB: record.py - store gates refuse invented<br/>heroes or citations-of-nothing
     DB-->>Board: /api/recs poll: "the session just<br/>recorded recommendation #22"
@@ -136,7 +136,7 @@ flowchart TD
     Q -->|"yes, it was judged<br/>by someone else"| H["heuristic<br/>counters, playstyles<br/><i>source: counterpick.gg, wiki</i>"]
     Q -->|"no - it is ours"| P["proprietary<br/><i>committed CSVs + recorded output</i>"]
     P --> P1["authored judgement:<br/>synergies, archetypes,<br/>map playstyles, seasons"]
-    P --> P2["the tunable brain:<br/>heuristics (100 formulas, 65 live),<br/>heuristic_params (the dials)"]
+    P --> P2["the tunable brain:<br/>heuristics (112 formulas, 79 live),<br/>heuristic_params (the dials)"]
     P --> P3["recorded output:<br/>recommendations + transcripts,<br/>mirrored to data/raw, restored<br/>after every rebuild"]
 ```
 

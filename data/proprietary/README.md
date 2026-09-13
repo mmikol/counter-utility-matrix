@@ -4,7 +4,7 @@
 CSVs load into the playbook — `synergies.csv`, `archetypes.csv` (the role
 shape each style's comp wants), `map_playstyle.csv` (what kind of fight
 each map rewards), and the tunable brain: `heuristics.csv` (the
-100-consideration catalog behind the dossier's `derived:` lines) with
+112-consideration catalog behind the dossier's `derived:` lines) with
 `heuristic_params.csv` (its dials) — see "The authored pipelines" below.
 The inference layer is built too — see "Asking for a comp".
 
@@ -69,7 +69,7 @@ slot. `map_playstyle.csv` (`map,style,score,note`) says what kind of fight
 each map rewards, on the same 1-3 scale.
 
 `heuristics.csv` is the catalog of every consideration the dossier
-mathematically encodes when weighing a comp - 100 numbered formulas with an
+mathematically encodes when weighing a comp - 112 numbered formulas with an
 honest status each (`live` / `ready` / `blocked`) - and
 `heuristic_params.csv` is its dial panel: the thresholds the live formulas
 read at build time. Tuning is continuous by design: edit a value, re-run

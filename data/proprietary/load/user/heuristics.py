@@ -2,7 +2,7 @@
 tunable brain.
 
 heuristics.csv is the catalog: one row per consideration the dossier
-mathematically encodes when weighing a team composition, numbered 1-100,
+mathematically encodes when weighing a team composition, numbered,
 with the formula written out and an honest status - `live` (the dossier
 emits it today, under the tag in the tag column), `ready` (computable from
 the current schema, not yet wired), or `blocked` (names the data the schema
