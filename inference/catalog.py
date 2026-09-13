@@ -38,7 +38,7 @@ import os
 import re
 
 from db import ROOT
-from ui.facts import compute
+from ui.core import compute
 from inference.expr import ExprError, Section, compile_expr
 
 STRATEGIES_DIR = os.path.join(ROOT, "inference", "strategies")

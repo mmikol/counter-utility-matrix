@@ -1,4 +1,4 @@
-"""The UI LAYER's engine: everything the database knows about a board.
+"""The UI LAYER's core: everything the database knows about a board.
 
     model    the World - the whole database loaded into memory, per request
     compute  the metrics - pure functions over a World, shared with the

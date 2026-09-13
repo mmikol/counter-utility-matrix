@@ -24,8 +24,8 @@ import psycopg
 
 from db import ROOT
 from db import psql
-from ui.facts import model
-from ui.facts.compute import TEAM_SIZE
+from ui.core import model
+from ui.core.compute import TEAM_SIZE
 from inference import catalog as catalog_module
 from inference import engine
 from inference import record as record_module

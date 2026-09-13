@@ -28,7 +28,7 @@ RED = ["Winston", "D.Va", "Genji", "Tracer", "Kiriko", "Juno"]
 # --- outcomes ----------------------------------------------------------------------
 
 def test_outcome_is_recorded_with_its_picks_and_becomes_facts(db):
-    from ui.facts import engine, model
+    from ui.core import engine, model
     oid = outcomes.record_outcome(db, "win", "King's Row", "attack", SIX, RED,
                                   ["Sombra"], None, "held the first fight")
     row = db.execute("select result, side, note from outcomes where outcome_id=%s",

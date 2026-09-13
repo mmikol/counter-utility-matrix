@@ -134,7 +134,7 @@ def test_playbook_styles_share_one_vocabulary(rows):
 
 
 def test_archetypes_describe_a_full_six_stack(rows):
-    from ui.facts.compute import TEAM_SIZE
+    from ui.core.compute import TEAM_SIZE
     for style, total in rows("select style, sum(slots) from comp_archetypes group by 1"):
         assert total == TEAM_SIZE, "%s describes %d slots" % (style, total)
 

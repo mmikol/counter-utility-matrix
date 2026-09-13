@@ -2,7 +2,7 @@
 
 import pytest
 
-from ui.facts import compute, engine, model
+from ui.core import compute, engine, model
 
 pytestmark = pytest.mark.invariant
 
@@ -97,7 +97,7 @@ def test_metrics_without_a_map_fall_back_honestly(world):
 def test_the_whole_database_becomes_facts(world, rows):
     # every data table is read by the World (the ledger is not data)
     import re
-    from ui.facts import model as model_module
+    from ui.core import model as model_module
     src = open(model_module.__file__, encoding="utf-8").read()
     unread = [t for (t,) in rows("select tablename from pg_tables where schemaname='public'")
               if t != "schema_migrations" and not re.search(r"\b%s\b" % t, src)]
@@ -122,7 +122,7 @@ def test_bans_become_facts_and_a_banned_pick_is_refused(world):
 
 
 def test_sides_exist_only_on_escort_and_hybrid(world):
-    from ui.facts.compute import is_sided, map_metrics, opposite
+    from ui.core.compute import is_sided, map_metrics, opposite
     kings, ilios = world.map("King's Row"), world.map("Ilios")
     assert is_sided(kings) and not is_sided(ilios)
     assert map_metrics(kings, "attack")["side"] == "attack"

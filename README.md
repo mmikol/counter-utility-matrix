@@ -174,7 +174,7 @@ barriers, cohesion, availability, map fit, coverage of the other team) and
 matchup facts once both teams do (pool and floor differentials, burst vs
 heal, chew time, tempo and poke wars, net answer edges, dive pressure,
 vertical threats, the ult race). Every fact is numbered `F1..` and cites
-its table or formula; `ui/facts/compute.py` is the registry of every metric.
+its table or formula; `ui/core/compute.py` is the registry of every metric.
 
 ## The inference layer: strategies in markdown
 
@@ -274,7 +274,7 @@ db/                  DATA LAYER - pulls, cleans, stores; owns the schema
   raw/               one CSV per table plus EXPORT.json naming the database
                      they came from (exported, gitignored)
 ui/                  UI LAYER - every click becomes facts
-  facts/             model.py (the World), compute.py (the metrics registry),
+  core/              model.py (the World), compute.py (the metrics registry),
                      engine.py (the FactSet)
   board.py           the map selector and the red and blue rosters (a shell)
   static/            board.css and board.js, served by board.py

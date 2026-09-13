@@ -28,7 +28,7 @@ small step per fit, and every step is a line in the tuning log.
 
 import math
 
-from ui.facts import compute, model
+from ui.core import compute, model
 from inference import catalog as catalog_module
 from inference import tune as tune_module
 from inference.solver import Candidate, Solver

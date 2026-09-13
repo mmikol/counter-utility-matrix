@@ -24,9 +24,9 @@ import psycopg
 
 from db import ROOT
 from db import psql
-from ui.facts import engine as facts_engine
-from ui.facts import model
-from ui.facts.compute import SIDED_MODES, TEAM_SIZE
+from ui.core import engine as facts_engine
+from ui.core import model
+from ui.core.compute import SIDED_MODES, TEAM_SIZE
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
 from inference import record as record_module
