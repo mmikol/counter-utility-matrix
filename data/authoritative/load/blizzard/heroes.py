@@ -1,19 +1,13 @@
-"""Ingest pipeline: overwatch.blizzard.com - heroes.
+"""Pull + clean + store: overwatch.blizzard.com - the roster.
 
-Scrapes hero, role, subrole, ability and perk data. Blizzard publishes no
-numbers and no map data, so weapons, stats and maps come from the wiki.
+Heroes, roles, subroles (with their icons and the hero portraits the user
+layer draws), ability and perk text. Blizzard publishes no numbers and no
+map data, so weapons, stats and maps come from the wiki.
 
-Loads the PostgreSQL schema defined by migrations/001_ddl_schema.sql.
-Scope is Open Queue Competitive: gameplay text only. Stadium Powers are
-skipped; perks are included. No lore, no media URLs.
-
-    python -m data.authoritative.load.blizzard.heroes --dsn postgresql://user@localhost/overwatch
-    DATABASE_URL=... python -m data.authoritative.load.blizzard.heroes
+    python -m data.authoritative.load.blizzard.heroes
 """
 
-import re
 import sys
-from datetime import datetime, timezone
 
 import psycopg
 import requests
@@ -23,33 +17,32 @@ from data.sources import cache_key, cached_get
 from data.authoritative import pipeline
 from data.sources.blizzard import BASE_URL, BLIZZARD, HEROES_URL, USER_AGENT
 from data.authoritative.extract.blizzard.heroes import (
+    ScrapeError,
     parse_abilities,
+    parse_icons,
     parse_perks,
     parse_roster,
     parse_subroles,
 )
 
-REQUEST_DELAY = 1.0
-
 ROLE_NAMES = {"tank": "Tank", "damage": "Damage", "support": "Support"}
 
 
-class ScrapeError(Exception):
-    pass
-
-
-def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, cao):
+def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
+         cao):
     cursor = connection.cursor()
     source_id = pipeline.register_source(cursor, BLIZZARD, cao)
 
     role_ids = {}
     for code in ("tank", "damage", "support"):
         cursor.execute(
-            "INSERT INTO roles (code, name, source_id) VALUES (%s, %s, %s)"
+            "INSERT INTO roles (code, name, icon_url, source_id)"
+            " VALUES (%s, %s, %s, %s)"
             " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name,"
+            " icon_url = coalesce(EXCLUDED.icon_url, roles.icon_url),"
             " source_id = EXCLUDED.source_id, cao = now()"
             " RETURNING role_id",
-            (code, ROLE_NAMES[code], source_id),
+            (code, ROLE_NAMES[code], icons["roles"].get(code), source_id),
         )
         role_ids[code] = cursor.fetchone()[0]
 
@@ -57,10 +50,11 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, cao):
     for subrole in sorted(subroles.values(), key=lambda s: (s["role_code"], s["code"])):
         cursor.execute(
             "INSERT INTO subroles (role_id, code, name, passive_description,"
-            " source_id) VALUES (%s, %s, %s, %s, %s)"
+            " icon_url, source_id) VALUES (%s, %s, %s, %s, %s, %s)"
             " ON CONFLICT (code) DO UPDATE SET role_id = EXCLUDED.role_id,"
             " name = EXCLUDED.name,"
             " passive_description = EXCLUDED.passive_description,"
+            " icon_url = coalesce(EXCLUDED.icon_url, subroles.icon_url),"
             " source_id = EXCLUDED.source_id, cao = now()"
             " RETURNING subrole_id",
             (
@@ -68,6 +62,7 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, cao):
                 subrole["code"],
                 subrole["name"],
                 subrole["passive_description"],
+                icons["subroles"].get(subrole["code"]),
                 source_id,
             ),
         )
@@ -75,10 +70,11 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, cao):
 
     for hero in heroes:
         cursor.execute(
-            "INSERT INTO heroes (slug, name, role_id, subrole_id, source_id)"
-            " VALUES (%s, %s, %s, %s, %s)"
+            "INSERT INTO heroes (slug, name, role_id, subrole_id, portrait_url,"
+            " source_id) VALUES (%s, %s, %s, %s, %s, %s)"
             " ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name,"
             " role_id = EXCLUDED.role_id, subrole_id = EXCLUDED.subrole_id,"
+            " portrait_url = coalesce(EXCLUDED.portrait_url, heroes.portrait_url),"
             " source_id = EXCLUDED.source_id, cao = now()"
             " RETURNING hero_id",
             (
@@ -86,6 +82,7 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, cao):
                 hero["name"],
                 role_ids[hero["role_code"]],
                 subrole_ids[hero["subrole_code"]],
+                hero.get("portrait_url"),
                 source_id,
             ),
         )
@@ -103,13 +100,8 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, cao):
                 " description = EXCLUDED.description,"
                 " position = EXCLUDED.position,"
                 " source_id = EXCLUDED.source_id, cao = now()",
-                (
-                    hero_id,
-                    ability["name"],
-                    ability["description"],
-                    ability["position"],
-                    source_id,
-                ),
+                (hero_id, ability["name"], ability["description"],
+                 ability["position"], source_id),
             )
         for perk in perks_by_slug[hero["slug"]]:
             cursor.execute(
@@ -120,62 +112,59 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, cao):
                 " description = EXCLUDED.description,"
                 " position = EXCLUDED.position,"
                 " source_id = EXCLUDED.source_id, cao = now()",
-                (
-                    hero_id,
-                    perk["tier_id"],
-                    perk["name"],
-                    perk["description"],
-                    perk["position"],
-                    source_id,
-                ),
+                (hero_id, perk["tier_id"], perk["name"], perk["description"],
+                 perk["position"], source_id),
             )
 
     connection.commit()
 
 
-def main():
-    parser = pipeline.build_parser(__doc__, ".cache-blizzard")
-    args = parser.parse_args()
-
-    pipeline.prepare_cache(args)
-
-    session = requests.Session()
+def run(connection, cache_dir=None, session=None, log=print):
+    """Pull the roster and every hero page, clean them, store them.
+    Returns a summary dict."""
+    session = session or requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
 
-    roster_soup = BeautifulSoup(cached_get(session, HEROES_URL, args.cache,
-                            cache_key(HEROES_URL)), "html.parser")
+    roster_soup = BeautifulSoup(cached_get(session, HEROES_URL, cache_dir,
+                                           cache_key(HEROES_URL)), "html.parser")
     subroles = parse_subroles(roster_soup)
     heroes = parse_roster(roster_soup)
-    print("roster: %d heroes, %d subroles" % (len(heroes), len(subroles)))
+    icons = parse_icons(roster_soup)
+    log("roster: %d heroes, %d subroles" % (len(heroes), len(subroles)))
 
-    abilities_by_slug = {}
-    perks_by_slug = {}
+    abilities_by_slug, perks_by_slug = {}, {}
     for index, hero in enumerate(heroes, start=1):
         slug = hero["slug"]
-        url = "%s/heroes/%s/" % (BASE_URL, slug)
-        page = cached_get(
-            session, url, args.cache, cache_key(slug)
-        )
+        page = cached_get(session, "%s/heroes/%s/" % (BASE_URL, slug),
+                          cache_dir, cache_key(slug))
         soup = BeautifulSoup(page, "html.parser")
         abilities_by_slug[slug] = parse_abilities(soup, slug)
         perks_by_slug[slug] = parse_perks(soup, slug)
-        print(
-            "  [%2d/%d] %-18s %d abilities, %d perks"
+        log("  [%2d/%d] %-18s %d abilities, %d perks"
             % (index, len(heroes), hero["name"],
-               len(abilities_by_slug[slug]), len(perks_by_slug[slug]))
-        )
+               len(abilities_by_slug[slug]), len(perks_by_slug[slug])))
 
-    cao = datetime.now(timezone.utc)
-    dsn = pipeline.resolve_dsn(args)
-    with psycopg.connect(dsn) as connection:
-        load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, cao)
-        pipeline.export_raw(
-            connection, args, ("roles", "subroles", "heroes", "abilities", "perks")
-        )
+    load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
+         pipeline.now())
+    return {
+        "heroes": len(heroes),
+        "subroles": len(subroles),
+        "abilities": sum(len(a) for a in abilities_by_slug.values()),
+        "perks": sum(len(p) for p in perks_by_slug.values()),
+        "portraits": sum(1 for h in heroes if h.get("portrait_url")),
+        "tables": ["roles", "subroles", "heroes", "abilities", "perks"],
+    }
 
-    print("loaded into %s" % re.sub(r"//[^@/]*@", "//", dsn))
-    print("\nRun wiki.heroes next: it classifies these abilities and adds"
-          "\nthe ones Blizzard does not publish.")
+
+def main():
+    parser = pipeline.build_parser(__doc__, ".cache-blizzard")
+    args = parser.parse_args()
+    cache = pipeline.prepare_cache(args.cache)
+    with psycopg.connect(pipeline.resolve_dsn(args)) as connection:
+        summary = run(connection, cache)
+        pipeline.export_raw(connection, args, summary["tables"])
+    print("loaded %(heroes)d heroes, %(abilities)d abilities, %(perks)d perks,"
+          " %(portraits)d portraits" % summary)
 
 
 if __name__ == "__main__":

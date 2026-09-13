@@ -1,6 +1,6 @@
 # Data dictionary
 
-Generated from the live schema (`python -m orchestrator docs`).
+Generated from the live schema (`python -m data.orchestrator docs`).
 
 Every table carries two columns omitted from the lists below, because they
 are on all of them: `source_id` (which source the row came from, see
@@ -8,11 +8,11 @@ are on all of them: `source_id` (which source the row came from, see
 
 | domain | tables |
 | --- | --- |
-| **foundation** | `sources` |
+| **foundation** | `schema_migrations` · `sources` |
 | **HEROES** | `abilities` · `ability_kinds` · `ability_modifiers` · `ability_stats` · `heroes` · `perk_ability_effects` · `perk_stats` · `perk_tiers` · `perks` · `roles` · `stat_keys` · `subroles` · `weapon_config_slots` · `weapon_configs` · `weapon_stats` · `weapons` |
 | **MAPS** | `game_modes` · `map_modes` · `map_stages` · `maps` |
 | **META** | `competitive_tiers` · `hero_meta` · `map_meta` · `meta_snapshots` · `patches` · `regions` · `seasons` |
-| **PLAYBOOK** | `comp_archetypes` · `counters` · `heuristic_params` · `heuristics` · `map_playstyle` · `map_strategy` · `playstyle` · `synergies` |
+| **PLAYBOOK** | `comp_archetypes` · `counters` · `heuristics` · `map_playstyle` · `map_strategy` · `playstyle` · `synergies` |
 | **INFERENCE** | `recommendation_evidence` · `recommendation_picks` · `recommendations` · `strategies` |
 
 
@@ -30,6 +30,7 @@ kind_id is NULL until the wiki pipeline sets it. Blizzard's markup labels neithe
 | `name` | text | no |  |
 | `description` | text | no |  |
 | `position` | smallint | no |  |
+| `keywords` | text | yes |  |
 
 ## `ability_kinds`
 
@@ -150,36 +151,29 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 | `hero_id` | integer | no |  |
 | `slug` | text | no |  |
 | `name` | text | no |  |
-| `role_id` | integer | no | `subroles.subrole_id` |
+| `role_id` | integer | no | `subroles.role_id` |
 | `subrole_id` | integer | no | `subroles.subrole_id` |
 | `health` | smallint | yes |  |
 | `shield` | smallint | yes |  |
 | `armor` | smallint | yes |  |
-
-## `heuristic_params`
-
-*PLAYBOOK · 9 rows · `007_heuristics.sql`*
-
-| column | type | null | references |
-| --- | --- | --- | --- |
-| `code` | text | no |  |
-| `value` | numeric | no |  |
-| `note` | text | no |  |
+| `portrait_url` | text | yes |  |
 
 ## `heuristics`
 
-*PLAYBOOK · 100 rows · `007_heuristics.sql`*
+*PLAYBOOK · 36 rows · `007_three_layers.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
-| `heuristic_id` | smallint | no |  |
-| `tag` | text | no |  |
+| `heuristic_id` | text | no |  |
 | `name` | text | no |  |
+| `kind` | text | no |  |
 | `category` | text | no |  |
-| `formula` | text | no |  |
-| `inputs` | text | no |  |
-| `status` | text | no |  |
-| `rationale` | text | no |  |
+| `direction` | text | yes |  |
+| `metric` | text | yes |  |
+| `weight` | numeric | yes |  |
+| `expression` | text | yes |  |
+| `params` | text | yes |  |
+| `body` | text | no |  |
 
 ## `map_meta`
 
@@ -349,7 +343,7 @@ Which playstyle a hero belongs to, straight from the wiki's team composition pag
 
 *INFERENCE · 17 rows · `006_inference.sql`*
 
-The dossier lines the model cited, by tag (E1, E2, ...). hero_id links a citation to the specific pick it justified; NULL means it supported the comp as a whole.
+The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a citation to the specific pick it justified; NULL means it supported the comp as a whole.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -405,6 +399,16 @@ The dossier lines the model cited, by tag (E1, E2, ...). hero_id links a citatio
 | `role_id` | integer | no |  |
 | `code` | text | no |  |
 | `name` | text | no |  |
+| `icon_url` | text | yes |  |
+
+## `schema_migrations`
+
+*foundation · 8 rows · `008_schema_migrations.sql`*
+
+| column | type | null | references |
+| --- | --- | --- | --- |
+| `filename` | text | no |  |
+| `applied_at` | timestamp with time zone | no |  |
 
 ## `seasons`
 
@@ -467,6 +471,7 @@ The ten subroles, each belonging to exactly one role, each carrying the passive 
 | `code` | text | no |  |
 | `name` | text | no |  |
 | `passive_description` | text | no |  |
+| `icon_url` | text | yes |  |
 
 ## `synergies`
 
@@ -504,6 +509,7 @@ weapon_type lives here rather than on the weapon because it varies by config: An
 | `name` | text | no |  |
 | `weapon_type` | text | yes |  |
 | `position` | smallint | no |  |
+| `keywords` | text | yes |  |
 
 ## `weapon_stats`
 

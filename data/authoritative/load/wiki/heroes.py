@@ -1,28 +1,21 @@
-"""Ingest pipeline: overwatch.fandom.com - hero kit data, via Cargo.
+"""Pull + clean + store: overwatch.fandom.com - hero kit data, via Cargo.
 
-The wiki stores its ability data in a Cargo table, which the MediaWiki endpoint
-exposes directly. That is read here instead of parsing article templates: the
-table has one row per ability with every stat as its own column, an explicit
-`removed` flag for retired kit, and an `ability_key` naming the input slot.
+The wiki stores its ability data in a Cargo table with one row per ability,
+every stat as its own column, an explicit `removed` flag and a keyword list
+("hitscan", "strong movement", "stun", "lesser cleanse", ...). A few template
+parameters are never registered as Cargo fields - the interaction flags
+among them - so those are supplemented from the article wikitext.
 
-A few template parameters are never registered as Cargo fields, so no query can
-reach them - the interaction flags (does this pierce Defense Matrix, Deflect, a
-barrier?) among them. Those are supplemented from the article wikitext, one
-page per hero, after the Cargo rows are in.
+Loads weapons and their firing configs, classifies every ability, adds the
+abilities Blizzard does not publish, stores each ability's keywords, and
+attaches stat measurements to abilities, weapons and perks. Runs after
+blizzard.heroes, which owns the hero, ability and perk rows this fills in.
 
-Loads weapons and their firing configs, classifies every ability
-(weapon / ability / ultimate / passive), adds the abilities Blizzard does not
-publish, and attaches stat measurements to abilities, weapons and perks.
-
-Run after blizzard.heroes, which owns the hero, ability and perk rows this
-fills in:
-
-    python -m data.authoritative.load.wiki.heroes --dsn postgresql://...
+    python -m data.authoritative.load.wiki.heroes
 """
 
 import collections
 import sys
-from datetime import datetime, timezone
 
 import psycopg
 import requests
@@ -59,11 +52,6 @@ CARGO_FIELDS = (
     "dps", "hps", "ignores_speedcap", "ability_keywords",
 )
 
-# Columns that describe the ability rather than measure it.
-
-
-WEAPON_KIND, ABILITY_KIND, ULTIMATE_KIND, PASSIVE_KIND = 1, 2, 3, 4
-
 # The unit a stat is measured in when its value carries none of its own
 # ("damage = 90" is 90 hp). Stats absent here are categorical or boolean.
 STAT_UNITS = {
@@ -90,10 +78,7 @@ STAT_UNITS = {
 # Stats that are inherently per-second, so a bare number is still a rate.
 STAT_DEFAULT_DENOMINATOR = {"dps": "seconds", "hps": "seconds"}
 
-# Declared on Template:Ability details but not registered as Cargo fields, so
-# they are read from the article wikitext instead. The ignores_* family says
-# whether an ability passes through Defense Matrix, Deflect, Javelin Spin,
-# barriers or a speed boost - the interactions that decide counter-picks.
+# Declared on Template:Ability details but not registered as Cargo fields.
 SUPPLEMENT_FIELDS = (
     "ignores_matrix", "ignores_deflect", "ignores_window", "ignores_barrier",
     "ignores_boost", "aoe", "view_angle",
@@ -101,11 +86,7 @@ SUPPLEMENT_FIELDS = (
 
 
 def supplement_from_wikitext(session, hero_name, cache_dir):
-    """One hero page -> ({ability match_key: {stat: ...}}, {health/shield/armor}).
-
-    Both come off the same fetch: the stats Cargo does not expose, and the
-    hero's own health pool, which the wiki keeps on the article.
-    """
+    """One hero page -> ({ability match_key: {stat: ...}}, {health/shield/armor})."""
     try:
         text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
     except (WikiError, requests.RequestException):
@@ -175,7 +156,6 @@ def insert_stats(cursor, table, owner_column, owner_id, stats, key_ids, source_i
     written = 0
     for code, (value_text, _, raw) in stats.items():
         default_unit = STAT_UNITS.get(code)
-        # dps and hps are per-second even when written as a bare number.
         implied = STAT_DEFAULT_DENOMINATOR.get(code)
         for value, numerator, denominator, window, condition, text in (
             parse_measurements(value_text, default_unit)
@@ -199,10 +179,8 @@ def insert_stats(cursor, table, owner_column, owner_id, stats, key_ids, source_i
 
 
 def load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally):
-    """Weapons, their firing configs, and the stats on each config."""
-    for position, (weapon_name, configs) in enumerate(
-        group_weapons(weapons)
-    ):
+    """Weapons, their firing configs (with keywords), and the stats on each."""
+    for position, (weapon_name, configs) in enumerate(group_weapons(weapons)):
         cursor.execute(
             "INSERT INTO weapons (hero_id, name, position, source_id)"
             " VALUES (%s, %s, %s, %s)"
@@ -217,14 +195,13 @@ def load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally):
         for config_position, config in enumerate(configs):
             cursor.execute(
                 "INSERT INTO weapon_configs (weapon_id, slot_id, name,"
-                " weapon_type, position, source_id)"
-                " VALUES (%s, %s, %s, %s, %s, %s)"
+                " weapon_type, keywords, position, source_id)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (weapon_id, slot_id) DO NOTHING"
                 " RETURNING config_id",
-                (row[0],
-                 slot_id(config["mode"] or config["input_key"]),
+                (row[0], slot_id(config["mode"] or config["input_key"]),
                  config["display_name"], config["weapon_type"],
-                 config_position, source_id),
+                 config.get("keywords") or None, config_position, source_id),
             )
             config_row = cursor.fetchone()
             if config_row is None:
@@ -238,15 +215,8 @@ def load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally):
 
 def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
                    source_id, tally):
-    """Classify the abilities Blizzard loaded, add the ones it omits, stat them.
-
-    Weapon entries take part ONLY to classify: Blizzard lists a hero's weapon
-    among the abilities ("Biotic Rifle"), and the matching weapon entry is
-    what tells us its kind. They never create ability rows and never carry
-    stats here - a weapon's numbers live on its configs, and statting the
-    ability too once double-booked them onto whichever colliding row a rerun
-    found first, making update and rebuild disagree.
-    """
+    """Classify the abilities Blizzard loaded, add the ones it omits, stat
+    them, store their keywords. Weapon entries take part ONLY to classify."""
     existing = {
         match_key(row[0]): row[1]
         for row in cursor.execute(
@@ -264,8 +234,9 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
             ability_id = existing.get(match_key(candidate)) if candidate else None
             if ability_id is not None:
                 cursor.execute(
-                    "UPDATE abilities SET kind_id = %s WHERE ability_id = %s",
-                    (entry["kind_id"], ability_id),
+                    "UPDATE abilities SET kind_id = %s, keywords = %s"
+                    " WHERE ability_id = %s",
+                    (entry["kind_id"], entry.get("keywords") or None, ability_id),
                 )
                 tally["classified"] += cursor.rowcount
                 break
@@ -275,10 +246,12 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
         if ability_id is None:
             cursor.execute(
                 "INSERT INTO abilities (hero_id, kind_id, name, description,"
-                " position, source_id) VALUES (%s, %s, %s, %s, %s, %s)"
+                " keywords, position, source_id)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (hero_id, name) DO NOTHING RETURNING ability_id",
                 (hero_id, entry["kind_id"], entry["display_name"],
-                 entry["description"], next_position, source_id),
+                 entry["description"], entry.get("keywords") or None,
+                 next_position, source_id),
             )
             inserted = cursor.fetchone()
             if inserted is None:
@@ -290,8 +263,9 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
             tally["added"] += 1
         else:
             cursor.execute(
-                "UPDATE abilities SET kind_id = %s WHERE ability_id = %s",
-                (entry["kind_id"], ability_id),
+                "UPDATE abilities SET kind_id = %s, keywords = %s"
+                " WHERE ability_id = %s",
+                (entry["kind_id"], entry.get("keywords") or None, ability_id),
             )
             tally["classified"] += 1
 
@@ -329,10 +303,7 @@ def load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
             cursor, "perk_stats", "perk_id", perk_id, entry["stats"],
             key_ids, source_id,
         )
-        # A perk names the ability it alters in its own description.
-        for name in abilities_named_in(
-            entry["description"], ability_names
-        ):
+        for name in abilities_named_in(entry["description"], ability_names):
             cursor.execute(
                 "INSERT INTO perk_ability_effects (perk_id, ability_id,"
                 " source_id) SELECT %s, ability_id, %s FROM abilities"
@@ -342,31 +313,20 @@ def load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
             )
             tally["perk_links"] += cursor.rowcount
 
-def main():
-    parser = pipeline.build_parser(__doc__, ".cache-wiki")
-    parser.add_argument(
-        "--no-supplement", action="store_true",
-        help="skip the wikitext pass for fields Cargo does not expose",
-    )
-    args = parser.parse_args()
 
-    pipeline.prepare_cache(args)
-
-    dsn = pipeline.resolve_dsn(args)
-
-    session = requests.Session()
+def run(connection, cache_dir=None, session=None, supplement=True, log=print):
+    """Pull the Cargo table (and each hero article), clean, store."""
+    session = session or requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
-    cao = datetime.now(timezone.utc)
 
-    rows = cargo_query(session, CARGO_TABLE, CARGO_FIELDS, args.cache)
+    rows = cargo_query(session, CARGO_TABLE, CARGO_FIELDS, cache_dir)
     by_hero = parse_rows(rows)
-    print("cargo rows: %d   heroes named: %d" % (len(rows), len(by_hero)))
+    log("cargo rows: %d   heroes named: %d" % (len(rows), len(by_hero)))
 
-    profiles = {}
-    if not args.no_supplement:
-        supplemented = 0
+    profiles, supplemented = {}, 0
+    if supplement:
         for hero_name, (weapons, abilities, perks) in sorted(by_hero.items()):
-            extra, profile = supplement_from_wikitext(session, hero_name, args.cache)
+            extra, profile = supplement_from_wikitext(session, hero_name, cache_dir)
             if profile:
                 profiles[hero_name] = profile
             for entry in weapons + abilities + perks:
@@ -374,75 +334,70 @@ def main():
                     if code not in entry["stats"]:
                         entry["stats"][code] = value
                         supplemented += 1
-        print("supplemented stats: %d  (fields Cargo does not expose)" % supplemented)
+        log("supplemented stats: %d  (fields Cargo does not expose)" % supplemented)
 
-    with psycopg.connect(dsn) as connection:
-        cursor = connection.cursor()
-        source_id = pipeline.register_source(cursor, WIKI, cao)
-        cursor.execute("DELETE FROM ability_modifiers")
-        cursor.execute("DELETE FROM perk_ability_effects")
-        cursor.execute("DELETE FROM perk_stats")
-        cursor.execute("DELETE FROM weapon_stats")
-        cursor.execute("DELETE FROM ability_stats")
-        cursor.execute("DELETE FROM weapon_configs")
-        cursor.execute("DELETE FROM weapons")
+    cursor = connection.cursor()
+    source_id = pipeline.register_source(cursor, WIKI, pipeline.now())
+    for table in ("ability_modifiers", "perk_ability_effects", "perk_stats",
+                  "weapon_stats", "ability_stats", "weapon_configs", "weapons"):
+        cursor.execute("DELETE FROM " + table)
 
-        all_codes = set()
-        for weapons, abilities, perks in by_hero.values():
-            for entry in weapons + abilities + perks:
-                all_codes.update(entry["stats"])
-        key_ids = stat_key_ids(cursor, all_codes, source_id)
+    all_codes = set()
+    for weapons, abilities, perks in by_hero.values():
+        for entry in weapons + abilities + perks:
+            all_codes.update(entry["stats"])
+    key_ids = stat_key_ids(cursor, all_codes, source_id)
+    hero_ids = pipeline.lookup_ids(cursor, "heroes", "name", "hero_id")
 
-        hero_ids = pipeline.lookup_ids(cursor, "heroes", "name", "hero_id")
+    tally = collections.Counter()
+    unknown_heroes = []
+    for hero_name, profile in profiles.items():
+        hero_id = hero_ids.get(hero_name.lower())
+        if hero_id is None:
+            continue
+        cursor.execute(
+            "UPDATE heroes SET health = %s, shield = %s, armor = %s"
+            " WHERE hero_id = %s",
+            (profile.get("health"), profile.get("shield"),
+             profile.get("armor"), hero_id),
+        )
+        tally["health"] += cursor.rowcount
 
-        tally = collections.Counter()
-        unknown_heroes = []
+    for hero_name, (weapons, abilities, perks) in sorted(by_hero.items()):
+        hero_id = hero_ids.get(hero_name.lower())
+        if hero_id is None:
+            unknown_heroes.append(hero_name)
+            continue
+        load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally)
+        load_abilities(cursor, hero_id, weapons, abilities, key_ids, source_id, tally)
+        load_perks(cursor, hero_id, perks, key_ids, source_id, tally)
+    connection.commit()
 
-        # Blizzard publishes no hero health; fill it in from the wiki article.
-        for hero_name, profile in profiles.items():
-            hero_id = hero_ids.get(hero_name.lower())
-            if hero_id is None:
-                continue
-            cursor.execute(
-                "UPDATE heroes SET health = %s, shield = %s, armor = %s"
-                " WHERE hero_id = %s",
-                (profile.get("health"), profile.get("shield"),
-                 profile.get("armor"), hero_id),
-            )
-            tally["health"] += cursor.rowcount
+    summary = dict(tally)
+    summary.update({
+        "cargo_rows": len(rows), "supplemented": supplemented,
+        "unknown_heroes": sorted(unknown_heroes),
+        "tables": ["abilities", "ability_stats", "ability_modifiers", "weapons",
+                   "weapon_configs", "weapon_stats", "perk_stats",
+                   "perk_ability_effects", "stat_keys", "heroes"],
+    })
+    return summary
 
 
-        for hero_name, (weapons, abilities, perks) in sorted(by_hero.items()):
-            hero_id = hero_ids.get(hero_name.lower())
-            if hero_id is None:
-                unknown_heroes.append(hero_name)
-                continue
-
-            load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally)
-
-            load_abilities(
-                cursor, hero_id, weapons, abilities, key_ids, source_id, tally
-            )
-
-            load_perks(cursor, hero_id, perks, key_ids, source_id, tally)
-        connection.commit()
-
-        pipeline.export_raw(connection, args, ("abilities", "ability_stats", "weapons", "weapon_configs",
-         "weapon_stats", "perk_stats", "stat_keys"))
-
-    print("weapons loaded:       %d" % tally["weapons"])
-    print("weapon configs:       %d" % tally["configs"])
-    print("abilities classified: %d" % tally["classified"])
-    print("abilities added:      %d  (published by the wiki, not by Blizzard)" % tally["added"])
-    print("abilities with stats: %d" % tally["abilities_with_stats"])
-    print("hero health set:      %d" % tally["health"])
-    print("perks with stats:     %d" % tally["perks_with_stats"])
-    print("perk -> ability links: %d" % tally["perk_links"])
-    print("ability modifiers:    %d" % tally["modifiers"])
-    print("stat measurements:    %d" % tally["stats"])
-    if unknown_heroes:
-        print("\n%d names in Cargo that are not roster heroes: %s"
-              % (len(unknown_heroes), ", ".join(sorted(unknown_heroes))))
+def main():
+    parser = pipeline.build_parser(__doc__, ".cache-wiki")
+    parser.add_argument("--no-supplement", action="store_true",
+                        help="skip the wikitext pass for fields Cargo does not expose")
+    args = parser.parse_args()
+    cache = pipeline.prepare_cache(args.cache)
+    with psycopg.connect(pipeline.resolve_dsn(args)) as connection:
+        summary = run(connection, cache, supplement=not args.no_supplement)
+        pipeline.export_raw(connection, args, summary["tables"])
+    for key in ("weapons", "configs", "classified", "added", "stats", "modifiers"):
+        print("%-12s %d" % (key, summary.get(key, 0)))
+    if summary["unknown_heroes"]:
+        print("names in Cargo that are not roster heroes: %s"
+              % ", ".join(summary["unknown_heroes"]))
 
 
 if __name__ == "__main__":

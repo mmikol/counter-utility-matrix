@@ -1,13 +1,37 @@
-# docker compose up  ->  inflates the database on first run (the entrypoint
-# builds it when empty), then serves the UI at http://localhost:8017. No keys,
-# no accounts - compositions come from chatting with the /comp skill in a
-# Claude Code session, which queries this database via ./docker-db.
+# docker compose up --build  ->  one container per layer:
 #
-# The app talks to a real postgres service (pgserver ships no linux/arm64
-# wheel, and a proper service is the better container shape anyway). Mounts
-# keep the expensive and the authored parts on the host: page caches make
-# rebuilds cheap, data/raw receives the CSV exports, data/proprietary is
-# where you author synergies/strategies and where transcripts land.
+#   db          PostgreSQL (the database)
+#   data        DATA LAYER: builds the database when empty or stale (rebuilds
+#               from the bind-mounted page caches; recorded comps come back
+#               from the data/raw mirror), then serves the MCP server over
+#               HTTP at http://localhost:8020/mcp - the door a Claude Code
+#               session opens (.mcp.json, server "overwatch-db-docker")
+#   inference   INFERENCE ENGINE: http://localhost:8019 (infer, evaluate,
+#               heuristics, record) reading the heuristics files live
+#   ui          USER LAYER: the board at http://localhost:8017, reading the
+#               database for facts and the inference service for comps
+#   refresher   the data layer's clock: refreshes every source, the playbook
+#               and the heuristics mirror daily at OVERWATCH_DB_REFRESH_AT
+#               (05:00 container time; set TZ for local time), and right away
+#               on start when the cached pages are older than a day - so the
+#               board is ready when a game starts
+#
+# No keys, no accounts. Host-side tools reach the same database through
+# ./docker-db (port 5433).
+# One image, built once (by `data`), shared by every layer's container.
+x-app: &app
+  image: overwatch-db
+  environment: &env
+    DATABASE_URL: postgresql://overwatch:overwatch@db/overwatch
+    PYTHONUNBUFFERED: "1"
+  volumes: &mounts
+    - ./.cache-blizzard:/app/.cache-blizzard
+    - ./.cache-wiki:/app/.cache-wiki
+    - ./.cache-counterpick:/app/.cache-counterpick
+    - ./data/raw:/app/data/raw
+    - ./data/proprietary:/app/data/proprietary
+    - ./inference/heuristics:/app/inference/heuristics
+
 services:
   db:
     image: postgres:16-alpine
@@ -16,7 +40,7 @@ services:
       POSTGRES_PASSWORD: overwatch
       POSTGRES_DB: overwatch
     ports:
-      - "5433:5432"        # host-side tools (the /comp skill) via ./docker-db
+      - "5433:5432"        # host-side tools via ./docker-db
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -25,51 +49,66 @@ services:
       timeout: 3s
       retries: 30
 
-  app:
+  data:
+    <<: *app
     build: .
+    command: ["data"]
+    ports:
+      - "8020:8020"        # MCP over HTTP: /mcp, /health
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      # healthy once the database is built and the MCP server answers
+      test: ["CMD", "python", "-c",
+             "import json,urllib.request;d=json.load(urllib.request.urlopen('http://localhost:8020/health'));assert d['status']=='ok' and d['heroes']>0 and not d['pending_migrations']"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 900s   # the first build scrapes the sources
+
+  inference:
+    <<: *app
+    command: ["inference"]
+    ports:
+      - "8019:8019"
+    depends_on:
+      data:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import json,urllib.request;d=json.load(urllib.request.urlopen('http://localhost:8019/health'));assert d['status']=='ok'"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+
+  ui:
+    <<: *app
+    command: ["ui"]
     ports:
       - "8017:8017"
     environment:
-      DATABASE_URL: postgresql://overwatch:overwatch@db/overwatch
+      <<: *env
+      INFERENCE_URL: http://inference:8019
+      OVERWATCH_DB_UI_HOST: 0.0.0.0
     depends_on:
-      db:
+      data:
         condition: service_healthy
-    volumes:
-      - ./.cache-blizzard:/app/.cache-blizzard
-      - ./.cache-wiki:/app/.cache-wiki
-      - ./.cache-counterpick:/app/.cache-counterpick
-      - ./data/raw:/app/data/raw
-      - ./data/proprietary:/app/data/proprietary
+      inference:
+        condition: service_healthy
 
-  # The cron: refreshes the data on a schedule (default: daily). Each run is
-  # an orchestrator `update` - entities refreshed in place, a new dated
-  # snapshot appended, CSVs re-exported - through the same bind-mounted
-  # caches. CODED BUT DISABLED by default (profile "cron"): enable with
-  #   docker compose --profile cron up -d
-  # Tune with OVERWATCH_DB_UPDATE_INTERVAL (seconds).
-  updater:
-    profiles: ["cron"]
-    build: .
+  refresher:
+    <<: *app
+    command: ["refresh"]
     environment:
-      DATABASE_URL: postgresql://overwatch:overwatch@db/overwatch
+      <<: *env
+      OVERWATCH_DB_REFRESH_AT: ${OVERWATCH_DB_REFRESH_AT:-05:00}
+      OVERWATCH_DB_REFRESH_MAX_AGE_HOURS: ${OVERWATCH_DB_REFRESH_MAX_AGE_HOURS:-20}
+      TZ: ${TZ:-UTC}
     depends_on:
-      db:
+      data:
         condition: service_healthy
-    volumes:
-      - ./.cache-blizzard:/app/.cache-blizzard
-      - ./.cache-wiki:/app/.cache-wiki
-      - ./.cache-counterpick:/app/.cache-counterpick
-      - ./data/raw:/app/data/raw
-      - ./data/proprietary:/app/data/proprietary
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        interval="$${OVERWATCH_DB_UPDATE_INTERVAL:-86400}"
-        echo "updater: every $${interval}s (first run after one interval)"
-        while sleep "$$interval"; do
-          echo "updater: running orchestrator update"
-          python -m orchestrator update || echo "updater: update failed;"            " will retry next interval"
-        done
 
 volumes:
   pgdata:

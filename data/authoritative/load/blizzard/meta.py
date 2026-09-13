@@ -1,90 +1,54 @@
-"""Ingest pipeline: overwatch.blizzard.com/en-us/rates/ - hero meta statistics.
+"""Pull + clean + store: overwatch.blizzard.com/en-us/rates/ - win, pick and
+ban rates as a dated snapshot, sliced by skill tier and by map.
 
-Loads win, pick and ban rates as a dated snapshot, sliced by skill tier and by
-map. The page's filters are server-side query parameters (role, input, rq,
-tier, map, region) and it carries its rows as JSON on a blz-data-table
-element, so no browser is needed.
+Three deliberate restrictions, all recorded on the snapshot:
 
-Three deliberate restrictions:
-
-  queue   Competitive - Role Queue. The page offers no Open Queue, so this is
-          the one part of the database that is not Open Queue, and the
-          snapshot records it. The rq code for it is read from the page's own
-          queue filter rather than hardcoded: Blizzard has renumbered it once
-          already (1 became 2 in September 2026, with the old value silently
-          serving ban-free Quick-Play-shaped rows), and a wrong queue code
-          fails loudly here instead of loading the wrong population.
+  queue     Competitive - Role Queue (the page offers no Open Queue). The rq
+            code is read from the page's own queue filter, never hardcoded:
+            Blizzard renumbered it once and the old code silently served a
+            different population.
   platform  Console (the parameter is spelled input=Console).
-  region  Americas, on every request including the baseline. The source offers
-          Americas, Asia and Europe and nothing narrower, so this is as close
-          to the United States as it can be scoped. Nothing here is a
-          multi-region aggregate.
+  region    Americas, on every request including the baseline.
 
-    python -m data.authoritative.load.blizzard.meta --dsn postgresql://...
+    python -m data.authoritative.load.blizzard.meta
 """
 
 import sys
-from datetime import datetime, timezone
 
 import psycopg
 import requests
 
 from data.sources import cache_key, cached_get
 from data.authoritative import pipeline
-from orchestrator import current_patch, current_season
+from data.common import current_patch, current_season
 from data.sources.blizzard import BLIZZARD, RATES_URL, USER_AGENT
 from data.authoritative.extract.blizzard.meta import (
+    RatesError,
     parse_filter_options,
     parse_rows,
 )
 
-# ~280 sequential pages is more load than the source will take. It answers 504
-# first, then stops answering at all and closes the connection. So this stage
-# is deliberately slow and stubborn: a jittered gap between requests, and a
-# long climbing wait before it gives up on one. Slower here is faster overall,
-# because being cut off costs the whole stage.
+# ~280 sequential pages is more load than the source will take. Slower here
+# is faster overall, because being cut off costs the whole stage.
 REQUEST_DELAY = 5.0
 REQUEST_TIMEOUT = 90
 RETRIES = 6
 RETRY_BACKOFF = 5.0
 
-# The rq code is NOT hardcoded - see competitive_rq(). Blizzard renumbered it
-# once already, and the old code kept answering with a different population.
 QUEUE_NAME = "competitive_role_queue"
 QUEUE_LABEL = "Competitive - Role Queue"
-# The source's query parameter is spelled "input", but it selects a platform:
-# its two values are PC and Console. What it is called and what it means differ,
-# so the parameter keeps the source's spelling and the column keeps the meaning.
 INPUT_PARAM = "Console"
 PLATFORM_NAME = "console"
-# Derived, not published: console Overwatch supports no input but a
-# controller, so the console platform pins the device. A PC snapshot would
-# leave this NULL - that population mixes controller and mouse-and-keyboard.
+# Derived, not published: console supports no input but a controller.
 INPUT_DEVICE = "controller"
-
 ALL_TIER = "All"
-
-# Every figure in this database is the Americas. The source offers Americas,
-# Asia and Europe and nothing narrower - there is no United States filter - so
-# Americas is the closest it can be scoped, and it takes in Canada and Latin
-# America as well. There is deliberately no unfiltered "all regions" figure any
-# more: mixing three populations into one row made a number nobody plays under.
 REGION_PARAM = "Americas"
 REGION_CODE = "americas"
 REGION_NAME = "Americas"
 
 
-class RatesError(Exception):
-    pass
-
-
 def competitive_rq(session, cache_dir):
-    """The rq code the page currently assigns to Competitive - Role Queue.
-
-    Read from the queue filter of an un-queued request, and matched by label:
-    codes drift (1 became 2), labels are the source's own vocabulary. Exactly
-    one option must match, or this stage stops rather than guess a population.
-    """
+    """The rq code the page currently assigns to Competitive - Role Queue."""
     page = cached_get(
         session, RATES_URL, cache_dir,
         cache_key("rates", "queue-vocabulary",
@@ -104,164 +68,137 @@ def competitive_rq(session, cache_dir):
 
 def fetch(session, params, cache_dir, rq):
     """One rates page for a given filter combination."""
-    query = dict(params, rq=rq, input=INPUT_PARAM,
-                 region=REGION_PARAM)
+    query = dict(params, rq=rq, input=INPUT_PARAM, region=REGION_PARAM)
     return cached_get(
-        session,
-        RATES_URL,
-        cache_dir,
+        session, RATES_URL, cache_dir,
         cache_key("rates", *("%s-%s" % kv for kv in sorted(query.items()))),
-        params=query,
-        timeout=REQUEST_TIMEOUT,
-        retries=RETRIES,
-        delay=REQUEST_DELAY,
-        backoff=RETRY_BACKOFF,
+        params=query, timeout=REQUEST_TIMEOUT, retries=RETRIES,
+        delay=REQUEST_DELAY, backoff=RETRY_BACKOFF,
     )
+
+
+def run(connection, cache_dir=None, session=None, log=print):
+    session = session or requests.Session()
+    session.headers.update({"User-Agent": USER_AGENT})
+    cao = pipeline.now()
+
+    rq = competitive_rq(session, cache_dir)
+    baseline = fetch(session, {}, cache_dir, rq)
+    tiers = parse_filter_options(baseline, "filter-tier-select")
+    maps = [m for m in parse_filter_options(baseline, "filter-map-select")
+            if m[0] != "all-maps"]
+
+    cursor = connection.cursor()
+    source_id = pipeline.register_source(cursor, BLIZZARD, cao)
+    cursor.execute(
+        "INSERT INTO regions (code, name, source_id) VALUES (%s, %s, %s)"
+        " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name"
+        " RETURNING region_id",
+        (REGION_CODE, REGION_NAME, source_id),
+    )
+    region_id = cursor.fetchone()[0]
+
+    tier_ids = {}
+    for order, (code, name) in enumerate(tiers):
+        cursor.execute(
+            "INSERT INTO competitive_tiers (code, name, rank_order, source_id)"
+            " VALUES (%s, %s, %s, %s)"
+            " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name,"
+            " rank_order = EXCLUDED.rank_order RETURNING tier_id",
+            (code.lower(), name, order, source_id),
+        )
+        tier_ids[code] = cursor.fetchone()[0]
+
+    cursor.execute(
+        "INSERT INTO meta_snapshots (captured_at, queue, platform, input,"
+        " patch_id, season_id, source_id)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING snapshot_id",
+        (cao, QUEUE_NAME, PLATFORM_NAME, INPUT_DEVICE,
+         current_patch(cursor), current_season(cursor), source_id),
+    )
+    snapshot_id = cursor.fetchone()[0]
+
+    hero_ids = pipeline.lookup_ids(cursor, "heroes", "name", "hero_id")
+    map_ids = pipeline.lookup_ids(cursor, "maps", "name", "map_id")
+    unmatched = set()
+
+    def load_hero_slice(html, tier_code):
+        written = 0
+        for name, win, pick, ban in parse_rows(html):
+            hero_id = hero_ids.get(name.lower())
+            if hero_id is None:
+                unmatched.add(name)
+                continue
+            cursor.execute(
+                "INSERT INTO hero_meta (snapshot_id, hero_id, region_id,"
+                " tier_id, win_rate, pick_rate, ban_rate, source_id)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
+                " ON CONFLICT (snapshot_id, hero_id, region_id, tier_id)"
+                " DO NOTHING",
+                (snapshot_id, hero_id, region_id, tier_ids[tier_code],
+                 win, pick, ban, source_id),
+            )
+            written += 1
+        return written
+
+    rows = load_hero_slice(baseline, ALL_TIER)
+    for code, _ in tiers:
+        if code != ALL_TIER:
+            rows += load_hero_slice(fetch(session, {"tier": code}, cache_dir, rq),
+                                    code)
+    log("hero/tier rows: %d" % rows)
+
+    # Per map, across all ranks. Map x tier would be 270 requests against
+    # 30, and the source refuses connections well before the end of a sweep
+    # that size; rows carry tier_id (all ranks) so widening needs no
+    # migration, only the inner loop.
+    map_rows, skipped_maps = 0, []
+    for slug, label in maps:
+        map_id = map_ids.get(label.lower())
+        if map_id is None:
+            skipped_maps.append(label)
+            continue
+        for name, win, pick, ban in parse_rows(
+            fetch(session, {"map": slug}, cache_dir, rq)
+        ):
+            hero_id = hero_ids.get(name.lower())
+            if hero_id is None:
+                unmatched.add(name)
+                continue
+            cursor.execute(
+                "INSERT INTO map_meta (snapshot_id, hero_id, map_id,"
+                " tier_id, region_id, stage_id, win_rate, pick_rate,"
+                " ban_rate, source_id)"
+                " VALUES (%s, %s, %s, %s, %s, NULL, %s, %s, %s, %s)"
+                " ON CONFLICT (snapshot_id, hero_id, map_id, tier_id,"
+                " region_id, stage_id) DO NOTHING",
+                (snapshot_id, hero_id, map_id, tier_ids[ALL_TIER],
+                 region_id, win, pick, ban, source_id),
+            )
+            map_rows += 1
+    connection.commit()
+    snapshots = cursor.execute("SELECT count(*) FROM meta_snapshots").fetchone()[0]
+    log("hero/map rows: %d   snapshots held: %d" % (map_rows, snapshots))
+    return {"queue": QUEUE_NAME, "platform": PLATFORM_NAME, "region": REGION_CODE,
+            "tiers": len(tier_ids), "maps": len(maps) - len(skipped_maps),
+            "hero_rows": rows, "map_rows": map_rows, "snapshot_id": snapshot_id,
+            "snapshots": snapshots, "unmatched": sorted(unmatched),
+            "skipped_maps": skipped_maps,
+            "tables": ["regions", "competitive_tiers", "meta_snapshots",
+                       "hero_meta", "map_meta"]}
 
 
 def main():
     parser = pipeline.build_parser(__doc__, ".cache-blizzard")
     args = parser.parse_args()
-
-    pipeline.prepare_cache(args)
-
-    dsn = pipeline.resolve_dsn(args)
-
-    session = requests.Session()
-    session.headers.update({"User-Agent": USER_AGENT})
-    cao = datetime.now(timezone.utc)
-
-    # The region-filtered page with no other filter is both the baseline slice
-    # and the source of the tier and map vocabularies.
-    rq = competitive_rq(session, args.cache)
-    baseline = fetch(session, {}, args.cache, rq)
-    tiers = parse_filter_options(baseline, "filter-tier-select")
-    maps = [m for m in parse_filter_options(baseline, "filter-map-select")
-            if m[0] != "all-maps"]
-
-    with psycopg.connect(dsn) as connection:
-        cursor = connection.cursor()
-        source_id = pipeline.register_source(cursor, BLIZZARD, cao)
-
-        cursor.execute(
-            "INSERT INTO regions (code, name, source_id) VALUES (%s, %s, %s)"
-            " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name"
-            " RETURNING region_id",
-            (REGION_CODE, REGION_NAME, source_id),
-        )
-        region_ids = {REGION_CODE: cursor.fetchone()[0]}
-
-        tier_ids = {}
-        for order, (code, name) in enumerate(tiers):
-            cursor.execute(
-                "INSERT INTO competitive_tiers (code, name, rank_order, source_id)"
-                " VALUES (%s, %s, %s, %s)"
-                " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name,"
-                " rank_order = EXCLUDED.rank_order RETURNING tier_id",
-                (code.lower(), name, order, source_id),
-            )
-            tier_ids[code] = cursor.fetchone()[0]
-
-        cursor.execute(
-            "INSERT INTO meta_snapshots (captured_at, queue, platform, input,"
-            " patch_id, season_id, source_id)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING snapshot_id",
-            (cao, QUEUE_NAME, PLATFORM_NAME, INPUT_DEVICE,
-             current_patch(cursor), current_season(cursor), source_id),
-        )
-        snapshot_id = cursor.fetchone()[0]
-
-        hero_ids = pipeline.lookup_ids(cursor, "heroes", "name", "hero_id")
-        map_ids = pipeline.lookup_ids(cursor, "maps", "name", "map_id")
-
-        unmatched = set()
-
-        def load_hero_slice(html, region_code, tier_code):
-            written = 0
-            for name, win, pick, ban in parse_rows(html):
-                hero_id = hero_ids.get(name.lower())
-                if hero_id is None:
-                    unmatched.add(name)
-                    continue
-                cursor.execute(
-                    "INSERT INTO hero_meta (snapshot_id, hero_id, region_id,"
-                    " tier_id, win_rate, pick_rate, ban_rate, source_id)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s, %s)"
-                    " ON CONFLICT (snapshot_id, hero_id, region_id, tier_id)"
-                    " DO NOTHING",
-                    (snapshot_id, hero_id, region_ids[region_code],
-                     tier_ids[tier_code], win, pick, ban, source_id),
-                )
-                written += 1
-            return written
-
-        # The baseline page is already the Americas, so it is this region's
-        # figure across all tiers rather than a global one.
-        rows = load_hero_slice(baseline, REGION_CODE, ALL_TIER)
-
-        for code, _ in tiers:
-            if code == ALL_TIER:
-                continue
-            rows += load_hero_slice(
-                fetch(session, {"tier": code}, args.cache, rq), REGION_CODE, code
-            )
-
-        # Per map, across all ranks. The source's filters compose, so map and
-        # tier could be crossed to get a hero's rates on one map in Bronze -
-        # and that is real signal, not noise: Widowmaker swings some fifteen
-        # points between Bronze and Grandmaster on a single map, which the
-        # all-ranks figure averages into an unremarkable middle.
-        #
-        # It is not fetched, because it costs 30 maps x 9 tiers = 270 requests
-        # against 30, and the source starts refusing connections well before
-        # the end of a sweep that size. Rows still carry tier_id, set to the
-        # all-ranks tier, so crossing them later needs no migration - only the
-        # inner loop back.
-        map_rows, skipped_maps = 0, []
-        for slug, label in maps:
-            map_id = map_ids.get(label.lower())
-            if map_id is None:
-                skipped_maps.append(label)
-                continue
-            for name, win, pick, ban in parse_rows(
-                fetch(session, {"map": slug}, args.cache, rq)
-            ):
-                hero_id = hero_ids.get(name.lower())
-                if hero_id is None:
-                    unmatched.add(name)
-                    continue
-                cursor.execute(
-                    "INSERT INTO map_meta (snapshot_id, hero_id, map_id,"
-                    " tier_id, region_id, stage_id, win_rate, pick_rate,"
-                    " ban_rate, source_id)"
-                    " VALUES (%s, %s, %s, %s, %s, NULL, %s, %s, %s, %s)"
-                    " ON CONFLICT (snapshot_id, hero_id, map_id, tier_id,"
-                    " region_id, stage_id) DO NOTHING",
-                    (snapshot_id, hero_id, map_id, tier_ids[ALL_TIER],
-                     region_ids[REGION_CODE], win, pick, ban, source_id),
-                )
-                map_rows += 1
-        connection.commit()
-
-        pipeline.export_raw(
-            connection,
-            args,
-            ("regions", "competitive_tiers", "meta_snapshots", "hero_meta",
-             "map_meta"),
-        )
-        snapshots = cursor.execute("SELECT count(*) FROM meta_snapshots").fetchone()[0]
-
-    print("queue: %s   platform: %s" % (QUEUE_NAME, PLATFORM_NAME))
-    print("regions: %d   tiers: %d   maps: %d"
-          % (len(region_ids), len(tier_ids), len(maps) - len(skipped_maps)))
-    print("hero/region/tier rows: %d" % rows)
-    print("hero/map/tier rows:    %d" % map_rows)
-    print("snapshots held:        %d" % snapshots)
-    if unmatched:
-        print("\n%d names matched no hero: %s" % (len(unmatched), ", ".join(sorted(unmatched))))
-    if skipped_maps:
-        print("\n%d maps outside Open Queue Competitive scope: %s"
-              % (len(skipped_maps), ", ".join(skipped_maps)))
+    cache = pipeline.prepare_cache(args.cache)
+    with psycopg.connect(pipeline.resolve_dsn(args)) as connection:
+        summary = run(connection, cache)
+        pipeline.export_raw(connection, args, summary["tables"])
+    if summary["unmatched"]:
+        print("names matched no hero: %s" % ", ".join(summary["unmatched"]))
+    if summary["skipped_maps"]:
+        print("maps outside scope: %s" % ", ".join(summary["skipped_maps"]))
 
 
 if __name__ == "__main__":

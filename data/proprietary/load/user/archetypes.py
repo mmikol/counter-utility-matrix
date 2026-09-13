@@ -1,10 +1,7 @@
-"""Load pipeline: archetypes.csv - what a composition IS, by playstyle.
+"""Store: archetypes.csv - what a composition IS, by playstyle.
 
-Each row is one slot claim: this style wants this many of this role, with the
-note naming who typically fills it. The file is the whole truth (the table is
-cleared and reloaded), unknown role codes are an error to fix in the file, and
-everything loads under the `user` source. Style strings follow the playstyle
-table's vocabulary by convention.
+Each row is one slot claim: this style wants this many of this role. The
+file is the whole truth; unknown role codes are an error to fix in the file.
 
     python -m data.proprietary.load.user.archetypes
 """
@@ -46,34 +43,33 @@ def read_rows(path):
     return rows
 
 
+def run(connection, path=CSV_PATH, log=print):
+    rows = read_rows(path)
+    cursor = connection.cursor()
+    source_id = pipeline.register_source(cursor, USER, pipeline.now())
+    role_ids = pipeline.lookup_ids(cursor, "roles", "code", "role_id")
+    unknown = sorted({r for _, r, _, _ in rows if r not in role_ids})
+    if unknown:
+        raise ArchetypeError("unknown role codes (fix archetypes.csv): %s"
+                             % ", ".join(unknown))
+    cursor.execute("DELETE FROM comp_archetypes")
+    for style, role, slots, note in rows:
+        cursor.execute(
+            "INSERT INTO comp_archetypes (style, role_id, slots, note,"
+            " source_id) VALUES (%s, %s, %s, %s, %s)",
+            (style, role_ids[role], slots, note, source_id))
+    connection.commit()
+    log("archetype slots: %d loaded" % len(rows))
+    return {"slots": len(rows), "styles": sorted({s for s, *_ in rows}),
+            "tables": ["comp_archetypes"]}
+
+
 def main():
     parser = pipeline.build_parser(__doc__)
     args = parser.parse_args()
-    rows = read_rows(CSV_PATH)
-    cao = pipeline.now()
-
     with psycopg.connect(pipeline.resolve_dsn(args)) as connection:
-        cursor = connection.cursor()
-        source_id = pipeline.register_source(cursor, USER, cao)
-        role_ids = pipeline.lookup_ids(cursor, "roles", "code", "role_id")
-
-        unknown = sorted({r for _, r, _, _ in rows if r not in role_ids})
-        if unknown:
-            raise ArchetypeError("unknown role codes (fix archetypes.csv): %s"
-                                % ", ".join(unknown))
-
-        cursor.execute("DELETE FROM comp_archetypes")
-        for style, role, slots, note in rows:
-            cursor.execute(
-                "INSERT INTO comp_archetypes (style, role_id, slots, note,"
-                " source_id) VALUES (%s, %s, %s, %s, %s)",
-                (style, role_ids[role], slots, note, source_id),
-            )
-        connection.commit()
-        pipeline.export_raw(connection, args, ("comp_archetypes",))
-
-    print("archetype slots: %d loaded across %d styles"
-          % (len(rows), len({s for s, *_ in rows})))
+        summary = run(connection)
+        pipeline.export_raw(connection, args, summary["tables"])
 
 
 if __name__ == "__main__":

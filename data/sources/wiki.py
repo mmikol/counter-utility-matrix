@@ -10,6 +10,10 @@ import os
 import re
 import time
 
+import requests
+
+from data.sources import is_stale, keep_stale
+
 WIKI_API = "https://overwatch.fandom.com/api.php"
 CARGO_PAGE_SIZE = 500
 CARGO_RETRIES = 6
@@ -34,10 +38,23 @@ def cargo_query(session, table, fields, cache_dir):
     cache_path = None
     if cache_dir:
         cache_path = os.path.join(cache_dir, "cargo_%s.json" % table.lower())
-        if os.path.exists(cache_path):
+        if os.path.exists(cache_path) and not is_stale(cache_path):
             with open(cache_path, encoding="utf-8") as handle:
                 return json.load(handle)
+    try:
+        rows = _cargo_pages(session, table, fields)
+    except (WikiError, requests.RequestException) as error:
+        if cache_path and os.path.exists(cache_path):
+            return json.loads(keep_stale(cache_path, error))
+        raise
 
+    if cache_path:
+        with open(cache_path, "w", encoding="utf-8") as handle:
+            json.dump(rows, handle, ensure_ascii=False)
+    return rows
+
+
+def _cargo_pages(session, table, fields):
     rows, offset = [], 0
     while True:
         payload = None
@@ -73,10 +90,6 @@ def cargo_query(session, table, fields, cache_dir):
             break
         offset += CARGO_PAGE_SIZE
         time.sleep(REQUEST_DELAY * 4)
-
-    if cache_path:
-        with open(cache_path, "w", encoding="utf-8") as handle:
-            json.dump(rows, handle, ensure_ascii=False)
     return rows
 
 
@@ -86,20 +99,26 @@ def fetch_wikitext(session, title, cache_dir):
     if cache_dir:
         name = re.sub(r"[^A-Za-z0-9]+", "_", title).strip("_") + ".wikitext"
         cache_path = os.path.join(cache_dir, name)
-        if os.path.exists(cache_path):
+        if os.path.exists(cache_path) and not is_stale(cache_path):
             with open(cache_path, encoding="utf-8") as handle:
                 return handle.read()
 
-    response = session.get(
-        WIKI_API,
-        params={"action": "parse", "page": title, "prop": "wikitext", "format": "json"},
-        timeout=40,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    if "error" in payload:
-        raise WikiError("%s: %s" % (title, payload["error"].get("info", "not found")))
-    text = payload["parse"]["wikitext"]["*"]
+    try:
+        response = session.get(
+            WIKI_API,
+            params={"action": "parse", "page": title, "prop": "wikitext",
+                    "format": "json"},
+            timeout=40,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if "error" in payload:
+            raise WikiError("%s: %s" % (title, payload["error"].get("info", "not found")))
+        text = payload["parse"]["wikitext"]["*"]
+    except (WikiError, requests.RequestException) as error:
+        if cache_path and os.path.exists(cache_path):
+            return keep_stale(cache_path, error)
+        raise
 
     if cache_path:
         with open(cache_path, "w", encoding="utf-8") as handle:

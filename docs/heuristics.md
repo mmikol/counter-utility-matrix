@@ -1,656 +1,524 @@
-# The heuristics: 112 considerations, mathematically encoded
-
-Choosing a five-hero composition is a hundred small judgements. This
-catalog writes every one of them down as a formula over the database -
-role shape, healing supply, frontline mass, damage identity, counter
-algebra, synergy structure, map fit, meta pressure, tempo, and honest
-uncertainty - so that when the model argues for a comp, the arithmetic it
-leans on is inspectable, reproducible, and tunable.
-
-The catalog is DATA, not just documentation. It lives in the playbook:
-
-- **`heuristics`** - the 112 rows below, loaded from
-  `data/proprietary/heuristics.csv` by the `user.heuristics` pipeline.
-- **`heuristic_params`** - the dials. Every threshold a live formula uses
-  is a row here, loaded from `data/proprietary/heuristic_params.csv`.
-  The dossier reads them at build time, so tuning is: edit the CSV,
-  `python -m data.proprietary.load.user.heuristics`, done. The same names
-  exist as defaults in `dossier.py` only so a database predating these
-  tables still builds.
-
-Each formula carries an honest status:
-
-- **live** - the dossier emits it today, under the evidence tag in its
-  `tag` column. 79 formulas.
-- **ready** - computable from the current schema, not yet wired into the
-  dossier. 20 formulas. This is the implementation queue.
-- **blocked** - its inputs are missing; the row names exactly what -
-  a column the schema lacks, or (for the stage formulas) a column that
-  exists but the scrape's page budget leaves empty. 13 formulas. This
-  is the data roadmap.
-
-A test enforces catalog parity: the set of `derived:` tags the dossier
-source emits must equal the set on live derived rows here - the catalog
-cannot drift from the code it describes.
-
-## Notation
-
-`T, D, S` are the tank/damage/support counts among the five picks;
-`E` the named enemies; `A` the locked allies; `C` the candidate pool (the
-top-18 hero_meta-ranked union of enemy-answers, map-strong heroes, and
-synergy participants); `avail = A ∪ C`. `counters(x, y)` is the playbook
-row "y answers x"; `win_map(h)`/`pick_map(h)` are all-ranks map_meta
-figures on the asked map; `win_all(h)` the hero's all-ranks hero_meta
-figure; `pool(h) = health + shield + armor`; `styles(h)` the playstyle
-tags. `NAMES_IN_CAPS` are dials from `heuristic_params` (defaults in
-parentheses). An `*` marks a locked ally in any emitted line.
-Everything below is deterministic SQL + arithmetic - the model reads
-these lines, it never computes them.
-
-## The live formulas, in depth
-
-### derived:coverage
-`coverage(h) = |{ e ∈ E : counters(e, h) }|` for `h ∈ avail`. Emitted for
-the top 6 with `coverage ≥ COVERAGE_MIN (2)`, only when `|E| ≥ 2`. The
-intersections show who answers each enemy separately; coverage finds the
-picks that answer *several at once* - the highest-leverage slots in a
-five-hero budget.
-
-### derived:teamcover
-`|{ e ∈ E : ∃a ∈ A, counters(e, a) }| / |E|`, with the still-unanswered
-enemies named explicitly. What the locked picks already handle, before an
-open slot is spent on it - the open slots' to-do list, as names.
-
-### derived:netmatchup
-`net(c) = |{ e ∈ E : counters(e, c) }| − |{ e ∈ E : counters(c, e) }|`,
-top `NET_LIMIT (5)` candidates with both terms shown. Answering two
-enemies means less if both also answer you; the difference is the edge.
-
-### derived:safe
-`safe = { h ∈ C : ∀e ∈ E, ¬counters(h, e) }`, first 10 in pool order.
-The complement of the CAUTION lines: picks that walk into no counter
-already on the field.
-
-### derived:shape
-The role census `T/D/S` over `A`, with the open-slot count and flags:
-TANKLESS (`T = 0`), double tank (`T ≥ 2`), triple+ DPS (`D ≥ 3`),
-NO SUPPORT (`S = 0`), solo heal (`S = 1`); plus the archetype deviation
-`Σ_r max(0, count_r − slots_r)` against the map's top-style
-comp_archetypes row. "Enough healing, triple DPS, one or no tank" -
-the shapes that decide games, stated before any hero argument starts.
-
-### derived:healing
-`peak(h) = MAX` heal-keyed stat across `h`'s abilities *and* weapons;
-supply `= Σ peak` over locked supports; bench `= 2 × median(peak over the
-whole support roster)`. UNDER-HEALED flag iff `S ≥ 2` and
-`supply < HEAL_MARGIN (0.75) × bench`. "Enough healing" with a real
-denominator: the kits' own numbers against the roster's median line.
-
-### derived:frontline
-`Σ pool(h)` over locked tanks, each with its armor share. The literal hit
-points standing between the enemy and the backline, and how much of them
-discount sustained fire.
-
-### derived:barriers
-Every enemy `barrier_health` stat (the audit), against
-`{ h ∈ A ∪ C : ignores_barrier }` (the piercers). The barrier war stated
-as: what they field, who simply does not care.
-
-### derived:pairings
-Synergy edges `(a, b)` with **both** ends in `avail`, ordered by authored
-score desc, top `PAIRING_LIMIT (6)`. The synergies table lists what works
-in principle; this filters to what is *draftable in this game*.
-
-### derived:skeleton
-For each style the map rewards: take the archetype's role slots; seat
-locked allies first, then fill greedily from same-role candidates ranked
-by `(style ∈ styles(h), win_map else win_all)` desc, no hero twice. Emit
-with `avg win` and `[has gaps]`. A straw man by design - the model argues
-against something concrete instead of assembling from scratch.
-
-### derived:specialists
-`delta(h) = win_map(h) − win_all(h)`; top 6 with
-`delta ≥ SPECIALIST_DELTA (2.5)`. Separates "good here" from "good
-everywhere": a specialist's map figure is signal about the ground.
-
-### derived:sleepers
-`win_map(h) ≥ SLEEPER_WIN (51.0)` and `pick_map(h) ≤ SLEEPER_PICK (6.0)`,
-top 5 by win. High win at low pick is the underrated-here signature, with
-the standing caveat that low pick means small samples - the model is told
-the lobby underrates it, not that it is secretly best.
-
-### derived:lean
-`lean(s) = |{ e ∈ E : s ∈ styles(e) }|` per style when `|E| ≥ 2`; "leans
-s" only for a strict majority (heroes carry multiple tags, so plurality
-alone overclaims).
-
-### derived:trend
-`Δ(h) = win_all(h)` at the latest blizzard snapshot minus the previous
-one, at the all-ranks tier; emitted where `|Δ| ≥ TREND_POINTS (1.5)`.
-The snapshot series exists to be differenced; a two-point mover is patch
-news the current rates alone cannot show.
-
-### The wide tranche
-
-Beyond the fourteen tags above, another twenty-five formulas emit as
-single lines each - kit arithmetic (`derived:teampool`, `squish`,
-`weakestlink`, `overhealth`, `dmgmix`, `hitscan`, `rangeprofile`,
-`cdtempo`, `burstceiling`, `burstsurvive`, `oneshot`, `antiheal`,
-`ultcensus`, `ultburst`), synergy-graph structure (`cohesion`,
-`isolated`, `synreach`), coverage algebra (`coverbreadth`, `doublecover`,
-`banproof`), and map/meta screens (`styleconsensus`, `offmap`,
-`overrated`, `availability`, `pickmass`). Their exact definitions are
-their numbered catalog entries below - the catalog IS the specification.
-
-## The dials (heuristic_params)
-
-| dial | default | meaning |
-|---|---|---|
-| `COVERAGE_MIN` | 2 | a candidate must answer at least this many named enemies to earn a coverage line |
-| `SPECIALIST_DELTA` | 2.5 | percentage points above (specialist) or below (off-map) a hero's own baseline win rate |
-| `SLEEPER_WIN` | 51.0 | minimum map win rate for a sleeper |
-| `SLEEPER_PICK` | 6.0 | maximum pick rate for a sleeper; doubled, the floor for an over-picked underperformer |
-| `PAIRING_LIMIT` | 6 | how many proven partners to list per locked pick |
-| `NET_LIMIT` | 5 | how many candidates the net-matchup line ranks |
-| `TREND_POINTS` | 1.5 | minimum win-rate movement between snapshots worth naming |
-| `HEAL_MARGIN` | 0.75 | healing supply below this share of the two-support benchmark raises the under-healed flag |
-| `WEAK_TIE` | 2 | synergy scores at or below this are documented doubts (weak-tie audit, when wired) |
-
-## The catalog
-
-One entry per consideration; the same rows, verbatim, sit in the
-`heuristics` table. Statuses: **live** / **ready** / **blocked**.
-
-### Role shape
-
-**1. role census** (live, `derived:shape`)
-`T, D, S = |{h in picks : role(h) = r}| for r in {tank, damage, support}; always T+D+S = |picks|`
-*Inputs:* heroes.role_id, roles.code. *Why:* every other shape heuristic reads these three counts; stating them first makes the rest auditable
-
-**2. tankless flag** (live, `derived:shape`)
-`flag iff T = 0`
-*Inputs:* role census. *Why:* no one makes space: the comp must win on range or flank tempo, and the dossier should say so out loud
-
-**3. triple-DPS flag** (live, `derived:shape`)
-`flag iff D >= 3`
-*Inputs:* role census. *Why:* wins the fights it starts and loses attrition; a deliberate shape, but never an accidental one
-
-**4. support drought flag** (live, `derived:shape`)
-`flag iff S = 0`
-*Inputs:* role census. *Why:* sustain becomes spawn-door only; the strongest single warning a shape can carry
-
-**5. solo-heal flag** (live, `derived:shape`)
-`flag iff S = 1`
-*Inputs:* role census. *Why:* one support is a plan only when the other four peel for them or self-sustain
-
-**6. double-tank flag** (live, `derived:shape`)
-`flag iff T >= 2`
-*Inputs:* role census. *Why:* two frontlines trade damage output for space; worth naming because open queue allows it
-
-**7. archetype deviation** (live, `derived:shape`)
-`dev = SUM over roles r of max(0, count_r - slots_r), slots from the map's top-style comp_archetypes row`
-*Inputs:* role census, map_playstyle, comp_archetypes. *Why:* measures how far the locked picks already sit from the shape the map's own playstyle wants
-
-**8. open-slot role demand** (ready, `derived:shape`)
-`demand_r = max(0, slots_r - count_r) per role for the map archetype; lists what the open slots owe`
-*Inputs:* role census, comp_archetypes, map_playstyle. *Why:* turns deviation into a prescription: not just 'off-shape' but which roles the remaining picks should fill
-
-**9. subrole balance** (live, `derived:shape`)
-`distinct subroles among picks / |picks|; 1.0 = every pick brings a different job`
-*Inputs:* heroes.subrole_id, subroles. *Why:* two main tanks or two flex supports overlap jobs even when the role counts look fine
-
-**10. role-flex reserve** (ready, `derived:shape`)
-`|{c in C : role(c) = argmax_r demand_r}|; how deep the pool runs for the neediest role`
-*Inputs:* candidate pool, open-slot role demand. *Why:* a demand the pool cannot fill is a different problem than one with twelve answers
-
-### Healing and sustain
-
-**11. peak kit heal** (live, `derived:healing`)
-`peak(h) = MAX over h's ability_stats and weapon_stats of value where stat_key in (heal, hps)`
-*Inputs:* ability_stats, weapon_stats, stat_keys. *Why:* the kit's own biggest heal number, ability or weapon side - measured, not judged
-
-**12. healing supply vs bench** (live, `derived:healing`)
-`supply = SUM peak(h) over locked supports; bench = 2 x median(peak over the whole support roster)`
-*Inputs:* peak kit heal, roles. *Why:* 'enough healing' needs a denominator; the roster median is the only honest one the schema holds
-
-**13. under-healed flag** (live, `derived:healing`)
-`flag iff S >= 2 and supply < HEAL_MARGIN x bench`
-*Inputs:* healing supply vs bench, heuristic_params.HEAL_MARGIN. *Why:* only fires when the support line is complete and still light - two Zens is a choice, name it
-
-**14. self-sustain census** (blocked, `derived:selfheal`)
-`|{h in picks : h has a heal stat targeting self}|`
-*Inputs:* ability_stats (heal target not encoded). *Why:* the schema stores heal amounts but not who receives them; needs a target column on ability_stats
-
-**15. anti-heal exposure** (live, `derived:antiheal`)
-`|{e in E : e has healing_mod stat < 0}| and the worst value`
-*Inputs:* ability_stats, stat_keys.healing_mod. *Why:* a comp built on sustain answers Ana's grenade differently than one built on burst; the -100 is in the data
-
-**16. overhealth supply** (live, `derived:overhealth`)
-`SUM over picks of MAX overhealth stat per kit`
-*Inputs:* ability_stats, stat_keys.overhealth. *Why:* temporary health is burst insurance the healing-supply number does not see
-
-**17. healing amplification stack** (ready, `derived:healamp`)
-`|{h in picks : h has healing_mod stat > 0}| and the product of (1 + mod)`
-*Inputs:* ability_stats, stat_keys.healing_mod. *Why:* amp multiplies the supply number; two amps on one comp is a sustain identity
-
-**18. burst-vs-drip mix** (ready, `derived:healmix`)
-`per support: ability-side max heal / weapon-side max heal; >2 = burst kit, <1 = drip kit`
-*Inputs:* ability_stats, weapon_stats. *Why:* 350 supply from burst kits and 350 from drip kits survive different damage profiles
-
-**19. sustain uptime proxy** (ready, `derived:healuptime`)
-`per heal ability: duration / (duration + cooldown), using each kit's own stats`
-*Inputs:* ability_stats, stat_keys.cooldown, stat_keys.duration. *Why:* peak heal on a 14s cooldown is not the same supply as peak heal every 4s
-
-**20. lifeline redundancy** (ready, `derived:lifelines`)
-`|{h in picks : peak(h) > 0}|; count of picks carrying any healing at all`
-*Inputs:* peak kit heal. *Why:* when the count is exactly S, killing the supports ends the sustain; off-role healing is redundancy
-
-### Frontline and durability
-
-**21. frontline pool** (live, `derived:frontline`)
-`SUM over tanks of pool(h), pool = health + shield + armor`
-*Inputs:* heroes.health/shield/armor. *Why:* the literal hit points standing between the enemy and the backline
-
-**22. armor share** (live, `derived:frontline`)
-`armor(h) / pool(h) per tank, reported beside the pool`
-*Inputs:* heroes.armor. *Why:* armor discounts sustained fire; the same pool with more armor beats spam and loses to burst less
-
-**23. team effective HP** (live, `derived:teampool`)
-`SUM pool(h) over all five picks`
-*Inputs:* heroes.health/shield/armor. *Why:* the ceiling on how much damage the comp absorbs before the first death, ignoring healing
-
-**24. enemy barrier audit** (live, `derived:barriers`)
-`per enemy: MAX barrier_health stat in kit; lists every barrier the enemy fields`
-*Inputs:* ability_stats, stat_keys.barrier_health. *Why:* a 750hp Brigitte shield and a 1500hp Rein wall demand different amounts of chew
-
-**25. barrier-pierce coverage** (live, `derived:barriers`)
-`{h in A union C : h has ignores_barrier stat = 1}`
-*Inputs:* ability_stats, stat_keys.ignores_barrier. *Why:* the direct answer to the audit: who simply does not care about the barrier
-
-**26. armor-shred need** (ready, `derived:armorshred`)
-`SUM armor over enemies vs |{h in picks : beam weapon or ignores_armor stat}|`
-*Inputs:* heroes.armor, weapon_configs.weapon_type, ability_stats. *Why:* heavy enemy armor punishes low-damage-per-hit kits; beams and pierce restore the math
-
-**27. squish index** (live, `derived:squish`)
-`|{h in picks : pool(h) <= 225}|`
-*Inputs:* heroes.health/shield/armor. *Why:* each 225-pool pick is a one-dive target; three of them is a dive invitation
-
-**28. weakest-link pool** (live, `derived:weakestlink`)
-`MIN pool(h) over picks`
-*Inputs:* heroes.health/shield/armor. *Why:* focus fire finds the minimum, not the average
-
-**29. shield-regen reliance** (live, `derived:shieldshare`)
-`SUM shield / SUM pool over picks`
-*Inputs:* heroes.shield. *Why:* shields recharge out of fight: a high share rewards disengage-heavy playstyles and poke maps
-
-**30. focus-fire survivability** (live, `derived:burstsurvive`)
-`MIN pool(h) over picks vs MAX single-hit damage stat over enemy kits`
-*Inputs:* heroes pools, ability_stats/weapon_stats damage. *Why:* when the enemy's biggest hit exceeds the weakest pool, one mistake is a death, not a retreat
-
-### Damage profile
-
-**31. weapon-type mix** (live, `derived:dmgmix`)
-`counts of picks per weapon_configs.weapon_type (hitscan / projectile / beam / arcing)`
-*Inputs:* weapon_configs.weapon_type. *Why:* all-projectile comps share one weakness; the mix is the comp's damage identity in one line
-
-**32. hitscan census** (live, `derived:hitscan`)
-`|{h in picks : any weapon_config of h has weapon_type = hitscan}|`
-*Inputs:* weapon_configs.weapon_type. *Why:* the closest measured proxy for anti-air the schema holds
-
-**33. vertical-threat answer** (blocked, `derived:antiair`)
-`|{h in picks : hitscan}| vs |{e in E : e can fly}|`
-*Inputs:* flight is not encoded on heroes. *Why:* needs a mobility/flight flag on heroes; until then the hitscan census is the honest substitute
-
-**34. burst ceiling** (live, `derived:burstceiling`)
-`MAX single damage stat over the comp's abilities and weapons`
-*Inputs:* ability_stats, weapon_stats, stat_keys.damage. *Why:* whether the comp can delete a 250hp target through one heal window
-
-**35. sustained damage proxy** (live, `derived:dpsproxy`)
-`SUM over picks of MAX damage stat carrying a per-second unit (unit_denominator = second)`
-*Inputs:* weapon_stats/ability_stats units. *Why:* the schema stores per-second figures where the wiki does; summing only those keeps the units honest
-
-**36. range profile** (live, `derived:rangeprofile`)
-`MAX range stat per pick; comp median splits poke (>=20m) from brawl (<20m)`
-*Inputs:* ability_stats/weapon_stats, stat_keys.range. *Why:* a brawl comp on a poke map loses before the fight starts; range is measured, playstyle is judged - use both
-
-**37. beam presence** (ready, `derived:beams`)
-`|{h in picks : any weapon_type = beam}|`
-*Inputs:* weapon_configs.weapon_type. *Why:* beams ignore travel time and falloff quirks; they are also the armor answer in formula 26
-
-**38. close-range dependency** (ready, `derived:meleerange`)
-`|{h in picks : MAX range stat <= 10}|`
-*Inputs:* stat_keys.range. *Why:* picks that must touch the enemy to contribute all fail together against disengage comps
-
-**39. area-damage volume** (ready, `derived:spam`)
-`|{h in picks : any damage stat with a radius stat on the same ability}|`
-*Inputs:* ability_stats, stat_keys.radius. *Why:* area damage pressures chokes and barriers without aim; its count is the comp's siege weight
-
-**40. one-shot exposure** (live, `derived:oneshot`)
-`|{h in picks : pool(h) <= MAX enemy single-hit damage}|`
-*Inputs:* heroes pools, enemy damage stats. *Why:* the mirror of formula 30 from the enemy's seat: how many of ours die to one cooldown
-
-### Matchup algebra
-
-**41. enemy coverage** (live, `derived:coverage`)
-`cov(c) = |{e in E : (e, c) in counters}|; report candidates with cov >= COVERAGE_MIN`
-*Inputs:* counters, heuristic_params.COVERAGE_MIN. *Why:* one pick answering two named enemies is worth more than two picks answering one each
-
-**42. team coverage** (live, `derived:teamcover`)
-`|{e in E : exists a in A with (e, a) in counters}| / |E|`
-*Inputs:* counters, locked allies. *Why:* what the locked picks already answer, before spending an open slot on it
-
-**43. unanswered-enemy list** (live, `derived:teamcover`)
-`{e in E : no a in A answers e}, named explicitly`
-*Inputs:* team coverage. *Why:* the open slots' to-do list, stated as names rather than a percentage
-
-**44. net matchup** (live, `derived:netmatchup`)
-`net(c) = |{e in E : (e,c) in counters}| - |{e in E : (c,e) in counters}|; top NET_LIMIT candidates`
-*Inputs:* counters, heuristic_params.NET_LIMIT. *Why:* answering two enemies means less if both of them also answer you; the difference is the real edge
-
-**45. safe picks** (live, `derived:safe`)
-`{c in C : no e in E has (c, e) in counters}`
-*Inputs:* counters. *Why:* picks the named enemies hold no listed answer to - the low-risk half of the pool
-
-**46. exposure count** (live, `derived:netmatchup`)
-`exp(c) = |{e in E : (c, e) in counters}|, reported inside the net-matchup line`
-*Inputs:* counters. *Why:* the denominator of risk: how many named enemies were literally listed as this pick's answer
-
-**47. counter diversity** (live, `derived:coverbreadth`)
-`distinct enemies answered by the whole comp / |E|, counting each enemy once`
-*Inputs:* counters. *Why:* five picks all answering the same Zarya is 20% breadth wearing a 100% costume
+# The heuristics
 
-**48. coverage redundancy** (live, `derived:doublecover`)
-`|{e in E : answered by >= 2 picks}|`
-*Inputs:* counters. *Why:* redundant answers survive a swap or a ban; single-threaded answers do not
+The inference layer's brain: 36 markdown files in `inference/heuristics/`
+(3 constraints, 20 goals, 13 strategies). Each file is
+frontmatter a machine scores by and prose a person argues with; the
+solver reads the files live, and `load_playbook` mirrors them into the
+`heuristics` table so a recommendation can cite the ids it was scored
+under. Tuning is editing a file (the compose stack bind-mounts the
+directory, so the `inference` container picks edits up live). This
+page is generated: `python -m data.orchestrator docs`.
 
-**49. counter-chain instability** (ready, `derived:counterchain`)
-`|{(c, e) : c answers e but some e' in E answers c}| - answers that are themselves answered`
-*Inputs:* counters. *Why:* an answer that dies to the enemy's other half is a swap the enemy can force mid-match
+## How a composition is scored
 
-**50. ban-resilient coverage** (live, `derived:banproof`)
-`team coverage recomputed with the comp's highest-ban-rate answer removed`
-*Inputs:* counters, hero_meta.ban_rate. *Why:* if the plan dies when the likely ban lands, it was never a plan; measure the plan minus its ban
+```
+COMP = ARGMAX[ STRATEGIES( FACTS ) ]
+```
 
-### Synergy graph
-
-**51. proven partners** (live, `derived:pairings`)
-`top PAIRING_LIMIT synergy edges incident to each locked pick, with scores and notes`
-*Inputs:* synergies, heuristic_params.PAIRING_LIMIT. *Why:* the playbook's own memory of what worked next to the pick you already made
-
-**52. internal synergy edges** (live, `derived:cohesion`)
-`|{(a, b) in synergies : a, b both in picks}| out of C(5,2) = 10 possible`
-*Inputs:* synergies. *Why:* how much of the comp the playbook has actually seen work together
-
-**53. synergy density** (live, `derived:cohesion`)
-`internal edges / 10; 0.0 = five strangers, 1.0 = a documented machine`
-*Inputs:* internal synergy edges. *Why:* normalizing lets two candidate comps be compared on cohesion in one number
-
-**54. isolated pick** (live, `derived:isolated`)
-`{h in picks : no synergy edge from h to any teammate}`
-*Inputs:* synergies. *Why:* a great hero with no documented partner in this comp is a solo act - sometimes fine, always worth naming
-
-**55. synergy core** (ready, `derived:core`)
-`largest connected component of the synergy subgraph induced by the picks`
-*Inputs:* synergies. *Why:* a 4-hero core plus a specialist beats five loosely-paired picks; the component size says which you built
-
-**56. score-weighted cohesion** (live, `derived:cohesion`)
-`SUM of synergies.score over internal edges (null scores count 0), reported inside the cohesion line`
-*Inputs:* synergies.score. *Why:* when the author scored the pairs, the sum ranks comps beyond mere edge count
-
-**57. candidate synergy reach** (live, `derived:synreach`)
-`reach(c) = |{a in A : (a, c) in synergies}|`
-*Inputs:* synergies, locked allies. *Why:* the direct draft question: which candidate plugs into the picks already locked
+For a board (map, red picks, locked blue picks) the solver enumerates
+candidate fives around the locked picks, computes every team, enemy and
+matchup metric for each (the same functions the board renders as facts),
+then:
 
-**58. weak-tie audit** (ready, `derived:weakties`)
-`internal edges with score <= WEAK_TIE among the picks`
-*Inputs:* synergies.score, heuristic_params.WEAK_TIE. *Why:* a low-scored pair the author kept is a documented doubt; surface it rather than average it away
+- **constraints** discard a candidate whose `require` fails (soft ones
+  subtract their `penalty` instead);
+- **goals** min-max normalise their `metric` across the surviving
+  candidates to [0, 1] (flipped for `minimize`) and add `weight x norm`;
+- **strategies** are prose the session reads and the board shows; one
+  that also carries `bonus`/`penalty` adds `weight x (bonus - penalty)`
+  while its `when` holds.
 
-**59. synergy hubs** (ready, `derived:hubs`)
-`top heroes by degree in the whole synergy graph, restricted to C`
-*Inputs:* synergies. *Why:* high-degree heroes keep the comp flexible: whatever else changes, they still have partners
+Score = the sum. Players are assumed to play optimally, so the score is
+a comp's ceiling, not a prediction for a given lobby.
 
-**60. pairing gravity** (ready, `derived:gravity`)
-`rank candidates by (reach(c), mwin(c, map)); synergy first, map rate as tiebreak`
-*Inputs:* synergies, map_meta. *Why:* a draft order that respects the playbook's judgement before the population's average
+## Catalog
 
-### Map and mode fit
+### Constraints
 
-**61. map strategy alignment** (live, `map_strategy`)
-`picks appearing in map_strategy for this map, in the authored rank order`
-*Inputs:* map_strategy. *Why:* the playbook's explicit per-map picks; alignment with them is a cited argument, not a vibe
+#### Fliers need a hitscan answer (`anti-air`, matchup)
 
-**62. style-map intersection** (live, `playstyle+map_meta`)
-`heroes whose playstyle matches the map's top styles AND hold mwin >= 50 on it`
-*Inputs:* playstyle, map_playstyle, map_meta. *Why:* judged style and measured rate agreeing on the same hero is the strongest single signal we compute
+`require team.hitscan >= 1` (soft, penalty `2.5`); when `enemy.flyers >= 1`
 
-**63. draft skeleton** (live, `derived:skeleton`)
-`greedy fill of the map archetype's role slots from C, allies seated first, ranked by (style match, mwin else win); reports avg win`
-*Inputs:* comp_archetypes, map_playstyle, playstyle, map_meta, hero_meta. *Why:* a straw-man five to argue against; greedy by design and labeled as such - not an optimum
+When the enemy fields a hero who flies or hovers, a comp with no hitscan
+weapon answers them with projectiles and hope. The data layer tags
+flight from the kit's own keywords and descriptions, and hitscan from
+the weapon configs, so this is measured, not judged.
 
-**64. stage volatility** (blocked, `derived:stagesplit`)
-`per pick: MAX - MIN of mwin across the map's stages`
-*Inputs:* map_meta.stage_id exists but holds no rows - the per-stage scrape was cut with the map x tier page budget. *Why:* a hero who wins Lighthouse and loses Ruins is a mid-map swap candidate, not a lock - the column is ready; re-widening the rates scrape to stages fills it
+Soft, because a barrier-and-brawl comp can sometimes deny the ground a
+flier's team needs - but that argument has to beat a 2.5-point penalty.
 
-**65. attack-defense asymmetry** (blocked, `derived:sidedness`)
-`per pick: mwin on attack vs defense for this map`
-*Inputs:* side is not encoded on map_meta. *Why:* the rates page does not split by side; needs a side column and a source that measures it
+#### Do not build on a near-certain ban (`ban-safety`, meta)
 
-**66. gamemode profile** (ready, `derived:modefit`)
-`per pick: mean mwin grouped by maps.gamemode, compared to the current map's mode`
-*Inputs:* maps.gamemode, map_meta. *Why:* a hero can be a control specialist rather than an Ilios specialist; the mode average separates the two
+`require team.max_ban_rate < params.BAN_CERTAIN` (soft, penalty `2.5`)
+params: BAN_CERTAIN=35
 
-**67. style consensus margin** (live, `derived:styleconsensus`)
-`map_playstyle top score minus second score for this map`
-*Inputs:* map_playstyle. *Why:* a map judged brawl-by-a-landslide should bind the skeleton harder than a coin-flip map
+A hero banned in more than a third of lobbies is a plan that usually
+does not survive the ban screen. Soft rather than hard: when that hero
+is the only answer to what the enemy fielded, the rest of the score can
+still carry the comp, but it pays for the risk up front.
 
-**68. off-map liability** (live, `derived:offmap`)
-`{c : mwin(c, map) <= win(c) - SPECIALIST_DELTA} - the specialist formula's dark twin`
-*Inputs:* map_meta, hero_meta, heuristic_params.SPECIALIST_DELTA. *Why:* comfort picks that measurably underperform here deserve the same visibility as specialists
+Pair with `availability`, which prices every pick's ban rate smoothly;
+this file is the cliff, that one is the slope.
 
-**69. comp map breadth** (ready, `derived:mapbreadth`)
-`|{maps m : mean mwin of picks on m >= 50}| over all maps`
-*Inputs:* map_meta. *Why:* for scrims and tournaments: whether this five is a one-map trick or a portable identity
+#### One tank, two damage, two supports (`role-queue-shape`, shape)
 
-**70. stage specialist** (blocked, `derived:stagepick`)
-`{c : mwin(c, stage) >= mwin(c, map) + SPECIALIST_DELTA for some stage of this map}`
-*Inputs:* map_meta.stage_id exists but holds no rows - the per-stage scrape was cut with the map x tier page budget. *Why:* control maps are three maps in a trenchcoat; a Lighthouse specialist is real information - the column is ready; re-widening the rates scrape to stages fills it
+`require team.tanks == 1 and team.damage == 2 and team.supports == 2` (hard)
 
-### Meta and population
+The shape Competitive Role Queue enforces, and the shape every rate in
+META was measured under. A composition that is not 1-2-2 is not
+comparable to the numbers the other heuristics lean on, so the solver
+does not consider one.
 
-**71. sleepers** (live, `derived:sleepers`)
-`{c : mwin(c, map) >= SLEEPER_WIN and pick(c) <= SLEEPER_PICK}`
-*Inputs:* map_meta, hero_meta, heuristic_params.SLEEPER_WIN/SLEEPER_PICK. *Why:* wins a lot, picked rarely: either an inefficiency to exploit or a selection artifact to argue about
+Open Queue allows other shapes. To search them, relax this file - for
+example `require: team.supports >= 1 and team.tanks <= 2` - and expect
+the solver to return shapes the rates cannot vouch for. The shape flags
+on the board (TANKLESS, triple DPS, solo heal) keep naming what such a
+comp gives up.
 
-**72. map specialists** (live, `derived:specialists`)
-`{c : mwin(c, map) >= win(c) + SPECIALIST_DELTA}`
-*Inputs:* map_meta, hero_meta, heuristic_params.SPECIALIST_DELTA. *Why:* outperforms their own baseline here specifically - the map is doing work for them
+### Goals
 
-**73. enemy style lean** (live, `derived:lean`)
-`modal playstyle among E, when one style holds a strict majority`
-*Inputs:* playstyle. *Why:* naming the enemy's identity (dive, brawl, poke) frames every counter argument that follows
+#### Bring sustained damage (`damage-floor`, damage)
 
-**74. ban pressure** (live, `hero_meta`)
-`flag heroes with ban(h) > 25 as near-certain bans, > 20 as likely`
-*Inputs:* hero_meta.ban_rate. *Why:* a comp leaning on a 30%-ban hero needs the plan B written before the ban screen
+`maximize team.dps_floor` - summed published per-second damage figures (a floor: misses and healing ignored). weight 1
 
-**75. expected availability** (live, `derived:availability`)
-`PRODUCT over picks of (1 - ban(h)/100): the chance the whole five survives the ban screen`
-*Inputs:* hero_meta.ban_rate. *Why:* five 10%-ban picks lose the full comp four matches in ten; the product makes that visible
+The sum of each kit's best published per-second damage figure. A floor,
+stated as one: no misses, no falloff, no reloads folded in beyond what
+the wiki's own figure states. It separates comps that can chew a tank
+from comps that poke one.
 
-**76. pick-rate mass** (live, `derived:pickmass`)
-`SUM pick(h) over picks`
-*Inputs:* hero_meta.pick_rate. *Why:* high mass = the mirror-prone meta comp everyone practices against; low mass = off-meta surprise value
+#### Field more hit points (`effective-hp`, durability)
 
-**77. win-rate trend** (live, `derived:trend`)
-`delta = win(h) at latest snapshot - win(h) at previous; report |delta| >= TREND_POINTS`
-*Inputs:* hero_meta across meta_snapshots, heuristic_params.TREND_POINTS. *Why:* the series the snapshots accumulate exists to be differenced; a 2-point mover is patch news
+`maximize team.pool_total` - team effective HP: sum of health + shield + armor. weight 0.5
 
-**78. rank sensitivity** (live, `hero_meta`)
-`per candidate: MAX - MIN win across tiers; flag spreads >= 6 points`
-*Inputs:* hero_meta per tier. *Why:* a hero that wins in Bronze and loses in GM is advice that must know its audience
+Team effective HP - health, shield and armor summed. The ceiling on what
+the comp absorbs before the first death, ignoring healing. Lightly
+weighted: pool is mostly decided by the shape constraint, and the
+matchup goals already price what the enemy does to it.
 
-**79. population proxy caveat** (live, `meta_snapshots`)
-`every rate line inherits queue=RQ, platform=console, region=Americas from its snapshot`
-*Inputs:* meta_snapshots population columns. *Why:* the rates are a proxy for open queue, and the dossier says so every time rather than once
+#### Win on this ground (`map-fit`, map)
 
-**80. over-picked underperformer** (live, `derived:overrated`)
-`{c : pick(c) >= 2 x SLEEPER_PICK and win(c) < 50}`
-*Inputs:* hero_meta, heuristic_params.SLEEPER_PICK. *Why:* the sleeper formula's mirror: popularity the results do not justify - do not copy the lobby
+`maximize team.map_win_mean` - mean win rate on the map (the all-ranks mean without a map). weight 2
 
-### Ultimates and tempo
+Mean all-ranks win rate of the five on the selected map (the roster-wide
+win rate when no map is set, so the goal still ranks comps on a blank
+board). Map rates are the closest measured thing to "this comp works
+here"; specialists and off-map liabilities are the same numbers seen
+per hero on the board.
 
-**81. damage-ult census** (live, `derived:ultcensus`)
-`|{h in picks : h has an ultimate ability carrying a damage stat}|`
-*Inputs:* abilities.kind, ability_stats. *Why:* teamfight-ending buttons per fight cycle; zero of them means the comp wins on attrition only
+#### Take the picks the playbook lists for this map (`playbook-map-picks`, map)
 
-**82. ult burst stack** (live, `derived:ultburst`)
-`SUM over picks of MAX damage stat on their ultimate`
-*Inputs:* abilities.kind, ability_stats.damage. *Why:* the ceiling of a coordinated all-in; the number a 'we combo our ults' plan is actually claiming
+`maximize team.map_strategy_hits` - picks the playbook lists among their best maps here. weight 1; when `map.known == 1`
 
-**83. defensive-ult answer** (blocked, `derived:ultanswer`)
-`enemy damage ults vs our invulnerability/cleanse ults`
-*Inputs:* invulnerability is not encoded as a stat. *Why:* needs an effect taxonomy (invuln, cleanse, lockout) on abilities; text search is not a formula
+How many of the five appear in counterpick.gg's best-maps list for the
+selected map. A second opinion on `map-fit` from a source that ranks
+rather than counts; alignment with it is a cited argument.
 
-**84. authored combo notes** (ready, `derived:combos`)
-`synergy edges among picks whose note mentions an ultimate by name`
-*Inputs:* synergies.note, abilities. *Why:* crude by admission - it reads the author's own words, so it inherits their precision, not the game's
+#### Play the style the map rewards (`style-alignment`, map)
 
-**85. ult economy pacing** (blocked, `derived:ulteconomy`)
-`ult charge cost per hero vs damage/healing throughput`
-*Inputs:* charge costs are not published or scraped. *Why:* Blizzard does not publish charge requirements; without them any pacing number would be fiction
+`maximize team.style_fit` - share of picks tagged with the map's rewarded style (0 without a map). weight 1.5; when `map.known == 1`
 
-**86. cooldown tempo** (live, `derived:cdtempo`)
-`median cooldown across each pick's abilities; comp median <= 8s reads as high-uptime brawl tempo`
-*Inputs:* ability_stats, stat_keys.cooldown. *Why:* short-cooldown kits re-engage faster; the median is a measured stand-in for 'this comp fights constantly'
+Share of picks tagged with the playstyle the map rewards most (the
+authored `map_playstyle.csv`, top score). King's Row rewards brawl, so
+a five of brawl heroes fits it fully; a poke comp there fights the
+geometry as well as the enemy.
 
-**87. engage-tool census** (blocked, `derived:engage`)
-`|{h in picks : h has a movement ability}|`
-*Inputs:* movement is not encoded on abilities. *Why:* needs an ability-effect taxonomy; until then playstyle 'dive' membership is the judged proxy
+Judged, not measured - the wiki assigns styles and the operator scores
+maps - which is why `map-fit` (measured) outweighs it.
 
-**88. peel-tool census** (blocked, `derived:peel`)
-`|{h in picks : h has a stun/sleep/knockback ability}|`
-*Inputs:* crowd control is not encoded on abilities. *Why:* same missing taxonomy as engage; the counters table encodes its consequences, not the tools
+#### Keep a kill window through their healing (`burst-window`, matchup)
 
-**89. objective presence** (blocked, `derived:objtime`)
-`time-on-objective per hero`
-*Inputs:* no per-hero objective statistics are scraped. *Why:* the rates page publishes win/pick/ban only; this needs a source that does not currently exist in the pipeline
+`maximize matchup.burst_vs_heal` - blue's biggest hit minus red's biggest single save. weight 1; when `enemy.size >= 1`
 
-**90. swap-cost awareness** (blocked, `derived:swapcost`)
-`ult progress lost per proposed mid-match swap`
-*Inputs:* live match state is out of scope for the database. *Why:* the database describes the game, not a running match; kept to mark the boundary deliberately
+Our biggest single damage figure minus their biggest single heal. When
+it is positive, one cooldown deletes a target through the save; when it
+is negative, every pick has to stack damage to kill anything, and
+optimal-play enemies do not stand still for that.
 
-### Uncertainty and confidence
+#### Chew through them faster (`chew-time`, matchup)
 
-**91. vintage warning** (live, `meta_snapshots`)
-`flag when patches newer than the snapshot's patch exist in patches`
-*Inputs:* meta_snapshots.patch_id, patches.released. *Why:* stale rates argue less; the warning explicitly shifts weight toward kit facts and playbook judgement
+`minimize matchup.chew_time_ours` - seconds of blue's floor damage to chew red's pool (999 if unknown). weight 1; when `enemy.size >= 1`
 
-**92. snapshot age** (live, `meta_snapshots`)
-`days between captured_at and today, stated on every dossier`
-*Inputs:* meta_snapshots.captured_at. *Why:* the reader should never have to guess how old the numbers are
+Their total pool divided by our damage floor: seconds of unmitigated
+fire to delete the enemy team. Crude and labelled crude on the board -
+no healing, no misses - but a two-to-one asymmetry in the floor is real
+information about who wins a straight trade.
 
-**93. dual delineation** (live, `meta_snapshots`)
-`every snapshot carries both patch_id and season_id, and both predate its capture`
-*Inputs:* meta_snapshots, patches, seasons. *Why:* a rate without its patch and season is a number without a 'when'; enforced by invariant test, not convention
-
-**94. sample-size caveat** (blocked, `derived:samplesize`)
-`confidence interval on each win rate from its match count`
-*Inputs:* the rates page publishes no sample sizes. *Why:* without n, a 55% is indistinguishable from noise on a rare hero; permanent honesty note until a source appears
-
-**95. playbook confidence** (blocked, `derived:confidence`)
-`per playbook row: an authored confidence grade weighting how hard the dossier leans on it`
-*Inputs:* no confidence column exists on playbook tables. *Why:* today every authored claim argues at equal volume; a confidence column would let the author whisper
-
-**96. citation coverage gate** (live, `store`)
-`every recorded pick must cite >= 1 evidence tag that the dossier actually rendered`
-*Inputs:* recommendation_picks, recommendation_evidence, store.persist. *Why:* enforced at write time: an answer that cites nothing, or cites the unseen, is refused, not warned
-
-**97. history echo** (live, `recommendations`)
-`prior recorded recommendations for the same map, surfaced as evidence`
-*Inputs:* recommendations, recommendation_picks. *Why:* the system's own past answers are data; agreeing or breaking with them should be a conscious act
-
-**98. skeleton dissent** (ready, `derived:dissent`)
-`picks in the recorded answer that differ from the draft skeleton, counted and named`
-*Inputs:* recommendation_picks vs the skeleton at record time. *Why:* divergence from the greedy baseline is where the model earned its keep - or went wrong; either way, log it
-
-**99. catalog parity** (live, `heuristics`)
-`set of derived: tags emitted by dossier.py = set of tags on live derived rows in this table`
-*Inputs:* heuristics table, dossier source. *Why:* self-referential integrity, enforced by test: the catalog may never drift from the code it describes
-
-**100. the objective** (ready, `derived:argmax`)
-`COUNTER = argmax over 5-subsets of C of w1*coverage + w2*cohesion + w3*map fit + w4*meta - w5*exposure`
-*Inputs:* every table above; weights would live in heuristic_params. *Why:* the whole database in one line; the skeleton greedily approximates it, and an exact solver is the roadmap
-
-### Mirror and differentials
-
-**101. enemy role census** (live, `derived:enemyshape`)
-`T, D, S over E, with the same flags as formulas 2-6 (TANKLESS, triple+ DPS, no/solo support)`
-*Inputs:* heroes.role_id over the named enemies. *Why:* the shape that decides games decides them on both sides; name theirs before arguing counters
-
-**102. enemy healing supply** (live, `derived:enemyhealing`)
-`peak(h) = MAX heal-keyed stat per enemy support; supply = SUM peak vs the same 2 x roster-median bench as formula 12`
-*Inputs:* ability_stats, weapon_stats, roles over E. *Why:* an under-healed enemy line is an attrition invitation; an over-healed one demands burst or anti-heal
-
-**103. enemy frontline pool** (live, `derived:enemyfrontline`)
-`SUM pool over enemy tanks, each with its armor share - the mirror of formulas 21-22`
-*Inputs:* heroes.health/shield/armor over E. *Why:* the hit points standing between you and their backline is the number your damage plan must budget for
-
-**104. enemy damage identity** (live, `derived:enemydmgmix`)
-`weapon-type census over E (hitscan / projectile / beam / melee), the mirror of formula 31`
-*Inputs:* weapon_configs.weapon_type over E. *Why:* an all-projectile enemy rewards range and strafing; a hitscan-heavy one punishes sky and sightlines
-
-**105. pool differential** (live, `derived:pooldiff`)
-`SUM pool(A) - SUM pool(E), stated with how many picks each side has locked`
-*Inputs:* heroes pools, both boards. *Why:* raw material advantage; only meaningful with side sizes stated, so the line states them
-
-**106. burst-versus-heal check** (live, `derived:sustaindiff`)
-`MAX single damage figure(E) vs MAX single heal(A supports), and the reverse - can one side burst through the other's best save`
-*Inputs:* ability_stats, weapon_stats, both boards. *Why:* fights end where burst outruns the save; both directions of that race, from the kits' own numbers
-
-**107. chew-time proxy** (live, `derived:ttk`)
-`SUM pool(E) / SUM per-second damage figures(A), and the reverse - seconds of unmitigated fire to chew the other side`
-*Inputs:* heroes pools, per-seconds damage stats, both boards. *Why:* crude and labeled crude: no healing, no misses - but a 2x asymmetry in the floor is real information
-
-**108. enemy cohesion** (live, `derived:enemycohesion`)
-`synergy edges among E out of C(|E|,2), with density - the mirror of formulas 52-53`
-*Inputs:* synergies over E. *Why:* a documented-machine enemy comp punishes solo answers; five strangers can be picked apart
-
-**109. enemy ult threat** (live, `derived:enemyults`)
-`damage-carrying ultimates among E: count and summed max damage - the mirror of formulas 81-82`
-*Inputs:* abilities.kind_id, ability_stats over E. *Why:* the all-in the enemy is saving for; its ceiling is what your defensive plan must survive
-
-**110. tempo differential** (live, `derived:tempodiff`)
-`median kit cooldown of A vs E; the shorter side re-engages first`
-*Inputs:* ability_stats.cooldown, both boards. *Why:* uptime wars are won before the fight: the low-cooldown side dictates when fights happen
-
-**111. range differential** (live, `derived:rangediff`)
-`median max-range of A vs E; the longer side wins the poke war and forces the approach`
-*Inputs:* range stats, both boards. *Why:* whoever outranges chooses the fight's opening seconds; the approach is where brawls bleed
-
-**112. board net matchup** (live, `derived:boardnet`)
-`|{(e,a) in counters : e in E, a in A}| vs |{(a,e) in counters : a in A, e in E}| - whole-board directed answer totals`
-*Inputs:* counters, both boards. *Why:* formula 44 per candidate, summed across the whole board: who is answering whom, on net, right now
-
-## Other computed lines (documented for completeness)
-
-- **vintage WARNING** (`patches`): fires when
-  `max(patches.released) > max(released of any snapshot's patch)`.
-- **RANK-SENSITIVE** (`candidates`): `max − min` of a hero's per-rank win
-  rates (excluding the all-ranks row) `≥ 6` points.
-- **intersections** (`counters+map_meta`, `playstyle+map_meta`): literal
-  SQL joins, top 6 by `win_map`.
-- **CAUTION** (`counters`): `counters(candidate, e)` for some named `e`.
-- **ban lines** (`hero_meta`): `ban_rate > 25` (roster-wide) or `> 20`
-  (a named enemy).
-
-## Robustness caveats, stated rather than hidden
-
-All rate-derived heuristics inherit META's population: Competitive Role
-Queue, console, Americas, at the snapshot's patch - restated by the
-vintage lines on every dossier. Coverage/safe/pairings/netmatchup inherit
-the playbook's editorial nature (counterpick's judgements, your
-synergies). The skeleton is greedy, not optimal - by design: it is a foil
-for the model, and an optimal solver would be a second opinion pretending
-to be a fact (formula 100 keeps the honest version of that ambition on
-the roadmap). The blocked rows are kept in the catalog precisely so the
-gaps stay visible instead of forgotten.
+#### Answer every revealed enemy (`coverage`, matchup)
+
+`maximize team.coverage_share` - coverage / enemies revealed. weight 3; when `enemy.size >= 1`
+
+The share of revealed enemies at least one of our picks answers, from
+the playbook's counters table. The single strongest lever the database
+holds: a comp that answers all five has a plan for every fight, and one
+that answers two is hoping the other three misplay.
+
+Weighted highest because, under the optimal-play assumption, unanswered
+enemies do not misplay.
+
+#### Answer the dangerous ones twice (`double-coverage`, matchup)
+
+`maximize team.double_covered` - enemies answered by two or more picks. weight 1; when `enemy.size >= 2`
+
+Enemies answered by two or more of our picks. Redundant answers survive
+a ban, a swap, or one of ours dying first; single-threaded answers do
+not. Worth a point, not three: breadth (`coverage`) comes first.
+
+#### Walk into no counter already on the field (`exposure`, matchup)
+
+`minimize team.exposed_count` - picks answered by at least one enemy. weight 2; when `enemy.size >= 1`
+
+How many of our picks a revealed enemy is listed as answering. Answering
+two enemies means less when both of them also answer you; this is the
+other half of `coverage`, and the pair together is the net matchup the
+board shows.
+
+#### Outrange them (`range-war`, matchup)
+
+`maximize matchup.range_diff` - blue median reach minus red's. weight 0.75; when `enemy.size >= 1`
+
+Our median longest reach minus theirs. Whoever outranges chooses the
+fight's opening seconds and forces the approach, and the approach is
+where brawls bleed. Positive means we open at distance; negative means
+we close fast or trade cover.
+
+#### Survive the ban screen (`availability`, meta)
+
+`maximize team.availability` - chance every pick survives the ban screen: product of (1 - ban). weight 1
+
+The product over the five of (1 - ban rate): the chance the whole comp
+is playable after bans. Five ten-percent picks lose the full plan four
+matches in ten; the product makes that visible where the individual
+rates hide it.
+
+#### Prefer what is winning right now (`meta-strength`, meta)
+
+`maximize team.win_mean` - mean all-ranks win rate. weight 1
+
+Mean all-ranks win rate across every map at the latest snapshot. A
+weak prior next to the map figure, but it is what breaks ties when the
+map is unknown or a hero's map sample is thin - and it carries the
+snapshot's vintage, so read the WARNING fact when patches shipped since.
+
+#### Five different jobs (`subrole-diversity`, shape)
+
+`maximize team.subrole_diversity` - distinct subroles / size (1.0 = every pick a different job). weight 0.75
+
+Distinct subroles divided by picks. Two flankers or two survivors
+overlap jobs even when the role counts look fine; a comp whose every
+pick brings a different job covers more situations with the same five
+slots.
+
+#### Bring sustained healing (`healing-floor`, sustain)
+
+`maximize team.hps_floor` - summed published per-second healing figures. weight 1
+
+The sum of each kit's best published per-second healing figure - beams,
+streams, auras. The `under-healed` strategy handles the cliff (two
+supports who together heal little); this goal rewards the slope.
+
+#### Play heroes the playbook has seen work together (`cohesion`, synergy)
+
+`maximize team.synergy_score` - summed synergy scores among the picks. weight 2.5
+
+The summed scores of authored synergy pairs among the five, from
+`data/proprietary/synergies.csv`. Every pair carries the author's
+reasoning, so a high score is not a vibe - it is a stack of documented
+interactions: nano on the dive tank, speed on the brawl core, pocket on
+the flier.
+
+Weighted just under coverage: a comp that answers everyone but has never
+been played as a unit still has to invent its own plan mid-match.
+
+#### No pick without a partner (`no-strangers`, synergy)
+
+`minimize team.isolated_count` - picks with no authored partner on the team. weight 1
+
+Picks with no authored synergy edge to any teammate. A great hero with
+no documented partner in this comp is a solo act - sometimes fine,
+always worth paying for, because under optimal play the enemy will
+isolate exactly that pick.
+
+#### Cycle cooldowns faster (`tempo`, tempo)
+
+`minimize team.cooldown_median` - median cooldown across every ability on the team. weight 0.5
+
+Median cooldown across every ability on the team. Short-cooldown kits
+re-engage first and fight constantly; long ones make each fight
+decisive. A mild preference for uptime, because under optimal play the
+side that dictates fight frequency dictates the match.
+
+#### Have a team-fight-ending button (`ult-burst`, tempo)
+
+`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 0.5
+
+Summed maximum damage across the team's damage ultimates. The ceiling a
+"we combo our ults" plan actually claims. Zero means the comp wins on
+attrition only, which is a plan, but a slow one.
+
+#### Charge ultimates faster (`ult-economy`, tempo)
+
+`minimize team.ult_cost_mean` - mean ultimate charge cost where published. weight 0.5
+
+Mean ultimate charge cost where the wiki publishes it. Cheaper ultimates
+cycle more often; over a long fight sequence the comp with more ult
+cycles gets more fight-ending buttons for the same damage dealt.
+
+### Strategys
+
+#### Locked picks are constraints, not candidates (`locked-picks`, assumptions)
+
+
+A blue pick that is locked is in the comp. The solver never trades it
+away, the facts profile it (partners, who answers it, how it runs here)
+and the WARNING facts say when a revealed enemy answers it - at which
+point the open slots must cover for it, and the score says how well
+they do.
+
+#### What the score is (`objective`, assumptions)
+
+
+For every candidate five, the solver computes the same team, enemy and
+matchup metrics the board shows as facts, then sums: each goal's weight
+times its metric normalised to [0, 1] across the candidates (flipped
+for minimize), plus each scored strategy's weight times its bonus minus
+penalty while its condition holds, minus soft-constraint penalties. Hard
+constraints prune before any of that. A strategy with no bonus or
+penalty is prose alone - the session reads it, the board shows it.
+
+To tune, edit a file: raise a weight, add a `when`, change a threshold
+under `params`. The catalog is validated on load - a metric name that
+does not exist is an error, not a silent zero - and `db_docs`
+regenerates docs/heuristics.md from the files.
+
+#### Players play optimally (`optimal-play`, assumptions)
+
+
+The central assumption of this layer: every player on both teams plays
+their hero to its ceiling. The score is therefore a comp's ceiling, not
+a prediction for a lobby - no comfort-pick discount, no "nobody hits
+Widow at this rank", no skill gap.
+
+Everything that relaxes this will arrive as more granular data (rank
+tiers already exist on the board as RANK-SENSITIVE facts) and as
+heuristics that read it. Until then, argue against the optimum, not
+against a guess about the players.
+
+#### Do not field a whole team of dive bait (`squish-limit`, durability)
+
+weight 1; penalty `max(0, team.squish_count - 3) * 1.0`
+
+Picks at or under 250 pool are one-dive targets. Three of them is the
+standard shape; every one past that is a target the enemy's optimal
+play will find first.
+
+#### Shut off a heavy heal line (`anti-heal-answer`, matchup)
+
+weight 1; when `enemy.heal_ratio >= params.HEAL_RATIO`; bonus `min(team.antiheal, 1) * 1.5`
+params: HEAL_RATIO=1.0
+
+When their support line heals at or above the roster bench, one
+anti-heal pick (a negative healing modifier in the kit - the grenade,
+the discord of healing) is worth more than another damage dealer. One
+is rewarded; two overlap.
+
+#### Bring barrier-piercers when they wall up (`barrier-answer`, matchup)
+
+weight 1; when `matchup.barrier_need >= params.BARRIER_HP`; bonus `min(team.barrier_piercers, 2) * 1.0`
+params: BARRIER_HP=600
+
+When the enemy fields serious barrier health, picks whose kit ignores
+barriers (the wiki's `ignores_barrier` flag and keywords) restore the
+damage math. Up to two are rewarded; a third is redundancy the goals
+already price.
+
+#### Punish a one-note enemy comp (`counter-the-lean`, matchup)
+
+weight 1; when `matchup.style_lean_red == 'dive'`; bonus `min(team.cc_count, 2) * 0.5 + min(team.barrier_count, 1) * 0.5`
+
+When a strict majority of the revealed enemies carry the dive tag, the
+answer is peel and a wall to dive into: crowd control and a barrier.
+The `peel-against-dive` strategy reads engage tools; this one reads the
+judged style, so both fire against a real dive comp and only one
+against a coincidence.
+
+#### Peel when they dive (`peel-against-dive`, matchup)
+
+weight 1; when `enemy.mobility_count >= 2`; bonus `min(team.cc_count, 3) * 0.75`
+
+Two or more enemy picks with engage tools means the backline gets
+jumped. Crowd control - stuns, sleeps, immobilizes, knockbacks, read
+from the kits' keywords - is what turns a dive into a dead diver. Up
+to three peel tools are rewarded.
+
+#### Have an answer to their all-in (`ult-answers`, matchup)
+
+weight 1; when `matchup.ult_threat >= params.THREAT`; bonus `min(matchup.ult_answers, 2) * 0.75`
+params: THREAT=300
+
+When the enemy's damage ultimates stack past the threshold, an
+invulnerability or a cleanse (lamp, suzu, the transcendence of a
+support) is the difference between losing a fight and losing a fight
+plus the next one. Two answers rewarded.
+
+#### A dive comp needs to arrive together (`dive-needs-mobility`, shape)
+
+weight 1; when `map.style_top == 'dive' or team.style_lean == 'dive'`; bonus `min(team.mobility_count, 4) * 0.5`
+
+On a map that rewards dive, or when the picks already lean dive, every
+pick with a movement tool is one who arrives with the engage instead of
+watching it from the choke. Four rewarded; the fifth is the anchor.
+
+#### Two supports must actually heal (`under-healed`, sustain)
+
+weight 1; when `team.supports >= 2 and team.heal_ratio < params.HEAL_MARGIN`; penalty `2`
+params: HEAL_MARGIN=0.75
+
+The support line's summed peak single heal against the roster's
+two-support bench (twice the median support's peak). Below the margin
+the line is complete and still light - two Zenyattas is a choice, and
+this strategy makes the solver pay for it rather than stumble into it.
+
+#### Rates are Role Queue, console, Americas (`rates-are-a-proxy`, uncertainty)
+
+
+Every win, pick and ban rate was measured on Competitive Role Queue,
+console, Americas, under the patch and season on the snapshot fact.
+That is the closest published proxy for Open Queue and it is stated
+every time rather than assumed away. Lean on rates for direction, not
+decimals; a RANK-SENSITIVE fact means the advice must know its
+audience.
+
+#### When patches shipped since capture, trust the kit (`vintage`, uncertainty)
+
+
+The board's first facts state when the rates were captured and warn
+when patches have shipped since. Stale rates argue less: weight the
+kit numbers, keywords and the authored playbook over win rates until
+`pull_rates` runs again. The data layer makes that one tool call.
+
+## The vocabulary
+
+Every key a heuristic may reference, with its meaning. `enemy.*` are
+the `team.*` metrics computed for the red side.
+
+| key | meaning |
+| --- | --- |
+| `team.size` | picks locked on this team |
+| `team.open_slots` | slots still open (5 - size) |
+| `team.tanks` | tank count |
+| `team.damage` | damage count |
+| `team.supports` | support count |
+| `team.subrole_diversity` | distinct subroles / size (1.0 = every pick a different job) |
+| `team.subroles` (text) | the subroles present |
+| `team.shape_flags` (text) | TANKLESS / double tank / triple DPS / NO SUPPORT / solo heal |
+| `team.style_counts` (text) | picks per playstyle tag (a hero can carry several) |
+| `team.style_top` (text) | the modal playstyle among the picks |
+| `team.style_lean` (text) | the playstyle a strict majority of picks carry, else none |
+| `team.style_fit` | share of picks tagged with the map's rewarded style (0 without a map) |
+| `team.archetype_deviation` | picks over the map's top-style archetype role slots (0 without a map) |
+| `team.pool_total` | team effective HP: sum of health + shield + armor |
+| `team.pool_min` | the weakest pick's pool - focus fire finds the minimum |
+| `team.weakest` (text) | who holds the smallest pool |
+| `team.armor_total` | summed armor |
+| `team.armor_share` | armor / pool |
+| `team.shield_total` | summed recharging shields |
+| `team.shield_share` | shields / pool |
+| `team.squish_count` | picks at or under 250 pool |
+| `team.squishies` (text) | the picks at or under 250 pool |
+| `team.overhealth_total` | summed peak overhealth a kit can grant |
+| `team.dps_floor` | summed published per-second damage figures (a floor: misses and healing ignored) |
+| `team.dps_count` | picks whose kit publishes a per-second damage figure |
+| `team.burst_max` | the biggest single damage figure on the team |
+| `team.burst_hero` (text) | who holds the biggest single hit |
+| `team.ult_damage_total` | summed max damage across the team's damage ultimates |
+| `team.dmg_ults` | ultimates that carry a damage figure |
+| `team.ult_cost_mean` | mean ultimate charge cost where published |
+| `team.hitscan` | picks with a hitscan weapon or ability |
+| `team.projectile` | picks whose weapons are projectile |
+| `team.beam` | picks with a beam |
+| `team.melee` | picks with a melee weapon |
+| `team.aoe_count` | kit pieces tagged area of effect |
+| `team.range_median` | median of each pick's longest published range |
+| `team.range_max` | the longest range on the team |
+| `team.range_min` | the shortest longest-range |
+| `team.dmg_amp` | picks that amplify someone's damage |
+| `team.hps_floor` | summed published per-second healing figures |
+| `team.heal_peak_total` | summed peak single heal across all picks, any role |
+| `team.heal_peak_supports` | summed peak single heal across the supports |
+| `team.heal_peak_max` | the biggest single heal on the team |
+| `team.heal_ratio` | support heal peak / the roster's two-support bench |
+| `team.heal_amp` | picks that amplify healing |
+| `team.antiheal` | picks with anti-heal |
+| `team.cleanse` | picks with a cleanse |
+| `team.invuln` | picks with an invulnerability |
+| `team.lifelines` | picks carrying any healing at all |
+| `team.cooldown_median` | median cooldown across every ability on the team |
+| `team.cooldown_count` | cooldowns counted |
+| `team.cc_count` | picks with crowd control (stun, sleep, immobilize, hinder, knockback) |
+| `team.cc_tools` (text) | the crowd-control tools |
+| `team.mobility_count` | picks with a movement or evasive ability |
+| `team.mobility_tools` (text) | the movement tools |
+| `team.flyers` | picks that fly or hover |
+| `team.barrier_hp` | summed barrier health the team fields |
+| `team.barrier_count` | picks with a barrier |
+| `team.barrier_piercers` | picks whose kit ignores barriers |
+| `team.deployables` | picks with deployables |
+| `team.synergy_edges` | authored synergy pairs among the picks |
+| `team.synergy_score` | summed synergy scores among the picks |
+| `team.synergy_density` | synergy edges / possible pairs |
+| `team.isolated_count` | picks with no authored partner on the team |
+| `team.isolated` (text) | the isolated picks |
+| `team.core_size` | largest connected group in the team's synergy graph |
+| `team.pairs` (text) | the synergy pairs present |
+| `team.win_mean` | mean all-ranks win rate |
+| `team.pick_mass` | summed all-ranks pick rate |
+| `team.availability` | chance every pick survives the ban screen: product of (1 - ban) |
+| `team.max_ban_rate` | the highest ban rate on the team |
+| `team.max_ban_hero` (text) | who carries the highest ban rate |
+| `team.rank_sensitive_count` | picks whose win rate swings 6+ points across ranks |
+| `team.trend_sum` | summed win-rate movement since the previous snapshot |
+| `team.map_known` | 1 if a map is set |
+| `team.map_win_mean` | mean win rate on the map (the all-ranks mean without a map) |
+| `team.map_pick_mass` | summed pick rate on the map |
+| `team.map_specialists` | picks running 2.5+ points over their own baseline here |
+| `team.map_offmap` | picks running 2.5+ points under their own baseline here |
+| `team.map_strategy_hits` | picks the playbook lists among their best maps here |
+| `team.coverage` | enemies answered by at least one pick |
+| `team.coverage_share` | coverage / enemies revealed |
+| `team.unanswered` (text) | enemies no pick answers |
+| `team.answer_edges` | (enemy, pick) counter edges: picks answering enemies |
+| `team.exposure_edges` | (pick, enemy) counter edges: enemies answering picks |
+| `team.exposed_count` | picks answered by at least one enemy |
+| `team.exposed` (text) | the exposed picks |
+| `team.safe_count` | picks no enemy answers |
+| `team.net_edges` | answer edges minus exposure edges |
+| `team.double_covered` | enemies answered by two or more picks |
+| `team.banproof_coverage` | coverage recomputed without the highest-ban answerer |
+| `matchup.pool_diff` | blue effective HP minus red |
+| `matchup.dps_diff` | blue damage floor minus red |
+| `matchup.hps_diff` | blue healing floor minus red |
+| `matchup.burst_vs_heal` | blue's biggest hit minus red's biggest single save |
+| `matchup.heal_vs_burst` | blue's biggest single save minus red's biggest hit |
+| `matchup.chew_time_ours` | seconds of blue's floor damage to chew red's pool (999 if unknown) |
+| `matchup.chew_time_theirs` | seconds of red's floor damage to chew blue's pool |
+| `matchup.tempo_diff` | red median cooldown minus blue's (positive: blue cycles faster) |
+| `matchup.range_diff` | blue median reach minus red's |
+| `matchup.net_edges` | blue answer edges minus blue exposure edges |
+| `matchup.coverage_share` | share of red answered by blue |
+| `matchup.exposure_share` | share of blue answered by red |
+| `matchup.double_covered` | red picks answered twice over |
+| `matchup.dive_pressure` | red picks with a movement tool |
+| `matchup.flyers` | red picks that fly |
+| `matchup.barrier_need` | barrier health red fields |
+| `matchup.antiheal_need` | red supports' summed peak heal |
+| `matchup.ult_threat` | red's summed damage-ultimate ceiling |
+| `matchup.ult_answers` | blue invulnerabilities plus cleanses |
+| `matchup.style_lean_red` (text) | red's majority playstyle, else none |
+| `matchup.style_lean_blue` (text) | blue's majority playstyle, else none |
+| `map.known` | 1 if a map is set |
+| `map.style_top` (text) | the playstyle the map rewards most |
+| `map.style_margin` | top style score minus the runner-up |
+| `map.mode` (text) | the game mode |
+| `map.stages` | stage count |
+| `world.heal_bench` | 2 x the median peak heal across the support roster |
+| `world.roster_size` | heroes in the roster |

@@ -3,59 +3,64 @@ name: comp
 description: Recommend an Overwatch team composition from this repo's database. Use whenever the user asks for a comp, a counter, "what should we play", who beats whom, or what works on a map - conversationally, no API key needed.
 ---
 
-You are the inference layer of overwatch-db, running inside the session
-instead of behind the API. The user chats; you answer with a cited
-five-hero composition, fast.
+You are the conversational front of overwatch-db's inference layer. The
+user chats; you answer with a cited five-hero composition, fast, using the
+repo's MCP server from .mcp.json - `overwatch-db` (stdio, the local
+cluster) or `overwatch-db-docker` (HTTP, the compose stack's database, the
+one the board at http://localhost:8017 shows). Prefer whichever is
+connected; they expose the same tools.
 
 ## Workflow
 
-1. Pull map / known enemy heroes / the user's LOCKED FRIENDLY PICKS / the
-   actual question out of what the user
-   said. Missing pieces are fine - the dossier just says less. Don't
-   interrogate; one clarifying question only if the request is truly empty.
-2. Run the dossier (deterministic evidence from the whole database):
-
-       .venv/bin/python -m data.proprietary.dossier --map "King's Row" \
-           --enemy Zarya --enemy Mei --ally Ana
-
-   Locked picks are constraints: profiled, given proven partners, WARNed
-   when an enemy answers them - and the comp must include them.
-
-   Against the Docker database (after `docker compose up` has inflated it),
-   prefix any host command with the bridge: `./docker-db .venv/bin/python
-   -m ...` - or run inside the image: `docker compose run -T app python -m
-   ...`. If the local cluster is empty instead, run
-   `.venv/bin/python -m orchestrator rebuild` first.
-3. Read every line. Then decide the comp under the ground rules below.
-4. Answer in chat, tersely: the playstyle, five picks each with one line of
-   why and its [E-tags], then a short overall argument. Note the dossier's
-   vintage warning if it fired.
-5. Record it so it enters the database's own history (future dossiers cite
-   past recommendations as evidence). Build the JSON and pipe it:
-
-       .venv/bin/python -m data.proprietary.record < /tmp/comp.json
-
-   Shape: {"question", "map", "enemies", "allies", "model": "claude-code-session",
+1. Pull the map, the RED picks (the enemy's revealed heroes), the user's
+   LOCKED BLUE picks, and the actual question out of what they said.
+   Missing pieces are fine - the board just knows less. One clarifying
+   question at most, only if the request is truly empty.
+2. Call the `infer` tool: `{"map": "King's Row", "red": ["Zarya", "Pharah"],
+   "blue": ["Ana"]}`. It returns the optimal five under the markdown
+   heuristics in inference/heuristics/ (players assumed to play optimally),
+   each pick with its reasons and the fact ids (F#) that justify it, the
+   score breakdown per heuristic, and alternatives.
+   If the tools are unavailable, the shell equivalent is
+   `.venv/bin/python -m data.mcp call infer '{"map": "King's Row", "red": ["Zarya"]}'`
+   (prefix `./docker-db` to read the Docker database).
+3. Read the `facts` tool for the same board when you want the evidence
+   behind a number (`{"map": ..., "red": [...], "blue": [<the five>]}`) -
+   every fact the database holds about those heroes, the map, each team
+   and the matchup, numbered F1.. and citable. The heuristics come in three
+   kinds - constraints, goals, strategies (read them with the `heuristics`
+   tool or as MCP resources); the prose-only strategies are the ground
+   rules, and the operator's own strategy notes ride inside the facts.
+4. Decide - you are the agent in COMP = ARGMAX[ STRATEGIES( FACTS ) ]:
+   the solver's optimum is the straw man, and your job is to reconcile the
+   facts with the strategies where arithmetic cannot. Adopt the optimum
+   and say why, or improve on it and say why - a user's stated problem
+   ("we lose the first fight") can outweigh a goal the solver weighted;
+   the result's "ground rules to reconcile against" are the prose
+   strategies to hold it to. Stay inside the constraints (1-2-2 unless
+   the user is in Open Queue), keep the locked picks, and respect CAUTION
+   facts.
+5. Answer in chat, tersely: the playstyle, five picks each with one line of
+   why and its [F#] tags, then a short overall argument. Note the vintage
+   warning if the facts opened with one.
+6. Record it with the `record` tool so it enters the database's own history:
+   `{"question", "map", "red", "blue", "model": "claude-code-session",
    "answer": {"playstyle", "reasoning", "picks": [{"hero", "why",
-   "evidence": ["E7", ...]}]}}. The recorder validates shape and
-   meaning - an invented hero or a citation of nothing is refused.
-6. Follow-ups ("what if they swap to Pharah?") re-run step 2 with the new
-   context - the dossier is cheap and always current.
+   "evidence": ["F7", ...]}]}}`. Cite fact ids from the board
+   (map, red, blue = the five picks) - that is the board `record` rebuilds
+   to check them; an invented hero or a citation of nothing is refused.
+7. Follow-ups ("what if they swap to Pharah?") re-run step 2 with the new
+   red picks - inference is cheap and always current.
 
 ## Ground rules
 
-- Exactly five picks, only heroes named in the evidence or roster.
-- Every pick cites the tags that genuinely justify it - no citation padding.
-- `strategies` lines and synergy notes are the operator's own judgement:
-  they outweigh scraped rates; say so when they conflict.
-- Rates are Role Queue console (Americas) - a stated proxy for Open Queue.
-  Lean on them for direction, not decimals.
-- CAUTION lines mean a known enemy answers that candidate: picking anyway
-  needs an argument. RANK-SENSITIVE spreads matter if the user names a rank.
-- Respect ban pressure: never build a comp that dies with a likely ban.
-- If the dossier warned that patches shipped since capture, weight kit facts
-  and the playbook over rates, and tell the user.
-- `derived:` lines are pre-computed analytics (the 100-formula catalog in docs/heuristics.md; thresholds are tunable rows in heuristic_params):
-  coverage and safe-picks tell you the leverage slots, the draft skeleton is
-  a straw man to argue against - improve on it and say why, or adopt it and
-  say why. Cite them like any other line.
+- Exactly five picks, only heroes in the roster (`roster` tool lists it).
+- Every pick cites the facts that genuinely justify it - no padding.
+- Rates are Competitive Role Queue on console (Americas): a stated proxy for
+  Open Queue. Lean on them for direction, not decimals; RANK-SENSITIVE facts
+  matter if the user names a rank.
+- Never build a comp that dies with a likely ban (the ban facts say who).
+- The compose stack's `refresher` refreshes everything daily, so the facts
+  should open with today's capture. If they instead warn that patches
+  shipped since capture, weight kit facts and the playbook over rates, say
+  so, and offer to run `sync_all` with `refresh: true`.

@@ -7,5 +7,7 @@ Then one module per domain:
 
     heroes  ability rows into weapons, abilities and perks
     maps    the Standard Play galleries
-    meta    the team-composition playstyle lists
+
+The team-composition playstyle lists are a judgement, so their extractor
+lives with the heuristic type (data/heuristic/extract/wiki/meta.py).
 """

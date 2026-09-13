@@ -2,9 +2,10 @@
 #
 # CI deliberately does NOT build the database: a rebuild scrapes Blizzard and
 # the wiki, which is slow, flaky, and unkind to the sources on every push.
-# The invariant and validation tests skip themselves when db/cluster is
-# absent (see tests/conftest.py), so CI runs the linter and the unit tests;
-# the full suite is the local check after `python -m orchestrator rebuild`.
+# The invariant tests skip themselves when data/db/cluster is absent (see
+# tests/conftest.py), so CI runs the linter, the pure tests (transforms,
+# authored inputs, the expression language, the heuristics catalog) and the
+# MCP protocol tests, which spawn the server without a database.
 
 name: ci
 
@@ -28,7 +29,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Lint (pyflakes)
-        run: python -m pyflakes orchestrator.py ui.py data tests
+        run: python -m pyflakes data user inference tests
 
-      - name: Tests (unit; db-bound tests skip without a built cluster)
+      - name: Tests (pure + protocol; db-bound tests skip without a built cluster)
         run: python -m pytest -q -rs

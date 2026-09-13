@@ -1,10 +1,10 @@
-# overwatch-db: the database, its pipelines, the inference layer, and the UI
-# in one runnable image. See compose.yaml for the intended way to run it.
+# overwatch-db: one image for every layer - the data layer's tools and MCP
+# server, the inference engine, the board - and the tests. compose.yaml
+# runs one container per layer from it (docker-entrypoint.sh picks the role).
 FROM python:3.12-slim
 
-# Postgres (embedded via pgserver) refuses to run as root, so nothing here
-# does. The uid matters for the named volume: docker copies this directory's
-# ownership into the volume on first use.
+# Nothing here runs as root. The uid matters for the bind mounts: files the
+# data layer writes (caches, data/raw, transcripts) stay owned by uid 1000.
 RUN useradd --create-home --uid 1000 app
 WORKDIR /app
 
@@ -16,8 +16,7 @@ RUN mkdir -p data/raw .cache-blizzard .cache-wiki .cache-counterpick \
     && chown -R app:app /app
 USER app
 
-ENV PYTHONUNBUFFERED=1 \
-    OVERWATCH_DB_UI_HOST=0.0.0.0
-EXPOSE 8017
+ENV PYTHONUNBUFFERED=1
+EXPOSE 8017 8019 8020
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

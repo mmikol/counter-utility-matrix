@@ -1,16 +1,9 @@
-"""Load pipeline: synergies.csv - our hand-authored half of the playbook.
+"""Store: synergies.csv - our hand-authored half of the playbook.
 
-Each row is one PAIR: `hero` works with `other`, scored on whatever scale the
-author keeps consistently, with the reasoning in `note` - which is the part a
-strategy model actually wants. Synergy is bidirectional - if Mei works with
-Tracer, Tracer works with Mei - so a pair is written once, in either order,
-and stored once in canonical order. The same pair written twice (in either
-order) is a duplicate and an error.
-
-The file is the whole truth: the table is cleared and reloaded from it, so
-deleting a row deletes the claim. And because this input is authored rather
-than scraped, nothing is fuzzily matched or silently skipped - an unknown hero
-name is an error to fix in the file, not a row to drop.
+Each row is one PAIR, scored, with the reasoning in `note`. Synergy is
+bidirectional, so a pair is written once and stored once in canonical order;
+the same pair twice is an error. The file is the whole truth and unknown
+names are errors to fix in the file, not rows to drop.
 
     python -m data.proprietary.load.user.synergies
 """
@@ -33,7 +26,6 @@ class SynergyError(Exception):
 
 
 def read_rows(path):
-    """[(hero, other, score or None, note or None)], validated as authored."""
     rows, seen = [], set()
     with open(path, newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
@@ -59,42 +51,34 @@ def read_rows(path):
     return rows
 
 
+def run(connection, path=CSV_PATH, log=print):
+    rows = read_rows(path)
+    cursor = connection.cursor()
+    source_id = pipeline.register_source(cursor, USER, pipeline.now())
+    hero_ids = pipeline.lookup_ids(cursor, "heroes", "name", "hero_id")
+    unknown = sorted({name for pair in rows for name in pair[:2]
+                      if name.lower() not in hero_ids})
+    if unknown:
+        raise SynergyError("names not in the roster (fix synergies.csv): %s"
+                           % ", ".join(unknown))
+    cursor.execute("DELETE FROM synergies")
+    for hero, other, score, note in rows:
+        a, b = sorted((hero_ids[hero.lower()], hero_ids[other.lower()]))
+        cursor.execute(
+            "INSERT INTO synergies (hero_id, other_id, score, note,"
+            " source_id) VALUES (%s, %s, %s, %s, %s)",
+            (a, b, score, note, source_id))
+    connection.commit()
+    log("authored synergies: %d claims loaded" % len(rows))
+    return {"synergies": len(rows), "tables": ["synergies"]}
+
+
 def main():
     parser = pipeline.build_parser(__doc__)
     args = parser.parse_args()
-
-    rows = read_rows(CSV_PATH)
-    cao = pipeline.now()
-
     with psycopg.connect(pipeline.resolve_dsn(args)) as connection:
-        cursor = connection.cursor()
-        source_id = pipeline.register_source(cursor, USER, cao)
-        hero_ids = pipeline.lookup_ids(cursor, "heroes", "name", "hero_id")
-
-        unknown = sorted({name for pair in rows for name in pair[:2]
-                          if name.lower() not in hero_ids})
-        if unknown:
-            raise SynergyError(
-                "names not in the roster (fix synergies.csv): %s"
-                % ", ".join(unknown))
-
-        # The file is the whole truth, so the table mirrors it exactly.
-        cursor.execute("DELETE FROM synergies")
-        for hero, other, score, note in rows:
-            # canonical order: the pair is one fact whichever way it was written
-            a, b = sorted((hero_ids[hero.lower()], hero_ids[other.lower()]))
-            cursor.execute(
-                "INSERT INTO synergies (hero_id, other_id, score, note,"
-                " source_id) VALUES (%s, %s, %s, %s, %s)",
-                (a, b, score, note, source_id),
-            )
-        connection.commit()
-        pipeline.export_raw(connection, args, ("synergies",))
-
-    print("authored synergies: %d claims loaded" % len(rows))
-    if not rows:
-        print("(synergies.csv is header-only; author rows to fill the"
-              " playbook's second half)")
+        summary = run(connection)
+        pipeline.export_raw(connection, args, summary["tables"])
 
 
 if __name__ == "__main__":

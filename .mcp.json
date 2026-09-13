@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "overwatch-db": {
+      "command": ".venv/bin/python",
+      "args": ["-m", "data.mcp"]
+    },
+    "overwatch-db-docker": {
+      "type": "http",
+      "url": "http://localhost:8020/mcp"
+    }
+  }
+}

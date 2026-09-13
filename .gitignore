@@ -222,7 +222,7 @@ __marimo__/
 .cache-wiki/
 .cache-counterpick/
 pgdata/
-/db/cluster/
+/data/db/cluster/
 
 # OS generated files
 .DS_Store

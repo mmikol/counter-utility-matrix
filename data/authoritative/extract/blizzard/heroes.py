@@ -1,17 +1,27 @@
 """Extracting hero data from Blizzard's hero pages.
 
-The roster page carries every hero's role and subrole; each hero page carries
-an abilities carousel and a perks section. Blizzard publishes prose only - no
-numbers - and omits some abilities outright, which the wiki supplies.
+The roster page carries every hero's role, subrole and portrait; each hero
+page carries an abilities carousel and a perks section. Blizzard publishes
+prose only - no numbers - and omits some abilities outright, which the wiki
+supplies.
 """
+
+import re
 
 from data.authoritative.extract.blizzard.markup import to_text as html_to_text
 
 PERK_TIERS = {"minor": 1, "major": 2}
 
+URL_IN_STYLE_RE = re.compile(r"url\((['\"]?)(.*?)\1\)")
+
 
 class ScrapeError(Exception):
     pass
+
+
+def _style_url(node):
+    match = URL_IN_STYLE_RE.search(node.get("style", "") or "")
+    return match.group(2) if match else None
 
 
 def parse_subroles(soup):
@@ -34,20 +44,41 @@ def parse_subroles(soup):
     return subroles
 
 
+def parse_icons(soup):
+    """{'roles': {code: url}, 'subroles': {code: url}} - the icons the
+    game's own role filter draws, so the user layer can draw the same."""
+    roles, subroles = {}, {}
+    for option in soup.select("option.role[data-role]"):
+        url = _style_url(option)
+        if url and option["data-role"] != "all-heroes":
+            roles[option["data-role"]] = url
+    for option in soup.select("option.subrole[data-subrole]"):
+        url = _style_url(option)
+        if url:
+            subroles[option["data-subrole"]] = url
+    for card in soup.select("a.hero-card"):
+        icon = card.find("blz-card")
+        if icon is not None and icon.get("icon") and card.get("data-role"):
+            roles.setdefault(card["data-role"], icon["icon"])
+    return {"roles": roles, "subroles": subroles}
+
+
 def parse_roster(soup):
-    """Every hero card: slug, name, role, subrole."""
+    """Every hero card: slug, name, role, subrole, portrait."""
     heroes = []
     for card in soup.select("a.hero-card"):
         heading = card.find("h2", attrs={"slot": "heading"})
         href = card.get("href", "")
         if heading is None or not href:
             raise ScrapeError("hero card missing a name or link: %r" % card.get("id"))
+        portrait = card.find("blz-image", class_="heroCardPortrait")
         heroes.append(
             {
                 "slug": href.rstrip("/").rsplit("/", 1)[-1],
                 "name": heading.get_text(strip=True),
                 "role_code": card["data-role"],
                 "subrole_code": card["data-subrole"],
+                "portrait_url": portrait.get("src") if portrait is not None else None,
             }
         )
     if not heroes:
@@ -56,13 +87,9 @@ def parse_roster(soup):
 
 
 def parse_abilities(soup, slug):
-    """Ordered abilities for one hero.
-
-    The page holds a single carousel and it is the abilities one. position is
-    the published order. Nothing here classifies an ability: Blizzard labels
-    neither weapons nor ultimates, and the order does not identify them either.
-    kind_id is left NULL for the wiki pipeline to fill in.
-    """
+    """Ordered abilities for one hero. Nothing here classifies an ability:
+    Blizzard labels neither weapons nor ultimates; kind_id is left NULL for
+    the wiki pipeline to fill in."""
     carousels = soup.find_all("blz-carousel")
     if len(carousels) != 1:
         raise ScrapeError("%s: expected 1 carousel, found %d" % (slug, len(carousels)))
@@ -89,9 +116,7 @@ def parse_abilities(soup, slug):
 
 def parse_perks(soup, slug):
     """The four perks: two minor (level 2) and two major (level 3).
-
-    Stadium Powers live in their own section and are deliberately not read.
-    """
+    Stadium Powers live in their own section and are deliberately not read."""
     section = soup.find("blz-section", id="perks")
     if section is None:
         raise ScrapeError("%s: no perks section" % slug)

@@ -1,20 +1,15 @@
 # Entity relationship diagram
 
-The model is domains that intersect. A counter-pick question is a join
-across them: which hero (HEROES), on which map (MAPS), performing how well
-(META), answering whom and alongside whom (PLAYBOOK).
+Five domains, and every one of them becomes facts for a board: which hero
+(HEROES), on which map (MAPS), performing how well (META), answering whom
+and alongside whom (PLAYBOOK), and what the inference layer decided before
+(INFERENCE). The composition is the argmax of the strategies over those
+facts.
 
 ```
-COUNTER = MAX[ HEROES ∩ MAPS ∩ META ]
+FACTS = HEROES ∪ MAPS ∪ META ∪ PLAYBOOK ∪ HISTORY
+COMP  = ARGMAX[ STRATEGIES( FACTS ) ]
 ```
-
-Each section shows every relationship its tables own, including the ones
-that reach into another domain - PLAYBOOK's tables are almost entirely
-edges like that, judgements attached to heroes and maps defined elsewhere.
-
-Two tables can be joinable with no edge between them: `hero_meta` and
-`map_meta` share dimension keys and join on any of them - an edge here
-means a foreign key, and neither owns the other.
 
 Every table also carries `source_id` → `sources` and a `cao` timestamp.
 Those edges are left off - they would connect `sources` to all 40 tables
@@ -101,10 +96,6 @@ erDiagram
 ```
 
 ## The whole database
-
-Every table and every foreign key in one picture (still minus the
-`source_id` edges). The domain sections above are this diagram cut
-into readable pieces.
 
 ```mermaid
 erDiagram
