@@ -3,7 +3,7 @@
 One package per source, each owning the whole path from page to table:
 where its pages come from, how they are read, how their values are
 normalised, and a run() per domain that stores them - what the MCP tools
-call, with a main() for the shell.
+call. The tools are the one door; README.md here walks the tree.
 
     blizzard/     the official site: heroes (roster, roles, portraits,
                   text), meta (rates as dated snapshots)

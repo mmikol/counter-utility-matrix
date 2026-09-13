@@ -1,9 +1,9 @@
 """The tools the data layer serves - and, through the same door, the board
 tools of the user and inference layers.
 
-Every pull_* tool is pull -> clean -> store for one source and domain; the
-pulling and cleaning are the extract/transform code under data/, the
-storing is that domain's loader. `sync_all` runs them in dependency order.
+Every pull_* tool is pull -> clean -> store for one source and domain: that
+domain's run() in its source package under data/. `sync_all` runs them in
+dependency order.
 Nothing here is a static script: a session (or the refresher, or a shell
 through `python -m data.mcp call`) decides what to pull, when, and reads
 the summary back. There is no other door.
