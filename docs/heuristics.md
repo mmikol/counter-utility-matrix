@@ -1,7 +1,7 @@
 # The heuristics
 
-The inference layer's brain: 36 markdown files in `inference/heuristics/`
-(3 constraints, 20 goals, 13 strategies). Each file is
+The inference layer's brain: 38 markdown files in `inference/heuristics/`
+(3 constraints, 20 goals, 15 strategies). Each file is
 frontmatter a machine scores by and prose a person argues with; the
 solver reads the files live, and `load_playbook` mirrors them into the
 `heuristics` table so a recommendation can cite the ids it was scored
@@ -368,6 +368,31 @@ On a map that rewards dive, or when the picks already lean dive, every
 pick with a movement tool is one who arrives with the engage instead of
 watching it from the choke. Five rewarded; the sixth is the anchor.
 
+#### Attackers need to break a hold (`attack-breaks-the-hold`, side)
+
+weight 1; when `map.side == 'attack'`; bonus `min(team.mobility_count, 4) * 0.5 + min(team.antiheal, 1) * 0.5`
+
+On the attacking side of an Escort or Hybrid map the fight starts at a
+choke the defenders chose. Engage tools (movement, evasive, flight) let
+the comp arrive on the high ground instead of walking into it, and one
+anti-heal pick turns a held position into a trade the defenders lose.
+
+The rates do not split by side, so this is a judgement about the kits,
+not a measured advantage - which is why it is a strategy with a small
+bonus rather than a goal.
+
+#### Defenders hold ground (`defense-holds-the-ground`, side)
+
+weight 1; when `map.side == 'defense'`; bonus `min(team.deployables, 2) * 0.5 + min(team.barrier_count, 2) * 0.5 + (0.5 if team.range_median >= 20 else 0)`
+
+On the defending side the geometry is yours: deployables (turrets,
+walls, lamps) and barriers make a choke expensive to cross, and reach
+lets the comp chip the approach before the attackers can commit.
+
+Judged from the kits, like its attacking twin, and weighted the same:
+enough to tilt a close call between two comps the goals rate alike,
+never enough to override coverage or cohesion.
+
 #### Two supports must actually heal (`under-healed`, sustain)
 
 weight 1; when `team.supports >= 2 and team.heal_ratio < params.HEAL_MARGIN`; penalty `2`
@@ -516,6 +541,8 @@ the `team.*` metrics computed for the red side.
 | `matchup.style_lean_red` (text) | red's majority playstyle, else none |
 | `matchup.style_lean_blue` (text) | blue's majority playstyle, else none |
 | `map.known` | 1 if a map is set |
+| `map.sided` | 1 if the mode has an attacking and a defending side (Escort, Hybrid) |
+| `map.side` (text) | this seat's side on a sided map: attack, defense, or empty |
 | `map.style_top` (text) | the playstyle the map rewards most |
 | `map.style_margin` | top style score minus the runner-up |
 | `map.mode` (text) | the game mode |

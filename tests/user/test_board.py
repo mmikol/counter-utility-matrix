@@ -38,13 +38,17 @@ def test_facts_endpoint_returns_the_board(db):
     db.rollback()
 
 
-def test_infer_endpoint_searches_or_evaluates(db):
-    data, code = board.api_infer(db, {"map": ["King's Row"], "red": ["Zarya"], "blue": ["Ana"]})
-    assert code == 200 and data["kind"] == "infer" and len(data["blue"]) == 6
-    assert data["cited"] and all(p["evidence"] for p in data["picks"])
+def test_infer_endpoint_serves_both_seats_and_the_current_comp(db):
+    data, code = board.api_infer(db, {"map": ["King's Row"], "red": ["Zarya"], "blue": ["Ana"],
+                                      "side": ["attack"]})
+    assert code == 200 and data["side"] == "attack"
+    assert data["blue"]["kind"] == "infer" and len(data["blue"]["blue"]) == 6
+    assert data["red"]["seat"] == "red" and data["red"]["side"] == "defense"
+    assert data["current"]["partial"] and data["current"]["blue"] == ["Ana"]
+    assert data["blue"]["cited"] and all(p["evidence"] for p in data["blue"]["picks"])
     data, code = board.api_infer(db, {"blue": ["Reinhardt", "Zarya", "Widowmaker", "Bastion",
                                                "Ana", "Lúcio"]})
-    assert code == 200 and data["kind"] == "evaluate" and data["rank"] >= 1
+    assert code == 200 and data["current"]["kind"] == "evaluate" and data["current"]["rank"] >= 1
     db.rollback()
 
 
@@ -64,4 +68,7 @@ def test_bans_ride_the_query_string(db):
     assert any(f["scope"] == "bans" for f in data["facts"])
     data, code = board.api_infer(db, {"red": ["Zarya"], "blue": ["Ana"], "ban": ["Ana"]})
     assert code == 400 and "banned" in data["error"]
+    data = board.api_roster(db)
+    assert any(m["name"] == "King's Row" and m["sided"] for m in data["maps"])
+    assert any(m["name"] == "Ilios" and not m["sided"] for m in data["maps"])
     db.rollback()

@@ -174,3 +174,37 @@ def test_infer_never_drafts_a_banned_hero(world):
     assert r.facts.bans == r.bans
     with pytest.raises(ValueError, match="banned this match"):
         engine.infer(world, None, ["Zarya"], ["Ana"], bans=["Zarya"])
+
+
+@pytest.mark.invariant
+def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world):
+    from inference import engine
+    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack")
+    blue, red, cur = b["blue"], b["red"], b["current"]
+    assert blue.seat == "blue" and blue.side == "attack" and "Ana" in blue.blue
+    assert red.seat == "red" and red.side == "defense" and len(red.blue) == 6
+    assert {"Zarya", "Pharah"} <= set(red.blue)          # red keeps its revealed picks
+    assert red.red == ["Ana"]                             # and drafts against blue's
+    assert cur.kind == "current" and cur.partial and cur.blue == ["Ana"]
+    assert cur.contributions and cur.score is not None
+    d = engine.board_dict(b)
+    assert d["side"] == "attack" and d["red"]["seat"] == "red" and d["current"]["partial"]
+    assert "current comp" in engine.board_rendered(b)
+    # the side strategies fire on the right seat
+    ids = {c["id"] for c in blue.contributions if c.get("applies")}
+    assert "attack-breaks-the-hold" in ids and "defense-holds-the-ground" not in ids
+    ids = {c["id"] for c in red.contributions if c.get("applies")}
+    assert "defense-holds-the-ground" in ids
+
+
+@pytest.mark.invariant
+def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
+    from inference import engine
+    six = ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]
+    b = engine.board(world, "Ilios", ["Pharah"], six, side="attack")
+    assert b["side"] == "" and b["blue"].side == "" and b["red"].side == ""
+    assert b["current"].kind == "evaluate" and b["current"].rank >= 1
+    assert b["blue"].blue == sorted(six, key=lambda n: (
+        {"tank": 0, "damage": 1, "support": 2}[world.hero(n).role], n))
+    b = engine.board(world, None, [], [])
+    assert not b["current"].blue and b["current"].partial

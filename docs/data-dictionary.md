@@ -160,7 +160,7 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 
 ## `heuristics`
 
-*PLAYBOOK · 36 rows · `007_three_layers.sql`*
+*PLAYBOOK · 38 rows · `007_three_layers.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |

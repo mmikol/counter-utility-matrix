@@ -125,7 +125,7 @@ orchestrator, or cron decides what to pull and when.
 | `load_playbook` | the authored inputs: seasons, strategy notes, synergies, archetypes, map playstyles, and the mirror of the heuristics files |
 | `sync_all` | all of the above in dependency order, then the CSV mirror; `refresh: true` fetches every page again |
 | `db_status` · `db_init` · `db_rebuild` · `export_csv` · `db_docs` · `query` | the database's life, and read-only SQL |
-| `roster` · `facts` · `infer` · `evaluate` · `heuristics` · `record` | the user and inference layers through the same door |
+| `roster` · `facts` · `infer` · `evaluate` · `board` · `heuristics` · `record` | the user and inference layers through the same door (`board` solves both seats and scores the current comp) |
 
 The same tools run from a shell (`python -m data.mcp call pull_maps`) and are
 what `python -m data.orchestrator` drives:
@@ -140,11 +140,12 @@ what `python -m data.orchestrator` drives:
 
 ## The user layer: the board
 
-`user/board.py` serves a map selector, a bans bar (up to five, all optional:
-each team's two and the lobby's; a banned hero leaves both rosters and the
-search), and two hero-select screens - red for the enemy, blue for you -
-organised by role with the game's own portraits and role icons. Every click
-re-reads the database and rebuilds the **facts**:
+`user/board.py` serves a map selector (with an attack/defense switch on
+Escort and Hybrid maps - red gets the other side), a bans bar (up to five,
+all optional: each team's two and the lobby's; a banned hero leaves both
+rosters and the search), and two hero-select screens - red for the enemy,
+blue for you - organised by role with the game's own portraits and role
+icons. Every click re-reads the database and rebuilds the **facts**:
 100+ independent facts per named hero (kit numbers, keywords, perks, rates
 by rank and map, counters, partners), the map's own facts, joint facts per
 team once it has picks (shape, effective HP, damage and healing floors,
@@ -180,9 +181,12 @@ constraint shipped), prunes with the constraints, normalises each goal
 across the candidates, adds the scored strategies, and refines the best
 few by local search -
 players assumed to play optimally, so the score is a comp's ceiling. The
-board's **optimal comp** panel shows the six with per-pick reasons and
-fact citations, the score broken down per heuristic, and alternatives;
-with six blue picks locked it evaluates yours against the field instead.
+board's two displays are the **optimal comps** - blue's six around your
+locked picks and red's six around their revealed picks, each on its side of
+the map, with per-pick reasons, fact citations, the score broken down per
+heuristic, and alternatives - and the **current comp** - your picks as they
+stand, ranked against the whole field once six are locked and scored
+against the optimal search's field (flagged partial) before that.
 Tuning is editing a file; the catalog is validated on load and rendered
 to [docs/heuristics.md](docs/heuristics.md). The engine runs in-process
 for a local board and as its own service (`python -m inference.serve`,

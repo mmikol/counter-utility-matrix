@@ -118,3 +118,21 @@ def test_bans_become_facts_and_a_banned_pick_is_refused(world):
         engine.generate(world, None, ["Zarya"], ["Ana"], bans=["Ana"])
     with pytest.raises(ValueError, match="unknown heroes"):
         engine.generate(world, None, [], [], bans=["Goku"])
+
+
+def test_sides_exist_only_on_escort_and_hybrid(world):
+    from user.facts.compute import is_sided, map_metrics, opposite
+    kings, ilios = world.map("King's Row"), world.map("Ilios")
+    assert is_sided(kings) and not is_sided(ilios)
+    assert map_metrics(kings, "attack")["side"] == "attack"
+    assert map_metrics(ilios, "attack")["side"] == "" and map_metrics(ilios)["sided"] == 0
+    assert opposite("attack") == "defense" and opposite("") == ""
+    fs = engine.generate(world, "King's Row", ["Zarya"], ["Ana"], side="attack")
+    assert fs.side == "attack"
+    assert any(f.key == "map.side" and "blue attacks King's Row; red defends" in f.text
+               for f in fs.facts)
+    assert fs.find("map.side_caveat")
+    fs = engine.generate(world, "Ilios", [], [], side="attack")
+    assert fs.side == "" and any("no attacking or defending side" in f.text for f in fs.facts)
+    with pytest.raises(ValueError, match="side must be"):
+        engine.generate(world, "King's Row", [], [], side="left")

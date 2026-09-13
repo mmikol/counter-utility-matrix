@@ -25,7 +25,7 @@ import psycopg
 from data import common
 from user.facts import engine as facts_engine
 from user.facts import model
-from user.facts.compute import TEAM_SIZE
+from user.facts.compute import SIDED_MODES, TEAM_SIZE
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
 from inference import record as record_module
@@ -72,7 +72,8 @@ def _board(query):
     red = [x for x in query.get("red", []) if x]
     blue = [x for x in query.get("blue", []) if x]
     bans = [x for x in query.get("ban", []) if x][:5]
-    return map_name, red, blue, bans
+    side = (query.get("side") or [""])[0]
+    return map_name, red, blue, bans, side
 
 
 def api_roster(cx):
@@ -81,36 +82,35 @@ def api_roster(cx):
                "pool": h.pool, "portrait": h.portrait,
                "subrole_icon": (world.subrole_passives.get(h.subrole) or (None, None, None))[2]}
               for h in world.heroes_by_role()]
-    maps = [{"name": m.name, "mode": m.mode, "style": m.style_top}
+    maps = [{"name": m.name, "mode": m.mode, "style": m.style_top,
+             "sided": (m.mode or "") in SIDED_MODES}
             for m in world.maps_sorted()]
     return {"heroes": heroes, "maps": maps, "role_icons": world.role_icons,
             "snapshots": world.snapshots, "newer_patches": world.newer_patches}
 
 
 def api_facts(cx, query):
-    map_name, red, blue, bans = _board(query)
+    map_name, red, blue, bans, side = _board(query)
     world = model.load(cx)
     try:
-        fs = facts_engine.generate(world, map_name, red, blue, bans)
+        fs = facts_engine.generate(world, map_name, red, blue, bans, side)
     except ValueError as error:
         return {"error": str(error)}, 400
     return fs.to_dict(), 200
 
 
 def api_infer(cx, query):
-    map_name, red, blue, bans = _board(query)
+    """Both seats' optimal six and the current comp - the two displays."""
+    map_name, red, blue, bans, side = _board(query)
     if INFERENCE_URL:
-        return remote("/infer", {"map": map_name or "", "red": red, "blue": blue,
-                                 "ban": bans})
+        return remote("/board", {"map": map_name or "", "side": side, "red": red,
+                                 "blue": blue, "ban": bans})
     world = model.load(cx)
     try:
-        if len(blue) == TEAM_SIZE:
-            result = inference_engine.evaluate(world, map_name, red, blue, bans=bans)
-        else:
-            result = inference_engine.infer(world, map_name, red, blue, bans=bans)
+        b = inference_engine.board(world, map_name, red, blue, bans, side)
     except ValueError as error:
         return {"error": str(error)}, 400
-    return result.to_dict(), 200
+    return inference_engine.board_dict(b), 200
 
 
 def api_heuristics():
@@ -140,7 +140,7 @@ def api_record(cx, payload):
             cx, payload.get("question") or "recorded from the board",
             payload["answer"], payload.get("map"), payload.get("red", []),
             payload.get("blue", []), payload.get("model", "board"),
-            payload.get("bans", []))
+            payload.get("bans", []), payload.get("side", ""))
     except (ValueError, KeyError) as error:
         return {"error": str(error)}, 400
     return {"rec_id": rec_id, "transcript": os.path.relpath(path, common.ROOT)}, 200
@@ -174,6 +174,17 @@ header.top .sub { color:var(--muted); font-size:13px; }
   font-size:22px; letter-spacing:.06em; min-width:280px; }
 .mode { font-family:"Bebas Neue",Impact,sans-serif; font-size:18px; letter-spacing:.1em;
   color:var(--gold); border:1px solid var(--gold); border-radius:4px; padding:3px 10px; }
+.sideseg { display:none; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+.sideseg.show { display:inline-flex; }
+.sideseg button { border:0; border-radius:0; background:#141922; color:var(--muted);
+  font-family:"Bebas Neue",Impact,sans-serif; font-size:17px; letter-spacing:.12em; padding:7px 14px; }
+.sideseg button.on { background:var(--blue2); color:#fff; }
+.seat { margin-top:14px; padding:12px 14px; border-radius:10px; border:1px solid var(--line); }
+.seat.blue { background:linear-gradient(170deg,#12233a 0%,#1b212c 60%); border-color:#254a70; }
+.seat.red { background:linear-gradient(170deg,#2b141a 0%,#1b212c 60%); border-color:#5a2730; }
+.seat.red .card .pic { border-bottom-color:var(--red); }
+.seat.red .inf-head h3 { color:var(--red); } .seat.blue .inf-head h3 { color:var(--blue); }
+.partial { color:var(--gold); font-size:12px; margin:6px 0; }
 button { background:#263041; color:#fff; border:1px solid #35435a; border-radius:6px;
   padding:8px 14px; font:inherit; cursor:pointer; }
 button:hover { background:#31405a; }
@@ -318,10 +329,12 @@ SCRIPT = r"""
 var el = function (id) { return document.getElementById(id); };
 var TEAM = __TEAM_SIZE__;
 var BANS = 5;
-var ROSTER = null, st = { map: '', red: [], blue: [], bans: [] };
+var ROSTER = null, st = { map: '', red: [], blue: [], bans: [], side: '' };
 try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
       if (saved && saved.red && saved.blue) st = saved; } catch (e) {}
 if (!st.bans) st.bans = [];
+if (!st.side) st.side = '';
+function currentMap() { return ROSTER ? ROSTER.maps.filter(function (x) { return x.name === st.map; })[0] : null; }
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 function save() { try { localStorage.setItem('owdb-board2', JSON.stringify(st)); } catch (e) {} }
@@ -406,11 +419,19 @@ function paint() {
     el(team + 'count').textContent = st[team].length + '/' + TEAM;
   });
   el('mapsel').value = st.map;
-  var m = ROSTER.maps.filter(function (x) { return x.name === st.map; })[0];
-  el('mode').textContent = m ? m.mode + (m.style ? ' · rewards ' + m.style : '') : 'map unknown';
+  var m = currentMap();
+  var sided = !!(m && m.sided);
+  if (!sided) st.side = '';
+  el('mode').textContent = m ? m.mode + (m.style ? ' · rewards ' + m.style : '') +
+    (sided ? (st.side ? ' · blue ' + st.side + 's' : ' · pick a side') : ' · no sides') : 'map unknown';
+  el('sideseg').className = 'sideseg' + (sided ? ' show' : '');
+  var sb = el('sideseg').querySelectorAll('button');
+  for (var s = 0; s < sb.length; s++) sb[s].className = sb[s].getAttribute('data-side') === st.side ? 'on' : '';
 }
 
 document.addEventListener('click', function (e) {
+  var sideBtn = e.target.closest ? e.target.closest('[data-side]') : null;
+  if (sideBtn) { var sd = sideBtn.getAttribute('data-side'); st.side = st.side === sd ? '' : sd; save(); paint(); refresh(); return; }
   var ban = e.target.closest ? e.target.closest('[data-ban]') : null;
   if (ban) { toggleBan(ban.getAttribute('data-ban')); return; }
   var hit = e.target.closest ? e.target.closest('[data-h][data-team]') : null;
@@ -429,6 +450,7 @@ function qs() {
   st.red.forEach(function (h) { q.push('red=' + encodeURIComponent(h)); });
   st.blue.forEach(function (h) { q.push('blue=' + encodeURIComponent(h)); });
   st.bans.forEach(function (h) { q.push('ban=' + encodeURIComponent(h)); });
+  if (st.side) q.push('side=' + st.side);
   return q.join('&');
 }
 
@@ -444,11 +466,12 @@ function refresh() {
       FACTS = d; renderFacts(); el('factsn').textContent = d.count;
       el('status').textContent = d.count + ' facts · ' + new Date().toLocaleTimeString();
     }).catch(function () { flash('the database is not answering'); });
-    el('inf').innerHTML = "<p class='legend'>searching compositions…</p>";
+    el('inf-blue').innerHTML = "<p class='legend'>searching both seats…</p>"; el('inf-red').innerHTML = '';
+    el('cur').innerHTML = "<p class='legend'>scoring the current comp…</p>";
     fetch('/api/infer?' + q).then(function (r) { return r.json(); }).then(function (d) {
       if (mine !== seq) return;
       INF = d; renderInf();
-    }).catch(function () { el('inf').innerHTML = "<p class='legend'>inference is not answering</p>"; });
+    }).catch(function () { el('inf-blue').innerHTML = "<p class='legend'>inference is not answering</p>"; });
   }, 200);
 }
 
@@ -485,13 +508,22 @@ function bars(contribs) {
 
 function renderInf() {
   var d = INF;
-  if (!d || d.error) { el('inf').innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
-  var title = d.kind === 'infer' ? 'optimal comp' : 'your six, evaluated';
-  var out = "<div class='inf-head'><h3>" + title + "</h3><span class='score'>score " + (+d.score).toFixed(2) + "</span><span class='legend'>" +
-    (d.rank ? 'rank ' + d.rank + ' among the feasible field · ' : '') + d.considered + ' candidates · ' + d.seconds + 's · ' +
+  if (!d || d.error) { el('inf-blue').innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; el('inf-red').innerHTML = ''; el('cur').innerHTML = ''; return; }
+  renderResult(d.blue, el('inf-blue'), 'blue - optimal six' + (d.side ? ' on ' + d.side : ''), true);
+  renderResult(d.red, el('inf-red'), 'red - their optimal six' + (d.side ? ' on ' + (d.side === 'attack' ? 'defense' : 'attack') : ''), false);
+  var c = d.current;
+  if (!c.blue || !c.blue.length) el('cur').innerHTML = "<p class='legend'>lock a blue pick to score the current comp; six picks are ranked against the whole field.</p>";
+  else renderResult(c, el('cur'), c.kind === 'evaluate' ? 'current comp - your six, ranked' : 'current comp - ' + c.blue.length + ' of ' + TEAM + ' picked', false);
+}
+
+function renderResult(d, container, title, recordable) {
+  if (!d || d.error) { container.innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
+  var out = "<div class='inf-head'><h3>" + esc(title) + "</h3><span class='score'>score " + (+d.score).toFixed(2) + "</span><span class='legend'>" +
+    (d.rank ? 'rank ' + d.rank + ' among the feasible field · ' : '') + (d.considered ? d.considered + ' candidates · ' : '') + d.seconds + 's · ' +
     d.heuristics.constraint + ' constraints, ' + d.heuristics.goal + ' goals, ' + d.heuristics.strategy + ' strategies' +
     (d.playstyle ? ' · leans ' + d.playstyle : '') + '</span>' +
-    (d.kind === 'infer' ? "<button class='primary' id='recbtn'>record this comp</button>" : '') + '</div>';
+    (recordable ? "<button class='primary' id='recbtn'>record this comp</button>" : '') + '</div>';
+  if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search\u2019s field</div>';
   if (d.violations && d.violations.length) out += "<div class='warnbox'>violates: " + esc(d.violations.join(', ')) + '</div>';
   out += "<div class='comp'>";
   d.picks.forEach(function (p) {
@@ -500,14 +532,14 @@ function renderInf() {
       "</div><div class='body'><b>" + esc(p.hero) + "</b><div class='why'>" + esc(p.why) + '</div>' +
       p.evidence.map(function (id) { return "<span class='ev' title=\"" + esc(d.cited[id] || id) + "\">" + id + '</span>'; }).join('') + '</div></div>';
   });
-  out += '</div>' + bars(d.contributions);
+  out += '</div>' + bars(d.contributions || []);
   if (d.alternatives && d.alternatives.length) {
-    out += "<div class='alts'><b>" + (d.kind === 'infer' ? 'alternatives' : 'the field’s best') + "</b><ol>" +
+    out += "<div class='alts'><b>" + (d.kind === 'infer' ? 'alternatives' : 'the field\u2019s best') + "</b><ol>" +
       d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + " <span class='legend'>(" + (+a.score).toFixed(2) + ')</span></li>'; }).join('') + '</ol></div>';
   }
-  out += "<div class='notice' id='recnote'></div>";
-  el('inf').innerHTML = out;
-  var btn = el('recbtn');
+  if (recordable) out += "<div class='notice' id='recnote'></div>";
+  container.innerHTML = out;
+  var btn = recordable ? el('recbtn') : null;
   if (btn) btn.onclick = function () { recordComp(d); };
 }
 
@@ -515,7 +547,7 @@ function recordComp(d) {
   var answer = { playstyle: d.playstyle || 'balanced', reasoning: 'solver optimum under the catalog: score ' + (+d.score).toFixed(2) + ' over ' + d.considered + ' candidates',
     picks: d.picks.map(function (p) { return { hero: p.hero, why: p.why, evidence: p.evidence }; }) };
   fetch('/api/record', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question: 'board: ' + (st.map || 'any map') + ' vs ' + st.red.join(', ') + (st.bans.length ? ' (bans: ' + st.bans.join(', ') + ')' : ''), map: st.map || null, red: st.red, blue: st.blue, bans: st.bans, model: 'inference-engine', answer: answer }) })
+    body: JSON.stringify({ question: 'board: ' + (st.map || 'any map') + (st.side ? ' (' + st.side + ')' : '') + ' vs ' + st.red.join(', ') + (st.bans.length ? ' (bans: ' + st.bans.join(', ') + ')' : ''), map: st.map || null, side: st.side, red: st.red, blue: st.blue, bans: st.bans, model: 'inference-engine', answer: answer }) })
     .then(function (r) { return r.json(); }).then(function (r) {
       var n = el('recnote'); n.style.display = 'block';
       n.innerHTML = r.error ? 'refused: ' + esc(r.error) : 'recorded as <a href="/rec/' + r.rec_id + '">recommendation #' + r.rec_id + '</a> - ' + esc(r.transcript);
@@ -567,8 +599,8 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   el('mapsel').onchange = function () { st.map = this.value; save(); paint(); refresh(); };
   el('bansel').onchange = function () { if (this.value) toggleBan(this.value); };
   el('filter').oninput = renderFacts;
-  el('clearbtn').onclick = function () { st = { map: '', red: [], blue: [], bans: [] }; save(); paint(); refresh(); };
-  el('swapbtn').onclick = function () { var r = st.red; st.red = st.blue; st.blue = r; save(); paint(); refresh(); };
+  el('clearbtn').onclick = function () { st = { map: '', red: [], blue: [], bans: [], side: '' }; save(); paint(); refresh(); };
+  el('swapbtn').onclick = function () { var r = st.red; st.red = st.blue; st.blue = r; st.side = st.side === 'attack' ? 'defense' : st.side === 'defense' ? 'attack' : ''; save(); paint(); refresh(); };
   var chips = el('chips'); chips.innerHTML = SCOPES.map(function (s) { return "<button class='chip on' data-scope='" + s + "'>" + s + '</button>'; }).join('');
   chips.onclick = function (e) { var c = e.target.closest('.chip'); if (!c) return; var s = c.getAttribute('data-scope');
     scopeOn[s] = !scopeOn[s]; c.classList.toggle('on', scopeOn[s]); renderFacts(); };
@@ -587,6 +619,8 @@ def view_board():
             "<span class='sub'>COMP = ARGMAX[ STRATEGIES( FACTS ) ] &nbsp;·&nbsp; "
             "<a href='/recs'>recorded comps</a> &nbsp;·&nbsp; <span id='captured'></span></span>"
             "<div class='mapsel'><select id='mapsel'></select><span class='mode' id='mode'></span>"
+            "<span class='sideseg' id='sideseg' title='blue attacks or defends; red gets the other side'>"
+            "<button data-side='attack'>attack</button><button data-side='defense'>defense</button></span>"
             "<button id='swapbtn' title='swap red and blue'>swap sides</button>"
             "<button id='clearbtn'>new game</button><span class='status' id='status'></span></div>"
             "</header>"
@@ -605,14 +639,17 @@ def view_board():
             "<div class='slots' id='blueslots'></div><div class='roles' id='blueroster'></div></section>"
             "</div>"
             "<nav class='tabs'><button data-tab='facts'>facts <span id='factsn'></span></button>"
-            "<button data-tab='inf'>optimal comp</button><button data-tab='playbook'>playbook</button></nav>"
+            "<button data-tab='inf'>optimal comps</button><button data-tab='cur'>current comp</button>"
+            "<button data-tab='playbook'>playbook</button></nav>"
             "<section class='panel' id='tab-facts'><div class='tools'>"
             "<input type='text' id='filter' placeholder='filter facts - try a hero, CAUTION, derived:, team.'>"
             "<span id='chips'></span></div>"
             "<table class='facts'><tbody id='factbody'></tbody></table>"
             "<p class='legend'>every line is a row or a formula over the database, numbered for citation;"
             " the /comp skill and the inference layer read exactly these.</p></section>"
-            "<section class='panel' id='tab-inf'><div id='inf'></div></section>"
+            "<section class='panel' id='tab-inf'><div class='seat blue' id='inf-blue'></div>"
+            "<div class='seat red' id='inf-red'></div></section>"
+            "<section class='panel' id='tab-cur'><div class='seat blue' id='cur'></div></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
             "</main><script>" + SCRIPT.replace("__TEAM_SIZE__", str(TEAM_SIZE))
             + "</script>")

@@ -84,7 +84,7 @@ def persist(cx, question, answer, fs, map_id, prompt, model_name, raw_json):
 
 
 def transcript(rec_id, question, map_name, red, blue, answer, fs, model_name,
-               bans=()):
+               bans=(), side=""):
     """The durable record: a committed markdown file per recommendation."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     slug = re.sub(r"[^a-z0-9]+", "-", (map_name or "any-map").lower()).strip("-")
@@ -94,9 +94,10 @@ def transcript(rec_id, question, map_name, red, blue, answer, fs, model_name,
                    key=lambda t: int(t[1:]))
     lines = ["# Recommendation %d" % rec_id, "",
              "**Question:** %s" % question,
-             "**Map:** %s   **Red:** %s   **Blue locked:** %s   **Bans:** %s"
+             "**Map:** %s%s   **Red:** %s   **Blue locked:** %s   **Bans:** %s"
              "   **Model:** %s"
-             % (map_name or "-", ", ".join(red) or "-", ", ".join(blue) or "-",
+             % (map_name or "-", " (blue on %s)" % side if side else "",
+                ", ".join(red) or "-", ", ".join(blue) or "-",
                 ", ".join(bans) or "-", model_name), "",
              "## Comp - %s" % answer["playstyle"], ""]
     for p in answer["picks"]:
@@ -110,7 +111,7 @@ def transcript(rec_id, question, map_name, red, blue, answer, fs, model_name,
 
 
 def record(cx, question, answer, map_name=None, red=(), blue=(),
-           model_name="claude-code-session", bans=()):
+           model_name="claude-code-session", bans=(), side=""):
     """The whole path: gates, tables, mirror, transcript -> (rec_id, path).
 
     The evidence board is (map, red, the six picks): the facts a pick
@@ -118,7 +119,7 @@ def record(cx, question, answer, map_name=None, red=(), blue=(),
     validate_answer(answer)
     world = model.load(cx)
     picks = [p["hero"] for p in answer["picks"]]
-    fs = facts_engine.generate(world, map_name, list(red), picks, list(bans))
+    fs = facts_engine.generate(world, map_name, list(red), picks, list(bans), side)
     m = world.map(map_name) if map_name else None
     rec_id = persist(cx, question, answer, fs, m.id if m else None,
                      "facts rebuilt at record time:\n\n" + fs.rendered(),
@@ -126,7 +127,7 @@ def record(cx, question, answer, map_name=None, red=(), blue=(),
     cx.commit()
     common.export(cx)
     path = transcript(rec_id, question, map_name, list(red), list(blue), answer,
-                      fs, model_name, list(bans))
+                      fs, model_name, list(bans), side)
     return rec_id, path
 
 
@@ -139,7 +140,7 @@ def main():
                               payload.get("map"), payload.get("red", []),
                               payload.get("blue", []),
                               payload.get("model", "claude-code-session"),
-                              payload.get("bans", []))
+                              payload.get("bans", []), payload.get("side", ""))
     print("recorded as recommendation %d; transcript: %s" % (rec_id, path))
 
 

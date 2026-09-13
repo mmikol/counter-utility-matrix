@@ -20,6 +20,9 @@ def test_service_infers_evaluates_and_lists(db):
     assert code == 400 and "exactly 6" in data["error"]
     data, code = serve.handle_heuristics()
     assert code == 200 and len(data["heuristics"]) >= 30
+    data, code = serve.handle_board(db, {"map": ["King's Row"], "red": ["Zarya"],
+                                         "blue": ["Ana"], "side": ["defense"]})
+    assert code == 200 and data["red"]["side"] == "attack" and data["current"]["partial"]
     data, code = serve.handle_record(db, {"answer": {"picks": []}})
     assert code == 400
     db.rollback()
@@ -41,8 +44,8 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
     monkeypatch.setattr(board, "remote", fake_remote)
     assert board.api_infer(None, {"map": ["Ilios"], "red": ["Zarya"], "blue": []}) == (
         {"forwarded": True}, 200)
-    assert calls[-1] == ("/infer", {"map": "Ilios", "red": ["Zarya"], "blue": [],
-                                    "ban": []}, None)
+    assert calls[-1] == ("/board", {"map": "Ilios", "side": "", "red": ["Zarya"],
+                                    "blue": [], "ban": []}, None)
     assert board.api_heuristics() == {"forwarded": True}
     assert board.api_record(None, {"answer": {}}) == ({"forwarded": True}, 200)
     assert calls[-1][0] == "/record"

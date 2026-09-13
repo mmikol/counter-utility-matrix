@@ -40,10 +40,11 @@ class Candidate:
 
 
 class Solver:
-    def __init__(self, world, m, red, locked, catalog, pool_size=6, bans=()):
+    def __init__(self, world, m, red, locked, catalog, pool_size=6, bans=(), side=""):
         self.world, self.m, self.red = world, m, list(red)
         self.locked = list(locked)
         self.banned = {h.id for h in bans}
+        self.side = side
         self.catalog = catalog
         self.pool_size = pool_size
         self.constraints = [h for h in catalog if h.kind == "constraint"]
@@ -51,7 +52,7 @@ class Solver:
         self.strategies = [h for h in catalog if h.kind == "strategy" and h.scored]
         # the red side's metrics do not change across candidates
         self.red_t = compute.team_metrics(world, self.red, m, ())
-        self.static = {"enemy": self.red_t, "map": compute.map_metrics(m),
+        self.static = {"enemy": self.red_t, "map": compute.map_metrics(m, side),
                        "world": compute.world_metrics(world)}
         self.bounds = {}                     # goal id -> (min, max)
         self.considered = 0
@@ -258,9 +259,9 @@ class Solver:
         return out if improved_any else ranked
 
 
-def evaluate_comp(world, m, red, heroes, catalog, pool_size=6, bans=()):
+def evaluate_comp(world, m, red, heroes, catalog, pool_size=6, bans=(), side=""):
     """Score one full six against the field the solver would search."""
-    solver = Solver(world, m, red, [], catalog, pool_size, bans)
+    solver = Solver(world, m, red, [], catalog, pool_size, bans, side)
     field = [solver.prepare(c) for c in solver.enumerate()]
     solver.considered = len(field)
     target = solver.prepare(Candidate(heroes))

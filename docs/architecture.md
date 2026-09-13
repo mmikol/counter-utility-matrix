@@ -80,20 +80,24 @@ sequenceDiagram
     participant Solver as inference/ (solver)
     participant DB as PostgreSQL
 
-    You->>Board: pick the map, set the bans, click red picks<br/>as they reveal, lock your blue picks
-    Board->>Facts: /api/facts (map, red, blue, bans)
+    You->>Board: pick the map and your side, set the bans,<br/>click red picks as they reveal, lock your blue picks
+    Board->>Facts: /api/facts (map, side, red, blue, bans)
     Facts->>DB: load the World (a dozen queries)
     Facts-->>Board: F1..Fn - every fact about those heroes,<br/>the map, each team, the matchup
-    Board->>Solver: /api/infer (map, red, blue, bans)
-    Solver->>Solver: shapes the constraints allow · per-role pools ·<br/>every candidate scored · local search
-    Solver->>Facts: the FactSet for (map, red, the optimal six)
-    Solver-->>Board: the six with reasons and [F#] citations,<br/>score per heuristic, alternatives
+    Board->>Solver: /api/infer (map, side, red, blue, bans)
+    Solver->>Solver: blue's seat: shapes the constraints allow · per-role pools ·<br/>every candidate scored · local search
+    Solver->>Solver: red's seat, the other side: the same around their revealed picks
+    Solver->>Solver: the current comp: six locked -> ranked against the field;<br/>fewer -> scored with the optimal search's bounds
+    Solver->>Facts: the FactSet for each (map, side, red, the six)
+    Solver-->>Board: two displays: both optimal sixes with reasons and [F#]<br/>citations, score per heuristic, alternatives; the current comp's score
     You->>Board: "record this comp"
     Board->>Solver: record: gates (six real heroes,<br/>citations the board showed), tables, transcript
 ```
 
-With six blue picks locked the same endpoint evaluates your six against
-the field the solver would have searched, and says where it ranks.
+Sides exist on Escort and Hybrid maps only; the rates do not split by
+side, so the side reaches the score through two small strategies about the
+kits (engage and anti-heal on attack, deployables, barriers and reach on
+defense) and the facts say so.
 
 ## The life of the database
 

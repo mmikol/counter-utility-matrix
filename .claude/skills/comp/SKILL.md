@@ -12,13 +12,19 @@ connected; they expose the same tools.
 
 ## Workflow
 
-1. Pull the map, the BANS (up to five: each team's two and the lobby's,
-   all optional), the RED picks (the enemy's revealed heroes), the user's
-   LOCKED BLUE picks, and the actual question out of what they said.
+1. Pull the map, the SIDE (attack or defense, Escort and Hybrid maps
+   only; red gets the other), the BANS (up to five: each team's two and
+   the lobby's, all optional), the RED picks (the enemy's revealed
+   heroes), the user's LOCKED BLUE picks, and the actual question out of
+   what they said.
    Missing pieces are fine - the board just knows less. One clarifying
    question at most, only if the request is truly empty.
-2. Call the `infer` tool: `{"map": "King's Row", "red": ["Zarya", "Pharah"],
-   "blue": ["Ana"], "bans": ["Widowmaker"]}`. It returns the optimal six under the markdown
+2. Call the `infer` tool: `{"map": "King's Row", "side": "attack",
+   "red": ["Zarya", "Pharah"], "blue": ["Ana"], "bans": ["Widowmaker"]}`.
+   (`board` with the same arguments also returns red's optimal six on the
+   other side and the current blue picks scored - use it when the user asks
+   what the enemy should be playing or how their own six rates.)
+   It returns the optimal six under the markdown
    heuristics in inference/heuristics/ (players assumed to play optimally),
    each pick with its reasons and the fact ids (F#) that justify it, the
    score breakdown per heuristic, and alternatives.
@@ -45,7 +51,7 @@ connected; they expose the same tools.
    why and its [F#] tags, then a short overall argument. Note the vintage
    warning if the facts opened with one.
 6. Record it with the `record` tool so it enters the database's own history:
-   `{"question", "map", "red", "blue", "bans", "model": "claude-code-session",
+   `{"question", "map", "side", "red", "blue", "bans", "model": "claude-code-session",
    "answer": {"playstyle", "reasoning", "picks": [{"hero", "why",
    "evidence": ["F7", ...]}]}}`. Cite fact ids from the board
    (map, red, blue = the six picks) - that is the board `record` rebuilds

@@ -10,7 +10,8 @@ facts once both teams do. Ids F1.. are dense and stable within a board.
 """
 
 from user.facts import compute
-from user.facts.compute import RANK_SENSITIVE, SPECIALIST_DELTA, TREND_POINTS
+from user.facts.compute import (RANK_SENSITIVE, SIDES, SPECIALIST_DELTA, TREND_POINTS,
+                                is_sided, opposite)
 from user.facts.model import SQUISHY_POOL
 
 
@@ -41,9 +42,9 @@ def _plain(value):
 
 
 class FactSet:
-    def __init__(self, map_name=None, red=(), blue=(), bans=()):
+    def __init__(self, map_name=None, red=(), blue=(), bans=(), side=""):
         self.map_name, self.red, self.blue = map_name, list(red), list(blue)
-        self.bans = list(bans)
+        self.bans, self.side = list(bans), side
         self.facts = []
         self._by_key = {}
 
@@ -66,7 +67,7 @@ class FactSet:
 
     def to_dict(self):
         return {"map": self.map_name, "red": self.red, "blue": self.blue,
-                "bans": self.bans, "count": len(self.facts),
+                "bans": self.bans, "side": self.side, "count": len(self.facts),
                 "facts": [f.to_dict() for f in self.facts]}
 
 
@@ -81,18 +82,22 @@ def _trim(text, limit=110):
 
 # --- the board -------------------------------------------------------------
 
-def generate(world, map_name=None, red=(), blue=(), bans=()):
-    """The FactSet for a board: the map, the red and blue picks, and the
-    match's bans (each team's two and the lobby's - up to five, all
-    optional). A banned hero cannot be picked and cannot be recommended."""
+def generate(world, map_name=None, red=(), blue=(), bans=(), side=""):
+    """The FactSet for a board: the map (and blue's side on a sided map),
+    the red and blue picks, and the match's bans (each team's two and the
+    lobby's - up to five, all optional). A banned hero cannot be picked and
+    cannot be recommended."""
+    if side not in ("",) + SIDES:
+        raise ValueError("side must be attack or defense, got %r" % side)
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
+    side = side if is_sided(m) else ""
     fs = FactSet(m.name if m else None, [h.name for h in red_h],
-                 [h.name for h in blue_h], [h.name for h in bans_h])
+                 [h.name for h in blue_h], [h.name for h in bans_h], side)
     _meta_facts(fs, world)
     if bans_h:
         _ban_facts(fs, world, bans_h, red_h, blue_h)
     if m is not None:
-        _map_facts(fs, world, m)
+        _map_facts(fs, world, m, side)
     for h in red_h:
         _hero_facts(fs, world, h, "red", m, blue_h, [x for x in red_h if x is not h])
     for h in blue_h:
@@ -146,9 +151,26 @@ def _ban_facts(fs, world, bans, red, blue):
                    value=threatened, source="counters")
 
 
-def _map_facts(fs, world, m):
+def _map_facts(fs, world, m, side=""):
     fs.add("map", m.name, "map.mode", "%s is a %s map" % (m.name, m.mode),
            value=m.mode, source="map_modes")
+    if is_sided(m):
+        if side:
+            verb = {"attack": "attacks", "defense": "defends"}
+            fs.add("map", m.name, "map.side", "blue %s %s; red %s" % (
+                verb[side], m.name, verb[opposite(side)]), value=side,
+                source="derived:map.side")
+        else:
+            fs.add("map", m.name, "map.side", "%s has an attacking and a defending side"
+                   " - pick blue's side to tune the comps" % m.name, value="",
+                   source="derived:map.side")
+        fs.add("map", m.name, "map.side_caveat", "the rates do not split by side on"
+               " %s: side-specific advice comes from the kit facts and the side"
+               " strategies, not from win rates" % m.name, value=m.mode,
+               source="derived:map.side_caveat")
+    else:
+        fs.add("map", m.name, "map.side", "%s (%s) has no attacking or defending side"
+               % (m.name, m.mode), value="", source="derived:map.side")
     if m.stages:
         fs.add("map", m.name, "map.stages", "%s stages: %s"
                % (m.name, ", ".join(m.stages)), value=m.stages, source="map_stages")

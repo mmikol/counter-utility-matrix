@@ -20,6 +20,8 @@ from collections import Counter, OrderedDict
 from user.facts.model import ROLES, SQUISHY_POOL
 
 TEAM_SIZE = 6             # 6v6 Open Queue
+SIDED_MODES = ("Escort", "Hybrid")   # modes with an attacking and a defending side
+SIDES = ("attack", "defense")
 SPECIALIST_DELTA = 2.5
 RANK_SENSITIVE = 6.0
 TREND_POINTS = 1.5
@@ -145,6 +147,8 @@ MATCHUP_METRICS = OrderedDict([
 
 MAP_METRICS = OrderedDict([
     ("known", "1 if a map is set"),
+    ("sided", "1 if the mode has an attacking and a defending side (Escort, Hybrid)"),
+    ("side", "this seat's side on a sided map: attack, defense, or empty"),
     ("style_top", "the playstyle the map rewards most"),
     ("style_margin", "top style score minus the runner-up"),
     ("mode", "the game mode"),
@@ -387,27 +391,36 @@ def matchup_metrics(blue_t, red_t):
     return x
 
 
-def map_metrics(m):
+def is_sided(m):
+    return m is not None and (m.mode or "") in SIDED_MODES
+
+
+def opposite(side):
+    return {"attack": "defense", "defense": "attack"}.get(side, "")
+
+
+def map_metrics(m, side=""):
     if m is None:
-        return {"known": 0, "style_top": "", "style_margin": 0, "mode": "",
-                "stages": 0}
-    return {"known": 1, "style_top": m.style_top or "",
-            "style_margin": m.style_margin, "mode": m.mode or "",
-            "stages": len(m.stages)}
+        return {"known": 0, "sided": 0, "side": "", "style_top": "",
+                "style_margin": 0, "mode": "", "stages": 0}
+    sided = 1 if is_sided(m) else 0
+    return {"known": 1, "sided": sided, "side": side if sided else "",
+            "style_top": m.style_top or "", "style_margin": m.style_margin,
+            "mode": m.mode or "", "stages": len(m.stages)}
 
 
 def world_metrics(world):
     return {"heal_bench": world.heal_bench, "roster_size": len(world.heroes)}
 
 
-def namespace(world, m, red, blue):
+def namespace(world, m, red, blue, side=""):
     """The whole evaluation namespace for a board: {team, enemy, matchup,
-    map, world} - `team` is blue's seat, `enemy` is red's."""
+    map, world} - `team` is blue's seat, `enemy` is red's, `side` blue's."""
     blue_t = team_metrics(world, blue, m, red)
     red_t = team_metrics(world, red, m, blue)
     return {"team": blue_t, "enemy": red_t,
             "matchup": matchup_metrics(blue_t, red_t),
-            "map": map_metrics(m), "world": world_metrics(world)}
+            "map": map_metrics(m, side), "world": world_metrics(world)}
 
 
 # Metrics whose value is a name or a list, not a number: a goal may not
@@ -418,7 +431,7 @@ TEXT_METRICS = {
     "team.cc_tools", "team.mobility_tools", "team.isolated", "team.pairs",
     "team.max_ban_hero", "team.unanswered", "team.exposed",
     "matchup.style_lean_red", "matchup.style_lean_blue",
-    "map.style_top", "map.mode",
+    "map.style_top", "map.mode", "map.side",
 }
 
 

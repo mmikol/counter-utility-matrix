@@ -1,27 +1,32 @@
-"""infer() and evaluate(): the solver plus the facts it cites.
+"""infer(), evaluate() and board(): the solver plus the facts it cites.
 
-    infer(world, "King's Row", red=["Zarya", "Pharah"], blue=["Ana"])
+    infer(world, "King's Row", red=["Zarya", "Pharah"], blue=["Ana"], side="attack")
 
 returns the optimal six around the locked picks, each pick with the facts
 that justify it (the board the user layer would show for map + red + the
 six), the score broken down per heuristic, and the alternatives.
+board() does it for both seats - blue around its locked picks, red around
+its revealed ones, on opposite sides of a sided map - and scores the
+current blue picks as they stand.
 """
 
 import time
 
 from user.facts import engine as facts_engine
-from user.facts.compute import TEAM_SIZE
+from user.facts.compute import TEAM_SIZE, is_sided, opposite
 from inference import catalog as catalog_module
-from inference.solver import Solver, evaluate_comp
+from inference.solver import Candidate, Solver, evaluate_comp
 
 ROLE_ORDER = {"tank": 0, "damage": 1, "support": 2}
 
 
 class Result:
-    def __init__(self, kind, map_name, red, blue, locked, catalog, bans=()):
+    def __init__(self, kind, map_name, red, blue, locked, catalog, bans=(), side="",
+                 seat="blue"):
         self.kind, self.map_name = kind, map_name
         self.red, self.blue, self.locked = red, blue, locked
-        self.bans = list(bans)
+        self.bans, self.side, self.seat = list(bans), side, seat
+        self.partial = False
         self.catalog = catalog
         self.score = 0.0
         self.picks = []
@@ -46,8 +51,9 @@ class Result:
             ids = {fid for p in self.picks for fid in p["evidence"]}
             ids |= {c["fact"] for c in self.contributions if c.get("fact")}
             cited = {f.id: f.text for f in self.facts.facts if f.id in ids}
-        return {"kind": self.kind, "map": self.map_name, "red": self.red,
-                "blue": self.blue, "locked": self.locked, "bans": self.bans,
+        return {"kind": self.kind, "seat": self.seat, "map": self.map_name,
+                "red": self.red, "blue": self.blue, "locked": self.locked,
+                "bans": self.bans, "side": self.side, "partial": self.partial,
                 "score": round(self.score, 3),
                 "playstyle": self.playstyle, "picks": self.picks,
                 "contributions": self.contributions, "violations": self.violations,
@@ -58,9 +64,13 @@ class Result:
                 "facts": self.facts.to_dict() if (include_facts and self.facts) else None}
 
     def rendered(self):
-        head = "%s for %s vs %s%s%s" % (
-            "optimal comp" if self.kind == "infer" else "evaluation",
-            self.map_name or "any map", ", ".join(self.red) or "an unknown enemy",
+        head = "%s for %s%s%s vs %s%s%s" % (
+            {"infer": "optimal comp", "evaluate": "evaluation",
+             "current": "current comp"}[self.kind],
+            "red" if self.seat == "red" else "blue",
+            " on %s" % self.side if self.side else "",
+            " on %s" % self.map_name if self.map_name else "",
+            ", ".join(self.red) or "an unknown enemy",
             " (locked: %s)" % ", ".join(self.locked) if self.locked else "",
             " (banned: %s)" % ", ".join(self.bans) if self.bans else "")
         counts = {k: sum(1 for h in self.catalog if h.kind == k)
@@ -71,6 +81,9 @@ class Result:
                     self.score, " (rank %d among the feasible field)" % self.rank
                     if self.rank else "", self.considered, self.seconds,
                     counts["constraint"], counts["goal"], counts["strategy"])]
+        if self.partial:
+            lines.append("  PARTIAL: %d of %d picked - sums read low until the team is full"
+                         % (len(self.blue), TEAM_SIZE))
         if self.violations:
             lines.append("  VIOLATES: " + ", ".join(self.violations))
         for p in self.picks:
@@ -180,48 +193,125 @@ def _cited_fact(fs, keys):
     return None
 
 
+def _order(heroes):
+    return [h.name for h in sorted(heroes, key=lambda h: (ROLE_ORDER[h.role], h.name))]
+
+
+def _side(m, side):
+    if side not in ("", "attack", "defense"):
+        raise ValueError("side must be attack or defense, got %r" % side)
+    return side if is_sided(m) else ""
+
+
 def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=None,
-          bans=()):
+          bans=(), side="", seat="blue"):
+    """The optimal six for `seat` around its locked picks (`blue`) against
+    the other seat's revealed picks (`red`), on `side` of a sided map."""
     started = time.time()
     catalog = catalog or catalog_module.load()
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
+    side = _side(m, side)
     if len(blue_h) > TEAM_SIZE:
-        raise ValueError("more than %d blue picks" % TEAM_SIZE)
+        raise ValueError("more than %d %s picks" % (TEAM_SIZE, seat))
     result = Result("infer", m.name if m else None, [h.name for h in red_h], [],
-                    [h.name for h in blue_h], catalog, [h.name for h in bans_h])
-    solver = Solver(world, m, red_h, blue_h, catalog, pool_size, bans_h)
+                    [h.name for h in blue_h], catalog, [h.name for h in bans_h], side, seat)
+    solver = Solver(world, m, red_h, blue_h, catalog, pool_size, bans_h, side)
     ranked = solver.solve(top=max(top, 1) + 1)
     if not ranked:
         raise ValueError("no composition satisfies the constraints around the"
-                         " locked picks - relax a constraint in inference/heuristics/")
+                         " locked %s picks - relax a constraint in inference/heuristics/"
+                         % seat)
     best = ranked[0]
-    result.blue = [h.name for h in sorted(best.heroes, key=lambda h: (ROLE_ORDER[h.role], h.name))]
-    fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans)
+    result.blue = _order(best.heroes)
+    fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans,
+                               side)
     _fill(result, best, fs, solver)
-    result.alternatives = [{"blue": [h.name for h in sorted(
-        c.heroes, key=lambda h: (ROLE_ORDER[h.role], h.name))], "score": round(c.score, 3)}
-        for c in ranked[1:top + 1]]
+    result.alternatives = [{"blue": _order(c.heroes), "score": round(c.score, 3)}
+                           for c in ranked[1:top + 1]]
     result.seconds = time.time() - started
+    result.solver = solver
     return result
 
 
 def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
-             bans=()):
+             bans=(), side="", seat="blue"):
+    """A full six for `seat`, scored and ranked against the field the solver
+    would have searched."""
     started = time.time()
     catalog = catalog or catalog_module.load()
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
+    side = _side(m, side)
     if len(blue_h) != TEAM_SIZE:
-        raise ValueError("evaluate needs exactly %d blue picks (got %d)"
-                         % (TEAM_SIZE, len(blue_h)))
+        raise ValueError("evaluate needs exactly %d %s picks (got %d)"
+                         % (TEAM_SIZE, seat, len(blue_h)))
     result = Result("evaluate", m.name if m else None, [h.name for h in red_h],
-                    [h.name for h in blue_h], [], catalog, [h.name for h in bans_h])
+                    [h.name for h in blue_h], [], catalog, [h.name for h in bans_h], side,
+                    seat)
     target, field, rank, solver = evaluate_comp(world, m, red_h, blue_h, catalog,
-                                                pool_size, bans_h)
-    fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans)
+                                                pool_size, bans_h, side)
+    fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans,
+                               side)
     _fill(result, target, fs, solver)
     result.rank = rank
-    result.alternatives = [{"blue": [h.name for h in sorted(
-        c.heroes, key=lambda h: (ROLE_ORDER[h.role], h.name))], "score": round(c.score, 3)}
-        for c in field[:3]]
+    result.alternatives = [{"blue": _order(c.heroes), "score": round(c.score, 3)}
+                           for c in field[:3]]
     result.seconds = time.time() - started
     return result
+
+
+def current(world, blue_result, map_name=None, red=(), blue=(), catalog=None, bans=(),
+            side="", pool_size=6):
+    """The current blue picks as they stand: a full six is evaluated against
+    the field; a partial team is scored with the bounds of the optimal
+    search it came from, and says so."""
+    if len(blue) == TEAM_SIZE:
+        return evaluate(world, map_name, red, blue, pool_size, catalog, bans, side)
+    started = time.time()
+    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
+    side = _side(m, side)
+    result = Result("current", m.name if m else None, [h.name for h in red_h],
+                    [h.name for h in blue_h], [h.name for h in blue_h], catalog,
+                    [h.name for h in bans_h], side)
+    result.partial = True
+    if not blue_h:
+        result.seconds = time.time() - started
+        return result
+    solver = blue_result.solver
+    cand = solver.prepare(Candidate(blue_h))
+    solver.score(cand)
+    fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans,
+                               side)
+    _fill(result, cand, fs, solver)
+    result.seconds = time.time() - started
+    return result
+
+
+def board_dict(b):
+    """The board() result as JSON-ready data."""
+    return {"map": b["map"], "side": b["side"], "bans": b["bans"],
+            "blue": b["blue"].to_dict(), "red": b["red"].to_dict(),
+            "current": b["current"].to_dict()}
+
+
+def board_rendered(b):
+    return "\n\n".join(r.rendered() for r in (b["blue"], b["red"], b["current"])
+                       if r.blue or r.kind != "current")
+
+
+def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
+          catalog=None, top=5):
+    """Both seats and the current comp in one pass:
+
+        blue     the optimal six around blue's locked picks, on `side`
+        red      the optimal six around red's revealed picks, on the other side
+        current  blue's picks as they stand (full: ranked; partial: scored)
+    """
+    catalog = catalog or catalog_module.load()
+    m, _, _, _ = world.resolve(map_name, red, blue, bans)
+    side = _side(m, side)
+    blue_r = infer(world, map_name, red, blue, top, pool_size, catalog, bans, side, "blue")
+    red_r = infer(world, map_name, blue, red, top, pool_size, catalog, bans,
+                  opposite(side), "red")
+    cur = current(world, blue_r, map_name, red, blue, catalog, bans, side, pool_size)
+    return {"map": m.name if m else None, "side": side, "bans": list(bans),
+            "blue": blue_r, "red": red_r, "current": cur}

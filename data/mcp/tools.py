@@ -371,6 +371,9 @@ BOARD = {
              "description": "the match's bans, up to five (each team's two and"
                             " the lobby's), all optional; neither team can"
                             " pick them"},
+    "side": {"type": "string", "enum": ["attack", "defense", ""],
+             "description": "blue's side on an Escort or Hybrid map (red gets"
+                            " the other); ignored on Control, Push, Flashpoint"},
 }
 
 
@@ -397,12 +400,12 @@ def roster(ctx):
       " once both teams have picks. Numbered F1.. for citation.",
       dict(BOARD, format={"type": "string", "enum": ["lines", "json"],
                           "description": "lines (default) or json"}))
-def facts_tool(ctx, map=None, red=(), blue=(), bans=(), format="lines"):
+def facts_tool(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines"):
     from user.facts import engine, model
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
-        fs = engine.generate(world, map, list(red), list(blue), list(bans))
+        fs = engine.generate(world, map, list(red), list(blue), list(bans), side)
     except ValueError as error:
         raise ToolError(str(error))
     payload = fs.to_dict()
@@ -419,14 +422,14 @@ def facts_tool(ctx, map=None, red=(), blue=(), bans=(), format="lines"):
                                                          " return (default 5)"},
            pool={"type": "integer", "description": "candidates per role the"
                                                    " search keeps (default 6)"}))
-def infer_tool(ctx, map=None, red=(), blue=(), bans=(), top=5, pool=6):
+def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6):
     from user.facts import model
     from inference import engine
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
         result = engine.infer(world, map, list(red), list(blue), top=top,
-                              pool_size=pool, bans=list(bans))
+                              pool_size=pool, bans=list(bans), side=side)
     except ValueError as error:
         raise ToolError(str(error))
     return result.rendered(), result.to_dict()
@@ -435,16 +438,36 @@ def infer_tool(ctx, map=None, red=(), blue=(), bans=(), top=5, pool=6):
 @tool("evaluate", "Score a FULL blue six against the heuristics without"
       " searching: the breakdown per heuristic, constraint violations, and"
       " how it ranks against the optimum.", BOARD, ["blue"])
-def evaluate_tool(ctx, map=None, red=(), blue=(), bans=()):
+def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
     from user.facts import model
     from inference import engine
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
-        result = engine.evaluate(world, map, list(red), list(blue), bans=list(bans))
+        result = engine.evaluate(world, map, list(red), list(blue), bans=list(bans),
+                                 side=side)
     except ValueError as error:
         raise ToolError(str(error))
     return result.rendered(), result.to_dict()
+
+
+@tool("board", "Both seats at once, on opposite sides of a sided map: blue's"
+      " optimal six around the locked picks, red's optimal six around the"
+      " revealed picks, and blue's current picks scored as they stand"
+      " (ranked when six are locked, flagged partial otherwise).",
+      dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
+                                                          " search keeps (default 6)"}))
+def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6):
+    from user.facts import model
+    from inference import engine
+    with ctx.connect() as cx:
+        world = model.load(cx)
+    try:
+        b = engine.board(world, map, list(red), list(blue), list(bans), side,
+                         pool_size=pool)
+    except ValueError as error:
+        raise ToolError(str(error))
+    return engine.board_rendered(b), engine.board_dict(b)
 
 
 @tool("heuristics", "The inference layer's catalog: every markdown heuristic"
@@ -464,13 +487,13 @@ def heuristics_tool(ctx):
            answer={"type": "object", "description":
                    "{playstyle, reasoning, picks: [{hero, why, evidence: [F#]}]}"}),
       ["question", "answer"])
-def record_tool(ctx, question, answer, map=None, red=(), blue=(), bans=(),
+def record_tool(ctx, question, answer, map=None, red=(), blue=(), bans=(), side="",
                 model="claude-code-session"):
     from inference import record
     try:
         with ctx.connect() as cx:
             rec_id, path = record.record(cx, question, answer, map, list(red),
-                                         list(blue), model, list(bans))
+                                         list(blue), model, list(bans), side)
     except ValueError as error:
         raise ToolError(str(error))
     return ("recorded as recommendation %d; transcript %s"

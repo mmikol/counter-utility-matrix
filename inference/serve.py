@@ -3,8 +3,9 @@
     python -m inference.serve --port 8019
 
     GET  /health                       the catalog size and the database state
-    GET  /infer?map=&red=&blue=&ban=[&top=&pool=]   the optimal six
-    GET  /evaluate?map=&red=&blue=&ban=     a full six scored against the field
+    GET  /board?map=&side=&red=&blue=&ban=   both seats' optimal six + the current comp
+    GET  /infer?map=&side=&red=&blue=&ban=[&top=&pool=]   blue's optimal six
+    GET  /evaluate?map=&side=&red=&blue=&ban=   a full six scored against the field
     GET  /heuristics                   the catalog
     POST /record  {question, map, red, blue, model, answer}   the gates + tables
 
@@ -36,33 +37,47 @@ def board(query):
     red = [x for x in query.get("red", []) if x]
     blue = [x for x in query.get("blue", []) if x]
     bans = [x for x in query.get("ban", []) if x][:5]
-    return map_name, red, blue, bans
+    side = (query.get("side") or [""])[0]
+    return map_name, red, blue, bans, side
 
 
 def handle_infer(cx, query):
-    map_name, red, blue, bans = board(query)
+    map_name, red, blue, bans, side = board(query)
     top = int((query.get("top") or ["5"])[0])
     pool = int((query.get("pool") or ["6"])[0])
     world = model.load(cx)
     try:
         if len(blue) == TEAM_SIZE:
-            result = engine.evaluate(world, map_name, red, blue, pool_size=pool, bans=bans)
+            result = engine.evaluate(world, map_name, red, blue, pool_size=pool, bans=bans,
+                                     side=side)
         else:
             result = engine.infer(world, map_name, red, blue, top=top, pool_size=pool,
-                                  bans=bans)
+                                  bans=bans, side=side)
     except ValueError as error:
         return {"error": str(error)}, 400
     return result.to_dict(), 200
 
 
 def handle_evaluate(cx, query):
-    map_name, red, blue, bans = board(query)
+    map_name, red, blue, bans, side = board(query)
     world = model.load(cx)
     try:
-        result = engine.evaluate(world, map_name, red, blue, bans=bans)
+        result = engine.evaluate(world, map_name, red, blue, bans=bans, side=side)
     except ValueError as error:
         return {"error": str(error)}, 400
     return result.to_dict(), 200
+
+
+def handle_board(cx, query):
+    """Both seats and the current comp - what the board's two displays show."""
+    map_name, red, blue, bans, side = board(query)
+    pool = int((query.get("pool") or ["6"])[0])
+    world = model.load(cx)
+    try:
+        b = engine.board(world, map_name, red, blue, bans, side, pool_size=pool)
+    except ValueError as error:
+        return {"error": str(error)}, 400
+    return engine.board_dict(b), 200
 
 
 def handle_heuristics():
@@ -75,7 +90,7 @@ def handle_record(cx, payload):
             cx, payload.get("question") or "recorded through the inference service",
             payload["answer"], payload.get("map"), payload.get("red", []),
             payload.get("blue", []), payload.get("model", "inference-service"),
-            payload.get("bans", []))
+            payload.get("bans", []), payload.get("side", ""))
     except (ValueError, KeyError) as error:
         return {"error": str(error)}, 400
     return {"rec_id": rec_id, "transcript": os.path.relpath(path, common.ROOT)}, 200
@@ -112,6 +127,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/heuristics":
                 return self._json(*handle_heuristics())
             with psycopg.connect(common.default_dsn()) as cx:
+                if path == "/board":
+                    return self._json(*handle_board(cx, query))
                 if path == "/infer":
                     return self._json(*handle_infer(cx, query))
                 if path == "/evaluate":
