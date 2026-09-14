@@ -632,7 +632,7 @@ STRATEGY_FIELDS = {
       " Left with nothing inferred it lands as a draft the solver ignores.",
       dict({"id": {"type": "string", "description": "lowercase-kebab, becomes the filename"},
             "name": {"type": "string"},
-            "kind": {"type": "string", "enum": ["constraint", "heuristic"]},
+            "kind": {"type": "string", "enum": ["constraint", "heuristic", "assumption"]},
             "body": {"type": "string", "description": "the prose: what it means and why"},
             "reason": {"type": "string", "description": "why it was added, in a sentence"}},
            **STRATEGY_FIELDS),

@@ -80,31 +80,40 @@ silences a heuristic, deleting a file is a human decision; the
 ## `/strategy` - grow the playbook from three things
 
 **Say:** "add a strategy", "the solver should reward anti-heal against a
-heavy heal line", "finish that draft".
+heavy heal line", "finish that draft" - or paste a rough note about the
+game.
 
-**Takes, and only these:** the name; the kind - a constraint (something
-the comp must or should do: a limit, a reward, a penalty), a heuristic
-(something to have more or less of, measured) or an assumption (what to
-take as given: a ground rule, never scored); two
-to six sentences of prose - what it means, when it applies, why. It never
-asks you for a metric key, a weight or an expression.
+**Takes, and only these, however roughly:** the name; the kind - a
+constraint (something the comp must or should do: a limit, a reward, a
+penalty), a heuristic (something to have more or less of, measured) or an
+assumption (what to take as given: a ground rule, never scored); some
+prose - what it means, when it applies, why. It never asks you for a
+metric key, a weight or an expression, and it fixes a kind that does not
+fit the prose, saying why.
 
-**Does:** reads the vocabulary (`metrics`) and the catalog (`strategies`)
-for the house style, then decides the frontmatter from the prose - a
-heuristic's one numeric metric, direction and weight; a constraint's
-`require` limit, or its `when` guard with `bonus`/`penalty` expressions
-and `params` for any threshold, or `kind: assumption` when nothing
-measurable captures it - and stores the file with `add_strategy`, the reason quoting
-the sentence each field follows from. The catalog refuses an unknown key
-or an expression that does not parse, and nothing is written until it
-passes. For a draft you dropped in yourself (a file with only name, kind
-and prose), it completes it with `infer_strategy`. Then it runs `board`
+**Does:** first it standardizes the three inputs into the playbook's form
+- a two-to-six-word name in sentence case, a kebab id, a category, and
+the prose rewritten into the house grammar (the claim, why it is true in
+the game's terms, when it applies, what is measured) with the meaning
+untouched - and shows the before and after with one line of what changed;
+a nod stores it. Then it reads the vocabulary (`metrics`) and the catalog
+(`strategies`), names the nearest existing strategy, and derives the
+mathematics with its working shown: a heuristic's one numeric metric,
+direction and weight on a stated scale; a constraint's `require` limit,
+or its `when` guard with `bonus`/`penalty` expressions and `params` for
+any threshold; `kind: assumption` when nothing measurable captures it.
+It checks the metric actually varies across comps before storing with
+`add_strategy` (the reason quoting the sentence each field follows from;
+the catalog refuses an unknown key or an expression that does not parse,
+and nothing is written until it passes). For a draft you dropped in
+yourself, it completes it with `infer_strategy`. Then it runs `board`
 where the strategy applies and points at the new line in the breakdown,
-and reports where it landed: the file, the table, the log line.
+regenerates the catalog docs with `db_docs`, and reports the standardized
+strategy, the mathematics in words, the effect, and the one dial to turn.
 
-**Ground rules:** one file per strategy, never overwritten; the prose
-stays yours, the frontmatter is the skill's; a strategy encodes the game,
-not a lobby's habits.
+**Ground rules:** one file per strategy, never overwritten; the claim
+stays yours and the words become the playbook's, every change shown; a
+strategy encodes the game, not a lobby's habits.
 
 ## `/refresh` - the agents' run
 
