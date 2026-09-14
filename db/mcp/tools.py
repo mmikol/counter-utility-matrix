@@ -550,7 +550,8 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
       " to red's selection (blue's own picks never constrain it), red's best"
       " counter to yours, both current comps scored on those scales, your picks"
       " against red's best counter, your locked picks with the empty slots filled,"
-      " a momentum verdict, and the game plan in prose.",
+      " a momentum verdict, the game plan in prose, and the shapes the playbook's"
+      " limits allow - what the roster enforces as you pick.",
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
                                                           " search keeps (default 6)"}))
 def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6):

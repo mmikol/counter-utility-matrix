@@ -152,6 +152,10 @@ def test_the_page_is_a_shell_over_static_files():
     assert "game plan" in script and "d.plan" in script
     assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
     assert "leadReason" not in script and "class='sug'" not in script   # the hero alone
+    # the playbook's shape limits hold on the roster: a capped role dims and refuses
+    assert "function roleCap" in script and "' capped'" in script and "d.shapes" in script
+    assert "the playbook allows at most" in script
+    assert ".tile.capped" in board.static_file("board.css")[0].decode()
     # swap sides and new game are gone
     assert "swapbtn" not in script and "clearbtn" not in script
     assert "el('clearall').onclick" in script                # clear all takes new game's place

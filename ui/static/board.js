@@ -1,6 +1,8 @@
 /* the board: TEAM and BANS are set by the page before this loads */
 var el = function (id) { return document.getElementById(id); };
 var ROSTER = null, st = { map: '', red: [], blue: [], bans: [], side: '' };
+var SHAPES = null;   /* the (tank, damage, support) triples the playbook allows, from the board */
+var ROLES = ['tank', 'damage', 'support'];
 try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
       if (saved && saved.red && saved.blue) st = saved; } catch (e) {}
 if (!st.bans) st.bans = [];
@@ -54,12 +56,34 @@ function buildTeam(team) {
 }
 function buildBanPicker() { el('banroster').innerHTML = rosterHTML('ban'); }
 
+/* how many of a role a team may hold, given what it holds of the others: the
+   most any legal shape seats. null when the board has not said what is legal */
+function roleCap(team, role) {
+  if (!SHAPES || !SHAPES.length) return null;
+  var have = roleCounts(team), cap = -1;
+  SHAPES.forEach(function (shape) {
+    for (var i = 0; i < ROLES.length; i++) if (ROLES[i] !== role && shape[i] < have[ROLES[i]]) return;
+    cap = Math.max(cap, shape[ROLES.indexOf(role)]);
+  });
+  return cap < 0 ? null : cap;
+}
+function roleCounts(team) {
+  var have = { tank: 0, damage: 0, support: 0 };
+  st[team].forEach(function (n) { var h = hero(n); if (h && have.hasOwnProperty(h.role)) have[h.role]++; });
+  return have;
+}
 function toggle(team, name) {
   if (st.bans.indexOf(name) >= 0) { flash(name + ' is banned this match'); return; }
   var arr = st[team], at = arr.indexOf(name);
   if (at >= 0) arr.splice(at, 1);
-  else if (arr.length < TEAM) arr.push(name);
-  else { flash((team === 'red' ? 'red' : 'blue') + ' already has ' + TEAM + ' - click a lit hero to free the slot'); return; }
+  else if (arr.length >= TEAM) { flash((team === 'red' ? 'red' : 'blue') + ' already has ' + TEAM + ' - click a lit hero to free the slot'); return; }
+  else {
+    var h = hero(name), cap = h ? roleCap(team, h.role) : null;
+    if (cap !== null && roleCounts(team)[h.role] >= cap) {
+      flash('the playbook allows at most ' + cap + ' ' + h.role + (cap === 1 ? '' : 's') + ' - free one for ' + name); return;
+    }
+    arr.push(name);
+  }
   save(); paint(); refresh();
 }
 
@@ -110,11 +134,20 @@ function paint() {
         s.innerHTML = portrait(h) + "<span class='nm'>" + esc(name) + '</span>'; }
       else { s.className = 'slot'; s.removeAttribute('data-h'); s.innerHTML = "<span class='idx'>" + (i + 1) + '</span>'; }
     }
+    var have = roleCounts(team), capped = {}, caps = {};
+    ROLES.forEach(function (role) { caps[role] = roleCap(team, role); capped[role] = caps[role] !== null && have[role] >= caps[role]; });
     var tiles = el(team + 'roster').querySelectorAll('.tile[data-h]');   /* the announced card keeps its own class */
     for (var t = 0; t < tiles.length; t++) {
-      var n = tiles[t].getAttribute('data-h');
-      tiles[t].className = 'tile' + (st[team].indexOf(n) >= 0 ? ' on' : '') + (st[other].indexOf(n) >= 0 ? ' other' : '') +
-        (st.bans.indexOf(n) >= 0 ? ' banned' : '');
+      var n = tiles[t].getAttribute('data-h'), hh = hero(n), on = st[team].indexOf(n) >= 0;
+      tiles[t].className = 'tile' + (on ? ' on' : '') + (st[other].indexOf(n) >= 0 ? ' other' : '') +
+        (st.bans.indexOf(n) >= 0 ? ' banned' : '') + (!on && hh && capped[hh.role] ? ' capped' : '');
+    }
+    var heads = el(team + 'roster').querySelectorAll('.rolecol h4');   /* the cap, when the playbook sets one */
+    for (var r = 0; r < heads.length; r++) {
+      var cap = caps[ROLES[r]], note = heads[r].querySelector('.cap');
+      if (!note) { note = document.createElement('span'); note.className = 'cap'; heads[r].appendChild(note); }
+      note.textContent = cap !== null && cap < TEAM ? 'max ' + cap : '';
+      note.title = 'the playbook seats at most ' + cap + ' on a team';
     }
     el(team + 'count').textContent = st[team].length + '/' + TEAM;
   });
@@ -257,6 +290,7 @@ function renderInf() {
   renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
   el('bluescore').textContent = (c && c.blue && c.blue.length && typeof c.normalized === 'number') ? c.normalized + ' / 100' : '';
   el('redscore').textContent = (rc && rc.blue && rc.blue.length && typeof rc.normalized === 'number') ? rc.normalized + ' / 100' : '';
+  if (d.shapes && d.shapes.length && JSON.stringify(d.shapes) !== JSON.stringify(SHAPES)) { SHAPES = d.shapes; paint(); return; }
   paintSuggestions();
 }
 

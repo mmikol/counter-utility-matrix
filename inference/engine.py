@@ -18,7 +18,7 @@ import time
 import types
 
 from inference import catalog as catalog_module
-from inference.solver import Candidate, Solver, evaluate_comp
+from inference.solver import Candidate, Solver, evaluate_comp, legal_shapes
 from ui.facts import compute
 from ui.facts import engine as facts_engine
 from ui.facts.compute import TEAM_SIZE, is_sided, opposite
@@ -345,7 +345,8 @@ def board_dict(b):
             "blue": b["blue"].to_dict(), "red": b["red"].to_dict(),
             "current": b["current"].to_dict(), "red_current": b["red_current"].to_dict(),
             "countered": b["countered"].to_dict() if b["countered"] else None,
-            "fill": b["fill"].to_dict() if b["fill"] else None, "momentum": b["momentum"]}
+            "fill": b["fill"].to_dict() if b["fill"] else None, "momentum": b["momentum"],
+            "shapes": b["shapes"]}
 
 
 def board_rendered(b):
@@ -632,6 +633,8 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
                      blue's optimal's scale (None unless one to five are locked)
         momentum     the verdict from the two current comps
         plan         the game plan in prose, from the same facts
+        shapes       the (tanks, damage, supports) triples the playbook's shape
+                     limits allow - what the roster enforces as you pick
     """
     parallel = parallel_available(catalog)
     catalog = catalog or catalog_module.load()
@@ -678,4 +681,5 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
     return {"map": m.name if m else None, "side": side, "bans": list(bans),
             "blue": blue_r, "red": red_r, "current": cur, "red_current": red_cur, "fill": fill,
             "countered": countered, "momentum": _momentum(cur, red_cur, countered),
-            "plan": _plan(world, m, side, list(bans), red_h, blue_r)}
+            "plan": _plan(world, m, side, list(bans), red_h, blue_r),
+            "shapes": [list(s) for s in legal_shapes(catalog)]}

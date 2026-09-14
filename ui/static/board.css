@@ -73,6 +73,9 @@ button.primary { background:var(--blue2); border-color:var(--blue); }
 .bans .slot.full { border-color:#ff7a8a; box-shadow:0 0 14px rgba(255,75,87,.35); }
 .bans .slot .idx { inset:0; left:0; display:flex; align-items:center; justify-content:center;
   color:#6b2f3a; letter-spacing:.12em; text-transform:uppercase; }
+.tile.capped { opacity:.28; filter:grayscale(.8); cursor:not-allowed; }   /* no legal six seats one more of this role */
+.tile.capped:hover { transform:none; border-color:#2a3240; }
+.rolecol h4 .cap { margin-left:8px; font-size:10px; letter-spacing:.12em; color:var(--gold); text-transform:uppercase; }
 .tile.banned { opacity:.28; filter:grayscale(1); cursor:not-allowed; }
 .tile.banned::before { content:'✕'; position:absolute; inset:0; display:flex; align-items:center;
   justify-content:center; font-size:34px; color:#ff4b57; z-index:1; }

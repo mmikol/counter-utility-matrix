@@ -222,6 +222,24 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
 
 
 @pytest.mark.invariant
+def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
+    """The roster enforces what the shape limits allow: the two-tank limit
+    means no triple the solver would search seats a third tank, and the
+    board says so in a form the script can read."""
+    from inference import engine
+    from inference.solver import legal_shapes
+    cat = catalog.load()
+    shapes = legal_shapes(cat)
+    assert shapes and all(t + d + s == 6 for t, d, s in shapes)
+    assert (2, 2, 2) in shapes and all(t <= 2 for t, _, _ in shapes)
+    assert (3, 2, 1) not in shapes
+    seated = legal_shapes(cat, {"tank": 2, "damage": 3, "support": 0})
+    assert seated and all(t == 2 and d >= 3 for t, d, _ in seated)
+    b = engine.board(world, "King's Row", ["Zarya"], ["Ana"], catalog=cat)
+    assert b["shapes"] == [list(s) for s in shapes]
+    assert engine.board_dict(b)["shapes"] == b["shapes"]
+
+
 def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     from inference import engine
     six = ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]

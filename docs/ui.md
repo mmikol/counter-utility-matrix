@@ -82,7 +82,13 @@ change debounces, then fetches facts and inference together.
 **The rosters.** One tile renderer draws the red roster, the blue roster
 and the ban picker, so all three read as the same hero select: portrait
 tiles in tank, damage and support columns, lit when picked, dotted when
-on the other team, crossed out when banned. A hero the roster carries as
+on the other team, crossed out when banned, and dimmed once the
+playbook's shape limits leave no legal six that seats one more of that
+role - the board result carries the `(tanks, damage, supports)` triples
+the hard limits allow, the column header says the cap when there is one
+(`max 2` over the tanks), and a click on a dimmed tile is refused with a
+note rather than sent; both teams are held to it, since the limit is the
+game's form and not blue's alone. A hero the roster carries as
 **announced** - one the wiki knows ahead of release, with its role,
 subrole, health, kit and release day - sits in its own role column as
 the same tile, dimmed, tagged "coming soon", its portrait when the wiki

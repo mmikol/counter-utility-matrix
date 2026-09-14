@@ -209,27 +209,8 @@ class Solver:
                              for r in ROLE_KEY})
 
     def _shapes(self, locked_counts):
-        shape_constraints = [h for h in self.limits if not h.soft and h.require
-                       and set(h.require.names) <= SHAPE_KEYS
-                       and (h.when is None or set(h.when.names) <= SHAPE_KEYS)]
-        out = []
-        for t in range(TEAM_SIZE + 1):
-            for d in range(TEAM_SIZE + 1 - t):
-                s = TEAM_SIZE - t - d
-                if (t < locked_counts["tank"] or d < locked_counts["damage"]
-                        or s < locked_counts["support"]):
-                    continue
-                stub = scope({"team": {"tanks": t, "damage": d, "supports": s,
-                                       "size": TEAM_SIZE, "open_slots": 0}})
-                ok = True
-                for h in shape_constraints:
-                    stub["params"] = h.params_section
-                    if self._holds(h, stub) and not bool(h.require.eval(stub)):
-                        ok = False
-                        break
-                if ok:
-                    out.append((t, d, s))
-        return out
+        return legal_shapes(self.catalog, locked_counts)
+
 
     def prior(self, h):
         """A cheap ranking to cut each role's pool before enumeration."""
@@ -327,6 +308,36 @@ class Solver:
         out = list(known.values())
         out.sort(key=self._rank_key)
         return out if improved_any else ranked
+
+
+def legal_shapes(catalog, locked_counts=None):
+    """(tanks, damage, supports) triples the catalog's shape-only hard limits
+    allow - the playbook's rule of the game's form (at most two tanks; or
+    2-2-2) - optionally only those that can still seat the picks counted per
+    role. The board carries the full list so the roster can refuse a pick no
+    legal six could seat."""
+    locked_counts = locked_counts or dict.fromkeys(ROLE_KEY, 0)
+    shape_constraints = [h for h in catalog if h.form == "limit" and not h.soft and h.require
+                         and set(h.require.names) <= SHAPE_KEYS
+                         and (h.when is None or set(h.when.names) <= SHAPE_KEYS)]
+    out = []
+    for t in range(TEAM_SIZE + 1):
+        for d in range(TEAM_SIZE + 1 - t):
+            s = TEAM_SIZE - t - d
+            if (t < locked_counts["tank"] or d < locked_counts["damage"]
+                    or s < locked_counts["support"]):
+                continue
+            stub = scope({"team": {"tanks": t, "damage": d, "supports": s,
+                                   "size": TEAM_SIZE, "open_slots": 0}})
+            ok = True
+            for h in shape_constraints:
+                stub["params"] = h.params_section
+                if Solver._holds(h, stub) and not bool(h.require.eval(stub)):
+                    ok = False
+                    break
+            if ok:
+                out.append((t, d, s))
+    return out
 
 
 def evaluate_comp(world, m, red, heroes, catalog, pool_size=6, bans=(), side=""):
