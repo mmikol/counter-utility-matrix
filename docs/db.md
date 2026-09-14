@@ -1,9 +1,10 @@
 # The DATA LAYER - `db/`
 
 Pull every source, clean it, store it in Postgres, and serve the tools
-that do so. This is the layer that owns `FACTS = HEROES ∪ MAPS ∪ META`:
+that do so. This is the layer that owns `DATA = HEROES ∪ MAPS ∪ META`:
 what the sources say about the heroes, the maps and the meta, pulled and
-set. Any data in the database is just data - every row carries a
+set - the tables a board's facts are derived from, the independent ones
+read one at a time and the dependent ones joined across the selections. Any data in the database is just data - every row carries a
 `source_id`, and that is the only distinction drawn between what was
 measured, what was judged and what was written by hand.
 
@@ -321,16 +322,20 @@ document is written by hand.
 <!-- generated:erd -->
 Five domains. Three are the authoritative data the sources are pulled
 for - which hero (HEROES), on which map (MAPS), performing how well
-(META) - and become the FACTS of a board. The other two are the
+(META) - the DATA a board's facts are derived from: the independent
+ones read one table each, the dependent ones join across the
+selections (map_meta is heroes ⋈ maps, counters and synergies are
+heroes ⋈ heroes). The other two are the
 playbook's record: the authored inputs (PLAYBOOK) and the mirror of the
 strategies the inference layer solves with (INFERENCE). The composition is
 the argmax of the strategies - the constraints, heuristics and assumptions
 in inference/strategies/ - over the facts.
 
 ```
-FACTS      = HEROES ∪ MAPS ∪ META
-STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS
-COMP       = ARGMAX[ STRATEGIES( FACTS ) ]
+DATA        = HEROES ∪ MAPS ∪ META
+FACTS       = INDEPENDENT ∪ DEPENDENT   (each selection alone; the joins across them)
+STRATEGIES  = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS
+COMP        = ARGMAX[ STRATEGIES( FACTS ) ]
 ```
 
 Every table also carries `source_id` → `sources` and a `cao` timestamp.

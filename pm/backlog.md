@@ -7,14 +7,13 @@ ordered by payoff over blast radius; the first is the one to pick up.
 
 ## In progress
 
-- **Run a board's independent solves in parallel** - `multithreading` branch.
-  Blue's optimal and red's counter in two spawned workers, the fill in the
-  parent, the pessimistic case after. A click halves on a machine with
-  spare cores (2.1 s to 1.1 s here); the answer is the sequential one.
-  Passes three ways (the local suite went from 4.5 to 1.7 minutes, the
-  image's from 5.6 to 2.2); the inference container peaks at 410 MiB of
-  its 1 GiB, the data container got 2 GiB for the suite. Done when the
-  branch is merged.
+- **The fact engine's dependent variables** - `fact-engine` branch. The
+  equation now says what the engine does: FACTS = INDEPENDENT ∪ DEPENDENT,
+  each selection alone read from one table, then the joins across the
+  selections (hero ⋈ map, hero ⋈ enemy, hero ⋈ ally, the team, the
+  matchup, the bans). The math page, the docs and the skills state it
+  that way. Next is the list under "Fact engine" below, best first. Done
+  when the pairwise numbers are facts and the branch is merged.
 
 ## Next
 
@@ -85,6 +84,10 @@ counters table is a list).
 
 ## Done
 
+- **Run a board's independent solves in parallel** - `5baaa95`. Blue's
+  optimal and red's counter in two spawned workers, the fill in the
+  parent, the pessimistic case after; a click halves on a machine with
+  spare cores (2.1 s to 1.1 s), the answer is the sequential one.
 - **A deterministic solver** - `bf91ef8`. Style ties broke by set order,
   so the process's hash seed could change the answer; ties break by name.
 - **A 75% coverage bar and ruff at 100 columns** - `bf91ef8`.

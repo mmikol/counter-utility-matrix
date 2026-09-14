@@ -144,7 +144,7 @@ def test_sides_exist_only_on_escort_and_hybrid(world):
 
 @pytest.mark.invariant
 def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_apart(world):
-    # FACTS = HEROES ∪ MAPS ∪ META (F1..); the playbook's record rides below as S1..
+    # FACTS = INDEPENDENT ∪ DEPENDENT (F1..); the playbook's record rides below as S1..
     fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
     facts = [f for f in fs.facts if f.scope != engine.PLAYBOOK_SCOPE]
     side = fs.playbook

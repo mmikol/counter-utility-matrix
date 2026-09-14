@@ -9,8 +9,18 @@ every write, and the inference layer owns the scoring. What it owns is
 the equation's left-hand term:
 
 ```
-FACTS = HEROES ∪ MAPS ∪ META        the authoritative data, restricted to one board
+INDEPENDENT = ⋃ facts(s) over each selection s        a hero, the map, the meta - each alone
+DEPENDENT   = ⋃ facts(s ⋈ t) over the intersections   hero ⋈ map, hero ⋈ enemy, hero ⋈ ally,
+                                                      team, team × team, bans ⋈ picks
+FACTS       = INDEPENDENT ∪ DEPENDENT                 one board's facts, F1..
 ```
+
+An independent fact is read from one table, keyed by the selection, and
+no other selection changes it. A dependent fact is a join across
+selections - `map_meta` is heroes ⋈ maps, `counters` and `synergies` are
+heroes ⋈ heroes, the team facts aggregate over the picks, the matchup
+facts compare the two aggregates, the ban facts join a banned hero with
+both teams' counters - and every selection added opens new intersections.
 
 ```bash
 .venv/bin/python -m ui.board              # http://localhost:8017, the local cluster

@@ -39,7 +39,7 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     assert "normalized" in script and "/ 100" in script    # the 0-100 figure, raw score beside it
     # the playbook holds three kinds; the badge appends the form only when it differs
     # the equation lives on /math now
-    assert "STRATEGIES = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS" in board.view_math()
+    assert "STRATEGIES  = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS" in board.view_math()
     assert "h.form !== h.kind ?" in script
     assert "'assumption' ? 'assumption - taken as given" in script
     assert "prose -" not in script
@@ -179,9 +179,12 @@ def test_the_page_is_a_shell_over_static_files():
 
 def test_the_math_page_states_the_equation_and_the_layers():
     page = board.view_math()
-    for line in ("FACTS      = HEROES &cup; MAPS &cup; META",
-                 "STRATEGIES = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS",
-                 "COMP       = ARGMAX[ STRATEGIES( FACTS ) ]"):
+    for line in ("DATA        = HEROES &cup; MAPS &cup; META",
+                 "FACTS       = INDEPENDENT &cup; DEPENDENT",
+                 "STRATEGIES  = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS",
+                 "COMP        = ARGMAX[ STRATEGIES( FACTS ) ]"):
         assert line in page
+    assert "independent variables" in page and "dependent variables" in page
+    assert "heroes &#8904; map_meta" in page                # the joins are stated, not a union
     assert "The data layer" in page and "The inference layer" in page and "The board" in page
     assert "never calls a language model" in page

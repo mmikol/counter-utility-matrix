@@ -2,23 +2,28 @@
 
     generate(world, "King's Row", red=["Zarya", "Pharah"], blue=["Ana"])
 
-    FACTS      = HEROES ∪ MAPS ∪ META         F1..  the authoritative data
-    STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS   the playbook, inference/strategies/
-    (the playbook's record)                   S1..  what it holds, decided and saw
+    INDEPENDENT = ⋃ facts(s) over each selection s       a hero, the map, the meta - alone
+    DEPENDENT   = ⋃ facts(s ⋈ t) over the intersections  hero ⋈ map, hero ⋈ enemy, hero ⋈ ally,
+                                                         team, team × team, bans ⋈ picks
+    FACTS       = INDEPENDENT ∪ DEPENDENT                F1..
+    STRATEGIES  = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS the playbook, inference/strategies/
+    (the playbook's record)                              S1..  what it holds
 
-FACTS are the authoritative data - what the sources say about the heroes,
-the maps and the meta, pulled and set - restricted to this board: the
-twelve heroes (and the bans), the one map, the rates and counters for them
-here. Independent facts per hero and for the map come first; joint facts
-per team appear once a team has picks; matchup facts once both teams do.
+FACTS are derived from the authoritative data - what the sources say about
+the heroes, the maps and the meta, pulled and set - for this board: the
+independent variables are each selection alone, read from one table; the
+dependent variables are the joins across selections (map_meta is heroes ⋈
+maps, counters and synergies are heroes ⋈ heroes, the team aggregates the
+picks, the matchup compares the aggregates, the bans join both teams).
+Independent facts per hero and for the map come first; the joins per team
+appear once a team has picks, and the matchup once both teams do.
 Below them, numbered S1.., rides the PLAYBOOK's record: the archetypes it
 names, how many constraints, heuristics and assumptions it holds -
-citable, never mistaken for data, and not the strategies themselves (those are the constraints and
-heuristics the solver reads). Both sides are structured (scope, subject,
-key, value) so the
-inference layer can read them by key, and rendered as sentences so a
-person - or the /comp skill - can read them as evidence. Ids are dense and
-stable within a board.
+citable, never mistaken for data, and not the strategies themselves (those
+are the constraints and heuristics the solver reads). Both sides are
+structured (scope, subject, key, value) so the inference layer can read
+them by key, and rendered as sentences so a person - or the /comp skill -
+can read them as evidence. Ids are dense and stable within a board.
 """
 
 from ui.facts import compute

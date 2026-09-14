@@ -242,17 +242,31 @@ def _page(title, body):
 MATH = """
 <article class='math'>
 <h2>The equation</h2>
-<pre class='eq'>FACTS      = HEROES &cup; MAPS &cup; META
-STRATEGIES = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS
-COMP       = ARGMAX[ STRATEGIES( FACTS ) ]</pre>
-<p><b>FACTS</b> is the authoritative data, and only that: what is pulled from the sources and set
+<pre class='eq'>DATA        = HEROES &cup; MAPS &cup; META
+INDEPENDENT = &#8899; facts(s)     over each selection s
+DEPENDENT   = &#8899; facts(s &#8904; t) over the intersections of selections
+FACTS       = INDEPENDENT &cup; DEPENDENT
+STRATEGIES  = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS
+COMP        = ARGMAX[ STRATEGIES( FACTS ) ]</pre>
+<p><b>DATA</b> is the authoritative data, and only that: what is pulled from the sources and set
 in the database. <b>HEROES</b> are the kits - roles, subroles, health pools, every ability with its
 published numbers, who counters whom, which pairs work together. <b>MAPS</b> are the pool - the
 mode, the stages, whether a map has sides, and the authored note on what kind of fight it
 rewards. <b>META</b> is the record - win, pick and ban rates per hero, per map, per rank, captured
-as dated snapshots, plus the patches that shipped since. On one board (a map, a side, red's
-picks, yours, the bans) the facts are numbered F1, F2, ... and every claim the board makes cites
-them.</p>
+as dated snapshots, plus the patches that shipped since.</p>
+<p><b>FACTS</b> is what the fact engine derives from that data for one board - a map, a side,
+red's picks, yours, the bans - in two kinds. The <b>independent variables</b> are each selection
+alone: a hero's kit and rates, the map's mode and what it rewards, the meta's vintage. Each is
+read from one table, keyed by the selection, and no other selection changes it. The
+<b>dependent variables</b> are what only an intersection can say, and each is a join: the hero on
+this map (heroes &#8904; map_meta &#8904; maps), the hero against each enemy and beside each ally
+(heroes &#8904; counters &#8904; heroes, heroes &#8904; synergies &#8904; heroes), the team as one
+thing (an aggregate over your picks), the matchup (the two aggregates compared), and the bans
+(a banned hero joined with both teams' counters). Every selection you add opens new
+intersections, and the engine derives every fact they support - so a board with nothing on it
+has only the meta's facts, and a full board has about a thousand. The facts are numbered F1,
+F2, ... and every claim the board makes cites them; the numbers a strategy reads are the
+dependent variables.</p>
 <p><b>STRATEGIES</b> is the playbook: markdown files, one per strategy, in three kinds.
 A <b>constraint</b> is a limit the comp may not cross (at most two tanks), a scored adjustment
 (a bonus or a penalty when a condition holds), or a ground rule in prose. A <b>heuristic</b> is a
