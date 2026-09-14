@@ -46,14 +46,15 @@ files through `strategies` first, then bring the inputs to the standard.
 - **Category:** one of the catalog's - matchup, sustain, damage,
   durability, shape, map, side, tempo, synergy, meta, uncertainty,
   assumptions - chosen from what the prose is about.
-- **Prose:** two to five sentences in this order. The claim, in one
-  sentence, present tense, about the game not the engine. Why it is true,
-  in the game's terms - kits, ranges, cooldowns, maps, roles. When it
-  applies and when it does not. What is measured for it, in words ("read
-  from the kits' keywords", "up to three peel tools are rewarded"). Plain
-  grammar, third person, no hedging, no "I think", hero names spelled as
-  the roster spells them, numbers as digits with their units. Keep the
-  colleague's meaning exactly; sharpen the words, never the claim.
+- **Prose:** three sentences at most - the user's rule, and the
+  `add_strategy` tool refuses more. In order: the claim, present tense,
+  about the game not the engine; why it is true and when it applies, in
+  the game's terms - kits, ranges, cooldowns, maps, roles; what is
+  measured for it, in words ("read from the kits' keywords", "up to
+  three peel tools are rewarded"). Plain grammar, third person, no
+  hedging, no "I think", hero names spelled as the roster spells them,
+  numbers as digits with their units. Keep the colleague's meaning
+  exactly; sharpen the words, never the claim.
 
 Show the standardized three side by side with what they gave, with one
 line naming what you changed and why ("two sentences merged; 'CC' spelled

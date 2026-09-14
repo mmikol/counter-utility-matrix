@@ -49,6 +49,9 @@ The share of revealed enemies at least one of our picks answers...
 | assumption | | nothing - prose by definition | nothing - what the solver takes as given and the agent holds a comp to; shown on the board and read by the session |
 | constraint or heuristic | draft | name, kind and prose only | nothing yet - shown and served, ignored by the solver, until `/strategy` infers the rest or turns it into an assumption |
 
+A strategy's prose is three sentences at most (`add_strategy` refuses
+more): the claim, why and when, what is measured.
+
 **The solver does not infer a formula or a weight from prose; a model
 does - the `/strategy` skill on command, or the engine on its own through
 `derive.py`.** The skill: you give it three things - a name,

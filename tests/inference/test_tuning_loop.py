@@ -23,6 +23,24 @@ def catalog_copy(tmp_path):
 
 # --- tuning --------------------------------------------------------------------------
 
+def test_a_strategy_is_three_sentences_at_most(catalog_copy):
+    """The user's rule: the add tool refuses a fourth sentence, counts a code
+    span as one token and the title line as none, and the from-scratch
+    playbook's own files keep to it."""
+    assert tune.sentences("# Title\n\nOne. Two! Three?") == 3
+    assert tune.sentences("One `require: a == 2.` two.") == 1
+    assert tune.sentences("One (as noted). Two \"quoted.\" Three.") == 3
+    with pytest.raises(tune.TuneError, match="at most 3 sentences"):
+        tune.add("four-sentences", "Four sentences", "assumption",
+                 "One. Two. Three. Four.", directory=catalog_copy)
+    added = tune.add("three-sentences", "Three sentences", "assumption",
+                     "One. Two. Three.", directory=catalog_copy)
+    assert added["form"] == "assumption"
+    scratch = os.path.join("inference", "experiments", "from-scratch")
+    for h in catalog.load(scratch):
+        assert tune.sentences(h.body) <= tune.MAX_SENTENCES, h.id
+
+
 def test_tune_edits_validates_mirrors_and_logs(catalog_copy):
     change = tune.tune("coverage", "weight", 3.5, "test: more coverage", catalog_copy)
     assert change["old"] == "3" and change["new"] == "3.5"

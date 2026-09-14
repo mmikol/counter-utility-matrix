@@ -231,6 +231,17 @@ def complete(hid, fields, reason, directory=None, by="claude-code-session", log_
             "line": line}
 
 
+MAX_SENTENCES = 3          # the user's rule: a strategy's description is three sentences at most
+_SENTENCE_END = re.compile(r"[.!?](?:[\"')\]`]*)(?:\s|$)")
+
+
+def sentences(body):
+    """How many sentences the prose holds - the title line and code spans aside."""
+    text = "\n".join(line for line in (body or "").splitlines() if not line.startswith("#"))
+    text = re.sub(r"`[^`]*`", "code", text)                 # `require: a == 2.` is one token
+    return len(_SENTENCE_END.findall(text.strip()))
+
+
 def add(hid, name, kind, body, fields=None, reason="", directory=None,
         by="claude-code-session", log_path=None, category="general"):
     """A new strategy file from its name, kind, prose and (inferred) fields,
@@ -244,6 +255,9 @@ def add(hid, name, kind, body, fields=None, reason="", directory=None,
         raise TuneError("a strategy needs a name and its prose")
     if len(name) > 120 or len(body) > 20000:
         raise TuneError("a strategy is a name under 120 characters and prose under 20,000")
+    if sentences(body) > MAX_SENTENCES:
+        raise TuneError("a strategy's prose is at most %d sentences; this has %d"
+                        % (MAX_SENTENCES, sentences(body)))
     path = os.path.join(directory, hid + ".md")
     if os.path.exists(path):
         raise TuneError("%r exists; tune or infer_strategy changes it, delete is a human's" % hid)

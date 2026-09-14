@@ -15,3 +15,4 @@ Every change to a strategy's frontmatter, newest last: when, what, why, and who.
 - 2026-09-14T18:48Z `healing-covers-the-team` weight: 1.5 -> 1 (stored from the board's slider) [the board]
 - 2026-09-14T18:56Z `healing-covers-the-team` removed (the user asked for it to go: the playbook keeps the two-tank limit and the flier cover, and gains the optimal-play assumption) [claude-code-session]
 - 2026-09-14T18:56Z `optimal-play` added as assumption/assumption (the user asked for the assumption that all players play optimally) [claude-code-session]
+- 2026-09-14T19:02Z `open-queue-tanks`, `fliers-need-cover`, `optimal-play` prose trimmed to three sentences (the user's rule: a strategy's description is three sentences at most) [claude-code-session]

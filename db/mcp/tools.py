@@ -651,7 +651,8 @@ STRATEGY_FIELDS = {
 @tool("add_strategy", "Store a new strategy in inference/strategies/ from its name,"
       " kind and prose plus the frontmatter /strategy inferred - a heuristic's"
       " metric/direction/weight, or a constraint's require or when/bonus/penalty"
-      " and params,; an assumption is prose and needs nothing. Validated through the"
+      " and params; an assumption is prose and needs nothing. The prose is three"
+      " sentences at most. Validated through the"
       " catalog before the file exists, mirrored into the database, logged."
       " Left with nothing inferred it lands as a draft the solver ignores.",
       dict({"id": {"type": "string", "description": "lowercase-kebab, becomes the filename"},
