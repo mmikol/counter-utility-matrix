@@ -47,7 +47,7 @@ connected; they expose the same tools.
    `strategies` tool or as MCP resources): constraints (a limit, a scored
    adjustment, or prose), heuristics (a weighted metric) and assumptions
    (prose, taken as given). The prose constraints are the ground
-   constraints.
+   rules.
 4. Decide - you are the agent in COMP = ARGMAX[ STRATEGIES( FACTS ) ],
    where STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS:
    the solver's optimum is the straw man, and your job is to reconcile the

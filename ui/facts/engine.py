@@ -3,7 +3,7 @@
     generate(world, "King's Row", red=["Zarya", "Pharah"], blue=["Ana"])
 
     FACTS      = HEROES ∪ MAPS ∪ META         F1..  the authoritative data
-    STRATEGIES = CONSTRAINTS ∪ HEURISTICS     the playbook, inference/strategies/
+    STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS   the playbook, inference/strategies/
     (the playbook's record)                   S1..  what it holds, decided and saw
 
 FACTS are the authoritative data - what the sources say about the heroes,
@@ -714,7 +714,7 @@ def _playbook_record(fs, world, m):
     if world.catalog_counts:
         c = world.catalog_counts
         fs.add(scope, "catalog", "playbook.catalog",
-               "the playbook holds %d constraints and %d heuristics"
-               " (STRATEGIES = CONSTRAINTS ∪ HEURISTICS)"
-               % (c.get("constraint", 0), c.get("heuristic", 0)),
+               "the playbook holds %d constraints, %d heuristics and %d assumptions"
+               " (STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS)"
+               % (c.get("constraint", 0), c.get("heuristic", 0), c.get("assumption", 0)),
                value=c, source="strategies")

@@ -16,7 +16,7 @@
 DROP TABLE strategies;
 
 -- The mirror of the playbook: one row per markdown file in
--- inference/strategies/ - its kind (constraint | heuristic), the frontmatter
+-- inference/strategies/ - its kind (constraint | heuristic | assumption, the last added by 013), the frontmatter
 -- a machine scores by (metric, direction, weight, expressions, params) and
 -- the prose body a person argues with. Reloaded whole by load_authored so a
 -- recommendation can cite the ids it was scored under; the files remain the

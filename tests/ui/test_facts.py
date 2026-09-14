@@ -161,4 +161,4 @@ def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_ap
     divider = text.index(engine.PLAYBOOK_DIVIDER)
     assert text.index("[S1]") > divider > text.index("[F%d]" % len(facts))
     catalog_note = next(f.text for f in side if f.key == "playbook.catalog")
-    assert "STRATEGIES = CONSTRAINTS ∪ HEURISTICS" in catalog_note
+    assert "STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS" in catalog_note

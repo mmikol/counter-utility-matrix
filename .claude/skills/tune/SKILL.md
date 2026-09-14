@@ -4,7 +4,7 @@ description: Change how Counter Utility Matrix's inference engine scores composi
 ---
 
 You are editing the brain: the playbook in `inference/strategies/` - constraints
-and heuristics, STRATEGIES = CONSTRAINTS ∪ HEURISTICS; a constraint is a limit (`require`), a
+and heuristics, STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS; a constraint is a limit (`require`), a
 scored adjustment (`bonus`/`penalty`) or prose. Every change goes through the `tune`
 tool on the `counter-utility-matrix` (or `counter-utility-matrix-docker`) MCP server, which
 validates it against the catalog, writes the file, re-mirrors the table,

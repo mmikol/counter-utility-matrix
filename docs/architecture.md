@@ -4,7 +4,7 @@ Three layers over one database, each a folder at the root, each with its own doc
 
 ```
 FACTS      = HEROES ∪ MAPS ∪ META             the data layer's term: pulled from the sources and set
-STRATEGIES = CONSTRAINTS ∪ HEURISTICS         the inference layer's: a markdown playbook, tuned by history
+STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS   the inference layer's: a markdown playbook, tuned by history
 COMP       = ARGMAX[ STRATEGIES( FACTS ) ]    what the board shows: the solver searches, the agent argues
 ```
 
@@ -84,7 +84,7 @@ The equation the whole repo serves:
 
 ```
 FACTS      = HEROES ∪ MAPS ∪ META             the authoritative data: pulled from the sources and set
-STRATEGIES = CONSTRAINTS ∪ HEURISTICS         the playbook: markdown files, tuned by what history shows
+STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS   the playbook: markdown files, tuned by what history shows
 COMP       = ARGMAX[ STRATEGIES( FACTS ) ]    constraints limit, adjust or instruct; heuristics weigh;
                                               the agent argues
 ```
@@ -98,7 +98,7 @@ is a limit (`require`, hard unless soft), a scored adjustment
 (`bonus`/`penalty` while `when` holds) or prose the agent holds a comp to;
 a *heuristic* weighs a metric, maximised or minimised; an *assumption* is
 prose taken as given, shown and never scored. The tuning log is not a
-term: it is the history of the weights. The user layer numbers the facts
+term: it is the history of the weights. The UI layer numbers the facts
 F1.. and carries the playbook's record (the archetypes, the catalog's
 shape) below them as S1.. so both are citable and neither is mistaken for
 the other, or for the strategies themselves.
@@ -120,7 +120,7 @@ a stated problem, a lobby's habits, a patch the rates predate.
 | `pyproject.toml` | ruff's rules (line length 100); the coverage bar, 75% where a database exists |
 | `pytest.ini` | the `invariant` marker for tests that need a built database |
 | `SECURITY.md` | the terms - you run it at your own risk, no security commitment from the author - and how to report a vulnerability privately; the measures themselves are in [security.md](security.md) |
-| `LICENSE` | PolyForm Strict 1.0.0: noncommercial use only, no redistribution, no changes or new works; anything else needs a separate license from the author | |
+| `LICENSE` | PolyForm Strict 1.0.0: noncommercial use only, no redistribution, no changes or new works; anything else needs a separate license from the author |
 | `.gitignore` `.dockerignore` | the caches, the cluster, the mirror, the venv, `.env` |
 
 ## Deployment
@@ -132,7 +132,7 @@ flowchart LR
         BROWSER["browser"]
         SHELL["./docker-db<br/>DATABASE_URL -> :5433"]
     end
-    subgraph DOCKER["docker compose (one image, five containers)"]
+    subgraph DOCKER["docker compose (one image, six containers, plus postgres)"]
         DATA["data - DATA LAYER<br/>builds when empty or stale,<br/>then MCP over HTTP :8020/mcp"]
         INF["inference - INFERENCE ENGINE<br/>:8019 infer · evaluate ·<br/>board · strategies"]
         UI["ui - UI LAYER<br/>:8017 the board<br/>facts in-process,<br/>comps via INFERENCE_URL"]
@@ -155,7 +155,7 @@ The containers share one network; only `data` and `refresher` ever open
 a connection out. [security.md](security.md) has the rest of the measures.
 
 `docker-entrypoint.sh` takes the role as its argument (`data`,
-`inference`, `ui`); `inference` and `ui` wait until the data layer reports
+`inference`, `ui`, `refresh`, `sentry`); the others wait until the data layer reports
 the database current, and compose's healthchecks order the start the same
 way. Bind mounts keep the page caches, `db/raw`, `db/data/authored` and
 `inference/strategies/` on the host, so tuning a strategy or authoring a

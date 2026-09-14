@@ -47,7 +47,7 @@ the script has no constant to keep in step with the Python.
 | --- | --- |
 | `/` | the board: map selector, attack/defense switch (Escort and Hybrid maps), the bans bar (a collapsible picker of the same portrait tiles, up to five, all optional), the red and blue rosters grouped by role with the announced hero at the end, and three panels - **comps**, **facts**, **playbook** |
 | `/static/<file>` | `board.css` and `board.js` |
-| `/api/roster` | every hero (role, subrole, portrait, icon) and every map (mode, sided or not), the rosters are built from |
+| `/api/roster` | every hero (role, subrole, portrait, icon) and every map (mode, sided or not) - what the rosters are built from |
 | `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
 | `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, the momentum verdict and the game plan - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
 | `/api/strategies` | the strategies catalog: every constraint and heuristic with its kind, form, frontmatter and body |

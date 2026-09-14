@@ -8,7 +8,7 @@ Bring everything up and prove it is ready. Run, from the repo root:
     python orchestrator.py up          # or `python orchestrator.py` to also run the agents
 
 It builds the one image, starts one container per layer (`db`, `data`,
-`inference`, `ui`, `refresher`), waits for each layer's health, and prints
+`inference`, `ui`, `refresher`, `sentry`), waits for each layer's health, and prints
 a verdict. A first build scrapes the sources once (minutes); later starts
 take seconds. Then:
 

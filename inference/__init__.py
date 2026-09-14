@@ -1,6 +1,6 @@
 """The INFERENCE LAYER: facts in, the optimal composition out.
 
-    strategies/   the brain - STRATEGIES = CONSTRAINTS ∪ HEURISTICS: one markdown
+    strategies/   the brain - STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS: one markdown
                   file per strategy, of two kinds. A constraint is a limit
                   (require: must hold), a scored adjustment (bonus/penalty
                   while a condition holds) or prose the agent holds a comp

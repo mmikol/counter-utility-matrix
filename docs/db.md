@@ -19,8 +19,8 @@ a shell calls them the same way:
 .venv/bin/python -m db.mcp call pull_rates '{"refresh": true}'
 ```
 
-There is no orchestrator, no per-module script, and nothing to keep in
-step with the tools.
+The root's `orchestrator.py` drives the same tools for the whole stack;
+there is no per-module script and nothing to keep in step with the tools.
 
 ## Layout
 
@@ -84,16 +84,16 @@ The servers, the transport and the full tool reference are in
 | file | purpose |
 | --- | --- |
 | `server.py` | A dependency-free MCP server: JSON-RPC over stdio, and the same surface over Streamable HTTP (`POST /mcp`, `GET /health`). `initialize`, `tools/list`, `tools/call`, `resources/*`. Dependency-free so the door has nothing to audit but its own few hundred lines. |
-| `tools.py` | The tools. `pull_*` (one source and domain each), `load_authored`, `sync_all`; the database's life (`db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, read-only `query`); and, through the same door, the user and inference layers' tools (`roster`, `facts`, `infer`, `evaluate`, `board`, `strategies`, `metrics`, `add_strategy`, `infer_strategy`, `derive_strategies`, `tune`, `tuning_log`). The strategies are also served as `strategy://` resources. |
+| `tools.py` | The tools. `pull_*` (one source and domain each), `load_authored`, `sync_all`; the database's life (`db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, read-only `query`); and, through the same door, the UI and inference layers' tools (`roster`, `facts`, `infer`, `evaluate`, `board`, `strategies`, `metrics`, `add_strategy`, `infer_strategy`, `derive_strategies`, `tune`, `tuning_log`). The strategies are also served as `strategy://` resources. |
 | `__main__.py` | `python -m db.mcp` serves over stdio (what `.mcp.json` launches); `--http HOST:PORT` serves over HTTP (the `data` container); `list` and `call NAME [JSON]` are the shell. |
 
 ### `psql/` - the database
 
 | file | purpose |
 | --- | --- |
-| `__init__.py` | Where the database is (`DATABASE_URL`, or the embedded cluster at `db/cluster`); how a source registers the `sources` row its rows carry; how names look up ids; what a capture is stamped with (now, the current patch and season); the CSV export and its `EXPORT.json` mark naming the database it came from. Knows no particular source or table. |
+| `__init__.py` | Where the database is (`DATABASE_URL`, or the embedded cluster at `db/psql/cluster`); how a source registers the `sources` row its rows carry; how names look up ids; what a capture is stamped with (now, the current patch and season); the CSV export and its `EXPORT.json` mark naming the database it came from. Knows no particular source or table. |
 | `schema.py` | Applies migrations and records them in the `schema_migrations` ledger; `pending` says which files the database has not seen; `rebuild` drops everything and reapplies; `generate_docs` writes the ER diagrams and the data dictionary at the end of this document from the live schema. |
-| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` outcomes (dropped by `014`), `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
+| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` outcomes (dropped by `014`), `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `014` the recorded tables dropped, `015` announced heroes. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
 | `cluster/` | The embedded Postgres cluster `pgserver` creates on first touch (gitignored). The compose stack uses its own `postgres` container instead, reachable from the host through `./docker-db`. |
 
 ### `data/authored/` - what we write
@@ -114,8 +114,8 @@ folder's own `__init__.py`.
   snapshots; loading recomputes `season_id` on every snapshot.
 
 There are no free-form notes here. A note that should shape a comp is a
-prose constraint in `inference/strategies/` - the playbook holds two kinds of
-file, constraints and heuristics, and nothing else - where it is shown on the board,
+prose constraint in `inference/strategies/` - the playbook holds three kinds of
+file, constraints, heuristics and assumptions, and nothing else - where it is shown on the board,
 read by the `/comp` session, and tuned and logged with the rest.
 
 All follow the same contract: committed, whole-truth on reload, loud errors
@@ -147,7 +147,7 @@ other database.
 `sync_all` runs the pulls in dependency order - `blizzard.heroes`,
 `wiki.heroes`, `wiki.maps`, `wiki.patches`, `blizzard.meta`,
 `wiki.playstyles`, `counterpick.heroes` - then `load_authored`, then
-`restore`, then `export_csv`. Entity tables refresh in place; each rates
+`export_csv`. Entity tables refresh in place; each rates
 pull appends a dated snapshot, the series the trend facts difference. The
 page caches (`.cache-blizzard/`, `.cache-wiki/`, `.cache-counterpick/` at
 the repo root) make every build after the first cost almost no requests.
@@ -194,7 +194,7 @@ stateDiagram-v2
 ```
 
 `python -m db.mcp call <tool>` runs the same tools without a session;
-Docker's `data` container runs `rebuild` on an empty or stale database and
+Docker's `data` container runs `db_rebuild` on an empty or stale database and
 the `refresher` container refreshes once a day (and on start when the
 cached pages are older than a day): the daily refresh refetches the rates
 and the counters and re-mirrors the playbook and the strategies; once the
@@ -218,7 +218,7 @@ flowchart TD
 
 ## Widening the meta's granularity
 
-Everything here is about the *fact* tables — the ones holding rates and
+Everything here is about the *fact* tables - the ones holding rates and
 playbook rows. Hero kits, weapons, maps and modes have no such dimensions: a
 cooldown is a cooldown in every region, on every platform, at every rank.
 
@@ -226,7 +226,7 @@ cooldown is a cooldown in every region, on every platform, at every rank.
 
 **A rebuild drops the database and reapplies the migrations from scratch,**
 and the migrations ledger makes the Docker entrypoint do the same the moment
-the files change. So adding a dimension is never a data migration — there is
+the files change. So adding a dimension is never a data migration - there is
 no data to migrate. It is an edit to `psql/migrations/004_meta.sql`, an edit to `pull_rates`,
 and a refetch.
 
@@ -237,27 +237,28 @@ the request count, and it is multiplicative.
 
 | dimension | column exists? | populated today | to widen it |
 | --- | --- | --- | --- |
-| tier — `hero_meta` | yes | 9 ranks | already there |
-| tier — `map_meta` | yes | all-ranks only | restore the inner loop; ×9 requests |
-| region — `hero_meta` | yes | Americas | drop the region pin; ×3 requests |
-| region — `map_meta` | yes | Americas | drop the region pin; ×3 requests |
+| tier - `hero_meta` | yes | 9 ranks | already there |
+| tier - `map_meta` | yes | all-ranks only | restore the inner loop; ×9 requests |
+| region - `hero_meta` | yes | Americas | drop the region pin; ×3 requests |
+| region - `map_meta` | yes | Americas | drop the region pin; ×3 requests |
 | platform | as `meta_snapshots.platform` | Console | fetch `input=PC` too; ×2 requests |
 | input device | yes | controller (entailed by console) | a source that splits PC by device (see below) |
 | map stage | `map_stages` 36 rows | stage list loaded | a source with per-stage rates (see below) |
-| any — PLAYBOOK tables | deliberately none | — | judgements are tier- and region-agnostic by design: a current read of the game, not a measurement of a population. Dimensioned numbers live in META |
+| any - PLAYBOOK tables | deliberately none | - | judgements are tier- and region-agnostic by design: a current read of the game, not a measurement of a population. Dimensioned numbers live in META |
 
 ### The two that are not merely unfetched
 
 **Input device is not the same as platform**, and only one of them is
-published. Blizzard's filter offers `PC` and `Console` — a platform. It says
+published. Blizzard's filter offers `PC` and `Console` - a platform. It says
 nothing about whether that player held a controller or a mouse, and both
-platforms support both. A `input` dimension would need a source that actually
-separates them; none of the three does. The column is deliberately absent
-rather than filled with a guess inferred from platform.
+platforms support both. `meta_snapshots.input` therefore carries the one
+value the pin entails - `controller`, because the project pins console - and
+a real split would need a source that actually separates the two; none of
+the three does.
 
 **Map stages exist; per-stage rates do not.** The stage list itself is now
-loaded — 36 stages across the ten Control and Flashpoint maps, read from each
-map's wiki article — so `map_stages` is populated and `map_meta.stage_id` has
+loaded - 36 stages across the ten Control and Flashpoint maps, read from each
+map's wiki article - so `map_stages` is populated and `map_meta.stage_id` has
 a real vocabulary to point at. What is still missing is any source that
 reports rates *per stage*: Blizzard's map filter stops at whole maps, so every
 `map_meta` row keeps `stage_id` NULL until someone publishes
@@ -285,10 +286,9 @@ and Grandmaster on a single map, which the all-ranks figure averages away.
 
 ### Every dimension now has a column
 
-There is no longer a dimension that needs a migration to add — only data to
-put in one. Two are empty because nothing publishes them:
-`meta_snapshots.input` and `map_meta.stage_id` are both NULL on every
-row, and `map_stages` has no rows at all. The rest carry a real value that
+There is no longer a dimension that needs a migration to add - only data to
+put in one. One is empty because nothing publishes it:
+`map_meta.stage_id` is NULL on every row. The rest carry a real value that
 used to be implicit: `map_meta.region_id` says Americas rather than
 leaving it to be inferred from the database as a whole, the playbook tables
 say all-ranks rather than leaving rank unstated, and `meta_snapshots.input`
@@ -861,7 +861,7 @@ The stat vocabulary. `unit` is the canonical unit for the stat, used when a valu
 
 *INFERENCE · `010_constraints_and_heuristics.sql`*
 
-The mirror of the playbook: one row per markdown file in inference/strategies/ - its kind (constraint | heuristic), the frontmatter a machine scores by (metric, direction, weight, expressions, params) and the prose body a person argues with. Reloaded whole by load_authored so a recommendation can cite the ids it was scored under; the files remain the truth.
+The mirror of the playbook: one row per markdown file in inference/strategies/ - its kind (constraint | heuristic | assumption, the last added by 013), the frontmatter a machine scores by (metric, direction, weight, expressions, params) and the prose body a person argues with. Reloaded whole by load_authored so a recommendation can cite the ids it was scored under; the files remain the truth.
 
 | column | type | null | references |
 | --- | --- | --- | --- |

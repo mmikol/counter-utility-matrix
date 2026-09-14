@@ -256,7 +256,7 @@ A <b>constraint</b> is a limit the comp may not cross (at most two tanks), a sco
 (a bonus or a penalty when a condition holds), or a ground rule in prose. A <b>heuristic</b> is a
 metric to push in a direction with a weight: effective HP up, exposure down, cohesion up.
 An <b>assumption</b> is prose by definition - what the model takes as given (players play
-optimally; rates are role queue on console) - shown with every result and never scored. A
+optimally; rates are Role Queue on console) - shown with every result and never scored. A
 strategy is written as a name, a kind and a paragraph; the formula, the metric and the weight
 are inferred from that and stored in the same file.</p>
 <p><b>COMP</b> is the argmax: of every legal six under the constraints, the one the weighted

@@ -468,8 +468,8 @@ def _plan(world, m, side, bans, red_h, blue_r):
         them = "Their %d pick%s%s (%s)" % (n, "" if n == 1 else "s",
                                             " so far" if n < TEAM_SIZE else "",
                                             ", ".join(h.name for h in red_h))
-        them += (" lean %s: %s." % (red_lean, THEIR_LEAN[red_lean])) if red_lean in THEIR_LEAN \
-            else " show no lean yet."
+        them += (" lean%s %s: %s." % ("s" if n == 1 else "", red_lean, THEIR_LEAN[red_lean])) \
+            if red_lean in THEIR_LEAN else " show%s no lean yet." % ("s" if n == 1 else "")
         answered = {}
         for p in blue_r.picks:
             for part in p["why"].split("; "):

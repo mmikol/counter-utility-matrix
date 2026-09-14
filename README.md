@@ -26,7 +26,7 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 That is the whole run: the stack comes up (one container per layer; the
 first time, the data container pulls every source and builds the database
-- a few polite minutes), the agents run headless on the `/refresh` skill
+- a few minutes, at a pace the sources can bear), the agents run headless on the `/refresh` skill
 (refresh the data, derive draft strategies, regenerate the docs), and the
 app is left running:
 
@@ -78,6 +78,6 @@ lists - and the hero portraits remain their owners'.
 - [docs/db.md](docs/db.md) - the DATA LAYER: the sources, the MCP tools, the schema with its ER diagrams and data dictionary, the refresh, the mirror
 - [docs/ui.md](docs/ui.md) - the UI LAYER: the board, its endpoints, the facts behind it
 - [docs/inference.md](docs/inference.md) - the INFERENCE LAYER: the strategy files, the solver, the tuning loop, the deriver, the catalog
-- [docs/skills.md](docs/skills.md) - the six skills a Claude Code session runs here: what each takes, does, and refuses
+- [docs/skills.md](docs/skills.md) - the nine skills a Claude Code session runs here: what each takes, does, and refuses
 - [docs/mcp.md](docs/mcp.md) - the two MCP servers and every tool they expose
 - [docs/security.md](docs/security.md) - the threat model and what stands in the way: prompt injection, the door, SQL, files, the containers, the sentry

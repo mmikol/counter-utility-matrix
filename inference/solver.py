@@ -3,7 +3,7 @@
     enumerate  every shape the hard limits allow, filled around the
                locked picks from a per-role pool ranked by a cheap prior
                (six per role by default)
-    score      STRATEGIES = CONSTRAINTS ∪ HEURISTICS: limits prune (soft ones charge),
+    score      STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS: limits prune (soft ones charge),
                heuristics normalise and weigh, scored constraints add; prose constraints are
                the agent's. Heuristics are normalised against a REFERENCE:
                a seeded sample of random legal sixes for this board (map,

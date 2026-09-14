@@ -562,9 +562,10 @@ def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6):
     return engine.board_rendered(b), engine.board_dict(b)
 
 
-@tool("strategies", "The inference layer's catalog - STRATEGIES = CONSTRAINTS ∪ HEURISTICS:"
-      " every markdown strategy with its kind (constraint or heuristic), a constraint's form"
-      " (limit, scored, prose), metric, direction, weight and expressions.")
+@tool("strategies", "The inference layer's catalog - STRATEGIES = CONSTRAINTS ∪ HEURISTICS"
+      " ∪ ASSUMPTIONS: every markdown strategy with its kind (constraint, heuristic or"
+      " assumption), a constraint's form (limit, scored, prose), metric, direction, weight"
+      " and expressions.")
 def strategies_tool(ctx):
     from inference import catalog
     cat = catalog.load()

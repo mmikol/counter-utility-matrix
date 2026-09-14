@@ -193,7 +193,7 @@ function renderFacts() {
     if (f && (x.id + ' ' + x.key + ' ' + x.subject + ' ' + x.text).toLowerCase().indexOf(f) < 0) return;
     var head = x.scope === 'hero' ? (x.team + ' · ' + x.subject) : x.scope === 'team' ? (x.subject + ' team') : x.scope;
     if (x.scope === 'bans') head = 'bans';
-    if (x.scope === 'playbook') head = 'the playbook’s record · what it holds — not facts';
+    if (x.scope === 'playbook') head = 'the playbook\'s record · what it holds - not facts';
     if (head !== last) { out += "<tr class='h'><td colspan='3' class='head'>" + esc(head) + '</td></tr>'; last = head; }
     var cls = (x.team || '') + (/^(WARNING|CAUTION)/.test(x.text) ? ' warn' : '') + (x.source.indexOf('derived:') === 0 ? ' derived' : '');
     out += "<tr class='" + cls + "'><td class='tag'>[" + x.id + "]</td><td class='text'>" + esc(x.text) + "</td><td class='src'>" + esc(x.source) + '</td></tr>';
@@ -210,7 +210,7 @@ function bars(contribs) {
     var detail = c.form === 'heuristic' ? (c.applies ? c.metric + ' = ' + (typeof c.raw === 'number' ? +c.raw.toFixed(2) : c.raw) + ' · norm ' + (+c.norm).toFixed(2) : 'not applicable here')
                : c.form === 'scored' ? (c.applies ? 'bonus ' + c.bonus + ' − penalty ' + c.penalty : 'condition not met')
                : (c.ok ? 'limit satisfied' : 'limit VIOLATED');
-    out += "<div class='bar" + ((c.weighted || 0) < 0 ? ' neg' : '') + (c.applies === false ? ' off' : '') + "' title=\"" + esc(detail + (c.text ? ' — ' + c.text : '')) + "\"><span class='lbl'>" + esc(c.id) + (c.fact ? " <span class='ev'>" + c.fact + '</span>' : '') + "</span><span class='trk'><span class='fill' style='width:" + w.toFixed(1) + "%'></span></span><span class='val'>" + ((c.weighted || 0) >= 0 ? '+' : '') + (+(c.weighted || 0)).toFixed(2) + '</span></div>';
+    out += "<div class='bar" + ((c.weighted || 0) < 0 ? ' neg' : '') + (c.applies === false ? ' off' : '') + "' title=\"" + esc(detail + (c.text ? ' - ' + c.text : '')) + "\"><span class='lbl'>" + esc(c.id) + (c.fact ? " <span class='ev'>" + c.fact + '</span>' : '') + "</span><span class='trk'><span class='fill' style='width:" + w.toFixed(1) + "%'></span></span><span class='val'>" + ((c.weighted || 0) >= 0 ? '+' : '') + (+(c.weighted || 0)).toFixed(2) + '</span></div>';
   });
   return out + '</div>';
 }
@@ -282,7 +282,7 @@ function renderResult(d, container, title) {
     d.strategies.constraint + ' constraints, ' + d.strategies.heuristic + ' heuristics' +
     (d.playstyle ? ' · leans ' + d.playstyle : '') + '</span>' +
     '</div>';
-  if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search’s field</div>';
+  if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search\'s field</div>';
   if (d.violations && d.violations.length) out += "<div class='warnbox'>violates: " + esc(d.violations.join(', ')) + '</div>';
   out += "<div class='comp'>";
   d.picks.forEach(function (p) {
@@ -293,7 +293,7 @@ function renderResult(d, container, title) {
   });
   out += '</div>' + bars(d.contributions || []);
   if (d.alternatives && d.alternatives.length) {
-    out += "<div class='alts'><b>" + (d.kind === 'infer' ? 'alternatives' : 'the field’s best') + "</b><ol>" +
+    out += "<div class='alts'><b>" + (d.kind === 'infer' ? 'alternatives' : 'the field\'s best') + "</b><ol>" +
       d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + ' ' + altScore(a) + '</li>'; }).join('') + '</ol></div>';
   }
   container.innerHTML = out;
