@@ -251,8 +251,6 @@ def view_board():
             " title='open or close the ban picker'>"
             "<h3>bans</h3><span class='bancount' id='bancount'>"
             "</span><span class='banmini' id='banmini'></span>"
-            "<span class='hint'>up to five, all optional: each team's two and the lobby's -"
-            " a banned hero leaves both rosters and the search</span>"
             "<span class='caret'>&#9656;</span></div>"
             "<div class='banbody' id='banbody'><div class='slots' id='banslots'></div>"
             "<div class='roles' id='banroster'></div></div></div>"

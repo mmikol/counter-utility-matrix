@@ -21,6 +21,7 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     facts_panel = body[body.index("id='tab-facts'"):body.index("id='tab-playbook'")]
     assert "id='factsn' class='count'" in facts_panel
     assert "recorded" not in body
+    assert "up to five, all optional" not in body            # the bans bar carries no hint
     assert "record this comp" not in board.static_file("board.js")[0].decode()
     assert "FACTS = HEROES" not in body                              # the equation moved to /math
     assert "href='/math'" in body and "id='captured'" in body

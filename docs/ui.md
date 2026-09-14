@@ -62,7 +62,7 @@ the script has no constant to keep in step with the Python.
 
 | route | serves |
 | --- | --- |
-| `/` | the board: map selector, attack/defense switch (Escort and Hybrid maps), the bans bar (a collapsible picker of the same portrait tiles, up to five, all optional), the red and blue rosters grouped by role with the announced hero at the end, and three panels - **comps**, **facts**, **playbook** |
+| `/` | the board: map selector, attack/defense switch (Escort and Hybrid maps), the bans bar (a collapsible picker of the same portrait tiles - no hint text, just the count and the banned faces - up to five, all optional), the red and blue rosters grouped by role with the announced hero at the end, and three panels - **comps**, **facts**, **playbook** |
 | `/static/<file>` | `board.css` and `board.js` |
 | `/api/roster` | every hero (role, subrole, portrait, icon) and every map (mode, sided or not) - what the rosters are built from |
 | `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
