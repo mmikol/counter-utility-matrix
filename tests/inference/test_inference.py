@@ -222,6 +222,52 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
 
 
 @pytest.mark.invariant
+def test_weights_override_a_heuristic_for_one_board_and_never_the_file():
+    """The playbook tab's sliders: `id:value` strings or a mapping become
+    weights clamped to the file's range; the catalog's heuristic carries the
+    override in a copy, the loaded one and its file are untouched, and a
+    constraint or an unknown id is ignored."""
+    parsed = catalog.parse_weights(["a:2", "b:11", "c:-1", "nonsense", "d:x"])
+    assert parsed == {"a": 2.0, "b": 10.0, "c": 0.0}
+    assert catalog.parse_weights({"a": "3.5"}) == {"a": 3.5}
+    cat = catalog.load()
+    heuristic = next(h for h in cat if h.kind == "heuristic")
+    limit = next(h for h in cat if h.form == "limit")
+    before = heuristic.weight
+    over = catalog.weighted(cat, {heuristic.id: 7.5, limit.id: 9, "no-such": 1})
+    assert next(h for h in over if h.id == heuristic.id).weight == 7.5
+    assert heuristic.weight == before                        # the loaded one is untouched
+    assert next(h for h in over if h.id == limit.id) is limit  # a constraint's stays its own
+    assert catalog.weighted(cat, {}) is cat and len(over) == len(cat)
+
+
+def test_the_board_scores_under_the_weights_it_is_given(world, monkeypatch):
+    """A weight set on the board changes the score, every result says the
+    weights it was scored under, and the two workers apply the same override
+    as the sequential path."""
+    from inference import engine
+    monkeypatch.setattr(engine, "PARALLEL", False)
+    plain = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"])
+    # a heuristic that actually moves this comp's score (one at the reference floor would not)
+    moving = next(c["id"] for c in plain["current"].contributions
+                  if c["kind"] == "heuristic" and c.get("weighted"))
+    heuristic = next(h for h in catalog.load() if h.id == moving)
+    weights = {heuristic.id: 10.0 if heuristic.weight < 10 else 0.5}
+    tilted = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+                          weights=weights)
+    assert tilted["current"].to_dict()["weights"][heuristic.id] == weights[heuristic.id]
+    assert plain["current"].to_dict()["weights"][heuristic.id] == heuristic.weight
+    assert tilted["current"].score != plain["current"].score
+    assert next(h for h in catalog.load() if h.id == heuristic.id).weight == heuristic.weight
+    monkeypatch.setattr(engine, "PARALLEL", True)
+    if engine.parallel_available():
+        split = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+                             weights=weights)
+        for key in ("blue", "red", "current", "red_current"):
+            assert split[key].to_dict()["weights"] == tilted[key].to_dict()["weights"]
+            assert round(split[key].score, 6) == round(tilted[key].score, 6)
+
+
 def test_a_playbook_that_scores_nothing_reads_unscored(world, monkeypatch):
     """Hard limits and prose alone tie every legal six at zero: the results
     carry no share of a best, say so, and the verdict is the one line."""

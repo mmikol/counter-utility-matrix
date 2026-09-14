@@ -155,6 +155,13 @@ def test_the_page_is_a_shell_over_static_files():
     # the playbook's shape limits hold on the roster: a capped role dims and refuses
     assert "function roleCap" in script and "' capped'" in script and "d.shapes" in script
     assert "the playbook allows at most" in script
+    # a heuristic's weight is a slider under its card; the setting rides with each request
+    assert "function weightRow" in script and "type='range' min='1' max='10' step='0.01'" in script
+    assert "type='number' class='wval' min='1' max='10' step='0.01'" in script
+    assert "q.push('weight=' + " in script and "st.weights" in script
+    assert "function setWeight" in script
+    assert "h.form === 'heuristic' ? weightRow(h)" in script     # only heuristics have weights
+    assert "d.playbook || 'inference/strategies'" in script       # the card names its folder
     # a playbook that scores nothing reads unscored, never 100 / 100
     assert "d.scoring === false" in script and "'unscored'" in script and "var UNSCORED" in script
     assert ".tile.capped" in board.static_file("board.css")[0].decode()

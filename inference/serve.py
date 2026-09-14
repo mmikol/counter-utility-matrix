@@ -70,16 +70,19 @@ def handle_board(cx, query):
     """Both seats and the current comp - what the board's two displays show."""
     map_name, red, blue, bans, side = board(query)
     pool = int((query.get("pool") or ["6"])[0])
+    weights = catalog_module.parse_weights(query.get("weight", []))
     world = model.load(cx)
     try:
-        b = engine.board(world, map_name, red, blue, bans, side, pool_size=pool)
+        b = engine.board(world, map_name, red, blue, bans, side, pool_size=pool,
+                         weights=weights)
     except ValueError as error:
         return {"error": str(error)}, 400
     return engine.board_dict(b), 200
 
 
 def handle_heuristics():
-    return {"strategies": [h.to_dict() for h in catalog_module.load()]}, 200
+    return {"strategies": [h.to_dict() for h in catalog_module.load()],
+            "playbook": catalog_module.playbook_name()}, 200
 
 
 def handle_health():

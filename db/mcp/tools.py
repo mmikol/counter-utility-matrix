@@ -553,16 +553,20 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
       " a momentum verdict, the game plan in prose, and the shapes the playbook's"
       " limits allow - what the roster enforces as you pick.",
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
-                                                          " search keeps (default 6)"}))
-def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6):
+                                                          " search keeps (default 6)"},
+           weights={"type": "object",
+                    "description": "{heuristic id: 0..10} - weights to score this board"
+                                   " under instead of the files' (the playbook tab's"
+                                   " sliders); the files are untouched"}))
+def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6, weights=None):
     pool, _ = _clamp(pool)
-    from inference import engine
+    from inference import catalog, engine
     from ui.facts import model
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
         b = engine.board(world, map, list(red), list(blue), list(bans), side,
-                         pool_size=pool)
+                         pool_size=pool, weights=catalog.parse_weights(weights or {}))
     except ValueError as error:
         raise ToolError(str(error)) from error
     return engine.board_rendered(b), engine.board_dict(b)

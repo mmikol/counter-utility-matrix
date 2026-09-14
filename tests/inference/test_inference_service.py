@@ -47,6 +47,8 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
         {"forwarded": True}, 200)
     assert calls[-1] == ("/board", {"map": "Ilios", "side": "", "red": ["Zarya"],
                                     "blue": [], "ban": []}, None)
+    board.api_infer(None, {"map": ["Ilios"], "weight": ["healing-floor:9.99", "x:12", "junk"]})
+    assert calls[-1][1]["weight"] == ["healing-floor:9.99", "x:10"]   # clamped, junk dropped
     assert board.api_strategies() == {"forwarded": True}
 
 

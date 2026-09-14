@@ -1,6 +1,6 @@
 /* the board: TEAM and BANS are set by the page before this loads */
 var el = function (id) { return document.getElementById(id); };
-var ROSTER = null, st = { map: '', red: [], blue: [], bans: [], side: '' };
+var ROSTER = null, st = { map: '', red: [], blue: [], bans: [], side: '', weights: {} };
 var SHAPES = null;   /* the (tank, damage, support) triples the playbook allows, from the board */
 var ROLES = ['tank', 'damage', 'support'];
 try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
@@ -13,6 +13,7 @@ var bansOpen = false;                        /* the ban picker starts collapsed 
 function currentMap() { return ROSTER ? ROSTER.maps.filter(function (x) { return x.name === st.map; })[0] : null; }
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+if (!st.weights || typeof st.weights !== 'object') st.weights = {};   /* a state saved before the sliders */
 function save() { try { localStorage.setItem('owdb-board2', JSON.stringify(st)); } catch (e) {} }
 function hero(name) { return ROSTER.byName[name]; }
 function portrait(h) {
@@ -193,6 +194,7 @@ function qs() {
   st.blue.forEach(function (h) { q.push('blue=' + encodeURIComponent(h)); });
   st.bans.forEach(function (h) { q.push('ban=' + encodeURIComponent(h)); });
   if (st.side) q.push('side=' + st.side);
+  Object.keys(st.weights || {}).sort().forEach(function (id) { q.push('weight=' + encodeURIComponent(id + ':' + st.weights[id])); });
   return q.join('&');
 }
 
@@ -318,9 +320,10 @@ function paintSuggestions() {
 
 function renderResult(d, container, title) {
   if (!d || d.error) { container.innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
+  var yours = Object.keys(st.weights || {}).length;
   var out = "<div class='inf-head'><h3>" + esc(title) + '</h3>' + scoreHTML(d) + "<span class='legend'>" +
     (d.rank ? 'rank ' + d.rank + ' among the feasible field · ' : '') + (d.considered ? d.considered + ' candidates · ' : '') + d.seconds + 's · ' +
-    d.strategies.constraint + ' constraints, ' + d.strategies.heuristic + ' heuristics' +
+    d.strategies.constraint + ' constraints, ' + d.strategies.heuristic + ' heuristics' + (yours ? ' (' + yours + ' weight' + (yours === 1 ? '' : 's') + ' set by you)' : '') +
     (d.playstyle ? ' · leans ' + d.playstyle : '') + '</span>' +
     '</div>';
   if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search\'s field</div>';
@@ -340,6 +343,25 @@ function renderResult(d, container, title) {
   container.innerHTML = out;
 }
 
+/* a heuristic's weight is the user's to set: a slider under its card, 1 to 10
+   to the hundredth (1.02, 9.99), with a number box for the exact figure,
+   starting at the weight the file infers; a setting rides with every board
+   request (weight=id:value) and never touches the file. Only heuristics have
+   weights to set - a scored constraint's stays its own. */
+function weightRow(h) {
+  var set = st.weights && st.weights.hasOwnProperty(h.id), v = set ? st.weights[h.id] : h.weight;
+  return "<div class='wrow' data-id='" + esc(h.id) + "' data-inferred='" + h.weight + "'>" +
+    "<span class='wlbl'>weight</span><input type='range' min='1' max='10' step='0.01' value='" + v + "' aria-label='weight of " + esc(h.name) + "'>" +
+    "<input type='number' class='wval' min='1' max='10' step='0.01' value='" + v + "' aria-label='exact weight of " + esc(h.name) + "'>" +
+    "<span class='winf'>inferred " + h.weight + "</span>" +
+    "<button class='wreset' " + (set ? '' : 'disabled') + ">reset</button></div>";
+}
+function clampWeight(x) { x = Math.round(+x * 100) / 100; return isNaN(x) ? null : Math.min(10, Math.max(1, x)); }
+function setWeight(id, value, inferred) {
+  if (!st.weights) st.weights = {};
+  if (value === null || value === inferred) delete st.weights[id]; else st.weights[id] = value;
+  save(); refresh();
+}
 function renderPlaybook(d) {
   if (!d || !d.strategies) { el('playbook').innerHTML = "<div class='warnbox'>" + esc(d && d.error ? d.error : 'the strategies are not answering') + '</div>'; return; }
   var out = "<div class='hcards'>";
@@ -353,9 +375,19 @@ function renderPlaybook(d) {
     var params = Object.keys(h.params || {}).map(function (k) { return k + '=' + h.params[k]; }).join(', ');
     var body = h.body.replace(/^#[^\n]*\n/, '').split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.replace(/\s+/g, ' ')) + '</p>'; }).join('');
     out += "<div class='hcard'><span class='kind " + h.kind + "'>" + h.kind + (h.form !== h.kind ? ' · ' + h.form : '') + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
-      "<div class='legend'>inference/strategies/" + esc(h.id) + '.md · ' + esc(h.category) + '</div></div>';
+      (h.form === 'heuristic' ? weightRow(h) : '') +
+      "<div class='legend'>" + esc((d.playbook || 'inference/strategies') + '/' + h.id + '.md') + ' · ' + esc(h.category) + '</div></div>';
   });
   el('playbook').innerHTML = out + '</div>';
+  el('playbook').querySelectorAll('.wrow').forEach(function (row) {
+    var id = row.getAttribute('data-id'), inferred = +row.getAttribute('data-inferred');
+    var range = row.querySelector('input[type=range]'), val = row.querySelector('.wval'), reset = row.querySelector('.wreset');
+    var commit = function (x) { x = clampWeight(x); if (x === null) return; range.value = x; val.value = x; reset.disabled = x === inferred; setWeight(id, x, inferred); };
+    range.oninput = function () { val.value = range.value; };
+    range.onchange = function () { commit(range.value); };
+    val.onchange = function () { commit(val.value); };
+    reset.onclick = function () { range.value = inferred; val.value = inferred; reset.disabled = true; setWeight(id, null, inferred); };
+  });
 }
 
 function showTab(name) {
@@ -384,8 +416,8 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
     scopeOn[s] = !scopeOn[s]; c.classList.toggle('on', scopeOn[s]); renderFacts(); };
   fetch('/api/strategies').then(function (r) { return r.json(); }).then(renderPlaybook);
   showTab((function () { try { return localStorage.getItem('owdb-tab'); } catch (e) { return null; } })());
-  el('clearall').onclick = function () {   /* back to nothing: map, side, bans, both teams */
-    st = { map: '', red: [], blue: [], bans: [], side: '' }; save(); paint(); refresh();
+  el('clearall').onclick = function () {   /* back to nothing: map, side, bans, both teams - the weights stay */
+    st = { map: '', red: [], blue: [], bans: [], side: '', weights: st.weights || {} }; save(); paint(); refresh();
   };
   refresh();
 });

@@ -45,6 +45,7 @@ derives a formula on its own.
 reads as params.NAME - tuning is editing the file.
 """
 
+import copy
 import os
 import re
 
@@ -289,6 +290,37 @@ def load(directory=STRATEGIES_DIR):
     if not out:
         raise CatalogError("no strategies in %s" % directory)
     out.sort(key=lambda h: (KIND_ORDER[h.kind], FORMS.index(h.form), h.category, h.id))
+    return out
+
+
+def parse_weights(items):
+    """`id:value` strings (a query's repeated `weight` parameter) or a mapping
+    -> {id: weight}, each clamped to the file's 0..10; malformed entries are
+    dropped. What a board's sliders send."""
+    pairs = items.items() if isinstance(items, dict) else \
+        (str(x).split(":", 1) for x in (items or []) if ":" in str(x))
+    out = {}
+    for hid, value in pairs:
+        try:
+            out[str(hid).strip()] = min(10.0, max(0.0, float(value)))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def weighted(catalog, weights):
+    """The catalog with the heuristics named in `weights` carrying those
+    weights instead of their files' - shallow copies, so the files and the
+    loaded catalog stay as they are. Only a heuristic has a weight to set:
+    a scored constraint's stays its own, and an unknown id is ignored."""
+    if not weights:
+        return catalog
+    out = []
+    for h in catalog:
+        if h.kind == "heuristic" and h.id in weights and h.weight != weights[h.id]:
+            h = copy.copy(h)
+            h.weight = weights[h.id]
+        out.append(h)
     return out
 
 

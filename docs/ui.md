@@ -146,7 +146,16 @@ with its reasons and `[F#]` citations, the score bars per strategy, the
 alternatives (each with its own 0-100 figure when present) and the partial
 notice. *facts*
 filters by text and by scope (meta, bans, map, hero, team, matchup,
-playbook). *playbook* renders the catalog with each constraint's form.
+playbook). *playbook* renders the catalog with each constraint's form,
+and under each heuristic a slider for its weight - 1 to 10 to the
+hundredth (1.02, 9.99), with a number box beside it for the exact figure,
+starting at the weight the file infers, with the inferred figure shown
+and a reset. A setting is the viewer's alone: it is kept in the
+browser, rides with every board request as `weight=<id>:<value>`, is
+applied by the solver for that board only (each result reports the
+`weights` it was scored under, and the comps legend counts the ones set
+by you), and never touches the file; only heuristics have a weight to
+set. *clear all* leaves the weights in place.
 Pinned to the header's top-right
 corner are two pills: *the math*, a page stating the equation and how
 the layers fit, and the repository on GitHub (`COUNTER_MATRIX_REPO_URL`

@@ -76,12 +76,16 @@ class Result:
     def __getstate__(self):
         """What crosses a process boundary: everything but the solver (its
         reference sample and bounds stay with the worker that used them) and
-        the catalog's compiled expressions - a strategy's id, name and kind is
-        all a result needs of it afterwards."""
+        the catalog's compiled expressions - a strategy's id, name, kind, form,
+        weight and softness is all a result needs of it afterwards (the
+        weights it was scored under; whether the playbook scores at all)."""
         state = dict(self.__dict__)
         state.pop("solver", None)
         state["catalog"] = [types.SimpleNamespace(id=h.id, name=h.name, kind=h.kind,
-                                                  pending=getattr(h, "pending", False))
+                                                  pending=getattr(h, "pending", False),
+                                                  form=getattr(h, "form", None),
+                                                  weight=getattr(h, "weight", None),
+                                                  soft=getattr(h, "soft", False))
                             for h in self.catalog]
         return state
 
@@ -98,6 +102,8 @@ class Result:
                 "red": self.red, "blue": self.blue, "locked": self.locked,
                 "bans": self.bans, "side": self.side, "partial": self.partial,
                 "score": round(self.score, 3), "scoring": scoring,
+                "weights": {h.id: getattr(h, "weight", None)
+                            for h in self.catalog if h.kind == "heuristic"},
                 "normalized": (_pct(self.score, self.best if self.best is not None else self.score)
                                if scoring else None),
                 "playstyle": self.playstyle, "picks": self.picks,
@@ -614,10 +620,10 @@ def warm():
     return WORKERS
 
 
-def _seat(world, map_name, enemy, own, top, pool_size, bans, side, seat):
+def _seat(world, map_name, enemy, own, top, pool_size, bans, side, seat, weights=None):
     """One seat, in a worker: its optimal six against the enemy's revealed picks,
     and its own picks scored on that optimal's scale."""
-    catalog = catalog_module.load()
+    catalog = catalog_module.weighted(catalog_module.load(), weights)
     optimal = infer(world, map_name, enemy, [], top, pool_size, catalog, bans, side, seat)
     cur = current(world, optimal, map_name, enemy, own, catalog, bans, side, pool_size, seat)
     _finish(cur, optimal.score)
@@ -625,7 +631,7 @@ def _seat(world, map_name, enemy, own, top, pool_size, bans, side, seat):
 
 
 def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
-          catalog=None, top=5):
+          catalog=None, top=5, weights=None):
     """The whole board in one pass, at whatever stage the draft is - no map
     (the meta's best six), a map, a map and a side, bans, red's picks as
     they reveal:
@@ -649,9 +655,13 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
         plan         the game plan in prose, from the same facts
         shapes       the (tanks, damage, supports) triples the playbook's shape
                      limits allow - what the roster enforces as you pick
+
+    `weights` ({heuristic id: 0..10}) overrides the files' weights for this
+    board only - the playbook tab's sliders; the files stay as they are and
+    every result says the weights it was scored under.
     """
     parallel = parallel_available(catalog)
-    catalog = catalog or catalog_module.load()
+    catalog = catalog_module.weighted(catalog or catalog_module.load(), weights)
     m, red_h, _, _ = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
     fill = None
@@ -659,9 +669,9 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
         try:
             pool = _workers()
             seats = [pool.submit(_seat, world, map_name, list(red), list(blue), top, pool_size,
-                                 list(bans), side, "blue"),
+                                 list(bans), side, "blue", weights),
                      pool.submit(_seat, world, map_name, list(blue), list(red), top, pool_size,
-                                 list(bans), opposite(side), "red")]
+                                 list(bans), opposite(side), "red", weights)]
             if 0 < len(blue) < TEAM_SIZE:              # the fill, here, meanwhile
                 fill = infer(world, map_name, red, blue, top, pool_size, catalog, bans, side,
                              "blue")

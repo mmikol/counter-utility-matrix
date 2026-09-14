@@ -110,14 +110,19 @@ def api_facts(cx, query):
 
 
 def api_infer(cx, query):
-    """Both seats' optimal six and the current comp - the two displays."""
+    """Both seats' optimal six and the current comp - the two displays. The
+    playbook tab's sliders ride along as `weight=<id>:<0..10>`, one per
+    heuristic set away from its file."""
     map_name, red, blue, bans, side = _board(query)
+    weights = catalog_module.parse_weights(query.get("weight", []))
     if INFERENCE_URL:
-        return remote("/board", {"map": map_name or "", "side": side, "red": red,
-                                 "blue": blue, "ban": bans})
+        query = {"map": map_name or "", "side": side, "red": red, "blue": blue, "ban": bans}
+        if weights:
+            query["weight"] = ["%s:%g" % kv for kv in sorted(weights.items())]
+        return remote("/board", query)
     world = model.load(cx)
     try:
-        b = inference_engine.board(world, map_name, red, blue, bans, side)
+        b = inference_engine.board(world, map_name, red, blue, bans, side, weights=weights)
     except ValueError as error:
         return {"error": str(error)}, 400
     return inference_engine.board_dict(b), 200
@@ -127,7 +132,8 @@ def api_strategies():
     if INFERENCE_URL:
         return remote("/strategies")[0]
     catalog = catalog_module.load()
-    return {"strategies": [h.to_dict() for h in catalog]}
+    return {"strategies": [h.to_dict() for h in catalog],
+            "playbook": catalog_module.playbook_name()}
 
 
 # --- the board page ---------------------------------------------------------
