@@ -25,9 +25,10 @@ or the user points at, and leave a report.
    local run and the image); CI, which builds none, reports only. The
    third run is what CI sees - but not exactly: GitHub runs from a fresh
    clone with no `.env`, no caches and no cluster, so after every push
-   read the run itself (`gh run list --limit 3`, or without gh:
-   `curl -s https://api.github.com/repos/mmikol/counter-utility-matrix/actions/runs?per_page=3`)
-   and, when it disagrees with the local run, reproduce it in a fresh
+   read the run itself with `gh run list --limit 3` (the repository is
+   private, so the anonymous API cannot see it; `gh` is installed at
+   `~/.local/bin/gh` and signed in as the user) and, when it disagrees
+   with the local run, reproduce it in a fresh
    clone with a fresh venv before touching anything. A failure is the
    first thing to fix or report; never mark a failing test skipped to get
    green, and never weaken an assertion to pass - a test that cannot fail
