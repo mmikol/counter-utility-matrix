@@ -292,8 +292,14 @@ def load(directory=STRATEGIES_DIR):
     return out
 
 
-def mirror(cx, catalog):
-    """Reload the strategies table from the files (whole truth)."""
+def playbook_name(directory=None):
+    """How the database names a playbook: its folder, relative to the repo."""
+    return os.path.relpath(directory or STRATEGIES_DIR, ROOT).replace(os.sep, "/")
+
+
+def mirror(cx, catalog, directory=None):
+    """Reload the strategies table from the files (whole truth), each row
+    naming the playbook it came from."""
     from db.data.authored import AUTHORED
     from db.psql import now, register_source
     cursor = cx.cursor()
@@ -302,12 +308,12 @@ def mirror(cx, catalog):
     for h in catalog:
         cursor.execute(
             "INSERT INTO strategies (strategy_id, name, kind, category,"
-            " direction, metric, weight, expression, params, body, source_id)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            " direction, metric, weight, expression, params, body, playbook, source_id)"
+            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (h.id, h.name, h.kind, h.category, h.direction, h.metric,
              h.weight if h.scored else None, h.expressions or None,
              ", ".join("%s=%s" % kv for kv in sorted(h.params.items())) or None,
-             h.body, source_id))
+             h.body, playbook_name(directory), source_id))
     cx.commit()
     counts = {k: sum(1 for h in catalog if h.kind == k) for k in KINDS}
     return dict(counts, total=len(catalog), tables=["strategies"])

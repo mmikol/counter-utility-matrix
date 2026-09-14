@@ -46,7 +46,7 @@ x-app: &app
   environment: &env
     DATABASE_URL: postgresql://overwatch:${POSTGRES_PASSWORD:-overwatch}@db/overwatch
     # another playbook for an experiment: a path under the repo, e.g.
-    # inference/experiments/two-rules (see inference/experiments/README.md)
+    # inference/experiments/from-scratch (see inference/experiments/README.md)
     COUNTER_MATRIX_STRATEGIES: ${COUNTER_MATRIX_STRATEGIES:-}
     PYTHONUNBUFFERED: "1"
     PYTHONDONTWRITEBYTECODE: "1"

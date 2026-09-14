@@ -875,6 +875,7 @@ The mirror of the playbook: one row per markdown file in inference/strategies/ -
 | `expression` | text | yes |  |
 | `params` | text | yes |  |
 | `body` | text | no |  |
+| `playbook` | text | no |  |
 
 #### `subroles`
 

@@ -214,8 +214,16 @@ def test_ability_keywords_are_stored_verbatim(one):
 
 
 def test_heuristics_table_mirrors_the_files(rows):
+    """The table names the playbook it mirrors - the shipped one or an
+    experiment - and matches that folder's files."""
+    import os
+
+    from db import ROOT
     from inference import catalog
-    files = {h.id: h.kind for h in catalog.load()}
+    playbooks = [r[0] for r in rows("select distinct playbook from strategies")]
+    assert len(playbooks) == 1, playbooks
+    directory = os.path.join(ROOT, playbooks[0])
+    files = {h.id: h.kind for h in catalog.load(directory)}
     table = dict(rows("select strategy_id, kind from strategies"))
     assert table == files
 

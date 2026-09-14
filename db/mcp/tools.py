@@ -69,8 +69,10 @@ def build(ctx):
     return out
 
 
-def run_tool(ctx, name, **arguments):
-    """Call a registered tool by name, in-process (the refresher's and the shell's path)."""
+def run_tool(ctx, name, /, **arguments):
+    """Call a registered tool by name, in-process (the refresher's and the shell's
+    path). The tool's name is positional only, so a tool argument called `name`
+    (add_strategy has one) reaches the tool instead of colliding here."""
     for tool_name, _, _schema, fn in REGISTRY:
         if tool_name == name:
             return fn(ctx, **arguments)

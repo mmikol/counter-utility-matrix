@@ -231,6 +231,7 @@ class World:
         self.role_icons = {}
         self.heal_bench = 0.0
         self.catalog_counts = {}     # the strategies mirror: kind -> count
+        self.playbook = ""           # the folder the mirror came from, when not the shipped one
 
     # --- lookups -------------------------------------------------------
 
@@ -477,6 +478,8 @@ def load(cx):
             order by p.released desc""")]
     if cx.execute("select to_regclass('strategies')").fetchone()[0]:
         w.catalog_counts = dict(_rows(cx, "select kind, count(*) from strategies group by kind"))
+        named = [p for (p,) in _rows(cx, "select distinct playbook from strategies")]
+        w.playbook = named[0] if len(named) == 1 and named[0] != "inference/strategies" else ""
     for hero in w.heroes.values():
         hero.finish()
     supports = [h.peak_heal for h in w.heroes.values()

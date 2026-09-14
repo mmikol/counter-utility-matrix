@@ -727,7 +727,8 @@ def _playbook_record(fs, world, m):
     if world.catalog_counts:
         c = world.catalog_counts
         fs.add(scope, "catalog", "playbook.catalog",
-               "the playbook holds %d constraints, %d heuristics and %d assumptions"
+               "the playbook%s holds %d constraints, %d heuristics and %d assumptions"
                " (STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS)"
-               % (c.get("constraint", 0), c.get("heuristic", 0), c.get("assumption", 0)),
+               % (" (%s, an experiment)" % world.playbook if world.playbook else "",
+                  c.get("constraint", 0), c.get("heuristic", 0), c.get("assumption", 0)),
                value=c, source="strategies")

@@ -25,7 +25,8 @@ DOC_DOMAIN = {"001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES"
               "010_constraints_and_heuristics.sql": "INFERENCE",
               "011_reader_role.sql": "foundation", "012_reader_login.sql": "foundation",
               "013_assumptions.sql": "INFERENCE", "014_no_recorded.sql": "INFERENCE",
-              "015_announced_heroes.sql": "HEROES"}
+              "015_announced_heroes.sql": "HEROES",
+              "016_playbook_of_record.sql": "INFERENCE"}
 
 
 class SchemaError(Exception):

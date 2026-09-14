@@ -308,3 +308,11 @@ def test_the_entry_point_calls_a_tool(capsys, dsn, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", dsn)
     assert main(["call", "db_status"]) == 0
     assert "tables" in capsys.readouterr().out
+
+
+def test_a_tool_argument_named_name_reaches_the_tool():
+    """run_tool takes the tool's name positionally, so add_strategy's own `name`
+    argument is not swallowed by the call - it raised TypeError once."""
+    with pytest.raises(KeyError):
+        tools.run_tool(tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x"), "no_such_tool",
+                       name="Players play optimally")
