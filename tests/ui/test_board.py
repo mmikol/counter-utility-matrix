@@ -27,12 +27,10 @@ def test_board_page_has_two_rosters_and_the_three_panels():
         assert gone not in body, gone
     assert "record this comp" not in board.static_file("board.js")[0].decode()
     assert "FACTS = HEROES" not in body                              # the equation moved to /math
-    assert "href='/math'" in body and "id='captured'" in body
-    # the status and the vintage sit in a footer
-    foot = body[body.index("<footer class='foot'>"):body.index("</footer>")]
-    assert "id='status'" in foot
-    assert "id='captured'" in foot
-    assert body.index("</footer>") > body.index("id='tab-playbook'")
+    assert "href='/math'" in body
+    # no footer: the status line and the capture date are gone from the page
+    assert "<footer" not in body and "id='status'" not in body and "id='captured'" not in body
+    assert "el('status')" not in board.static_file("board.js")[0].decode()
     assert "id='flash'" in body[:body.index("</header>")]
     assert "data-tab='comps'" in body
     # the two old panels were merged into comps: both seats side by side, the
@@ -159,7 +157,9 @@ def test_the_page_is_a_shell_over_static_files():
     assert body.index("id='inf-blue'") < body.index("id='inf-red'")
     assert body.index("id='blueslots'") < body.index("id='redslots'")
     script = board.static_file("board.js")[0].decode()
-    assert "their comp as revealed" in script and "red_current" in script and "d.momentum" in script
+    assert "red - optimal six: their best counter" in script and "d.momentum" in script
+    assert "their comp as revealed" not in script   # red's picks score in the badge only
+    assert "if (d.kind === 'infer') return '';" in script        # an optimal carries no score
     # blue's seat is the optimal six only
     assert "'blue - your picks'" not in script
     assert "function meaning(d)" in script
@@ -167,6 +167,8 @@ def test_the_page_is_a_shell_over_static_files():
     # the strip is two bars, blue's and red's, empty until a seat has a figure
     assert "bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current)" in script
     assert ">fight odds</span>" in script and "class='mbars'" in script   # stacked, one track width
+    assert "mo.odds ? mo.odds[side] : null" in script      # the bars are the odds when both score
+    assert "<p><b>Fight odds.</b>" in board.view_math()
     assert "mo.verdict" not in script                          # no verdict sentence on the board
     assert "click red picks as they reveal" not in script       # the red seat carries no hint
     assert "game plan" in script and "d.plan" in script
@@ -175,6 +177,7 @@ def test_the_page_is_a_shell_over_static_files():
     # the playbook's shape limits hold on the roster: a capped role dims and refuses
     assert "function roleCap" in script and "' capped'" in script and "d.shapes" in script
     assert "the playbook allows at most" in script
+    assert "'(max ' + cap + ')'" in script                      # the cap note, in parentheses
     # a heuristic's weight is a slider under its card; the setting rides with each request
     assert "function weightRow" in script and "type='range' min='1' max='10' step='0.01'" in script
     assert "type='number' class='wval' min='1' max='10' step='0.01'" in script

@@ -268,6 +268,24 @@ def test_the_board_scores_under_the_weights_it_is_given(world, monkeypatch):
             assert round(split[key].score, 6) == round(tilted[key].score, 6)
 
 
+def test_fight_odds_pit_the_two_shares_against_each_other(world, monkeypatch):
+    """Both seats scored: each side's odds are its share over the two shares'
+    sum, the pair splits 100, and the verdict says so; one seat unscored or
+    empty: no odds."""
+    from inference import engine
+    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
+    b = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
+                                       ["Ana", "Reinhardt"]))
+    mo = b["momentum"]
+    n, m = mo["blue"], mo["red"]
+    assert isinstance(n, int) and isinstance(m, int) and n + m > 0
+    blue_odds = round(100.0 * n / (n + m))
+    assert mo["odds"] == {"blue": blue_odds, "red": 100 - blue_odds}
+    assert "fight odds blue %d%%, red %d%%" % (blue_odds, 100 - blue_odds) in mo["verdict"]
+    alone = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"], []))
+    assert alone["momentum"]["blue"] is None and alone["momentum"]["odds"] is None
+
+
 def test_a_playbook_that_scores_nothing_reads_unscored(world, monkeypatch):
     """Hard limits and prose alone tie every legal six at zero: the results
     carry no share of a best, say so, and the verdict is the one line."""
@@ -280,7 +298,9 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world, monkeypatch):
     b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                      catalog=limit_only)
     d = engine.board_dict(b)
-    for key in ("blue", "red", "current", "red_current", "fill", "countered"):
+    for key in ("blue", "red"):                     # the optimal is the reference: 100, always
+        assert d[key]["scoring"] is True and d[key]["normalized"] == 100
+    for key in ("current", "red_current", "fill", "countered"):
         assert d[key]["scoring"] is False and d[key]["normalized"] is None
         assert all(a["normalized"] is None for a in d[key]["alternatives"])
     assert d["momentum"]["verdict"].startswith("unscored") and d["momentum"]["blue"] is None
@@ -305,7 +325,9 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
     grounded = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Ana"],
                                               ["Reinhardt", "Cassidy"], catalog=scratch))
-    for key in ("blue", "red", "current", "red_current", "fill"):
+    for key in ("blue", "red"):
+        assert grounded[key]["scoring"] is True and grounded[key]["normalized"] == 100
+    for key in ("current", "red_current", "fill"):
         assert grounded[key]["scoring"] is False and grounded[key]["normalized"] is None
         assert "Fliers need hitscan cover waits for matchup.flyers >= 1" in \
             grounded[key]["unscored"]
@@ -317,7 +339,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     assert "waits for matchup.flyers >= 1" in grounded["momentum"]["verdict"]
     empty = engine.board_dict(engine.board(world, None, [], [], catalog=scratch))
     assert "waits for matchup.flyers >= 1" in empty["momentum"]["verdict"]   # read off the optimal
-    assert "waits for" in empty["blue"]["unscored"]                           # what the badge shows
+    assert empty["blue"]["normalized"] == 100 and empty["blue"]["unscored"] is None
     flying = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
                                             ["Reinhardt", "Cassidy"], catalog=scratch))
     assert flying["blue"]["scoring"] is True and flying["blue"]["normalized"] == 100
@@ -328,7 +350,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     assert verdict.startswith("blue %d / 100" % flying["current"]["normalized"])
     assert "red unscored: Fliers need hitscan cover waits for matchup.flyers >= 1" in verdict
     assert flying["momentum"]["blue"] == flying["current"]["normalized"]
-    assert flying["momentum"]["red"] is None
+    assert flying["momentum"]["red"] is None and flying["momentum"]["odds"] is None
 
 
 def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):

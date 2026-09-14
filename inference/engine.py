@@ -41,10 +41,20 @@ UNSCORED = ("unscored - the playbook in force holds no heuristic, scored constra
 
 
 def _unscored(result):
-    """Why this result carries no share of a best, or None when it does: the
-    playbook holds no term that scores, or none of its terms applies to
-    this board (a heuristic waiting on its `when`) so the best six itself
-    scores zero and there is nothing to be a share of."""
+    """Why this result carries no share of a best, or None when it does. The
+    optimal six is 100 by definition - it is the reference, and scored
+    always; any other comp reads unscored when nothing can be a share of
+    anything: the playbook holds no term that scores, or none of its terms
+    applies to this board (a heuristic waiting on its `when`), so the best
+    six itself sums to zero."""
+    if getattr(result, "kind", None) == "infer":
+        return None
+    return _waiting(result)
+
+
+def _waiting(result):
+    """The reason nothing on this board scores, or None: read off any result,
+    the optimal included (a seat with no picks has no comp to read it from)."""
     catalog = getattr(result, "catalog", None)
     if catalog is None:                                    # the tests' stand-ins
         return None
@@ -411,8 +421,8 @@ def _momentum(cur, red_cur, countered, blue_r=None, red_r=None):
     red's share of its best counter to blue's. A seat with no picks has no
     contributions to name a waiting strategy by, so its reason is read off
     its optimal instead."""
-    blue_why = _unscored(cur) if cur.blue or blue_r is None else _unscored(blue_r)
-    red_why = _unscored(red_cur) if red_cur.blue or red_r is None else _unscored(red_r)
+    blue_why = _unscored(cur) if cur.blue or blue_r is None else _waiting(blue_r)
+    red_why = _unscored(red_cur) if red_cur.blue or red_r is None else _waiting(red_r)
     if blue_why and red_why:                       # neither seat can be a share of anything
         return {"blue": None, "red": None, "countered": None, "partial": False,
                 "verdict": blue_why}
@@ -422,6 +432,11 @@ def _momentum(cur, red_cur, countered, blue_r=None, red_r=None):
          if countered is not None and countered.blue and not _unscored(countered) else None)
     out = {"blue": n, "red": m, "countered": k,
            "partial": bool((cur.blue and cur.partial) or (red_cur.blue and red_cur.partial))}
+    # fight odds: the two shares pitted against each other - each side's share of
+    # the two shares' sum, so the pair reads as a split of 100 and the higher bar
+    # holds the fight; defined only when both seats score
+    out["odds"] = ({"blue": round(100.0 * n / (n + m)), "red": 100 - round(100.0 * n / (n + m))}
+                   if n is not None and m is not None and n + m > 0 else None)
     short = lambda why: "unscored: " + why.split(": ", 1)[-1]   # noqa: E731
     if (blue_why and cur.blue) or (red_why and red_cur.blue):   # one seat scores, the other waits
         sides = ["blue " + (short(blue_why) if blue_why else "%d / 100 of its optimal" % n)
@@ -446,6 +461,9 @@ def _momentum(cur, red_cur, countered, blue_r=None, red_r=None):
             out["verdict"] = "red ahead by %d - blue %d, red %d" % (-gap, n, m)
         if out["partial"]:
             out["verdict"] += " (partial picks)"
+        if out["odds"]:
+            out["verdict"] += "; fight odds blue %d%%, red %d%%" % (out["odds"]["blue"],
+                                                                    out["odds"]["red"])
     if k is not None:
         out["verdict"] += "; if red plays its best counter, your picks hold %d / 100" % k
     return out

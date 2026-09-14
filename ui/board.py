@@ -289,7 +289,6 @@ def view_board():
             " over the database, numbered for citation;"
             " the /comp skill and the inference layer read exactly these.</p></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
-            "<footer class='foot'><span id='status'></span><span id='captured'></span></footer>"
             "</main><script>var TEAM = %d, BANS = 5;</script>"
             "<script src='/static/board.js'></script>" % (REPO_URL, GITHUB_MARK, TEAM_SIZE))
 
@@ -381,6 +380,12 @@ norm_h(v) = clamp( (v &minus; min_ref) / (max_ref &minus; min_ref), 0, 1 )
 found is 100, and every other comp - yours as you pick, theirs as they reveal - is its raw score
 as a share of that best. 100 means as good as the best six under this playbook on this board,
 not a win probability.</p>
+<p><b>Fight odds.</b> Blue's comp scores as a share of blue's optimal, red's as a share of
+red's - each against the best six its own seat could field here. The strip pits the two
+shares against each other: blue's odds are its share over the two shares' sum, red's the
+rest, so the pair splits 100 and the higher bar holds the fight. With one seat unscored the
+bars show the shares alone. It is a comparison of two shares under the playbook, not a fitted
+probability of winning.</p>
 <p><b>The argmax.</b> Each role's pool is first cut to the top six by a fixed prior - map win
 rate, plus answers to red's picks, minus exposure to them, plus synergies with the locked picks
 and style fit. Every shape the limits allow is then filled from the pools around the locked

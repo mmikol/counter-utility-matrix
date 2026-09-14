@@ -44,9 +44,6 @@ button { background:#263041; color:#fff; border:1px solid #35435a; border-radius
 button:hover { background:#31405a; }
 button.primary { background:var(--blue2); border-color:var(--blue); }
 .flash { color:var(--gold); font-size:12px; min-width:160px; text-align:right; }
-.foot { display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin-top:34px; padding-top:12px;
-  border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
-.foot span:empty { display:none; } .foot span + span:not(:empty)::before { content:'·'; margin-right:14px; }
 
 /* --- the bans bar: a collapsible picker built from the same tiles ----- */
 .bans { margin-top:10px; padding:8px 14px; background:#1a141a; border:1px solid #4a2a3a;
@@ -75,7 +72,7 @@ button.primary { background:var(--blue2); border-color:var(--blue); }
 .score.unscored { font-size:14px; letter-spacing:.08em; text-transform:uppercase; color:var(--gold); }
 .tile.capped { opacity:.28; filter:grayscale(.8); cursor:not-allowed; }   /* no legal six seats one more of this role */
 .tile.capped:hover { transform:none; border-color:#2a3240; }
-.rolecol h4 .cap { margin-left:8px; font-size:10px; letter-spacing:.12em; color:var(--gold); text-transform:uppercase; }
+.rolecol h4 .cap { margin-left:8px; font-size:10px; letter-spacing:.12em; color:var(--muted); text-transform:uppercase; }
 .tile.banned { opacity:.28; filter:grayscale(1); cursor:not-allowed; }
 .tile.banned::before { content:'✕'; position:absolute; inset:0; display:flex; align-items:center;
   justify-content:center; font-size:34px; color:#ff4b57; z-index:1; }
@@ -96,10 +93,8 @@ button.primary { background:var(--blue2); border-color:var(--blue); }
   position:relative; overflow:hidden; }
 .team.red { background:linear-gradient(170deg,#2b141a 0%,#151a23 55%); border-color:#5a2730; }
 .team.blue { background:linear-gradient(170deg,#12233a 0%,#151a23 55%); border-color:#254a70; }
-.team h2 { margin:0 0 6px; font-size:26px; display:flex; align-items:baseline; gap:10px; }
+.team h2 { margin:0 0 6px; font-size:26px; display:flex; align-items:center; gap:10px; }
 .team.red h2 { color:var(--red); } .team.blue h2 { color:var(--blue); }
-.team h2 small { font:12px/1 -apple-system,"Segoe UI",sans-serif; letter-spacing:0;
-  text-transform:none; color:var(--muted); }
 .slots { display:flex; gap:8px; margin:4px 0 12px; }
 .slot { flex:1; aspect-ratio:3/4; max-width:110px; border-radius:6px; position:relative;
   overflow:hidden; background:#0b0e14; border:2px dashed #3a4457; cursor:pointer;

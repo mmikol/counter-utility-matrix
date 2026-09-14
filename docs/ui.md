@@ -88,7 +88,7 @@ on the other team, crossed out when banned, and dimmed once the
 playbook's shape limits leave no legal six that seats one more of that
 role - the board result carries the `(tanks, damage, supports)` triples
 the hard limits allow, the column header says the cap when there is one
-(`max 2` over the tanks), and a click on a dimmed tile is refused with a
+(`(max 2)` over the tanks, in grey), and a click on a dimmed tile is refused with a
 note rather than sent; both teams are held to it, since the limit is the
 game's form and not blue's alone. A hero the roster carries as
 **announced** - one the wiki knows ahead of release, with its role,
@@ -117,15 +117,17 @@ solver scored, so picks can be tailored toward the optimal without
 matching it; a last line says what it rests on. Then, in the order of
 the boxes above, blue's optimal six (left: the counter to red's
 selection as revealed, whatever you have locked, so it never collapses
-into your own six) and red's comp as revealed (right, scored against
-yours on the scale of their best counter). Every score says what it
-means under the number: 100 is the best six the solver can build for
-this board, and any other comp's number is its score as a share of that
-best; the strip above the boxes, labelled *fight odds*, is two bars
-stacked on one track, blue's over red's, empty until a seat has a figure
-and filled to its share as the picks come in - the higher bar holds the
-fight; the name is the plain reading of two shares, not a fitted
-probability - an
+into your own six) and red's optimal six (right: their best counter to
+your selection). Neither optimal carries a score - each is its seat's
+reference, the 100 its picks are measured against - so the only scores
+on the board are the picks': the badges above the pickers, each comp's
+share of its own optimal. The strip above the boxes, labelled *fight odds*, is two bars
+stacked on one track, blue's over red's. With both seats scored each bar
+is its side's odds - its share over the two shares' sum, so the pair
+splits 100 and the higher bar holds the fight (the share stays in the
+tooltip); with one seat scored its bar is its share alone; empty until
+a seat has a figure. It is a comparison of two shares under the
+playbook, not a fitted probability - an
 unscored seat reads the word alone there and in the comps, its reason
 kept in the badge's tooltip; the scale is the math page's to explain.
 
@@ -149,7 +151,8 @@ The comp is
 full width below. Each result shows one figure, its 0-100 share
 (`normalized`: 100 for an optimal six, the current comp's share of blue's
 optimal on that board) with its meaning beside it; the raw sum is never
-shown. It reads *unscored* instead - in the team badges, the results and
+shown. The optimal six is the reference and reads 100 always; any other
+comp reads *unscored* instead - in the team badges, the results and
 the momentum strip - when nothing can be a share of anything: the
 playbook in force has no heuristic, scored constraint or soft limit, or
 none of them applies to this board yet (a heuristic waiting on its
@@ -189,11 +192,11 @@ leaves the weights in place.
 Pinned to the header's top-right
 corner are two pills: *the math*, a page stating the equation and how
 the layers fit, and the repository on GitHub (`COUNTER_MATRIX_REPO_URL`
-overrides the address when the repo moves). A
-footer at the very bottom carries the status - the facts on the board,
-the playbook notes, the time of the last read - and the rates' capture
-date and patch; the header keeps only the short-lived flashes (a banned
-pick, a full team).
+overrides the address when the repo moves). There is no
+footer: the header keeps only the short-lived flashes (a banned pick, a
+full team), the facts panel says how many facts the board holds, and the
+rates' capture date is a fact on the facts tab; a patch newer than the
+rates still raises the warning box under the header.
 `board.css` is the game's hero select: role columns, portrait tiles, red
 and blue seats, the dark palette.
 

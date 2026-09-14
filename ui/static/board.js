@@ -147,7 +147,7 @@ function paint() {
     for (var r = 0; r < heads.length; r++) {
       var cap = caps[ROLES[r]], note = heads[r].querySelector('.cap');
       if (!note) { note = document.createElement('span'); note.className = 'cap'; heads[r].appendChild(note); }
-      note.textContent = cap !== null && cap < TEAM ? 'max ' + cap : '';
+      note.textContent = cap !== null && cap < TEAM ? '(max ' + cap + ')' : '';
       note.title = 'the playbook seats at most ' + cap + ' on a team';
     }
   });
@@ -200,14 +200,12 @@ function qs() {
 var pending = null, seq = 0, FACTS = null, INF = null;
 function refresh() {
   clearTimeout(pending);
-  el('status').textContent = 'reading the database…';
   pending = setTimeout(function () {
     var mine = ++seq, q = qs();
     fetch('/api/facts?' + q).then(function (r) { return r.json(); }).then(function (d) {
       if (mine !== seq) return;
       if (d.error) { flash(d.error); return; }
       FACTS = d; renderFacts();
-      el('status').textContent = commas(d.count) + ' facts + ' + commas(d.playbook_count || 0) + ' playbook notes · ' + new Date().toLocaleTimeString();
     }).catch(function () { flash('the database is not answering'); });
     el('inf-blue').innerHTML = "<p class='legend'>searching both seats…</p>"; el('inf-red').innerHTML = '';
     fetch('/api/infer?' + q).then(function (r) { return r.json(); }).then(function (d) {
@@ -269,13 +267,14 @@ function meaning(d) {
 }
 var UNSCORED = 'the playbook in force holds no heuristic, scored constraint or soft limit, so every legal six ties at zero - add one and the board scores';
 function scoreHTML(d) {
+  if (d.kind === 'infer') return '';                 /* an optimal is the reference, not a score */
   if (d.scoring === false || typeof d.normalized !== 'number')
     return "<span class='score unscored' title='" + esc(d.unscored || UNSCORED) + "'>unscored</span>";
   return "<span class='score' title='" + esc(meaning(d)) + "'>" + Math.round(d.normalized) + "<small>/ 100</small></span><span class='raw'>" +
     "<span class='meaning'>" + esc(meaning(d)) + '</span></span>';
 }
-function altScore(a) {
-  return typeof a.normalized === 'number' ? "<span class='altn'>" + Math.round(a.normalized) + ' / 100</span>' : '';
+function altScore(a, d) {
+  return d.kind !== 'infer' && typeof a.normalized === 'number' ? "<span class='altn'>" + Math.round(a.normalized) + ' / 100</span>' : '';
 }
 
 /* the comps panel: blue's optimal six and red's side by side, the current comp below */
@@ -288,17 +287,24 @@ function renderInf() {
   /* the strip is two bars, blue's and red's, empty until a seat has a figure
      and filled to its share as the picks come in; a seat that cannot be
      scored reads the word, its reason in the badge's tooltip */
+  /* with both seats scored the bars are the odds - each share over the two
+     shares' sum, a split of 100 - and the tooltip keeps the share; with one
+     seat scored its bar is its share alone */
   var bar = function (side, value, res) {
+    var odds = mo.odds ? mo.odds[side] : null;
     var word = res && res.blue && res.blue.length && res.scoring === false ? 'unscored'
+             : odds !== null ? odds + '%'
              : typeof value === 'number' ? value + ' / 100' : '';
-    return "<span class='mbar " + side + "'><span class='side'>" + side + "</span><span class='trk'><span class='fill' style='width:" +
-      (typeof value === 'number' ? value : 0) + "%'></span></span><span class='val'>" + word + '</span></span>';
+    var tip = typeof value === 'number' ? side + ' ' + value + ' / 100 of its optimal' : '';
+    return "<span class='mbar " + side + "' title='" + esc(tip) + "'><span class='side'>" + side + "</span><span class='trk'><span class='fill' style='width:" +
+      (odds !== null ? odds : typeof value === 'number' ? value : 0) + "%'></span></span><span class='val'>" + word + '</span></span>';
   };
   el('momentum').innerHTML = "<span class='lbl' title='each side\'s comp as a share of the best six it could field here - the higher bar holds the fight'>fight odds</span>" +
     "<span class='mbars'>" + bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current) + '</span>';
+  /* the two optimals, side by side, neither scored - each is its seat's
+     reference; the picks' scores are the badges above the pickers */
   var rc = d.red_current;
-  if (!rc || !rc.blue || !rc.blue.length) el('inf-red').innerHTML = "<div class='inf-head'><h3>red - their comp as revealed</h3></div>";
-  else renderResult(rc, el('inf-red'), 'red - their comp as revealed' + (rc.kind === 'evaluate' ? ', ranked' : ' (' + rc.blue.length + ' of ' + TEAM + ')'));
+  renderResult(d.red, el('inf-red'), 'red - optimal six: their best counter to your selection' + (d.side ? ', on ' + opposite(d.side) : ''));
   var c = d.current;
   renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
   /* the badge above each seat's picks and picker always carries a figure: the
@@ -338,6 +344,7 @@ function paintSuggestions() {
 }
 
 /* a count with thousands separators: 14,101 candidates */
+function opposite(side) { return side === 'attack' ? 'defense' : side === 'defense' ? 'attack' : ''; }
 function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function renderResult(d, container, title) {
   if (!d || d.error) { container.innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
@@ -357,7 +364,7 @@ function renderResult(d, container, title) {
   out += '</div>' + bars(d.contributions || []);
   if (d.alternatives && d.alternatives.length) {
     out += "<div class='alts'><b>" + (d.kind === 'infer' ? 'alternatives' : 'the field\'s best') + "</b><ol>" +
-      d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + ' ' + altScore(a) + '</li>'; }).join('') + '</ol></div>';
+      d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + ' ' + altScore(a, d) + '</li>'; }).join('') + '</ol></div>';
   }
   container.innerHTML = out;
 }
@@ -467,8 +474,6 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   st.red = st.red.filter(known); st.blue = st.blue.filter(known); st.bans = st.bans.filter(known);
   if (!d.maps.some(function (m) { return m.name === st.map; })) st.map = '';
   buildTeam('red'); buildTeam('blue'); buildBanPicker(); paint();
-  var blz = (d.snapshots || []).filter(function (s) { return s.source === 'blizzard'; })[0];
-  if (blz) el('captured').textContent = 'rates captured ' + blz.captured + ' (' + (blz.patch || 'unknown patch') + ')';
   if (d.newer_patches && d.newer_patches.length) { var w = el('vintage'); w.style.display = 'block';
     w.textContent = d.newer_patches.length + ' patch(es) shipped since the rates were captured (newest ' + d.newer_patches[0][0] + ') - rates are pre-patch; run pull_rates'; }
   el('mapsel').onchange = function () { st.map = this.value; save(); paint(); refresh(); };
