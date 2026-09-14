@@ -89,7 +89,8 @@ turns every table into facts, and computes every metric in one place
 solver scores are the same function. The inference layer reads the facts,
 never the tables.
 
-The equation the whole repo serves:
+The equation the whole repo serves - the name is the definition, and the
+math page heads it "The Counter Utility Matrix":
 
 ```
 DATA           = HEROES ∪ MAPS ∪ META              the tables, as pulled and set

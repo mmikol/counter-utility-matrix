@@ -304,7 +304,7 @@ def _page(title, body):
 MATH = """
 <article class='math'>
 <nav class='toc'>
-<a href='#equation'>the equation</a>
+<a href='#equation'>the counter utility matrix</a>
 <a href='#function'>the function</a>
 <a class='sub' href='#what-100-means'>what 100 means</a>
 <a class='sub' href='#fight-odds'>fight odds</a>
@@ -315,7 +315,9 @@ MATH = """
 <a class='sub' href='#weights'>the weights</a>
 <a href='#pieces'>how the pieces fit</a>
 </nav>
-<h2 id='equation'>The equation</h2>
+<h2 id='equation'>The Counter Utility Matrix</h2>
+<p>The equation is the Counter Utility Matrix - the name is the definition, and everything on
+the board is one of its terms:</p>
 <pre class='eq'>DATA           = HEROES &cup; MAPS &cup; META              the tables, as set
 for each domain D in { HEROES, MAPS, META }:
   INDEPENDENT(D) = &#8899; facts(s)      over each selection s in D    s alone: its own row

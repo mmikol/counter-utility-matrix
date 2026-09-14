@@ -181,6 +181,7 @@ def test_the_page_is_a_shell_over_static_files():
     assert targets and all(("id='%s'" % t) in page for t in targets), targets
     for name in ("likely-comp", "counter", "weights", "what-100-means", "argmax"):
         assert name in targets
+    assert "<h2 id='equation'>The Counter Utility Matrix</h2>" in page   # the name is the equation
     assert "likelihood(h) = pick(h, map) + 2 &times; partners(h, the six so far)" in page
     assert "mo.verdict" not in script                          # no verdict sentence on the board
     assert "click red picks as they reveal" not in script       # the red seat carries no hint

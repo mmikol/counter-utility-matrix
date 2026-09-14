@@ -57,7 +57,7 @@ def test_the_page_the_statics_the_math_and_the_strategies_need_no_database(serve
     assert code == 200 and "text/css" in ctype and b".tile" in body
     assert get(served + "/static/nope.txt")[0] == 404
     code, _, body = get(served + "/math")
-    assert code == 200 and b"The equation" in body
+    assert code == 200 and b"The Counter Utility Matrix" in body
     code, _, body = get(served + "/api/strategies")
     assert code == 200 and json.loads(body)["strategies"]
     assert get(served + "/nothing")[0] == 404
