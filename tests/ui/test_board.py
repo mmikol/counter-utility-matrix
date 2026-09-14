@@ -17,6 +17,9 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     assert "tab-comps" in body and "tab-facts" in body and "tab-playbook" in body and "tab-recorded" in body
     assert "FACTS = HEROES" not in body and "href='/recs'" not in body   # the equation moved to /math
     assert "href='/math'" in body and "id='captured'" in body
+    foot = body[body.index("<footer class='foot'>"):body.index("</footer>")]   # the status and the vintage sit in a footer
+    assert "id='status'" in foot and "id='captured'" in foot and body.index("</footer>") > body.index("id='tab-playbook'")
+    assert "id='flash'" in body[:body.index("</header>")]
     assert "data-tab='comps'" in body
     # the two old panels were merged into comps: both seats side by side, the
     # current comp below, in one section

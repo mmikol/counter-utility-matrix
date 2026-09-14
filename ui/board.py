@@ -219,8 +219,7 @@ def view_board():
             "<span class='sideseg' id='sideseg' title='blue attacks or defends; red gets the other side'>"
             "<button data-side='attack'>attack</button><button data-side='defense'>defense</button></span>"
             "<button id='swapbtn' title='swap red and blue'>swap sides</button>"
-            "<button id='clearbtn'>new game</button><span class='status' id='status'>"
-            "<span id='captured'></span></span></div>"
+            "<button id='clearbtn'>new game</button><span class='flash' id='flash'></span></div>"
             "</header>"
             "<div class='bans' id='bans'><div class='banhead' id='banhead' title='open or close the ban picker'>"
             "<h3>bans</h3><span class='bancount' id='bancount'></span><span class='banmini' id='banmini'></span>"
@@ -257,6 +256,7 @@ def view_board():
             " the /comp skill and the inference layer read exactly these.</p></section>"
             "<section class='panel' id='tab-recorded'><div id='recorded'></div></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
+            "<footer class='foot'><span id='status'></span><span id='captured'></span></footer>"
             "</main><script>var TEAM = %d, BANS = 5;</script>"
             "<script src='/static/board.js'></script>" % TEAM_SIZE)
 

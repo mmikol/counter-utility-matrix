@@ -158,8 +158,8 @@ document.addEventListener('click', function (e) {
 });
 
 var flashTimer = null;
-function flash(msg) { el('status').textContent = msg; clearTimeout(flashTimer);
-  flashTimer = setTimeout(function () { el('status').textContent = ''; }, 3000); }
+function flash(msg) { el('flash').textContent = msg; clearTimeout(flashTimer);
+  flashTimer = setTimeout(function () { el('flash').textContent = ''; }, 3000); }
 
 function qs() {
   var q = [];
@@ -181,7 +181,7 @@ function refresh() {
       if (mine !== seq) return;
       if (d.error) { flash(d.error); return; }
       FACTS = d; renderFacts(); el('factsn').textContent = d.count;
-      el('status').textContent = d.count + ' facts + ' + (d.playbook_count || 0) + ' playbook notes · ' + new Date().toLocaleTimeString() + (CAPTURED ? ' · ' + CAPTURED : '');
+      el('status').textContent = d.count + ' facts + ' + (d.playbook_count || 0) + ' playbook notes · ' + new Date().toLocaleTimeString();
     }).catch(function () { flash('the database is not answering'); });
     el('inf-blue').innerHTML = "<p class='legend'>searching both seats…</p>"; el('inf-red').innerHTML = '';
     fetch('/api/infer?' + q).then(function (r) { return r.json(); }).then(function (d) {
@@ -335,7 +335,7 @@ function showTab(name) {
   try { localStorage.setItem('owdb-tab', name); } catch (e) {}
 }
 
-var lastRec = null, CAPTURED = '';
+var lastRec = null;
 function pollRecs() {
   fetch('/api/recs').then(function (r) { return r.json(); }).then(function (d) {
     if (lastRec !== null && d.latest > lastRec) { var n = el('newrec'); n.style.display = 'block';
@@ -377,7 +377,7 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   if (!d.maps.some(function (m) { return m.name === st.map; })) st.map = '';
   buildTeam('red'); buildTeam('blue'); buildBanPicker(); paint();
   var blz = (d.snapshots || []).filter(function (s) { return s.source === 'blizzard'; })[0];
-  if (blz) { CAPTURED = 'rates captured ' + blz.captured + ' (' + (blz.patch || 'unknown patch') + ')'; el('captured').textContent = CAPTURED; }
+  if (blz) el('captured').textContent = 'rates captured ' + blz.captured + ' (' + (blz.patch || 'unknown patch') + ')';
   if (d.newer_patches && d.newer_patches.length) { var w = el('vintage'); w.style.display = 'block';
     w.textContent = d.newer_patches.length + ' patch(es) shipped since the rates were captured (newest ' + d.newer_patches[0][0] + ') - rates are pre-patch; run pull_rates'; }
   el('mapsel').onchange = function () { st.map = this.value; save(); paint(); refresh(); };

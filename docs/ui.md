@@ -122,8 +122,11 @@ playbook). *playbook* renders the catalog with each constraint's form.
 went - the outcomes logged against it (win, loss or draw, the date, the
 side, the note), or "not played yet" - and the running tally; outcomes
 recorded without a comp are listed under it. The header carries a link to
-*the math*, a page stating the equation and how the layers fit; the
-rates' capture date and patch sit under the status line.
+*the math*, a page stating the equation and how the layers fit. A
+footer at the very bottom carries the status - the facts on the board,
+the playbook notes, the time of the last read - and the rates' capture
+date and patch; the header keeps only the short-lived flashes (a banned
+pick, a full team).
 `board.css` is the game's hero select: role columns, portrait tiles, red
 and blue seats, the dark palette.
 
