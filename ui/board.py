@@ -242,12 +242,16 @@ def _page(title, body):
 MATH = """
 <article class='math'>
 <h2>The equation</h2>
-<pre class='eq'>DATA        = HEROES &cup; MAPS &cup; META
-INDEPENDENT = &#8899; facts(s)     over each selection s
-DEPENDENT   = &#8899; facts(s &#8904; t) over the intersections of selections
-FACTS       = INDEPENDENT &cup; DEPENDENT
-STRATEGIES  = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS
-COMP        = ARGMAX[ STRATEGIES( FACTS ) ]</pre>
+<pre class='eq'>DATA           = HEROES &cup; MAPS &cup; META              the tables, as set
+for each domain D in { HEROES, MAPS, META }:
+  INDEPENDENT(D) = &#8899; facts(s)      over each selection s in D    s alone: its own row
+  DEPENDENT(D)   = &#8899; facts(s &#8904; t)  over the other selections t   s joined with t
+  FACTS(D)       = INDEPENDENT(D) &cup; DEPENDENT(D)
+FACTS          = FACTS(HEROES) &cup; FACTS(MAPS) &cup; FACTS(META)
+FACTS(D) &cap; FACTS(E) = the joins of D with E: what only their intersection can say
+STRATEGIES     = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS   the playbook: markdown files
+COMP           = ARGMAX[ STRATEGIES( FACTS ) ]            the solver searches, the agent argues
+</pre>
 <p><b>DATA</b> is the authoritative data, and only that: what is pulled from the sources and set
 in the database. <b>HEROES</b> are the kits - roles, subroles, health pools, every ability with its
 published numbers, who counters whom, which pairs work together. <b>MAPS</b> are the pool - the
@@ -255,18 +259,23 @@ mode, the stages, whether a map has sides, and the authored note on what kind of
 rewards. <b>META</b> is the record - win, pick and ban rates per hero, per map, per rank, captured
 as dated snapshots, plus the patches that shipped since.</p>
 <p><b>FACTS</b> is what the fact engine derives from that data for one board - a map, a side,
-red's picks, yours, the bans - in two kinds. The <b>independent variables</b> are each selection
-alone: a hero's kit and rates, the map's mode and what it rewards, the meta's vintage. Each is
-read from one table, keyed by the selection, and no other selection changes it. The
-<b>dependent variables</b> are what only an intersection can say, and each is a join: the hero on
-this map (heroes &#8904; map_meta &#8904; maps), the hero against each enemy and beside each ally
-(heroes &#8904; counters &#8904; heroes, heroes &#8904; synergies &#8904; heroes), the team as one
-thing (an aggregate over your picks), the matchup (the two aggregates compared), and the bans
-(a banned hero joined with both teams' counters). Every selection you add opens new
-intersections, and the engine derives every fact they support - so a board with nothing on it
-has only the meta's facts, and a full board has about a thousand. The facts are numbered F1,
-F2, ... and every claim the board makes cites them; the numbers a strategy reads are the
-dependent variables.</p>
+red's picks, yours, the bans - and every domain yields two kinds. The <b>independent</b> facts of
+a domain are each selection alone, read from its own row, and no other selection changes them: a
+hero's role, pool, range, every ability's numbers, its overall rates and its style; the map's
+mode, stages, sides and the note on what it rewards; the meta's vintage, source and queue. The
+<b>dependent</b> facts are the selection joined with others - &#8904;, the rows of two tables that
+meet on a key, which is what intersecting two selections means in a database - and a join belongs
+to every domain it touches, so the dependent facts are where the domains' fact sets intersect: a
+hero's rate on this map and its delta against its baseline (HEROES &cap; MAPS &cap; META: heroes
+&#8904; map_meta &#8904; maps), who among red's picks it answers and who answers it (HEROES &cap;
+HEROES: heroes &#8904; counters &#8904; heroes), who among your picks it pairs with (&#8904;
+synergies), the map's leaders and strugglers and how your picks fit its style (MAPS &cap; HEROES
+&cap; META), the team as one thing (the six joined and aggregated), the matchup (the twelve,
+compared), and the bans (a banned hero joined with both teams' counters). The tables themselves
+share no rows - DATA is their union - and every intersection is a join. Every selection you add
+opens new joins, and the engine derives every fact they support: a board with nothing on it has
+only the meta's facts, a full board about a thousand. The facts are numbered F1, F2, ... and every
+claim the board makes cites them; the numbers a strategy reads are the dependent facts.</p>
 <p><b>STRATEGIES</b> is the playbook: markdown files, one per strategy, in three kinds.
 A <b>constraint</b> is a limit the comp may not cross (at most two tanks), a scored adjustment
 (a bonus or a penalty when a condition holds), or a ground rule in prose. A <b>heuristic</b> is a
@@ -275,13 +284,50 @@ An <b>assumption</b> is prose by definition - what the model takes as given (pla
 optimally; rates are Role Queue on console) - shown with every result and never scored. A
 strategy is written as a name, a kind and a paragraph; the formula, the metric and the weight
 are inferred from that and stored in the same file.</p>
-<p><b>COMP</b> is the argmax: of every legal six under the constraints, the one the weighted
-heuristics score highest on the facts of this board. Each heuristic reads a metric off the six
-(its pool, its range, its answers to red's picks), normalises it against a fixed reference sample
-of comps so scores are comparable across boards, multiplies by its weight, and the sum is the
-score. 100 is the optimal's score on this board; every other comp on the board - yours as you
-pick, theirs as they reveal - is a share of it. Nothing in this is sampled or guessed: the same
+<p><b>COMP</b> is the argmax: of every legal six under the constraints, the one the function
+below scores highest on the facts of this board. Nothing in this is sampled or guessed: the same
 board gives the same six every time, in a second or two.</p>
+<h2>The function: STRATEGIES( FACTS )</h2>
+<p>A scoring function. It takes one candidate six for blue on one board and returns one number;
+ARGMAX searches the candidate sixes for the highest. What it reads is not the numbered sentences
+but the same dependent variables in structured form, the <b>namespace</b>: <code>team</code> (the
+aggregates over the candidate six, computed against red), <code>enemy</code> (red's aggregates,
+fixed for the board), <code>matchup</code> (the two compared), <code>map</code> and
+<code>world</code>. They come from the same functions the fact engine uses, so a strategy's
+<code>team.antiheal</code> is the number the facts tab prints. For every candidate the solver
+rebuilds <code>team</code> and <code>matchup</code>; the other three never change during a
+search.</p>
+<p>Each kind of strategy contributes one kind of term. A <b>limit</b> (a constraint with
+<code>require</code>) is a boolean over the namespace: a hard limit that fails removes the six
+from the search; a soft one that fails subtracts its penalty. A <b>heuristic</b> reads its metric,
+normalises it to 0..1 against a reference sample - 1200 random legal sixes for this board, seeded
+from the map, side, enemies and bans, so every call on one board shares one scale - flips it when
+the direction is minimise, and multiplies by its weight. A <b>scored constraint</b> evaluates its
+bonus and penalty while its <code>when</code> holds, and its weight multiplies the difference. An
+<b>assumption</b> and a prose constraint contribute nothing: they are shown, and they are the
+agent's to argue with.</p>
+<pre class='eq'>for one six x, with every hard limit holding:
+
+score(x) = &Sigma; heuristics h     w_h &middot; norm_h( metric_h(x) )
+         + &Sigma; scored r         w_r &middot; ( bonus_r(x) &minus; penalty_r(x) )
+         &minus; &Sigma; soft limits l    penalty_l(x)
+
+norm_h(v) = clamp( (v &minus; min_ref) / (max_ref &minus; min_ref), 0, 1 )
+            and 1 &minus; that when h minimises</pre>
+<p><b>What 100 means.</b> The raw score is not the number on the tile. The best six the solver
+found is 100, and every other comp - yours as you pick, theirs as they reveal - is its raw score
+as a share of that best. 100 means as good as the best six under this playbook on this board,
+not a win probability.</p>
+<p><b>The argmax.</b> Each role's pool is first cut to the top six by a fixed prior - map win
+rate, plus answers to red's picks, minus exposure to them, plus synergies with the locked picks
+and style fit. Every shape the limits allow is then filled from the pools around the locked
+picks, each six is scored, and a local search swaps slots for same-role heroes while it improves.
+Ties break by the six's mean map win rate, then by name, so the same board gives the same six
+every time.</p>
+<p><b>When the playbook holds only limits</b> - no heuristic, no scored constraint - the sum is
+empty: every legal six scores zero, every comp on the board shows 100, and the optimal is the
+tie-break alone: the highest win rates on this map that fit the shape, not a judgement about
+them together. A single heuristic is what turns that ordering into an inference.</p>
 <h2>How the pieces fit</h2>
 <pre class='eq'>sources → db/data (fetch) → db/psql (the database) → ui/facts (FACTS of a board)
                                                                     &darr;

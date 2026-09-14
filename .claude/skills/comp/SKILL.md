@@ -38,9 +38,10 @@ connected; they expose the same tools.
 3. Read the `facts` tool for the same board when you want the evidence
    behind a number (`{"map": ..., "red": [...], "blue": [<the six>]}`) -
    every fact the database holds about those heroes, the map, each team
-   and the matchup, numbered F1.. and citable - FACTS = INDEPENDENT ∪
-   DEPENDENT: each selection alone, then the joins across them (hero ⋈
-   map, hero ⋈ enemy, hero ⋈ ally, the team, the matchup). Below a divider comes the playbook's
+   and the matchup, numbered F1.. and citable - every domain's
+   independent facts (a selection's own row) and dependent ones (its
+   joins: hero ⋈ map, hero ⋈ enemy, hero ⋈ ally, the team, the matchup).
+   Below a divider comes the playbook's
    record, numbered S1.. and just as citable: the archetypes and the
    catalog's shape. The game is 6v6 Open Queue: six picks, at most two
    tanks. The playbook itself - STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪

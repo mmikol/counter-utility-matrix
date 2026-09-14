@@ -2,19 +2,23 @@
 
     generate(world, "King's Row", red=["Zarya", "Pharah"], blue=["Ana"])
 
-    INDEPENDENT = ⋃ facts(s) over each selection s       a hero, the map, the meta - alone
-    DEPENDENT   = ⋃ facts(s ⋈ t) over the intersections  hero ⋈ map, hero ⋈ enemy, hero ⋈ ally,
-                                                         team, team × team, bans ⋈ picks
-    FACTS       = INDEPENDENT ∪ DEPENDENT                F1..
-    STRATEGIES  = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS the playbook, inference/strategies/
-    (the playbook's record)                              S1..  what it holds
+    for each domain D in { HEROES, MAPS, META }:
+      INDEPENDENT(D) = ⋃ facts(s)      over each selection s in D   s alone: its own row
+      DEPENDENT(D)   = ⋃ facts(s ⋈ t)  over the other selections t  s joined with t
+      FACTS(D)       = INDEPENDENT(D) ∪ DEPENDENT(D)
+    FACTS       = FACTS(HEROES) ∪ FACTS(MAPS) ∪ FACTS(META)      F1..
+    STRATEGIES  = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS         the playbook
+    (the playbook's record)                                      S1..  what it holds
 
 FACTS are derived from the authoritative data - what the sources say about
-the heroes, the maps and the meta, pulled and set - for this board: the
-independent variables are each selection alone, read from one table; the
-dependent variables are the joins across selections (map_meta is heroes ⋈
-maps, counters and synergies are heroes ⋈ heroes, the team aggregates the
-picks, the matchup compares the aggregates, the bans join both teams).
+the heroes, the maps and the meta, pulled and set - for this board, and
+every domain yields both kinds: the independent facts are a selection's
+own row (a hero's kit, rates and style; the map's mode and note; the
+meta's vintage); the dependent facts are the selection joined with others
+(map_meta is heroes ⋈ maps ⋈ meta, counters and synergies are heroes ⋈
+heroes, the team is the six joined, the matchup the twelve, the bans join
+both teams), and a join belongs to every domain it touches - the
+dependent facts are where the domains' fact sets intersect.
 Independent facts per hero and for the map come first; the joins per team
 appear once a team has picks, and the matchup once both teams do.
 Below them, numbered S1.., rides the PLAYBOOK's record: the archetypes it

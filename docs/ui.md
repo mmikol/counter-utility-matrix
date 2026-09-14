@@ -9,18 +9,23 @@ every write, and the inference layer owns the scoring. What it owns is
 the equation's left-hand term:
 
 ```
-INDEPENDENT = ⋃ facts(s) over each selection s        a hero, the map, the meta - each alone
-DEPENDENT   = ⋃ facts(s ⋈ t) over the intersections   hero ⋈ map, hero ⋈ enemy, hero ⋈ ally,
-                                                      team, team × team, bans ⋈ picks
-FACTS       = INDEPENDENT ∪ DEPENDENT                 one board's facts, F1..
+DATA           = HEROES ∪ MAPS ∪ META              the tables, as pulled and set
+for each domain D in { HEROES, MAPS, META }:
+  INDEPENDENT(D) = ⋃ facts(s)      over each selection s in D    s alone: its own row
+  DEPENDENT(D)   = ⋃ facts(s ⋈ t)  over the other selections t   s joined with t, in D or beyond
+  FACTS(D)       = INDEPENDENT(D) ∪ DEPENDENT(D)
+FACTS          = FACTS(HEROES) ∪ FACTS(MAPS) ∪ FACTS(META)
+FACTS(D) ∩ FACTS(E) = the joins of D with E: what only their intersection can say
 ```
 
-An independent fact is read from one table, keyed by the selection, and
-no other selection changes it. A dependent fact is a join across
-selections - `map_meta` is heroes ⋈ maps, `counters` and `synergies` are
-heroes ⋈ heroes, the team facts aggregate over the picks, the matchup
-facts compare the two aggregates, the ban facts join a banned hero with
-both teams' counters - and every selection added opens new intersections.
+Every domain yields both kinds. An independent fact is one selection's
+own row, and no other selection changes it. A dependent fact is that
+selection joined with others - `map_meta` is heroes ⋈ maps ⋈ meta,
+`counters` and `synergies` are heroes ⋈ heroes, the team facts aggregate
+the six joined, the matchup facts compare the twelve, the ban facts join
+a banned hero with both teams' counters - and a join belongs to every
+domain it touches, so the dependent facts are where the domains' fact
+sets intersect. Every selection added opens new joins.
 
 ```bash
 .venv/bin/python -m ui.board              # http://localhost:8017, the local cluster

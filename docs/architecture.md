@@ -3,13 +3,15 @@
 Three layers over one database, each a folder at the root, each with its own document in `docs/`.
 
 ```
-DATA        = HEROES ∪ MAPS ∪ META                    pulled from the sources and set: the tables
-INDEPENDENT = ⋃ facts(s) over each selection s        a hero, the map, the meta - each alone
-DEPENDENT   = ⋃ facts(s ⋈ t) over the intersections   hero ⋈ map, hero ⋈ enemy, hero ⋈ ally,
-                                                      team, team × team, bans ⋈ picks
-FACTS       = INDEPENDENT ∪ DEPENDENT                 one board's facts, F1..
-STRATEGIES  = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS  the playbook: markdown files
-COMP        = ARGMAX[ STRATEGIES( FACTS ) ]           the solver searches, the agent argues
+DATA           = HEROES ∪ MAPS ∪ META              the tables, as pulled and set
+for each domain D in { HEROES, MAPS, META }:
+  INDEPENDENT(D) = ⋃ facts(s)      over each selection s in D    s alone: its own row
+  DEPENDENT(D)   = ⋃ facts(s ⋈ t)  over the other selections t   s joined with t, in D or beyond
+  FACTS(D)       = INDEPENDENT(D) ∪ DEPENDENT(D)
+FACTS          = FACTS(HEROES) ∪ FACTS(MAPS) ∪ FACTS(META)
+FACTS(D) ∩ FACTS(E) = the joins of D with E: what only their intersection can say
+STRATEGIES     = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS   the playbook: markdown files
+COMP           = ARGMAX[ STRATEGIES( FACTS ) ]            the solver searches, the agent argues
 ```
 
 Everything is free to run - no accounts, no keys, no API billing. The
@@ -88,13 +90,15 @@ never the tables.
 The equation the whole repo serves:
 
 ```
-DATA        = HEROES ∪ MAPS ∪ META                    pulled from the sources and set: the tables
-INDEPENDENT = ⋃ facts(s) over each selection s        a hero, the map, the meta - each alone
-DEPENDENT   = ⋃ facts(s ⋈ t) over the intersections   hero ⋈ map, hero ⋈ enemy, hero ⋈ ally,
-                                                      team, team × team, bans ⋈ picks
-FACTS       = INDEPENDENT ∪ DEPENDENT                 one board's facts, F1..
-STRATEGIES  = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS  the playbook: markdown files
-COMP        = ARGMAX[ STRATEGIES( FACTS ) ]           the solver searches, the agent argues
+DATA           = HEROES ∪ MAPS ∪ META              the tables, as pulled and set
+for each domain D in { HEROES, MAPS, META }:
+  INDEPENDENT(D) = ⋃ facts(s)      over each selection s in D    s alone: its own row
+  DEPENDENT(D)   = ⋃ facts(s ⋈ t)  over the other selections t   s joined with t, in D or beyond
+  FACTS(D)       = INDEPENDENT(D) ∪ DEPENDENT(D)
+FACTS          = FACTS(HEROES) ∪ FACTS(MAPS) ∪ FACTS(META)
+FACTS(D) ∩ FACTS(E) = the joins of D with E: what only their intersection can say
+STRATEGIES     = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS   the playbook: markdown files
+COMP           = ARGMAX[ STRATEGIES( FACTS ) ]            the solver searches, the agent argues
 ```
 
 The data layer owns DATA; the UI layer's fact engine owns FACTS - the
@@ -103,17 +107,21 @@ across the selections; the inference layer owns STRATEGIES and the argmax.
 
 DATA is the authoritative data: the heroes, maps and meta domains as the
 sources report them. FACTS is what the fact engine derives from it for one
-board, in two kinds. An independent fact belongs to one selection and no
-other changes it: a hero's kit and rates, the map's mode and what it
-rewards, the meta's vintage - one table, keyed by the selection. A
-dependent fact belongs to an intersection of selections and is a join:
-the hero on this map (`heroes ⋈ map_meta ⋈ maps`), the hero against each
-enemy and beside each ally (`heroes ⋈ counters ⋈ heroes`, `heroes ⋈
-synergies ⋈ heroes`), the team as one thing (an aggregate over the picks),
-the matchup (the two aggregates compared), the bans (a banned hero joined
-with both teams' counters). Every selection added opens new intersections,
-and the engine derives every fact they support; the numbers the
-strategies read are the dependent ones. STRATEGIES are the
+board, and every domain yields two kinds. An independent fact belongs to
+one selection and no other changes it: a hero's kit, rates and style, the
+map's mode and what it rewards, the meta's vintage - its own row. A
+dependent fact is the selection joined with others (⋈: the rows of two
+tables that meet on a key; the tables themselves share no rows, so DATA
+is their union and every intersection is a join), and a join belongs to
+every domain it touches, so the dependent facts are where the domains'
+fact sets intersect: the hero on this map (`heroes ⋈ map_meta ⋈ maps`,
+HEROES ∩ MAPS ∩ META), the hero against each enemy and beside each ally
+(`heroes ⋈ counters ⋈ heroes`, `heroes ⋈ synergies ⋈ heroes`), the map's
+leaders and how the picks fit its style, the team as one thing (the six
+joined and aggregated), the matchup (the twelve compared), the bans (a
+banned hero joined with both teams' counters). Every selection added
+opens new joins, and the engine derives every fact they support; the
+numbers the strategies read are the dependent ones. STRATEGIES are the
 playbook, `inference/strategies/`, of exactly three kinds of file: a *constraint*
 is a limit (`require`, hard unless soft), a scored adjustment
 (`bonus`/`penalty` while `when` holds) or prose the agent holds a comp to;

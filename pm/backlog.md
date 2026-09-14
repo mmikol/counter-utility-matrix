@@ -8,12 +8,15 @@ ordered by payoff over blast radius; the first is the one to pick up.
 ## In progress
 
 - **The fact engine's dependent variables** - `fact-engine` branch. The
-  equation now says what the engine does: FACTS = INDEPENDENT ∪ DEPENDENT,
-  each selection alone read from one table, then the joins across the
-  selections (hero ⋈ map, hero ⋈ enemy, hero ⋈ ally, the team, the
-  matchup, the bans). The math page, the docs and the skills state it
-  that way. Next is the list under "Fact engine" below, best first. Done
-  when the pairwise numbers are facts and the branch is merged.
+  equation now says what the engine does: for each domain (heroes, maps,
+  meta), FACTS(D) = INDEPENDENT(D) ∪ DEPENDENT(D) - a selection's own row,
+  then its joins (hero ⋈ map, hero ⋈ enemy, hero ⋈ ally, the team, the
+  matchup, the bans), a join belonging to every domain it touches. The
+  math page also states the function STRATEGIES( FACTS ) - the namespace
+  it reads, its three kinds of term, the formula, what 100 means, and
+  the tie-break that decides when the playbook holds only limits. Next
+  is the list under "Fact engine" below, best first. Done when the
+  pairwise numbers are facts and the branch is merged.
 
 ## Next
 
@@ -53,6 +56,10 @@ hero, one map, the meta, the bans), the rest intersections (hero x map,
 hero x enemy, hero x ally, the team, the matchup). What the data can still
 yield, best first:
 
+- **Tag every fact independent or dependent.** Each fact kind names the
+  tables it joins (none for an independent one); the facts tab shows the
+  tag and the board's counts by kind, so the equation's two terms are
+  visible per board. Cost: half a day; 127 kinds to classify once.
 - **Pairwise numbers, blue pick against red pick.** One-shot: whose
   biggest hit meets whose pool. Time to kill: pool over damage floor, each
   way. Out-range: whose longest reach exceeds whose. All from numbers the
