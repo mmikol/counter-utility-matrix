@@ -10,12 +10,12 @@ no keys, no API billing.
 ## Install
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or any docker + compose v2)
-- Python 3.9+ for the orchestrator, the tests and a Docker-less run (no PostgreSQL install needed: `pgserver` embeds one on macOS and Linux x86_64)
+- Python 3.12 for the orchestrator, the tests and a Docker-less run - the version the image runs (no PostgreSQL install needed: `pgserver` embeds one on macOS and Linux x86_64)
 - [Claude Code](https://claude.com/claude-code), for the skills and the agents' run - signed in once with `claude login`
 
 ```bash
 git clone git@github.com:mmikol/counter-utility-matrix.git && cd counter-utility-matrix
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
 ## Start

@@ -40,8 +40,8 @@ message per line over stdio, and the same surface over HTTP with a
 containers' healthchecks, and `405` on a bare `GET /mcp`. It speaks what a
 tool host needs - `initialize`, `ping`, `tools/list`, `tools/call`,
 `resources/list`, `resources/read`, an empty `prompts/list` - and logs to
-stderr, since stdout is the wire. It is hand-written because the official
-SDK needs Python 3.10 and the project runs on 3.9.
+stderr, since stdout is the wire. It is hand-written so the door has no
+dependency to audit: a few hundred lines of JSON-RPC instead of the SDK.
 
 ## From a shell
 

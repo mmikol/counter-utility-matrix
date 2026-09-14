@@ -102,8 +102,8 @@ optimal's scale - your picks as a share of blue's best counter to red's
 selection, red's as a share of their best counter to yours - and, when
 you have picks, how you hold if red answers you perfectly. Each box
 carries its own share as a badge by its name, and a *clear* button that
-empties that team's picks alone (*new game* in the header clears both,
-the map, the side and the bans). Red's box only holds and
+empties that team's picks (the map, the side and the bans are undone
+where they were set). Red's box only holds and
 scores what they reveal; the blue box also fills its empty slots with the
 solver's suggestions - the optimal six before any pick, then the best six
 that keeps what you have locked - each a click away from locking. The comp is
@@ -116,9 +116,9 @@ alternatives (each with its own 0-100 figure when present) and the partial
 notice. *facts*
 filters by text and by scope (meta, bans, map, hero, team, matchup,
 playbook). *playbook* renders the catalog with each constraint's form.
-The header carries a link to
-*the math*, a page stating the equation and how the layers fit, and, at
-its far right, a link to the repository on GitHub (`COUNTER_MATRIX_REPO_URL`
+Pinned to the header's top-right
+corner are two pills: *the math*, a page stating the equation and how
+the layers fit, and the repository on GitHub (`COUNTER_MATRIX_REPO_URL`
 overrides the address when the repo moves). A
 footer at the very bottom carries the status - the facts on the board,
 the playbook notes, the time of the last read - and the rates' capture

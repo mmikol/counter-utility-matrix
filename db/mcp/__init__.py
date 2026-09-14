@@ -6,8 +6,8 @@ through the same door.
     python -m db.mcp list            print the tools
     python -m db.mcp call pull_maps  run one tool from the shell
 
-The protocol implementation is dependency-free (server.py) because the
-official SDK needs Python 3.10 and the project runs on 3.9; the surface is
-the standard one - initialize, tools/list, tools/call, resources - so any
-MCP client can drive it.
+The protocol implementation is dependency-free (server.py) so the door has
+nothing to audit but its own few hundred lines; the surface is the standard
+one - initialize, tools/list, tools/call, resources - so any MCP client can
+drive it.
 """
