@@ -242,7 +242,12 @@ function renderInf() {
   var c = d.current;
   if (!c.blue || !c.blue.length) el('cur').innerHTML = "<div class='inf-head'><h3>current comp - your picks</h3></div>" +
     "<p class='legend'>lock a blue pick to score the current comp; six picks are ranked against the whole field.</p>";
-  else renderResult(c, el('cur'), 'current comp - your picks' + (c.kind === 'evaluate' ? ', ranked' : ' (' + c.blue.length + ' of ' + TEAM + ')'), false);
+  else {
+    renderResult(c, el('cur'), 'current comp - your picks against blue\'s optimal' + (c.kind === 'evaluate' ? ', ranked' : ' (' + c.blue.length + ' of ' + TEAM + ')'), false);
+    var gap = (typeof d.blue.score === 'number' && typeof c.score === 'number') ? (d.blue.score - c.score) : null;
+    el('cur').insertAdjacentHTML('afterbegin', "<p class='legend compare'>blue\'s optimal scores " + (+d.blue.score).toFixed(2) + " \u00b7 your picks " + (+c.score).toFixed(2) +
+      (gap !== null ? " \u00b7 " + (gap <= 0.005 ? 'you are on the optimal' : (gap.toFixed(2) + ' behind - ' + (typeof c.normalized === 'number' ? c.normalized : Math.round(100 * c.score / d.blue.score)) + ' / 100')) : '') + '</p>');
+  }
 }
 
 function renderResult(d, container, title, recordable) {

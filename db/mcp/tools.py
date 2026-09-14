@@ -545,8 +545,9 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
 
 
 @tool("board", "Both seats at once, on opposite sides of a sided map: blue's"
-      " optimal six around the locked picks, red's optimal six around the"
-      " revealed picks, and blue's current picks scored as they stand"
+      " absolute optimal six for the map, side, bans and red's picks (blue's own"
+      " picks never constrain it), red's optimal six around the revealed picks,"
+      " and blue's current picks scored as they stand on the optimal's scale"
       " (ranked when six are locked, flagged partial otherwise).",
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
                                                           " search keeps (default 6)"}))

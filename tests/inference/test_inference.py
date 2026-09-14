@@ -186,7 +186,9 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     from inference import engine
     b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack")
     blue, red, cur = b["blue"], b["red"], b["current"]
-    assert blue.seat == "blue" and blue.side == "attack" and "Ana" in blue.blue
+    assert blue.seat == "blue" and blue.side == "attack" and blue.locked == []
+    absolute = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], side="attack")
+    assert blue.blue == absolute.blue                     # blue's optimal ignores your picks
     assert red.seat == "red" and red.side == "defense" and len(red.blue) == 6
     assert {"Zarya", "Pharah"} <= set(red.blue)          # red keeps its revealed picks
     assert red.red == ["Ana"]                             # and drafts against blue's
@@ -209,8 +211,9 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     b = engine.board(world, "Ilios", ["Pharah"], six, side="attack")
     assert b["side"] == "" and b["blue"].side == "" and b["red"].side == ""
     assert b["current"].kind == "evaluate" and b["current"].rank >= 1
-    assert b["blue"].blue == sorted(six, key=lambda n: (
-        {"tank": 0, "damage": 1, "support": 2}[world.hero(n).role], n))
+    assert set(b["current"].blue) == set(six)
+    assert b["blue"].locked == [] and b["blue"].to_dict()["normalized"] == 100
+    assert 0 <= b["current"].to_dict()["normalized"] <= 100      # against the absolute optimal
     b = engine.board(world, None, [], [])
     assert not b["current"].blue and b["current"].partial
 
@@ -225,9 +228,12 @@ def test_scores_share_one_scale_per_board(world):
     assert abs(r.score - e.score) < 1e-9 and e.rank == 1
     assert r.to_dict()["normalized"] == 100 and e.to_dict()["normalized"] == 100
     assert all(0 <= a["normalized"] <= 100 for a in r.alternatives) and r.alternatives[0]["normalized"] < 100
-    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], r.blue)
-    assert abs(b["current"].score - r.score) < 1e-9
+    best = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [])
+    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], best.blue)
+    assert abs(b["current"].score - best.score) < 1e-9 and b["blue"].blue == best.blue
     assert b["current"].to_dict()["normalized"] == 100 and b["red"].to_dict()["normalized"] == 100
+    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], r.blue)     # a six around Ana
+    assert b["blue"].blue == best.blue and b["current"].to_dict()["normalized"] <= 100
     again = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], pool_size=4)
     assert abs(again.score - engine.evaluate(
         world, "King's Row", ["Zarya", "Pharah"], again.blue).score) < 1e-9

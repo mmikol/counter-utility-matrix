@@ -49,7 +49,7 @@ the script has no constant to keep in step with the Python.
 | `/static/<file>` | `board.css` and `board.js` |
 | `/api/roster` | every hero (role, subrole, portrait, icon) and every map (mode, sided or not), the rosters are built from |
 | `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
-| `/api/infer?map=&side=&red=&blue=&ban=` | both seats solved and the current picks scored - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
+| `/api/infer?map=&side=&red=&blue=&ban=` | both seats solved (blue's absolute optimal, red's around its revealed picks) and the current picks scored on blue's optimal's scale - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
 | `/api/strategies` | the strategies catalog: every constraint and heuristic with its kind, form, frontmatter and body |
 | `/api/record` (POST) | record a comp shown on the board through the inference layer's `record`: the gates hold (six real heroes, citations the board showed) and a transcript is written |
 | `/recs`, `/rec/<id>` | the recorded compositions, and one transcript rendered |
@@ -85,6 +85,10 @@ its slot un-bans it; at five, the rest dim.
 
 **The panels.** *comps* is the default: blue's optimal six (left) and
 red's optimal six (right) side by side, the current comp - your picks -
+below. Blue's optimal is absolute: the best six for the map, side, bans
+and red's picks, whatever you have locked, so it does not collapse into
+your selection when you hold six; your picks are scored against it, and
+a line above the current comp says how far behind they are. The comp is
 full width below. Each result shows its 0-100 figure large (`normalized`:
 100 for an optimal six, the current comp's share of blue's optimal on
 that board) with the raw score small beside it and as the tooltip, and

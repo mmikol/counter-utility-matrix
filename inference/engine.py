@@ -5,7 +5,7 @@
 returns the optimal six around the locked picks, each pick with the facts
 that justify it (the board the UI layer would show for map + red + the
 six), the score broken down per strategy, and the alternatives.
-board() does it for both seats - blue around its locked picks, red around
+board() does it for both seats - blue's absolute optimal, red around
 its revealed ones, on opposite sides of a sided map - and scores the
 current blue picks as they stand.
 """
@@ -328,16 +328,21 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
           catalog=None, top=5):
     """Both seats and the current comp in one pass:
 
-        blue     the optimal six around blue's locked picks, on `side`
+        blue     the absolute optimal six for this map, side, bans and red's
+                 picks - blue's own picks do not constrain it, so it is the
+                 same answer whether you have locked none or six
         red      the optimal six around red's revealed picks, on the other side
-        current  blue's picks as they stand (full: ranked; partial: scored)
+        current  blue's picks as they stand (full: ranked; partial: scored),
+                 on the optimal's scale: its `normalized` is the share of
+                 blue's optimal your picks reach
     """
     catalog = catalog or catalog_module.load()
     m, _, _, _ = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
-    blue_r = infer(world, map_name, red, blue, top, pool_size, catalog, bans, side, "blue")
+    blue_r = infer(world, map_name, red, [], top, pool_size, catalog, bans, side, "blue")
     red_r = infer(world, map_name, blue, red, top, pool_size, catalog, bans,
                   opposite(side), "red")
     cur = current(world, blue_r, map_name, red, blue, catalog, bans, side, pool_size)
+    _finish(cur, blue_r.score)                     # 100 is blue's optimal, whatever you hold
     return {"map": m.name if m else None, "side": side, "bans": list(bans),
             "blue": blue_r, "red": red_r, "current": cur}

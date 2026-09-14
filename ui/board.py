@@ -6,8 +6,9 @@ and the inference layer.
 
 Standard library only. Every click re-reads the database: the facts
 panel is the FactSet for (map, red, blue), the comps panel is the
-inference layer's answer for both seats around the locked picks with the
-current blue picks scored, and the playbook panel is the strategies
+inference layer's absolute optimal for blue, red's optimal around its
+revealed picks, and the current blue picks scored against blue's optimal,
+and the playbook panel is the strategies
 catalog as it sits on disk. JSON endpoints under /api/ serve the same
 three things.
 """
