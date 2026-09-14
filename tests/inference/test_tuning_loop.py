@@ -245,3 +245,18 @@ def test_a_file_named_for_another_id_cannot_hijack_it(catalog_copy):
     with pytest.raises(catalog.CatalogError) as caught:
         catalog.load(catalog_copy)
     assert caught.value.file == "aaa.md" and "id: is the filename" in str(caught.value)
+
+
+def test_an_experiment_playbook_is_chosen_by_the_environment(monkeypatch, tmp_path):
+    """COUNTER_MATRIX_STRATEGIES names another folder of strategy files; the
+    shipped playbook is the default, and the docs are written from it alone."""
+    monkeypatch.delenv("COUNTER_MATRIX_STRATEGIES", raising=False)
+    assert catalog.strategies_dir() == catalog.SHIPPED_DIR
+    monkeypatch.setenv("COUNTER_MATRIX_STRATEGIES", "inference/experiments/two-rules")
+    chosen = catalog.strategies_dir()
+    assert chosen.endswith(os.path.join("inference", "experiments", "two-rules"))
+    two = catalog.load(chosen)
+    assert sorted(h.id for h in two) == ["healing-floor", "open-queue-tanks"]
+    monkeypatch.setattr(catalog, "STRATEGIES_DIR", chosen)
+    assert catalog.write_docs(two, path=str(tmp_path / "never.md")) is None
+    assert not (tmp_path / "never.md").exists()

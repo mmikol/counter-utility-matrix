@@ -298,7 +298,9 @@ def refresh():
 
 def test():
     # the container's filesystem is read-only; coverage writes its data to the tmpfs
-    sh("docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage", "data",
+    # the suite runs on the shipped playbook whatever experiment .env names
+    sh("docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage",
+       "-e", "COUNTER_MATRIX_STRATEGIES=", "data",
        "python", "-m", "pytest", "-q",
        "-p", "no:cacheprovider", "--cov=db", "--cov=ui", "--cov=inference",
        "--cov=orchestrator", "--cov-report=term-missing:skip-covered")

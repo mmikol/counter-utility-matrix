@@ -361,7 +361,10 @@ def db_docs(ctx):
     from inference import catalog
     with ctx.connect() as cx:
         text = schema.generate_docs(cx)
-    paths = [catalog.write_docs(catalog.load()), write_tool_docs()]
+    paths = [p for p in (catalog.write_docs(catalog.load()), write_tool_docs()) if p]
+    if catalog.STRATEGIES_DIR != catalog.SHIPPED_DIR:
+        ctx.log("db_docs: an experiment playbook is in force (%s); the catalog section"
+                " of docs/inference.md was left as the shipped playbook" % catalog.STRATEGIES_DIR)
     return text + "; wrote " + ", ".join(os.path.relpath(p, ROOT) for p in paths), {}
 
 
@@ -571,6 +574,10 @@ def strategies_tool(ctx):
     cat = catalog.load()
     pending = [h.id for h in cat if h.pending]
     text = catalog.render(cat)
+    if catalog.STRATEGIES_DIR != catalog.SHIPPED_DIR:
+        text = "playbook in force: %s (an experiment; the shipped one is %s)\n\n%s" % (
+            os.path.relpath(catalog.STRATEGIES_DIR, ROOT),
+            os.path.relpath(catalog.SHIPPED_DIR, ROOT), text)
     if pending:
         text += "\n\n%d draft(s) awaiting /strategy: %s" % (len(pending), ", ".join(pending))
     return text, {"strategies": [h.to_dict() for h in cat], "pending": pending}

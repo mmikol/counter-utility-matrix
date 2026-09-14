@@ -52,7 +52,18 @@ from db import ROOT
 from inference.expr import ExprError, Section, compile_expr
 from ui.facts import compute
 
-STRATEGIES_DIR = os.path.join(ROOT, "inference", "strategies")
+SHIPPED_DIR = os.path.join(ROOT, "inference", "strategies")
+
+
+def strategies_dir():
+    """The playbook in force: the shipped one, unless COUNTER_MATRIX_STRATEGIES
+    names another (an experiment under inference/experiments/, say) - a path
+    relative to the repo root or absolute."""
+    chosen = os.environ.get("COUNTER_MATRIX_STRATEGIES", "").strip()
+    return os.path.abspath(os.path.join(ROOT, chosen)) if chosen else SHIPPED_DIR
+
+
+STRATEGIES_DIR = strategies_dir()
 DOCS_PATH = os.path.join(ROOT, "docs", "inference.md")
 KINDS = ("constraint", "heuristic", "assumption")
 FORMS = ("limit", "scored", "draft", "heuristic", "assumption")
@@ -320,8 +331,12 @@ def render(catalog):
 
 def write_docs(catalog, path=DOCS_PATH):
     """The catalog and the vocabulary, generated into docs/inference.md
-    between its <!-- generated:catalog --> markers."""
+    between its <!-- generated:catalog --> markers - from the shipped
+    playbook only: while an experiment is in force the docs keep describing
+    the real one, and this returns None."""
     from db.psql.schema import embed
+    if STRATEGIES_DIR != SHIPPED_DIR:
+        return None
     counts = {k: sum(1 for h in catalog if h.kind == k) for k in KINDS}
     forms = {f: sum(1 for h in catalog if h.form == f) for f in FORMS}
     reg = compute.registry()

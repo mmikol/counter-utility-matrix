@@ -119,6 +119,8 @@ Weights do not learn on their own. One path changes a file, logged in
 ```
 inference/
   __init__.py      the package's map
+  experiments/     other playbooks to run the stack on, one folder each,
+                   chosen with COUNTER_MATRIX_STRATEGIES (its README says how)
   strategies/      the playbook: one markdown file per constraint or heuristic,
                    and tuning-log.md
   catalog.py       reads, validates and mirrors the strategy files
