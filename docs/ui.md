@@ -125,9 +125,9 @@ empties that team's picks; *clear all* in the header empties everything -
 the map, the side, the bans and both teams. Red's box only holds and
 scores what they reveal; the blue box also fills its empty slots with the
 solver's suggestions - the optimal six before any pick, then the best six
-that keeps what you have locked - each a click away from locking and each
-tagged with its lead reason: what it answers on red, else who it partners,
-else just "suggested"; the full reasons are the tile's tooltip. The comp is
+that keeps what you have locked - each a click away from locking. The
+tile shows the hero alone; its reasons are the tooltip and the comps tab.
+The comp is
 full width below. Each result shows its 0-100 figure large (`normalized`:
 100 for an optimal six, the current comp's share of blue's optimal on
 that board) with the raw score small beside it and as the tooltip, and

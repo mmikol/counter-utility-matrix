@@ -205,7 +205,6 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .slot.suggested { border:1px dashed var(--blue); cursor:pointer; opacity:.7; }
 .slot.suggested:hover { opacity:1; box-shadow:0 0 16px rgba(62,166,255,.35); }
 .slot.suggested img { filter:saturate(.6); }
-.slot.suggested .sug { position:absolute; top:4px; right:6px; color:var(--blue); font-size:10px; letter-spacing:.12em; text-transform:uppercase; }
 .team h2 .tscore { font:600 15px/1 -apple-system,"Segoe UI",sans-serif; letter-spacing:0; color:var(--text);
   background:rgba(62,166,255,.18); border:1px solid var(--blue); border-radius:999px; padding:4px 10px; }
 .team.red h2 .tscore { background:rgba(255,75,87,.18); border-color:var(--red); }

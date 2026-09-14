@@ -151,7 +151,7 @@ def test_the_page_is_a_shell_over_static_files():
     assert "function meaning(d)" in script and "100 is the best six the solver can build" in script
     assert "game plan" in script and "d.plan" in script
     assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
-    assert "function leadReason" in script and "'answers '" in script   # the tile wears its reason
+    assert "leadReason" not in script and "class='sug'" not in script   # the hero alone
     # swap sides and new game are gone
     assert "swapbtn" not in script and "clearbtn" not in script
     assert "el('clearall').onclick" in script                # clear all takes new game's place
