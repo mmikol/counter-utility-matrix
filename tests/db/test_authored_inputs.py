@@ -103,4 +103,8 @@ def test_every_path_the_layer_declares_exists():
         assert os.path.isdir(path), path
     assert os.path.exists(os.path.join(db.AUTHORED_DIR, "seasons.csv"))
     assert os.path.exists(os.path.join(db.AUTHORED_DIR, "__init__.py"))
-    assert os.path.isdir(db.RAW_DIR) or True          # created on first export
+    # the CSV mirror is created on first export and never committed: scraped
+    # text and rates stay out of the public repository
+    assert db.RAW_DIR.endswith(os.path.join("db", "raw"))
+    with open(os.path.join(db.ROOT, ".gitignore"), encoding="utf-8") as handle:
+        assert "db/raw/" in handle.read().split()
