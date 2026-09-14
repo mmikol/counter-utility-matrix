@@ -15,6 +15,11 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     body = board.view_board()
     assert "team red" in body and "team blue" in body
     assert "tab-comps" in body and "tab-facts" in body and "tab-playbook" in body
+    # the facts total sits inside the facts panel, beside the filter - not on the tab
+    nav = body[body.index("<nav class='tabs'>"):body.index("</nav>")]
+    assert "factsn" not in nav and "<button data-tab='facts'>facts</button>" in nav
+    facts_panel = body[body.index("id='tab-facts'"):body.index("id='tab-playbook'")]
+    assert "id='factsn' class='count'" in facts_panel
     assert "recorded" not in body
     assert "record this comp" not in board.static_file("board.js")[0].decode()
     assert "FACTS = HEROES" not in body                              # the equation moved to /math
@@ -165,6 +170,15 @@ def test_the_page_is_a_shell_over_static_files():
     assert "h.form === 'heuristic' ? weightRow(h)" in script     # only heuristics have weights
     assert "function storeWeight" in script and "fetch('/api/weight', { method: 'POST'" in script
     assert "d.playbook || 'inference/strategies'" in script       # the card names its folder
+    # the playbook is grouped by kind, in the equation's order, each group counted
+    kinds = script[script.index("var KINDS = ["):script.index("function renderPlaybook")]
+    assert kinds.index("'constraint'") < kinds.index("'heuristic'") < kinds.index("'assumption'")
+    assert "class='pbgroup " in script and "none in the playbook in force" in script
+    assert "commas(shown) + ' of ' + commas(total) + ' facts'" in script   # the total, with commas
+    assert "function commas(n)" in script and "commas(d.considered)" in script
+    assert "set by you" not in script and "' constraints, '" not in script   # no counts
+    assert "strategies satisfied" in script and "' off'" in script  # the list keeps its grey-out
+    assert "var badge = function (cur, optimal, who)" in script    # a figure even with no picks
     # a playbook that scores nothing reads unscored, never 100 / 100
     assert "d.scoring === false" in script and "'unscored'" in script and "var UNSCORED" in script
     assert ".tile.capped" in board.static_file("board.css")[0].decode()

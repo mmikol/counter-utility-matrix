@@ -128,7 +128,10 @@ momentum strip: the verdict from the two current comps, each on its own
 optimal's scale - your picks as a share of blue's best counter to red's
 selection, red's as a share of their best counter to yours - and, when
 you have picks, how you hold if red answers you perfectly. Each box
-carries its own share as a badge by its name, and a *clear* button that
+carries its own share as a badge by its name - the current comp's while
+the seat holds picks, the suggested six's (its optimal, 100 by
+definition) before any pick, or *unscored* with the reason - and a
+*clear* button that
 empties that team's picks; *clear all* in the header empties everything -
 the map, the side, the bans and both teams. Red's box only holds and
 scores what they reveal; the blue box also fills its empty slots with the
@@ -146,19 +149,26 @@ none of them applies to this board yet (a heuristic waiting on its
 `when`), and the engine's reason (`unscored` on each result, naming the
 strategy that waits and what for) sits where the meaning would; then
 each pick
-with its reasons and `[F#]` citations, the score bars per strategy, the
+with its reasons and `[F#]` citations, the strategies satisfied (one bar
+per strategy, headed by the count met, greyed where a strategy did not
+apply to this comp), the
 alternatives (each with its own 0-100 figure when present) and the partial
 notice. *facts*
 filters by text and by scope (meta, bans, map, hero, team, matchup,
-playbook). *playbook* renders the catalog with each constraint's form,
+playbook), and says how many it holds beside the filter - "464 facts",
+or "12 of 464 facts" while a filter narrows it; the tab itself carries
+no number. *playbook* renders the catalog in three groups in the
+equation's order - constraints, heuristics, assumptions - each headed
+with its count and a line on what the kind does, an empty group saying
+so, every card edged in its kind's colour; a card shows its form,
 and under each heuristic a slider for its weight - 1 to 10 to the
 hundredth (1.02, 9.99), with a number box beside it for the exact figure,
 starting at the weight the file infers, with the inferred figure shown
 and a reset. A setting is the viewer's alone: it is kept in the
 browser, rides with every board request as `weight=<id>:<value>`, is
 applied by the solver for that board only (each result reports the
-`weights` it was scored under, and the comps legend counts the ones set
-by you), and never touches the file - until *store*, which writes it
+`weights` it was scored under), and never touches the file - until
+*store*, which writes it
 into the heuristic's file through the data layer's `tune` tool (validated
 against the catalog, logged in the tuning log with its reason, mirrored),
 after which the file's weight is the inferred default and the browser's

@@ -223,7 +223,9 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .ev { display:inline-block; background:#1d2430; color:var(--gold); border-radius:3px;
   padding:0 5px; font-size:11px; margin:1px 3px 1px 0; font-family:ui-monospace,monospace;
   cursor:help; }
-.bars { display:grid; grid-template-columns:1fr 1fr; gap:4px 22px; margin-top:10px; }
+.barshead { margin:12px 0 0; font-family:"Bebas Neue",Impact,sans-serif; font-size:15px; letter-spacing:.08em; color:var(--muted); font-weight:400; }
+.barshead .n { color:var(--gold); margin-left:6px; }
+.bars { display:grid; grid-template-columns:1fr 1fr; gap:4px 22px; margin-top:6px; }
 @media (max-width:900px) { .bars { grid-template-columns:1fr; } }
 .bar { display:grid; grid-template-columns:150px 1fr 54px; align-items:center; gap:8px;
   font-size:12px; }
@@ -236,6 +238,15 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .alts li { margin:3px 0; }
 .warnbox { background:#3a2026; border:1px solid #6b2f3a; border-radius:8px; padding:8px 12px;
   margin:10px 0; }
+.pbgroup { margin-bottom:18px; }
+.pbgroup h3 { font-family:"Bebas Neue",Impact,sans-serif; font-size:20px; letter-spacing:.06em; margin:0 0 8px;
+  display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+.pbgroup h3 .n { font-size:14px; color:var(--gold); }
+.pbgroup h3 .what { font-family:-apple-system,"Segoe UI",sans-serif; font-size:12px; letter-spacing:0; color:var(--muted); font-weight:400; text-transform:none; }
+.pbgroup.constraint h3 { color:var(--blue); } .pbgroup.heuristic h3 { color:var(--green); } .pbgroup.assumption h3 { color:#d9b36a; }
+.pbgroup .none { margin:0 0 4px; }
+.hcard.constraint { border-left:3px solid var(--blue); } .hcard.heuristic { border-left:3px solid var(--green); } .hcard.assumption { border-left:3px solid #d9b36a; }
+.tools .count { margin-left:auto; font-family:"Bebas Neue",Impact,sans-serif; font-size:16px; letter-spacing:.06em; color:var(--gold); white-space:nowrap; }
 .hcards { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:10px; }
 .hcard { background:#10141c; border:1px solid var(--line); border-radius:8px; padding:10px 12px; min-width:0; overflow:hidden; }
 .hcard .kind { display:inline-block; font-size:10px; letter-spacing:.14em; text-transform:uppercase;

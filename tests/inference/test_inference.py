@@ -315,6 +315,9 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     assert countered["scoring"] is (countered["unscored"] is None)
     assert grounded["momentum"]["verdict"].startswith("unscored on this board")
     assert "waits for matchup.flyers >= 1" in grounded["momentum"]["verdict"]
+    empty = engine.board_dict(engine.board(world, None, [], [], catalog=scratch))
+    assert "waits for matchup.flyers >= 1" in empty["momentum"]["verdict"]   # read off the optimal
+    assert "waits for" in empty["blue"]["unscored"]                           # what the badge shows
     flying = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
                                             ["Reinhardt", "Cassidy"], catalog=scratch))
     assert flying["blue"]["scoring"] is True and flying["blue"]["normalized"] == 100

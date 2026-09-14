@@ -405,11 +405,14 @@ def board_rendered(b):
     return "\n\n".join([*parts, "momentum: " + b["momentum"]["verdict"]])
 
 
-def _momentum(cur, red_cur, countered):
+def _momentum(cur, red_cur, countered, blue_r=None, red_r=None):
     """Who the picks favour, read off the two current comps on their own
     optimals' scales: blue's share of its best counter to red's selection,
-    red's share of its best counter to blue's."""
-    blue_why, red_why = _unscored(cur), _unscored(red_cur)
+    red's share of its best counter to blue's. A seat with no picks has no
+    contributions to name a waiting strategy by, so its reason is read off
+    its optimal instead."""
+    blue_why = _unscored(cur) if cur.blue or blue_r is None else _unscored(blue_r)
+    red_why = _unscored(red_cur) if red_cur.blue or red_r is None else _unscored(red_r)
     if blue_why and red_why:                       # neither seat can be a share of anything
         return {"blue": None, "red": None, "countered": None, "partial": False,
                 "verdict": blue_why}
@@ -741,6 +744,6 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
         _finish(fill, blue_r.score)                # how close the best completion comes
     return {"map": m.name if m else None, "side": side, "bans": list(bans),
             "blue": blue_r, "red": red_r, "current": cur, "red_current": red_cur, "fill": fill,
-            "countered": countered, "momentum": _momentum(cur, red_cur, countered),
+            "countered": countered, "momentum": _momentum(cur, red_cur, countered, blue_r, red_r),
             "plan": _plan(world, m, side, list(bans), red_h, blue_r),
             "shapes": [list(s) for s in legal_shapes(catalog)]}

@@ -207,8 +207,8 @@ function refresh() {
     fetch('/api/facts?' + q).then(function (r) { return r.json(); }).then(function (d) {
       if (mine !== seq) return;
       if (d.error) { flash(d.error); return; }
-      FACTS = d; renderFacts(); el('factsn').textContent = d.count;
-      el('status').textContent = d.count + ' facts + ' + (d.playbook_count || 0) + ' playbook notes · ' + new Date().toLocaleTimeString();
+      FACTS = d; renderFacts();
+      el('status').textContent = commas(d.count) + ' facts + ' + commas(d.playbook_count || 0) + ' playbook notes · ' + new Date().toLocaleTimeString();
     }).catch(function () { flash('the database is not answering'); });
     el('inf-blue').innerHTML = "<p class='legend'>searching both seats…</p>"; el('inf-red').innerHTML = '';
     fetch('/api/infer?' + q).then(function (r) { return r.json(); }).then(function (d) {
@@ -222,10 +222,11 @@ var SCOPES = ['meta', 'bans', 'map', 'hero', 'team', 'matchup', 'playbook'];
 var scopeOn = { meta: true, bans: true, map: true, hero: true, team: true, matchup: true, playbook: true };
 function renderFacts() {
   if (!FACTS) return;
-  var f = el('filter').value.toLowerCase(), out = '', last = null;
+  var f = el('filter').value.toLowerCase(), out = '', last = null, shown = 0;
   FACTS.facts.forEach(function (x) {
     if (!scopeOn[x.scope]) return;
     if (f && (x.id + ' ' + x.key + ' ' + x.subject + ' ' + x.text).toLowerCase().indexOf(f) < 0) return;
+    shown++;
     var head = x.scope === 'hero' ? (x.team + ' · ' + x.subject) : x.scope === 'team' ? (x.subject + ' team') : x.scope;
     if (x.scope === 'bans') head = 'bans';
     if (x.scope === 'playbook') head = 'the playbook\'s record · what it holds - not facts';
@@ -234,12 +235,17 @@ function renderFacts() {
     out += "<tr class='" + cls + "'><td class='tag'>[" + x.id + "]</td><td class='text'>" + esc(x.text) + "</td><td class='src'>" + esc(x.source) + '</td></tr>';
   });
   el('factbody').innerHTML = out || "<tr><td class='src'>nothing matches</td></tr>";
+  var total = FACTS.facts.length;   /* the total lives in the panel, beside the filter */
+  el('factsn').textContent = shown === total ? commas(total) + ' facts' : commas(shown) + ' of ' + commas(total) + ' facts';
 }
 
+/* the list under a comp: every strategy the playbook holds, one bar each -
+   lit when it applied to this comp, greyed when it did not (its guard unmet,
+   or nothing to read); headed by the count satisfied */
 function bars(contribs) {
-  var mx = 0.01;
+  var mx = 0.01, met = contribs.filter(function (c) { return c.applies !== false && c.ok !== false; }).length;
   contribs.forEach(function (c) { mx = Math.max(mx, Math.abs(c.weighted || 0)); });
-  var out = "<div class='bars'>";
+  var out = "<h4 class='barshead'>strategies satisfied <span class='n'>" + met + ' of ' + contribs.length + "</span></h4><div class='bars'>";
   contribs.forEach(function (c) {
     var w = Math.abs(c.weighted || 0) / mx * 100;
     var detail = c.form === 'heuristic' ? (c.applies ? c.metric + ' = ' + (typeof c.raw === 'number' ? +c.raw.toFixed(2) : c.raw) + ' · norm ' + (+c.norm).toFixed(2) : 'not applicable here')
@@ -291,10 +297,21 @@ function renderInf() {
   else renderResult(rc, el('inf-red'), 'red - their comp as revealed' + (rc.kind === 'evaluate' ? ', ranked' : ' (' + rc.blue.length + ' of ' + TEAM + ')'));
   var c = d.current;
   renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
-  var badge = function (r) { return !r || !r.blue || !r.blue.length ? '' : r.scoring === false ? 'unscored' : typeof r.normalized === 'number' ? r.normalized + ' / 100' : ''; };
-  el('bluescore').textContent = badge(c);
-  el('redscore').textContent = badge(rc);
-  el('bluescore').title = el('redscore').title = (c && c.scoring === false) ? (c.unscored || UNSCORED) : '';
+  /* the badge above each seat's picks and picker always carries a figure: the
+     current comp's share while the seat holds picks, else the suggested six's -
+     this seat's optimal, 100 by definition - or "unscored" with the reason */
+  var figure = function (r) { return r.scoring === false ? 'unscored' : typeof r.normalized === 'number' ? Math.round(r.normalized) + ' / 100' : ''; };
+  var badge = function (cur, optimal, who) {
+    var held = cur && cur.blue && cur.blue.length, r = held ? cur : optimal;
+    if (!r) return ['', ''];
+    var why = r.scoring === false ? (r.unscored || UNSCORED)
+            : held ? meaning(cur)
+            : 'no ' + who + ' picks yet: the six suggested is this seat\'s optimal, 100 by definition';
+    return [figure(r), why];
+  };
+  var b = badge(c, d.blue, 'blue'), r = badge(rc, d.red, 'red');
+  el('bluescore').textContent = b[0]; el('bluescore').title = b[1];
+  el('redscore').textContent = r[0]; el('redscore').title = r[1];
   if (d.shapes && d.shapes.length && JSON.stringify(d.shapes) !== JSON.stringify(SHAPES)) { SHAPES = d.shapes; paint(); return; }
   paintSuggestions();
 }
@@ -316,12 +333,12 @@ function paintSuggestions() {
   }
 }
 
+/* a count with thousands separators: 14,101 candidates */
+function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function renderResult(d, container, title) {
   if (!d || d.error) { container.innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
-  var yours = Object.keys(st.weights || {}).length;
   var out = "<div class='inf-head'><h3>" + esc(title) + '</h3>' + scoreHTML(d) + "<span class='legend'>" +
-    (d.rank ? 'rank ' + d.rank + ' among the feasible field · ' : '') + (d.considered ? d.considered + ' candidates · ' : '') + d.seconds + 's · ' +
-    d.strategies.constraint + ' constraints, ' + d.strategies.heuristic + ' heuristics' + (yours ? ' (' + yours + ' weight' + (yours === 1 ? '' : 's') + ' set by you)' : '') +
+    (d.rank ? 'rank ' + commas(d.rank) + ' among the feasible field · ' : '') + (d.considered ? commas(d.considered) + ' candidates · ' : '') + d.seconds + 's' +
     (d.playstyle ? ' · leans ' + d.playstyle : '') + '</span>' +
     '</div>';
   if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search\'s field</div>';
@@ -380,23 +397,24 @@ function setWeight(id, value, inferred) {
   if (value === null || value === inferred) delete st.weights[id]; else st.weights[id] = value;
   save(); refresh();
 }
+/* the playbook, one group per kind in the equation's order - constraints,
+   heuristics, assumptions - each headed with its count and what the kind
+   does, an empty group saying so; a card's left edge carries its kind's colour */
+var KINDS = [
+  ['constraint', 'constraints', 'limits the comp may not cross, and scored adjustments while a condition holds - the solver prunes or charges'],
+  ['heuristic', 'heuristics', 'a metric pushed up or down with a weight - the sliders below set the weights'],
+  ['assumption', 'assumptions', 'taken as given: shown with every result, read by the session, never scored']
+];
 function renderPlaybook(d) {
   if (!d || !d.strategies) { el('playbook').innerHTML = "<div class='warnbox'>" + esc(d && d.error ? d.error : 'the strategies are not answering') + '</div>'; return; }
-  var out = "<div class='hcards'>";
-  d.strategies.forEach(function (h) {
-    var meta = h.form === 'heuristic' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight
-             : h.form === 'limit' ? 'require ' + h.require + (h.soft ? ' · soft, penalty ' + h.penalty : ' · hard') + (h.when ? ' · when ' + h.when : '')
-             : h.form === 'scored' ? [h.when ? 'when ' + h.when : '', h.bonus ? 'bonus ' + h.bonus : '', h.penalty ? 'penalty ' + h.penalty : ''].filter(Boolean).join(' · ') + ' · weight ' + h.weight
-             : h.form === 'draft' ? 'draft - name, kind and prose only; /strategy infers the rest, not scored until then'
-             : h.form === 'assumption' ? 'assumption - taken as given, read by the session, shown here, not scored'
-             : h.form;
-    var params = Object.keys(h.params || {}).map(function (k) { return k + '=' + h.params[k]; }).join(', ');
-    var body = h.body.replace(/^#[^\n]*\n/, '').split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.replace(/\s+/g, ' ')) + '</p>'; }).join('');
-    out += "<div class='hcard'><span class='kind " + h.kind + "'>" + h.kind + (h.form !== h.kind ? ' · ' + h.form : '') + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
-      (h.form === 'heuristic' ? weightRow(h) : '') +
-      "<div class='legend'>" + esc((d.playbook || 'inference/strategies') + '/' + h.id + '.md') + ' · ' + esc(h.category) + '</div></div>';
+  var out = '';
+  KINDS.forEach(function (k) {
+    var these = d.strategies.filter(function (h) { return h.kind === k[0]; });
+    out += "<section class='pbgroup " + k[0] + "'><h3>" + k[1] + " <span class='n'>" + these.length + "</span><span class='what'>" + esc(k[2]) + '</span></h3>';
+    out += these.length ? "<div class='hcards'>" + these.map(card).join('') + '</div>' : "<p class='legend none'>none in the playbook in force</p>";
+    out += '</section>';
   });
-  el('playbook').innerHTML = out + '</div>';
+  el('playbook').innerHTML = out;
   el('playbook').querySelectorAll('.wrow').forEach(function (row) {
     var id = row.getAttribute('data-id'), inferred = +row.getAttribute('data-inferred');
     var range = row.querySelector('input[type=range]'), val = row.querySelector('.wval'), reset = row.querySelector('.wreset'), store = row.querySelector('.wstore');
@@ -407,6 +425,19 @@ function renderPlaybook(d) {
     reset.onclick = function () { range.value = inferred; val.value = inferred; reset.disabled = store.disabled = true; setWeight(id, null, inferred); };
     store.onclick = function () { storeWeight(id, clampWeight(val.value), store); };
   });
+  function card(h) {
+    var meta = h.form === 'heuristic' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight
+             : h.form === 'limit' ? 'require ' + h.require + (h.soft ? ' · soft, penalty ' + h.penalty : ' · hard') + (h.when ? ' · when ' + h.when : '')
+             : h.form === 'scored' ? [h.when ? 'when ' + h.when : '', h.bonus ? 'bonus ' + h.bonus : '', h.penalty ? 'penalty ' + h.penalty : ''].filter(Boolean).join(' · ') + ' · weight ' + h.weight
+             : h.form === 'draft' ? 'draft - name, kind and prose only; /strategy infers the rest, not scored until then'
+             : h.form === 'assumption' ? 'assumption - taken as given, read by the session, shown here, not scored'
+             : h.form;
+    var params = Object.keys(h.params || {}).map(function (k) { return k + '=' + h.params[k]; }).join(', ');
+    var body = h.body.replace(/^#[^\n]*\n/, '').split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.replace(/\s+/g, ' ')) + '</p>'; }).join('');
+    return "<div class='hcard " + h.kind + "'><span class='kind " + h.kind + "'>" + h.kind + (h.form !== h.kind ? ' · ' + h.form : '') + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
+      (h.form === 'heuristic' ? weightRow(h) : '') +
+      "<div class='legend'>" + esc((d.playbook || 'inference/strategies') + '/' + h.id + '.md') + ' · ' + esc(h.category) + '</div></div>';
+  }
 }
 
 function showTab(name) {
