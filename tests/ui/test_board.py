@@ -161,6 +161,7 @@ def test_the_page_is_a_shell_over_static_files():
     assert "q.push('weight=' + " in script and "st.weights" in script
     assert "function setWeight" in script
     assert "h.form === 'heuristic' ? weightRow(h)" in script     # only heuristics have weights
+    assert "function storeWeight" in script and "fetch('/api/weight', { method: 'POST'" in script
     assert "d.playbook || 'inference/strategies'" in script       # the card names its folder
     # a playbook that scores nothing reads unscored, never 100 / 100
     assert "d.scoring === false" in script and "'unscored'" in script and "var UNSCORED" in script
@@ -212,3 +213,63 @@ def test_the_math_page_states_the_equation_and_the_layers():
     assert "When the playbook holds only limits" in page
     assert "The data layer" in page and "The inference layer" in page and "The board" in page
     assert "never calls a language model" in page
+
+
+# --- the board's one write: a weight stored through the tune tool ------------------
+
+
+def test_storing_a_weight_is_a_tune_call_over_the_door(monkeypatch):
+    """With an MCP URL set (the compose stack) the board sends one tools/call
+    for `tune` - the id, the field, the rounded weight, the reason - and
+    relays the tool's line or its refusal; bad input never reaches the door."""
+    calls = []
+
+    def fake_mcp(name, arguments):
+        calls.append((name, arguments))
+        if arguments["id"] == "no-such":
+            return "no strategy 'no-such'", None, True
+        return "tuned %s: weight 1 -> %s\n- log line" % (arguments["id"], arguments["value"]), \
+            {"id": arguments["id"], "field": "weight", "old": 1.0, "new": "9.99"}, False
+    monkeypatch.setattr(board, "MCP_URL", "http://data:8020/mcp")
+    monkeypatch.setattr(board, "mcp_call", fake_mcp)
+    data, code = board.api_weight({"id": "healing-floor", "weight": "9.994"})
+    assert code == 200 and data["line"] == "tuned healing-floor: weight 1 -> 9.99"
+    assert calls == [("tune", {"id": "healing-floor", "field": "weight", "value": 9.99,
+                               "reason": board.STORE_REASON, "by": "the board"})]
+    data, code = board.api_weight({"id": "no-such", "weight": 2})
+    assert code == 400 and "no strategy" in data["error"]
+    for bad in ({"id": "../escape", "weight": 2}, {"id": "healing-floor", "weight": "x"},
+                {"id": "healing-floor", "weight": 11}, {}, None):
+        assert board.api_weight(bad)[1] == 400
+    assert len(calls) == 2                                   # the refusals never knocked
+
+
+def test_storing_a_weight_locally_runs_the_tune_tool_in_process(db, dsn, tmp_path, monkeypatch):
+    """Without an MCP URL the same call goes through the tool registry: the
+    file's weight changes, the tuning log says why, and the catalog is
+    mirrored - here into a rolled-back transaction, on a private copy of
+    the playbook."""
+    import os
+    import shutil
+
+    from inference import catalog, tune
+    from tests.db.test_sources_from_cache import Sandbox
+    for name in os.listdir(catalog.STRATEGIES_DIR):
+        if name.endswith(".md"):
+            shutil.copy(os.path.join(catalog.STRATEGIES_DIR, name), tmp_path / name)
+    heuristic = next(h for h in catalog.load() if h.kind == "heuristic")
+    monkeypatch.setattr(board, "MCP_URL", "")
+    monkeypatch.setattr(board, "tool_context", lambda: Sandbox(dsn=dsn))
+    monkeypatch.setattr(catalog, "STRATEGIES_DIR", str(tmp_path))
+    monkeypatch.setattr(tune, "LOG_PATH", str(tmp_path / "tuning-log.md"))
+    data, code = board.api_weight({"id": heuristic.id, "weight": 7.25})
+    assert code == 200 and data["line"].startswith("tuned %s: weight" % heuristic.id)
+    assert data["change"]["new"] == "7.25"
+    stored = next(h for h in catalog.load(str(tmp_path)) if h.id == heuristic.id)
+    assert stored.weight == 7.25
+    assert next(h for h in catalog.load(catalog.SHIPPED_DIR)   # the repo's file is untouched
+                if h.id == heuristic.id).weight == heuristic.weight
+    log = (tmp_path / "tuning-log.md").read_text(encoding="utf-8")
+    assert board.STORE_REASON in log and heuristic.id in log and "[the board]" in log
+    data, code = board.api_weight({"id": "no-such-strategy", "weight": 2})
+    assert code == 400 and "no strategy" in data["error"]

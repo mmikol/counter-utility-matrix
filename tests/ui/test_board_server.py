@@ -20,6 +20,27 @@ def served():
     server.shutdown()
 
 
+def post(url, body):
+    data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
+    request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read().decode("utf-8"))
+
+
+def test_the_weight_store_is_the_only_post_and_reads_a_small_json_body(served, monkeypatch):
+    monkeypatch.setattr(board, "api_weight",
+                        lambda payload: ({"line": "tuned %s" % payload["id"]}, 200))
+    code, data = post(served + "/api/weight", {"id": "coverage", "weight": 3})
+    assert code == 200 and data == {"line": "tuned coverage"}
+    assert post(served + "/api/weight", b"{not json")[0] == 400
+    assert post(served + "/api/weight", b"")[0] == 400
+    assert post(served + "/api/weight", b"x" * 5000)[0] == 400
+    assert post(served + "/api/facts", {"id": "coverage"})[0] == 404
+
+
 def get(url):
     try:
         with urllib.request.urlopen(url, timeout=60) as response:

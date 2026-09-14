@@ -36,6 +36,12 @@ PORT = int(os.environ.get("COUNTER_MATRIX_UI_PORT", "8017"))
 # The inference layer runs in-process unless a service is named: in the
 # compose stack the `inference` container serves it (inference/serve.py).
 INFERENCE_URL = os.environ.get("INFERENCE_URL", "").rstrip("/")
+# the board's one write - storing a heuristic's weight - goes to the data
+# layer's `tune` tool: over HTTP to the MCP server when a URL is set (the
+# compose stack), in-process through the same registry otherwise
+MCP_URL = os.environ.get("COUNTER_MATRIX_MCP_URL", "").rstrip("/")
+MCP_TOKEN = os.environ.get("COUNTER_MATRIX_MCP_TOKEN", "")
+STORE_REASON = "stored from the board's slider"
 # The repository the header links to; override when the repo moves.
 REPO_URL = os.environ.get("COUNTER_MATRIX_REPO_URL", "https://github.com/mmikol/counter-utility-matrix")
 GITHUB_MARK = ("<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='true'><path fill='currentColor' d='M8 0C3.58 0 0 3.58 0 8"  # noqa: E501
@@ -126,6 +132,63 @@ def api_infer(cx, query):
     except ValueError as error:
         return {"error": str(error)}, 400
     return inference_engine.board_dict(b), 200
+
+
+def mcp_call(name, arguments):
+    """One tools/call on the MCP server -> (text, structured, is_error)."""
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                       "params": {"name": name, "arguments": arguments}}).encode("utf-8")
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if MCP_TOKEN:
+        headers["Authorization"] = "Bearer " + MCP_TOKEN
+    request = urllib.request.Request(MCP_URL, data=body, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            reply = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        return "the MCP server answered %d" % error.code, None, True
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        return "the MCP server is unreachable: %s" % error, None, True
+    if "error" in reply:
+        return str(reply["error"].get("message", reply["error"])), None, True
+    result = reply.get("result") or {}
+    text = "\n".join(c.get("text", "") for c in result.get("content", [])
+                     if c.get("type") == "text")
+    return text, result.get("structuredContent"), bool(result.get("isError"))
+
+
+def tool_context():
+    from db.mcp import tools
+    return tools.Context(dsn=dsn())
+
+
+def api_weight(payload):
+    """Store a heuristic's weight in its file - the slider's "store". The
+    change goes through the `tune` tool (validated, logged in the tuning
+    log with its reason, mirrored into the database), never around it."""
+    from inference import tune
+    hid = str((payload or {}).get("id") or "")
+    if not tune.ID_RE.fullmatch(hid):
+        return {"error": "no such heuristic"}, 400
+    try:
+        weight = round(float(payload.get("weight")), 2)
+    except (TypeError, ValueError):
+        return {"error": "the weight must be a number"}, 400
+    if not 0.0 <= weight <= 10.0:
+        return {"error": "the weight must be within 0..10"}, 400
+    arguments = {"id": hid, "field": "weight", "value": weight, "reason": STORE_REASON,
+                 "by": "the board"}
+    if MCP_URL:
+        text, change, failed = mcp_call("tune", arguments)
+        if failed:
+            return {"error": text}, 400
+        return {"line": text.split("\n")[0], "change": change}, 200
+    from db.mcp import tools
+    try:
+        text, change = tools.run_tool(tool_context(), "tune", **arguments)
+    except tools.ToolError as error:
+        return {"error": str(error)}, 400
+    return {"line": text.split("\n")[0], "change": change}, 200
 
 
 def api_strategies():
@@ -388,6 +451,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         pass
+
+    def do_POST(self):
+        if urlparse(self.path).path != "/api/weight":
+            return self._json({"error": "nothing here"}, 404)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+            if not 0 < length <= 4096:
+                return self._json({"error": "a small JSON body is required"}, 400)
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            return self._json(*api_weight(payload if isinstance(payload, dict) else {}))
+        except ValueError:
+            return self._json({"error": "bad JSON"}, 400)
+        except Exception:
+            self._send(_page("error", "<pre class='warnbox'>%s</pre>"
+                             % esc(traceback.format_exc())), 500)
 
     def do_GET(self):
         parsed = urlparse(self.path)

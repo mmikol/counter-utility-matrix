@@ -81,7 +81,9 @@ flowchart LR
     CHAT["Claude Code session<br/>/comp skill"] <-->|"MCP tools:<br/>pull_*, facts, infer, board"| DATA
 ```
 
-The data layer owns the writes to Postgres. The UI layer only reads,
+The data layer owns the writes to Postgres and the playbook. The UI
+layer reads (its one write, a heuristic's weight stored from the board,
+is handed to the data layer's `tune` tool),
 turns every table into facts, and computes every metric in one place
 (`ui/facts/compute.py`) so the number on the board and the number the
 solver scores are the same function. The inference layer reads the facts,

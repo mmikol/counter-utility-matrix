@@ -103,12 +103,15 @@ flowchart LR
 Every change to the brain is a line in the log with its reason.
 
 
-Weights do not learn on their own. The board's sliders (under each
+Weights do not yet learn on their own: since recording comps and
+outcomes was removed there is no match signal to learn from, and the
+backlog holds what learning would take. The board's sliders (under each
 heuristic in the playbook tab) override a weight for one board at a
 time - `weight=<id>:<0..10>` on `/board`, `weights` on the `board`
-tool - and the file is untouched; every result names the weights it
-was scored under. One path changes a file, logged in
-`strategies/tuning-log.md` with a reason and who asked:
+tool - and the file is untouched until the slider's *store*, which is
+a `tune` call; every result names the weights it was scored under. One
+path changes a file, logged in `strategies/tuning-log.md` with a reason
+and who asked:
 
 - **`tune`** - one validated frontmatter edit: `weight` (0..10),
   `direction`, `soft`, `when`, `require`, `bonus`, `penalty`, `metric`, or a

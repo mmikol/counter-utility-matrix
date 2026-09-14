@@ -599,12 +599,14 @@ def strategies_tool(ctx):
                                                   " require | bonus | penalty | metric |"
                                                   " params.NAME"},
        "value": {"description": "the new value: a number, a boolean, or an expression"},
-       "reason": {"type": "string", "description": "why, in a sentence"}},
+       "reason": {"type": "string", "description": "why, in a sentence"},
+       "by": {"type": "string", "description": "who asked, for the log line (default"
+                                              " claude-code-session; the board says so)"}},
       ["id", "field", "value", "reason"])
-def tune_tool(ctx, id, field, value, reason):
+def tune_tool(ctx, id, field, value, reason, by="claude-code-session"):
     from inference import catalog, tune
     try:
-        change = tune.tune(id, field, value, reason)
+        change = tune.tune(id, field, value, reason, by=str(by or "claude-code-session")[:40])
         with ctx.connect() as cx:
             catalog.mirror(cx, catalog.load())
     except (tune.TuneError, ValueError) as error:

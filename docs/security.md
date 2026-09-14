@@ -41,6 +41,15 @@ is a pull that ran unwatched. The deriver runs `claude -p` from a
 neutral directory with no project settings, no MCP servers, no tools and
 two turns, and stores only what the catalog validates.
 
+**The board has one write, and it knocks at the door too.** Storing a
+heuristic's weight from its slider is `POST /api/weight` on the board
+(bound to 127.0.0.1 like everything else), which the board turns into a
+`tune` call - over HTTP to the MCP server with the bearer token in the
+compose stack, in-process through the same tool registry on the local
+cluster - so the change is validated against the catalog, logged with
+its reason and mirrored like any other; the board itself never opens a
+playbook file, and its container mounts the playbook read-only.
+
 **The door checks who is knocking.** The HTTP server binds to 127.0.0.1,
 refuses browser origins that are not local (DNS-rebinding guard), caps a
 request at one megabyte and a batch at twenty messages, allows 120 tool

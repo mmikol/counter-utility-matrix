@@ -20,6 +20,19 @@ ordered by payoff over blast radius; the first is the one to pick up.
 
 ## Next
 
+- **Weights that learn on their own.** The user wants them to, with the
+  sliders as the manual override. Learning needs a signal, and the one
+  it had - recorded comps with a win or loss - was removed on the user's
+  word. Two ways back, to decide with the user: (a) a minimal outcome
+  record, one row per board with won or lost and the weights in force,
+  and a `fit` that nudges each heuristic's weight toward the
+  contributions that won (a logistic fit over the contribution vectors,
+  capped per step, every change a tuning-log line with "fit" as its
+  reason); or (b) no recording: fit the weights so that the solver's
+  per-hero contribution ranks agree with each hero's published win rate
+  on the map, a weaker signal that the data already holds. Cost: (a) two
+  days including the record and its tool; (b) a day.
+
 - **Memoize the per-hero parts of the metrics.** Thousands of candidate
   sixes share the same heroes; `compute.team_metrics` rebuilds each hero's
   pool, kit sums and keyword sets for every candidate. 70% of a solve is

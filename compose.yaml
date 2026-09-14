@@ -156,6 +156,8 @@ services:
       <<: *env
       INFERENCE_URL: http://inference:8019
       COUNTER_MATRIX_UI_HOST: 0.0.0.0
+      COUNTER_MATRIX_MCP_URL: http://data:8020/mcp     # the board's one write: tune
+      COUNTER_MATRIX_MCP_TOKEN: ${COUNTER_MATRIX_MCP_TOKEN:-}
     depends_on:
       data:
         condition: service_healthy

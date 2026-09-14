@@ -4,8 +4,10 @@ The board in front of you, and the facts behind it. Every click - a map,
 a side, a ban, a hero on either roster - becomes a request, the database
 is read, and three things come back: every fact about that board, the
 optimal six for both seats with the current picks scored, and the
-playbook as it sits on disk. This layer only reads; the data layer owns
-every write, and the inference layer owns the scoring. What it owns is
+playbook as it sits on disk. This layer reads, and has one write - a
+heuristic's weight stored from its slider - which it hands to the data
+layer's `tune` tool rather than making itself; the data layer owns every
+write, and the inference layer owns the scoring. What it owns is
 the equation's left-hand term:
 
 ```
@@ -154,8 +156,15 @@ and a reset. A setting is the viewer's alone: it is kept in the
 browser, rides with every board request as `weight=<id>:<value>`, is
 applied by the solver for that board only (each result reports the
 `weights` it was scored under, and the comps legend counts the ones set
-by you), and never touches the file; only heuristics have a weight to
-set. *clear all* leaves the weights in place.
+by you), and never touches the file - until *store*, which writes it
+into the heuristic's file through the data layer's `tune` tool (validated
+against the catalog, logged in the tuning log with its reason, mirrored),
+after which the file's weight is the inferred default and the browser's
+setting is dropped. `POST /api/weight` `{id, weight}` is that one write;
+it reaches the tool over HTTP at `COUNTER_MATRIX_MCP_URL` with the bearer
+token in the compose stack, and in-process through the same registry on
+the local cluster. Only heuristics have a weight to set. *clear all*
+leaves the weights in place.
 Pinned to the header's top-right
 corner are two pills: *the math*, a page stating the equation and how
 the layers fit, and the repository on GitHub (`COUNTER_MATRIX_REPO_URL`
