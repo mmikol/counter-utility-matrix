@@ -91,10 +91,12 @@ answer them, the family of heroes to stay in when you stray from the six,
 and what the six is built for - from the same facts and strategies the
 solver scored, so picks can be tailored toward the optimal without
 matching it; a last line says what it rests on. Then, in the order of
-the boxes above, blue's optimal six (left: the counter to red's
-selection as revealed, whatever you have locked, so it never collapses
-into your own six) and red's comp as revealed (right, scored against
-yours).
+the boxes above, blue's seat (left) and red's (right), each headed by
+that team's picks as they stand with their score - yours against red's
+selection on the scale of blue's optimal, theirs against yours on the
+scale of their best counter - and, under blue's, the optimal six: the
+counter to red's selection as revealed, whatever you have locked, so it
+never collapses into your own six.
 
 The scores live with the selections. Above the two boxes sits the
 momentum strip: the verdict from the two current comps, each on its own

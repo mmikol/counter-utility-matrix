@@ -248,8 +248,14 @@ function renderInf() {
   if (!rc || !rc.blue || !rc.blue.length) el('inf-red').innerHTML = "<div class='inf-head'><h3>red - their comp as revealed</h3></div>" +
     "<p class='legend'>click red picks as they reveal; their comp is scored against yours, on the scale of their best counter to you.</p>";
   else renderResult(rc, el('inf-red'), 'red - their comp as revealed' + (rc.kind === 'evaluate' ? ', ranked' : ' (' + rc.blue.length + ' of ' + TEAM + ')'));
-  renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
   var c = d.current;
+  /* blue's seat mirrors red's: your picks as they stand, scored, above the optimal six */
+  if (!c || !c.blue || !c.blue.length) el('inf-blue').innerHTML = "<div class='inf-head'><h3>blue - your picks</h3></div>" +
+    "<p class='legend'>lock blue picks; they are scored against red's selection, on the scale of blue's optimal.</p>";
+  else renderResult(c, el('inf-blue'), 'blue - your picks' + (c.kind === 'evaluate' ? ', ranked' : ' (' + c.blue.length + ' of ' + TEAM + ')'));
+  var opt = document.createElement('div'); opt.className = 'optimal';
+  el('inf-blue').appendChild(opt);
+  renderResult(d.blue, opt, 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
   el('bluescore').textContent = (c && c.blue && c.blue.length && typeof c.normalized === 'number') ? c.normalized + ' / 100' : '';
   el('redscore').textContent = (rc && rc.blue && rc.blue.length && typeof rc.normalized === 'number') ? rc.normalized + ' / 100' : '';
   paintSuggestions();

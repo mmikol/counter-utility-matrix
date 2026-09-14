@@ -177,6 +177,7 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .momentum .gauge span { display:block; height:5px; border-radius:3px; }
 .momentum .gauge .r { background:var(--red); } .momentum .gauge .b { background:var(--blue); }
 .seats { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.seat .optimal { margin-top:16px; padding-top:14px; border-top:1px dashed var(--line); }
 @media (max-width:1100px) { .seats { grid-template-columns:1fr; } }
 .seat { padding:12px 14px; border-radius:10px; border:1px solid var(--line); }
 .seat.blue { background:linear-gradient(170deg,#12233a 0%,#1b212c 60%); border-color:#254a70; }

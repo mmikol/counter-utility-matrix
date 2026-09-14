@@ -136,6 +136,7 @@ def test_the_page_is_a_shell_over_static_files():
     assert body.index("id='blueslots'") < body.index("id='redslots'")
     script = board.static_file("board.js")[0].decode()
     assert "their comp as revealed" in script and "red_current" in script and "d.momentum" in script
+    assert "'blue - your picks'" in script and "className = 'optimal'" in script   # blue's picks scored above its optimal
     assert "game plan" in script and "d.plan" in script
     assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
     assert "swapbtn" not in script and "clearbtn" not in script            # swap sides and new game are gone
