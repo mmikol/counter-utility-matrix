@@ -17,7 +17,6 @@ next feature opens its own branch.
   so; the joins the data can still yield are listed under "Fact engine"
   below, best first - the pairwise numbers, blue pick against red pick,
   are the one to start with.
-- **A heuristic's weight stored from the board** - `f131f80`, merged.
 - **Weights that learn on their own.** The user wants them to, with the
   sliders as the manual override. Learning needs a signal, and the one
   it had - recorded comps with a win or loss - was removed on the user's
@@ -102,6 +101,7 @@ counters table is a list).
 
 ## Done
 
+- **A heuristic's weight stores into its file from the board** - `f131f80`.
 - **A heuristic's weight is a slider under its card** - `2156473`.
   Only heuristics have one; 1 to 10 to the hundredth with a number box for
   the exact figure; the file's weight is the inferred default and a reset;
