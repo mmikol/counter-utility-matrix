@@ -238,7 +238,13 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .alts li { margin:3px 0; }
 .warnbox { background:#3a2026; border:1px solid #6b2f3a; border-radius:8px; padding:8px 12px;
   margin:10px 0; }
-.pbgroup { margin-bottom:18px; }
+.pbnav { display:flex; gap:8px; flex-wrap:wrap; margin:0 0 14px; }
+.pbnav button { font-family:"Bebas Neue",Impact,sans-serif; font-size:15px; letter-spacing:.08em; background:none;
+  border:1px solid var(--line); border-radius:999px; padding:4px 12px; color:var(--text); cursor:pointer; }
+.pbnav button .n { color:var(--gold); margin-left:4px; }
+.pbnav button.constraint:hover { border-color:var(--blue); } .pbnav button.heuristic:hover { border-color:var(--green); }
+.pbnav button.assumption:hover { border-color:#d9b36a; }
+.pbgroup { margin-bottom:18px; scroll-margin-top:12px; }
 .pbgroup h3 { font-family:"Bebas Neue",Impact,sans-serif; font-size:20px; letter-spacing:.06em; margin:0 0 8px;
   display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
 .pbgroup h3 .n { font-size:14px; color:var(--gold); }

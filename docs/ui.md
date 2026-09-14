@@ -158,9 +158,11 @@ filters by text and by scope (meta, bans, map, hero, team, matchup,
 playbook), and says how many it holds beside the filter - "464 facts",
 or "12 of 464 facts" while a filter narrows it; the tab itself carries
 no number. *playbook* renders the catalog in three groups in the
-equation's order - constraints, heuristics, assumptions - each headed
-with its count and a line on what the kind does, an empty group saying
-so, every card edged in its kind's colour; a card shows its form,
+equation's order - constraints, heuristics, assumptions - with a row of
+anchors at the top, one per group with its count, that scroll to it;
+each group is headed with its count and a line on what the kind does,
+an empty group saying so, every card edged in its kind's colour; a
+card's badge is its kind alone, its meta line says the form,
 and under each heuristic a slider for its weight - 1 to 10 to the
 hundredth (1.02, 9.99), with a number box beside it for the exact figure,
 starting at the weight the file infers, with the inferred figure shown

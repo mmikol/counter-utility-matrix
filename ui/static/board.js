@@ -407,14 +407,22 @@ var KINDS = [
 ];
 function renderPlaybook(d) {
   if (!d || !d.strategies) { el('playbook').innerHTML = "<div class='warnbox'>" + esc(d && d.error ? d.error : 'the strategies are not answering') + '</div>'; return; }
-  var out = '';
+  /* anchors first: one per group with its count, so a long playbook is a click
+     from any kind; each scrolls its group into view */
+  var out = "<nav class='pbnav'>" + KINDS.map(function (k) {
+    var n = d.strategies.filter(function (h) { return h.kind === k[0]; }).length;
+    return "<button class='" + k[0] + "' data-group='pb-" + k[0] + "'>" + k[1] + " <span class='n'>" + n + '</span></button>';
+  }).join('') + '</nav>';
   KINDS.forEach(function (k) {
     var these = d.strategies.filter(function (h) { return h.kind === k[0]; });
-    out += "<section class='pbgroup " + k[0] + "'><h3>" + k[1] + " <span class='n'>" + these.length + "</span><span class='what'>" + esc(k[2]) + '</span></h3>';
+    out += "<section class='pbgroup " + k[0] + "' id='pb-" + k[0] + "'><h3>" + k[1] + " <span class='n'>" + these.length + "</span><span class='what'>" + esc(k[2]) + '</span></h3>';
     out += these.length ? "<div class='hcards'>" + these.map(card).join('') + '</div>' : "<p class='legend none'>none in the playbook in force</p>";
     out += '</section>';
   });
   el('playbook').innerHTML = out;
+  el('playbook').querySelectorAll('.pbnav button').forEach(function (b) {
+    b.onclick = function () { el(b.getAttribute('data-group')).scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  });
   el('playbook').querySelectorAll('.wrow').forEach(function (row) {
     var id = row.getAttribute('data-id'), inferred = +row.getAttribute('data-inferred');
     var range = row.querySelector('input[type=range]'), val = row.querySelector('.wval'), reset = row.querySelector('.wreset'), store = row.querySelector('.wstore');
@@ -434,7 +442,7 @@ function renderPlaybook(d) {
              : h.form;
     var params = Object.keys(h.params || {}).map(function (k) { return k + '=' + h.params[k]; }).join(', ');
     var body = h.body.replace(/^#[^\n]*\n/, '').split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.replace(/\s+/g, ' ')) + '</p>'; }).join('');
-    return "<div class='hcard " + h.kind + "'><span class='kind " + h.kind + "'>" + h.kind + (h.form !== h.kind ? ' · ' + h.form : '') + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
+    return "<div class='hcard " + h.kind + "'><span class='kind " + h.kind + "'>" + h.kind + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
       (h.form === 'heuristic' ? weightRow(h) : '') +
       "<div class='legend'>" + esc((d.playbook || 'inference/strategies') + '/' + h.id + '.md') + ' · ' + esc(h.category) + '</div></div>';
   }

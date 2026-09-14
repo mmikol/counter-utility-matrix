@@ -44,10 +44,13 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     assert "normalized" in script and "/ 100" in script    # the 0-100 figure, and only it
     assert "' of the best '" not in script and "(score " not in script   # no raw sum anywhere
     assert "d.unscored || UNSCORED" in script                # the engine's reason
-    # the playbook holds three kinds; the badge appends the form only when it differs
+    # the playbook holds three kinds; a card's badge is its kind alone - the form
+    # (limit, scored, draft) is the meta line's to say
     # the equation lives on /math now
     assert "STRATEGIES     = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS" in board.view_math()
-    assert "h.form !== h.kind ?" in script
+    assert "h.form !== h.kind ?" not in script and "' · ' + h.form" not in script
+    # anchors at the top of the playbook, one per group, that scroll to it
+    assert "class='pbnav'" in script and "data-group='pb-" in script and "scrollIntoView" in script
     assert "'assumption' ? 'assumption - taken as given" in script
     assert "prose -" not in script
     assert b".kind.assumption" in board.static_file("board.css")[0]
