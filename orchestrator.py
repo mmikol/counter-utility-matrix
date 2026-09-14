@@ -191,7 +191,13 @@ def agents():
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
     done = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True,
                           timeout=3600)
-    print(done.stdout.strip() or done.stderr.strip())
+    said = (done.stdout.strip() + "\n" + done.stderr.strip()).strip()
+    if done.returncode != 0 and ("Not logged in" in said or "/login" in said):
+        print("agents: skipped - the claude CLI is not signed in; run `%s login` once on"
+              " this machine (the stack is up; drafts stay pending, weights stay as they are)"
+              % command[0])
+        return 0
+    print(said)
     if done.returncode != 0:
         return report(False, ["agents: claude -p exited %d" % done.returncode])
     return status()

@@ -189,7 +189,7 @@ same refresh from a shell, against whichever database `DATABASE_URL` names:
 ```mermaid
 stateDiagram-v2
     [*] --> Empty: docker compose up<br/>(or pgserver first touch)
-    Empty --> Schema: db_init<br/>9 migrations, 42 tables
+    Empty --> Schema: db_init<br/>10 migrations, 41 tables
     Schema --> Populated: sync_all<br/>7 pull tools + load_authored
     Empty --> Populated: db_rebuild<br/>(the entrypoint's move<br/>on an empty database)
     Populated --> Populated: pull_rates + pull_counters daily,<br/>sync_all weekly (the refresher)<br/>entities upsert in place,<br/>rates APPEND a dated snapshot
@@ -956,7 +956,7 @@ The stat vocabulary. `unit` is the canonical unit for the stat, used when a valu
 
 *INFERENCE · 38 rows · `010_constraints_and_heuristics.sql`*
 
-strategies The mirror of the playbook: one row per markdown file in inference/strategies/ - its kind (constraint | heuristic), the frontmatter a machine scores by (metric, direction, weight, expressions, params) and the prose body a person argues with. Reloaded whole by load_playbook so a recommendation can cite the ids it was scored under; the files remain the truth.
+The mirror of the playbook: one row per markdown file in inference/strategies/ - its kind (constraint | heuristic), the frontmatter a machine scores by (metric, direction, weight, expressions, params) and the prose body a person argues with. Reloaded whole by load_authored so a recommendation can cite the ids it was scored under; the files remain the truth.
 
 | column | type | null | references |
 | --- | --- | --- | --- |

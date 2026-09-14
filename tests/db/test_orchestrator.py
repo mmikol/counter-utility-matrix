@@ -57,3 +57,15 @@ def test_drafts_are_derived_on_the_host_then_the_stack_remirrors(monkeypatch):
     assert calls == []
     orchestrator.derive_pending({"inference": {"strategies": 39, "pending": 1}})
     assert calls == [("sh", "derive_strategies"), ("mcp", "load_authored")]
+
+
+def test_a_signed_out_cli_skips_the_agents_run_instead_of_failing(monkeypatch, capsys):
+    import subprocess
+    monkeypatch.setattr(orchestrator, "agents_command", lambda: ["/x/claude", "-p", "/refresh"])
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
+        a[0], 1, stdout="Not logged in · Please run /login\n", stderr=""))
+    assert orchestrator.agents() == 0
+    assert "not signed in" in capsys.readouterr().out
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
+        a[0], 2, stdout="", stderr="boom"))
+    assert orchestrator.agents() != 0

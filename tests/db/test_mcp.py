@@ -97,10 +97,8 @@ def test_server_reports_a_refused_tool_as_is_error():
 # --- the tools against the built database ------------------------------------
 
 @pytest.fixture(scope="module")
-def ctx(db):
-    import psycopg
-    return tools.Context(dsn=db.info.dsn if hasattr(db.info, "dsn") else
-                         psycopg.conninfo.make_conninfo(**db.info.get_parameters()))
+def ctx(db, dsn):
+    return tools.Context(dsn=dsn)
 
 
 @pytest.mark.invariant

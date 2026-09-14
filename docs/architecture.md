@@ -43,7 +43,7 @@ flowchart LR
         DBT["db_* · query · export_csv"]
     end
 
-    subgraph PG["PostgreSQL - 42 tables"]
+    subgraph PG["PostgreSQL - 41 tables"]
         HEROES["HEROES<br/>roster, kits, stats,<br/>keywords, portraits"]
         MAPS["MAPS"]
         META["META<br/>dated snapshots"]
@@ -129,7 +129,7 @@ flowchart LR
         BROWSER["browser"]
         SHELL["./docker-db<br/>DATABASE_URL -> :5433"]
     end
-    subgraph DOCKER["docker compose (one image, four containers)"]
+    subgraph DOCKER["docker compose (one image, five containers)"]
         DATA["data - DATA LAYER<br/>builds when empty or stale,<br/>then MCP over HTTP :8020/mcp"]
         INF["inference - INFERENCE ENGINE<br/>:8019 infer · evaluate ·<br/>strategies · record"]
         UI["ui - UI LAYER<br/>:8017 the board<br/>facts in-process,<br/>comps via INFERENCE_URL"]

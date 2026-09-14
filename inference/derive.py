@@ -15,7 +15,7 @@ leaves the draft as it was.
     available()              whether the claude CLI is on this machine
 
 Runs where the claude CLI is signed in - the host. `load_authored` and
-`stack.py up` call it when drafts exist; inside the compose stack the CLI
+`orchestrator.py up` call it when drafts exist; inside the compose stack the CLI
 is absent, so drafts stay pending until the host runs.
 """
 

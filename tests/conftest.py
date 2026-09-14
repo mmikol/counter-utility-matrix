@@ -35,6 +35,13 @@ def _dsn():
 
 
 @pytest.fixture(scope="session")
+def dsn():
+    """The connection string the suite runs against - with its password, which a
+    connection's own `info.dsn` leaves out."""
+    return _dsn()
+
+
+@pytest.fixture(scope="session")
 def db():
     dsn = _dsn()
     if not dsn:
