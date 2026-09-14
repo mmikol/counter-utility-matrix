@@ -14,7 +14,15 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = os.path.join(ROOT, "docs")
+SKILLS = os.path.join(ROOT, ".claude", "skills")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
+
+# two of these read the checkout itself - the git index, the .claude folder -
+# which the Docker image deliberately leaves out; there they skip, not fail
+needs_git = pytest.mark.skipif(not os.path.isdir(os.path.join(ROOT, ".git")) or not shutil.which("git"),
+                               reason="needs the git checkout")
+needs_skills = pytest.mark.skipif(not os.path.isdir(SKILLS),
+                                  reason="the skills are not in the image")
 
 
 def _read(*parts):
@@ -51,6 +59,7 @@ def test_every_relative_link_in_the_docs_resolves():
     assert not broken, broken
 
 
+@needs_git
 def test_the_overview_names_everything_at_the_root():
     tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True,
                              text=True).stdout.split()
@@ -81,10 +90,10 @@ MUST_NAME = {   # a skill is a playbook over these tools; if a tool is renamed, 
 
 
 def _skills():
-    root = os.path.join(ROOT, ".claude", "skills")
-    return {name: _read(".claude", "skills", name, "SKILL.md") for name in sorted(os.listdir(root))}
+    return {name: _read(".claude", "skills", name, "SKILL.md") for name in sorted(os.listdir(SKILLS))}
 
 
+@needs_skills
 def test_every_skill_has_frontmatter_and_names_its_tools():
     from db.mcp import tools
     registered = {name for name, *_ in tools.REGISTRY}
@@ -98,11 +107,15 @@ def test_every_skill_has_frontmatter_and_names_its_tools():
         assert MUST_NAME[name] <= named, (name, MUST_NAME[name] - named)
 
 
-def test_the_skills_document_covers_every_skill_and_the_tool_reference_is_current(copy_of):
-    from db.mcp import tools
+@needs_skills
+def test_the_skills_document_covers_every_skill(copy_of):
     doc = _read("docs", "skills.md")
     for name in _skills():
         assert "## `/%s`" % name in doc, name
+
+
+def test_the_tool_reference_is_current(copy_of):
+    from db.mcp import tools
     committed = _read("docs", "mcp.md")
     listed = set(re.findall(r"^\| `([a-z_]+)` \|", _section(committed, "tools"), re.M))
     assert listed == {name for name, *_ in tools.REGISTRY}
