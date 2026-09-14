@@ -634,6 +634,7 @@ the `team.*` metrics computed for the red side.
 | `team.win_mean` | mean all-ranks win rate |
 | `team.pick_mass` | summed all-ranks pick rate |
 | `team.availability` | chance every pick survives the ban screen: product of (1 - ban) |
+| `team.map_availability` | the same from this map's ban rates (the all-ranks ban where a map publishes none; equal to availability without a map) |
 | `team.max_ban_rate` | the highest ban rate on the team |
 | `team.max_ban_hero` (text) | who carries the highest ban rate |
 | `team.rank_sensitive_count` | picks whose win rate swings 6+ points across ranks |

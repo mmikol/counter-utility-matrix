@@ -100,6 +100,7 @@ class Hero:
         self.alt_rates = {}          # other sources' own populations: code -> (win, pick)
         self.prev_win = None
         self.map_rates = {}
+        self.map_bans = {}           # map_id -> ban rate on that map, when published
         self.best_maps = []
         self.perk_effects = []       # (perk, the ability it alters)
 
@@ -185,6 +186,9 @@ class Hero:
     def map_win(self, map_id):
         rate = self.map_rates.get(map_id)
         return rate[0] if rate else None
+
+    def map_ban(self, map_id):
+        return self.map_bans.get(map_id)
 
     def map_pick(self, map_id):
         rate = self.map_rates.get(map_id)
@@ -424,12 +428,14 @@ def load(cx):
     for mid, style, score, note in _rows(
             cx, "select map_id, style, score, note from map_playstyle"):
         w.maps[mid].styles[style] = (score, note)
-    for hid, mid, win, pick in _rows(cx, """
-            select m.hero_id, m.map_id, m.win_rate, m.pick_rate from map_meta m
+    for hid, mid, win, pick, ban in _rows(cx, """
+            select m.hero_id, m.map_id, m.win_rate, m.pick_rate, m.ban_rate from map_meta m
             join competitive_tiers t on t.tier_id = m.tier_id
             where t.code = 'all' and m.snapshot_id = %s""" % LATEST_BLIZZARD):
         if hid in w.heroes and mid in w.maps and win is not None:
             w.heroes[hid].map_rates[mid] = (float(win), float(pick) if pick is not None else None)
+            if ban is not None:
+                w.heroes[hid].map_bans[mid] = float(ban)
     for hid, mid in _rows(
             cx, "select hero_id, map_id from map_strategy order by hero_id, position"):
         if hid in w.heroes and mid in w.maps:

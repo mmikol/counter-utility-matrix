@@ -98,6 +98,8 @@ TEAM_METRICS = OrderedDict([
     ("win_mean", "mean all-ranks win rate"),
     ("pick_mass", "summed all-ranks pick rate"),
     ("availability", "chance every pick survives the ban screen: product of (1 - ban)"),
+    ("map_availability", "the same from this map's ban rates (the all-ranks ban where a map"
+                         " publishes none; equal to availability without a map)"),
     ("max_ban_rate", "the highest ban rate on the team"),
     ("max_ban_hero", "who carries the highest ban rate"),
     ("rank_sensitive_count",
@@ -299,6 +301,12 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     for h in heroes:
         avail *= 1.0 - (h.ban or 0) / 100.0
     t["availability"] = avail
+    here = 1.0
+    for h in heroes:
+        ban = h.map_ban(m.id) if m is not None else None
+        rate = h.ban if ban is None else ban            # this map's ban, else all-ranks
+        here *= 1.0 - (rate or 0) / 100.0
+    t["map_availability"] = here
     banned = max(heroes, key=lambda h: h.ban or 0) if heroes else None
     t["max_ban_rate"] = (banned.ban or 0) if banned else 0.0
     t["max_ban_hero"] = banned.name if banned and banned.ban else ""

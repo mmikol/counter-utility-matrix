@@ -447,8 +447,11 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
     if m is not None:
         win = h.map_win(m.id)
         if win is not None:
+            ban_here = h.map_ban(m.id)
             fs.add("hero", name, "hero.map_win", "%s on %s (this map): wins %.1f%%,"
-                   " picked %.1f%%" % (name, m.name, win, h.map_pick(m.id) or 0),
+                   " picked %.1f%%%s" % (name, m.name, win, h.map_pick(m.id) or 0,
+                                         ", banned %.1f%%" % ban_here if ban_here is not None
+                                         else ""),
                    value=win, unit="%", source="map_meta", team=team)
             if h.win is not None:
                 delta = win - h.win
@@ -604,6 +607,10 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
     add("pick_mass", "%s pick-rate mass: %.1f summed - %s" % (
         label, t["pick_mass"], "meta-shaped; expect practiced answers"
         if t["pick_mass"] >= 30 else "off-meta lean; surprise value"))
+    if m is not None and round(t["map_availability"], 2) != round(t["availability"], 2):
+        add("map_availability", "%s availability on %s: %.0f%% chance every pick survives the"
+            " ban screen here, from this map's ban rates" % (label, m.name,
+                                                             100 * t["map_availability"]))
     add("availability", "%s expected availability: %.0f%% chance every pick survives the"
         " ban screen%s" % (label, 100 * t["availability"],
                            " (%s at %.0f%% ban)" % (t["max_ban_hero"], t["max_ban_rate"])

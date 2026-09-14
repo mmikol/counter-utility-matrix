@@ -185,3 +185,15 @@ def test_the_provenance_is_one_line_per_source(world):
     seen = [(f.value["source"], f.value["queue"]) for f in lines]
     assert len(seen) == len(set(seen)), seen                  # no source and queue twice
     assert any(f.value["source"] == "blizzard" for f in lines)   # the main rates' line is there
+
+
+def test_the_map_fact_carries_this_maps_ban_rate_and_the_team_its_availability_here(world):
+    fs = engine.generate(world, "King's Row", ["Zarya"], ["Sombra", "Ana"])
+    fact = fs.find("hero.map_win", "Sombra")[0]
+    if world.hero("Sombra").map_ban(world.map("King's Row").id) is not None:
+        assert ", banned " in fact.text
+    picks = [world.hero("Sombra"), world.hero("Ana")]
+    t = compute.team_metrics(world, picks, world.map("King's Row"), [])
+    assert 0 <= t["map_availability"] <= 1
+    anywhere = compute.team_metrics(world, picks, None, [])
+    assert anywhere["map_availability"] == anywhere["availability"]
