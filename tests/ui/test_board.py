@@ -36,7 +36,9 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     assert "/api/roster" in script and "/api/facts" in script and "/api/infer" in script
     assert "localStorage" in script
     assert "var TABS = ['comps', 'facts', 'playbook']" in script
-    assert "normalized" in script and "/ 100" in script    # the 0-100 figure, raw score beside it
+    assert "normalized" in script and "/ 100" in script    # the 0-100 figure, and only it
+    assert "' of the best '" not in script and "(score " not in script   # no raw sum anywhere
+    assert "d.unscored || UNSCORED" in script                # the engine's reason
     # the playbook holds three kinds; the badge appends the form only when it differs
     # the equation lives on /math now
     assert "STRATEGIES     = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS" in board.view_math()

@@ -136,14 +136,16 @@ solver's suggestions - the optimal six before any pick, then the best six
 that keeps what you have locked - each a click away from locking. The
 tile shows the hero alone; its reasons are the tooltip and the comps tab.
 The comp is
-full width below. Each result shows its 0-100 figure large (`normalized`:
-100 for an optimal six, the current comp's share of blue's optimal on
-that board) with the raw score small beside it and as the tooltip, and
-falls back to the raw score when the figure is absent - or reads
-*unscored*, in the team badges, the results and the momentum strip, when
-the playbook in force has no heuristic, scored constraint or soft limit,
-since every legal six then ties at zero (`scoring` on each result says
-which); then each pick
+full width below. Each result shows one figure, its 0-100 share
+(`normalized`: 100 for an optimal six, the current comp's share of blue's
+optimal on that board) with its meaning beside it; the raw sum is never
+shown. It reads *unscored* instead - in the team badges, the results and
+the momentum strip - when nothing can be a share of anything: the
+playbook in force has no heuristic, scored constraint or soft limit, or
+none of them applies to this board yet (a heuristic waiting on its
+`when`), and the engine's reason (`unscored` on each result, naming the
+strategy that waits and what for) sits where the meaning would; then
+each pick
 with its reasons and `[F#]` citations, the score bars per strategy, the
 alternatives (each with its own 0-100 figure when present) and the partial
 notice. *facts*

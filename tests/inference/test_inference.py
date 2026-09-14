@@ -288,6 +288,44 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world, monkeypatch):
     scored = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
                                             ["Ana", "Reinhardt"], catalog=shipped))
     assert scored["current"]["scoring"] is True and 0 < scored["current"]["normalized"] < 100
+    assert scored["current"]["unscored"] is None
+
+
+def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reason(world,
+                                                                                    monkeypatch):
+    """A playbook whose only scoring term is guarded (hitscan cover while red
+    fields a flier) scores nothing until the guard holds: the best six itself
+    is zero, so no comp is a share of anything - the board says which
+    strategy waits and for what, and scores once the flier appears."""
+    import os
+
+    from inference import engine
+    scratch = catalog.load(os.path.join("inference", "experiments", "from-scratch"))
+    assert catalog.scores(scratch)
+    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
+    grounded = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Ana"],
+                                              ["Reinhardt", "Cassidy"], catalog=scratch))
+    for key in ("blue", "red", "current", "red_current", "fill"):
+        assert grounded[key]["scoring"] is False and grounded[key]["normalized"] is None
+        assert "Fliers need hitscan cover waits for matchup.flyers >= 1" in \
+            grounded[key]["unscored"]
+    # against red's optimal six the guard may hold (their best counter can field a flier):
+    # then that one result scores, and says nothing about waiting
+    countered = grounded["countered"]
+    assert countered["scoring"] is (countered["unscored"] is None)
+    assert grounded["momentum"]["verdict"].startswith("unscored on this board")
+    assert "waits for matchup.flyers >= 1" in grounded["momentum"]["verdict"]
+    flying = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
+                                            ["Reinhardt", "Cassidy"], catalog=scratch))
+    assert flying["blue"]["scoring"] is True and flying["blue"]["normalized"] == 100
+    assert flying["current"]["unscored"] is None and flying["current"]["normalized"] is not None
+    # blue fields no flier, so red's seat still waits: the verdict reads each side on its own
+    assert flying["red_current"]["scoring"] is False
+    verdict = flying["momentum"]["verdict"]
+    assert verdict.startswith("blue %d / 100" % flying["current"]["normalized"])
+    assert "red unscored: Fliers need hitscan cover waits for matchup.flyers >= 1" in verdict
+    assert flying["momentum"]["blue"] == flying["current"]["normalized"]
+    assert flying["momentum"]["red"] is None
 
 
 def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):

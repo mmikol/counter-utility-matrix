@@ -40,9 +40,34 @@ UNSCORED = ("unscored - the playbook in force holds no heuristic, scored constra
             " limit, so every legal six ties at zero; add one and the board scores")
 
 
+def _unscored(result):
+    """Why this result carries no share of a best, or None when it does: the
+    playbook holds no term that scores, or none of its terms applies to
+    this board (a heuristic waiting on its `when`) so the best six itself
+    scores zero and there is nothing to be a share of."""
+    catalog = getattr(result, "catalog", None)
+    if catalog is None:                                    # the tests' stand-ins
+        return None
+    if not catalog_module.scores(catalog):
+        return UNSCORED
+    best = result.best if getattr(result, "best", None) is not None else result.score
+    if best > 0:
+        return None
+    by_id = {h.id: h for h in catalog}
+    waiting = []
+    for c in getattr(result, "contributions", []) or []:
+        h = by_id.get(c.get("id"))
+        if h is None or c.get("applies", True) or c.get("kind") not in ("heuristic", "constraint"):
+            continue
+        when = getattr(h, "when_source", None) or getattr(getattr(h, "when", None), "source", None)
+        waiting.append("%s waits for %s" % (h.name, when) if when else h.name)
+    return ("unscored on this board - no scoring strategy applies yet"
+            + (": " + "; ".join(waiting) if waiting else ""))
+
+
 def _finish(result, best):
     result.best = best
-    scoring = catalog_module.scores(result.catalog)
+    scoring = _unscored(result) is None
     for alt in result.alternatives:
         alt["normalized"] = _pct(alt["score"], best) if scoring else None
 
@@ -85,7 +110,9 @@ class Result:
                                                   pending=getattr(h, "pending", False),
                                                   form=getattr(h, "form", None),
                                                   weight=getattr(h, "weight", None),
-                                                  soft=getattr(h, "soft", False))
+                                                  soft=getattr(h, "soft", False),
+                                                  when_source=getattr(
+                                                      getattr(h, "when", None), "source", None))
                             for h in self.catalog]
         return state
 
@@ -97,11 +124,12 @@ class Result:
             ids = {fid for p in self.picks for fid in p["evidence"]}
             ids |= {c["fact"] for c in self.contributions if c.get("fact")}
             cited = {f.id: f.text for f in self.facts.facts if f.id in ids}
-        scoring = catalog_module.scores(self.catalog)
+        unscored = _unscored(self)
+        scoring = unscored is None
         return {"kind": self.kind, "seat": self.seat, "map": self.map_name,
                 "red": self.red, "blue": self.blue, "locked": self.locked,
                 "bans": self.bans, "side": self.side, "partial": self.partial,
-                "score": round(self.score, 3), "scoring": scoring,
+                "score": round(self.score, 3), "scoring": scoring, "unscored": unscored,
                 "weights": {h.id: getattr(h, "weight", None)
                             for h in self.catalog if h.kind == "heuristic"},
                 "normalized": (_pct(self.score, self.best if self.best is not None else self.score)
@@ -127,8 +155,9 @@ class Result:
             " (banned: %s)" % ", ".join(self.bans) if self.bans else "")
         counts = {k: sum(1 for h in self.catalog if h.kind == k)
                   for k in catalog_module.KINDS}
+        unscored = _unscored(self)
         share = ("(%d/100)" % _pct(self.score, self.best if self.best is not None else self.score)
-                 if catalog_module.scores(self.catalog) else "(unscored)")
+                 if unscored is None else "(unscored)")
         lines = [head, "  %s%s - score %.2f %s%s, %d candidates considered in %.1fs"
                  " under %d constraints, %d heuristics and %d assumptions"
                  % (", ".join(self.blue), " (%s)" % self.playstyle if self.playstyle else "",
@@ -136,8 +165,8 @@ class Result:
                     " (rank %d among the feasible field)" % self.rank
                     if self.rank else "", self.considered, self.seconds,
                     counts["constraint"], counts["heuristic"], counts["assumption"])]
-        if not catalog_module.scores(self.catalog):
-            lines.append("  UNSCORED: " + UNSCORED.split(" - ", 1)[1])
+        if unscored:
+            lines.append("  UNSCORED: " + unscored.split(" - ", 1)[-1])
         if self.partial:
             lines.append("  PARTIAL: %d of %d picked - sums read low until the team is full"
                          % (len(self.blue), TEAM_SIZE))
@@ -380,16 +409,24 @@ def _momentum(cur, red_cur, countered):
     """Who the picks favour, read off the two current comps on their own
     optimals' scales: blue's share of its best counter to red's selection,
     red's share of its best counter to blue's."""
-    catalog = getattr(cur, "catalog", None)                 # the tests' stand-ins carry none
-    if catalog is not None and not catalog_module.scores(catalog):
+    blue_why, red_why = _unscored(cur), _unscored(red_cur)
+    if blue_why and red_why:                       # neither seat can be a share of anything
         return {"blue": None, "red": None, "countered": None, "partial": False,
-                "verdict": UNSCORED}
-    n = _pct(cur.score, cur.best) if cur.blue else None
-    m = _pct(red_cur.score, red_cur.best) if red_cur.blue else None
-    k = _pct(countered.score, countered.best) if countered is not None and countered.blue else None
+                "verdict": blue_why}
+    n = _pct(cur.score, cur.best) if cur.blue and not blue_why else None
+    m = _pct(red_cur.score, red_cur.best) if red_cur.blue and not red_why else None
+    k = (_pct(countered.score, countered.best)
+         if countered is not None and countered.blue and not _unscored(countered) else None)
     out = {"blue": n, "red": m, "countered": k,
            "partial": bool((cur.blue and cur.partial) or (red_cur.blue and red_cur.partial))}
-    if n is None and m is None:
+    short = lambda why: "unscored: " + why.split(": ", 1)[-1]   # noqa: E731
+    if (blue_why and cur.blue) or (red_why and red_cur.blue):   # one seat scores, the other waits
+        sides = ["blue " + (short(blue_why) if blue_why else "%d / 100 of its optimal" % n)
+                 if cur.blue else "no blue picks yet",
+                 "red " + (short(red_why) if red_why else "%d / 100 of its best counter" % m)
+                 if red_cur.blue else "no red picks revealed yet"]
+        out["verdict"] = "; ".join(sides)
+    elif n is None and m is None:
         out["verdict"] = "no picks yet on either side"
     elif n is None:
         out["verdict"] = ("red has revealed picks and blue has none:"

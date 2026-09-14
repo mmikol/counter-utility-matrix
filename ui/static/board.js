@@ -250,11 +250,11 @@ function bars(contribs) {
   return out + '</div>';
 }
 
-/* the 0-100 figure (`normalized`: 100 for an optimal six, the current comp's
-   share of blue's optimal) large, the raw score small beside it and as the
-   tooltip; a response without `normalized` shows the raw score alone */
-/* what a number means: 100 is the best six the solver can build for this
-   board; any other comp's number is its score as a share of that best */
+/* one figure: the 0-100 share (`normalized`: 100 for an optimal six, the
+   current comp's share of blue's optimal), its meaning beside it; the raw
+   sum is never shown. A result that cannot be scored - the playbook holds
+   no term, or none applies to this board yet - reads "unscored" with the
+   engine's reason (`unscored`) beside it */
 function meaning(d) {
   var n = typeof d.normalized === 'number' ? Math.round(d.normalized) : null;
   if (d.kind === 'infer') return 'the best six the solver can build for this board - the 100 every other comp here is measured against';
@@ -264,17 +264,15 @@ function meaning(d) {
 }
 var UNSCORED = 'the playbook in force holds no heuristic, scored constraint or soft limit, so every legal six ties at zero - add one and the board scores';
 function scoreHTML(d) {
-  var raw = 'score ' + (+d.score).toFixed(2) + (typeof d.best === 'number' && d.kind !== 'infer' ? ' of the best ' + (+d.best).toFixed(2) : '');
-  if (d.scoring === false)
-    return "<span class='score unscored' title='" + esc(UNSCORED) + "'>unscored</span><span class='raw'><span class='meaning'>" + esc(UNSCORED) + '</span></span>';
-  if (typeof d.normalized === 'number')
-    return "<span class='score' title='" + esc(raw) + "'>" + Math.round(d.normalized) + "<small>/ 100</small></span><span class='raw'>" + esc(raw) +
-      "<span class='meaning'>" + esc(meaning(d)) + '</span></span>';
-  return "<span class='score' title='the raw score under the catalog'>" + esc(raw) + '</span>';
+  if (d.scoring === false || typeof d.normalized !== 'number') {
+    var why = d.unscored || UNSCORED;
+    return "<span class='score unscored' title='" + esc(why) + "'>unscored</span><span class='raw'><span class='meaning'>" + esc(why) + '</span></span>';
+  }
+  return "<span class='score' title='" + esc(meaning(d)) + "'>" + Math.round(d.normalized) + "<small>/ 100</small></span><span class='raw'>" +
+    "<span class='meaning'>" + esc(meaning(d)) + '</span></span>';
 }
 function altScore(a) {
-  return (typeof a.normalized === 'number' ? "<span class='altn'>" + Math.round(a.normalized) + ' / 100</span> ' : '') +
-    "<span class='legend'>(score " + (+a.score).toFixed(2) + ')</span>';
+  return typeof a.normalized === 'number' ? "<span class='altn'>" + Math.round(a.normalized) + ' / 100</span>' : '';
 }
 
 /* the comps panel: blue's optimal six and red's side by side, the current comp below */
@@ -296,7 +294,7 @@ function renderInf() {
   var badge = function (r) { return !r || !r.blue || !r.blue.length ? '' : r.scoring === false ? 'unscored' : typeof r.normalized === 'number' ? r.normalized + ' / 100' : ''; };
   el('bluescore').textContent = badge(c);
   el('redscore').textContent = badge(rc);
-  el('bluescore').title = el('redscore').title = (c && c.scoring === false) ? UNSCORED : '';
+  el('bluescore').title = el('redscore').title = (c && c.scoring === false) ? (c.unscored || UNSCORED) : '';
   if (d.shapes && d.shapes.length && JSON.stringify(d.shapes) !== JSON.stringify(SHAPES)) { SHAPES = d.shapes; paint(); return; }
   paintSuggestions();
 }
