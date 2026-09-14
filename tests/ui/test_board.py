@@ -22,6 +22,9 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     assert "id='factsn' class='count'" in facts_panel
     assert "recorded" not in body
     assert "up to five, all optional" not in body            # the bans bar carries no hint
+    # a team header is its name, its figure and its clear button: no subtitle, no counter
+    for gone in ("your locked picks", "the enemy - click", "id='bluecount'", "id='redcount'"):
+        assert gone not in body, gone
     assert "record this comp" not in board.static_file("board.js")[0].decode()
     assert "FACTS = HEROES" not in body                              # the equation moved to /math
     assert "href='/math'" in body and "id='captured'" in body
@@ -159,7 +162,9 @@ def test_the_page_is_a_shell_over_static_files():
     assert "their comp as revealed" in script and "red_current" in script and "d.momentum" in script
     # blue's seat is the optimal six only
     assert "'blue - your picks'" not in script
-    assert "function meaning(d)" in script and "100 is the best six the solver can build" in script
+    assert "function meaning(d)" in script
+    assert "class='scale'" not in script                      # the strip carries no scale note
+    assert "replace(/unscored( on this board)?" in script      # an unscored seat is the word alone
     assert "game plan" in script and "d.plan" in script
     assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
     assert "leadReason" not in script and "class='sug'" not in script   # the hero alone

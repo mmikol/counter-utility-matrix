@@ -121,7 +121,9 @@ into your own six) and red's comp as revealed (right, scored against
 yours on the scale of their best counter). Every score says what it
 means under the number: 100 is the best six the solver can build for
 this board, and any other comp's number is its score as a share of that
-best; the momentum strip states the scale once and links to the math.
+best; the momentum strip is the verdict alone, and an unscored seat is
+the word alone there and in the comps, its reason kept in the badge's
+tooltip; the scale is the math page's to explain.
 
 The scores live with the selections. Above the two boxes sits the
 momentum strip: the verdict from the two current comps, each on its own

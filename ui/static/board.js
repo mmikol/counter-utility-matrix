@@ -150,7 +150,6 @@ function paint() {
       note.textContent = cap !== null && cap < TEAM ? 'max ' + cap : '';
       note.title = 'the playbook seats at most ' + cap + ' on a team';
     }
-    el(team + 'count').textContent = st[team].length + '/' + TEAM;
   });
   paintSuggestions();
   el('mapsel').value = st.map;
@@ -270,10 +269,8 @@ function meaning(d) {
 }
 var UNSCORED = 'the playbook in force holds no heuristic, scored constraint or soft limit, so every legal six ties at zero - add one and the board scores';
 function scoreHTML(d) {
-  if (d.scoring === false || typeof d.normalized !== 'number') {
-    var why = d.unscored || UNSCORED;
-    return "<span class='score unscored' title='" + esc(why) + "'>unscored</span><span class='raw'><span class='meaning'>" + esc(why) + '</span></span>';
-  }
+  if (d.scoring === false || typeof d.normalized !== 'number')
+    return "<span class='score unscored' title='" + esc(d.unscored || UNSCORED) + "'>unscored</span>";
   return "<span class='score' title='" + esc(meaning(d)) + "'>" + Math.round(d.normalized) + "<small>/ 100</small></span><span class='raw'>" +
     "<span class='meaning'>" + esc(meaning(d)) + '</span></span>';
 }
@@ -288,9 +285,11 @@ function renderInf() {
   var text = (d.plan || '').split('\n'), basis = text.length && text[text.length - 1].indexOf('Based on:') === 0 ? text.pop() : '';
   el('plan').innerHTML = "<span class='lbl'>game plan</span><div class='text'>" + text.map(esc).join('<br>') + '</div>' + (basis ? "<div class='basis'>" + esc(basis) + '</div>' : '');
   var mo = d.momentum || {};
-  el('momentum').innerHTML = "<span class='lbl'>momentum</span> <b>" + esc(mo.verdict || '') + '</b>' +
-    (typeof mo.blue === 'number' && typeof mo.red === 'number' ? "<span class='gauge'><span class='b' style='width:" + mo.blue + "%'></span><span class='r' style='width:" + mo.red + "%'></span></span>" : '') +
-    "<span class='scale'>100 is the best six the solver can build for this board; a comp's number is its score as a share of that best - yours against blue's optimal, theirs against their best counter to you. <a href='/math'>the math</a></span>";
+  /* the strip says the verdict and nothing more: an unscored seat is the word,
+     its reason stays in the badge's tooltip; the scale is the math page's */
+  var verdict = (mo.verdict || '').replace(/unscored( on this board)?( - [^;]*)?(: [^;]*)?/g, 'unscored');
+  el('momentum').innerHTML = "<span class='lbl'>momentum</span> <b>" + esc(verdict) + '</b>' +
+    (typeof mo.blue === 'number' && typeof mo.red === 'number' ? "<span class='gauge'><span class='b' style='width:" + mo.blue + "%'></span><span class='r' style='width:" + mo.red + "%'></span></span>" : '');
   var rc = d.red_current;
   if (!rc || !rc.blue || !rc.blue.length) el('inf-red').innerHTML = "<div class='inf-head'><h3>red - their comp as revealed</h3></div>" +
     "<p class='legend'>click red picks as they reveal; their comp is scored against yours, on the scale of their best counter to you.</p>";
