@@ -118,7 +118,7 @@ a stated problem, a lobby's habits, a patch the rates predate.
 | `.mcp.json` | registers the two MCP servers a Claude Code session sees: `counter-utility-matrix` (stdio, the local cluster) and `counter-utility-matrix-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
 | `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pyflakes, and pgserver (the embedded PostgreSQL a local build uses) |
 | `pytest.ini` | the `invariant` marker for tests that need a built database |
-| `SECURITY.md` | how to report a vulnerability; the measures themselves are in [security.md](security.md) |
+| `SECURITY.md` | the terms - you run it at your own risk, no security commitment from the author - and how to report a vulnerability privately; the measures themselves are in [security.md](security.md) |
 | `LICENSE` | PolyForm Strict 1.0.0: noncommercial use only, no redistribution, no changes or new works; anything else needs a separate license from the author | |
 | `.gitignore` `.dockerignore` | the caches, the cluster, the mirror, the venv, `.env` |
 

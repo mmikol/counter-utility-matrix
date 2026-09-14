@@ -121,4 +121,7 @@ non-zero when something is wrong.
   a quarantine, a tune) and say so in their logs.
 
 Report a vulnerability privately to the repository owner rather than in a
-public issue; see [SECURITY.md](../SECURITY.md).
+public issue; see [SECURITY.md](../SECURITY.md). None of this is a
+commitment: you run the software at your own risk, and the author promises
+no response time and no fix. These measures describe what the code does,
+not that it is enough for you.

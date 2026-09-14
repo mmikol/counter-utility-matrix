@@ -323,6 +323,6 @@ def test_an_announced_hero_is_described_but_never_picked(world):
         engine.infer(world, None, [], [h.name])                    # a pick may not
     with pytest.raises(ValueError, match="announced"):
         engine.board(world, None, [h.name], [])
-    r = engine.infer(world, None, [], [], pool_size=8)
+    r = engine.infer(world, None, [], [])                          # the default pool: a pool of 8 with no locks needs > 1 GiB
     assert h.name not in r.blue and all(a["blue"] for a in r.alternatives)
     assert not any(h.name in a["blue"] for a in r.alternatives)   # nor does the field hold it

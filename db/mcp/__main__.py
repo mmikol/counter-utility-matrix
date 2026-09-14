@@ -17,6 +17,7 @@ def _status(ctx):
             return {"status": "ok", "tables": data["tables"],
                     "pending_migrations": data["pending_migrations"],
                     "heroes": data["counts"].get("heroes", 0),
+                    "announced": data["counts"].get("announced", 0),
                     "newest_capture": data.get("newest_capture")}
         except Exception as error:      # the server is up even if the DB is not
             return {"status": "degraded", "error": str(error)}

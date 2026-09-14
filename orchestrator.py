@@ -85,8 +85,10 @@ def verdict(h):
         if not data.get("heroes"):
             ok = False
             lines.append("data layer: the database holds no heroes yet")
-        lines.append("data layer: %d tables, %d heroes, rates captured %s"
+        lines.append("data layer: %d tables, %d heroes%s, rates captured %s"
                      % (data.get("tables", 0), data.get("heroes", 0),
+                        " (%d announced, not yet playable)" % data["announced"]
+                        if data.get("announced") else "",
                         data.get("newest_capture") or "never"))
     inf = h.get("inference")
     if not inf or inf.get("status") != "ok":

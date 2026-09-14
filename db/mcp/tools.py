@@ -260,6 +260,9 @@ def db_status(ctx):
                       "counters", "synergies", "strategies"):
                 if cx.execute("select to_regclass(%s)", (t,)).fetchone()[0]:
                     counts[t] = cx.execute("select count(*) from " + t).fetchone()[0]
+            if "heroes" in counts and cx.execute("select to_regclass('heroes')").fetchone()[0]:
+                counts["announced"] = cx.execute(
+                    "select count(*) from heroes where status = 'announced'").fetchone()[0]
             if cx.execute("select to_regclass('meta_snapshots')").fetchone()[0]:
                 snaps = [{"id": i, "captured": str(c), "queue": q, "source": s}
                          for i, c, q, s in cx.execute("""

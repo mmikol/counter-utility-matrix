@@ -13,6 +13,12 @@ def test_verdict_reads_the_three_health_replies():
         "inference": {"status": "ok", "strategies": 38, "heroes": 53},
         "ui": {"heroes": [{}] * 53, "maps": [{}] * 30}})
     assert ok and any("rates captured 2026-09-13" in l for l in lines)
+    ok, lines = orchestrator.verdict({
+        "data": {"status": "ok", "tables": 36, "heroes": 54, "announced": 1,
+                 "pending_migrations": [], "newest_capture": "2026-09-14"},
+        "inference": {"status": "ok", "strategies": 38, "heroes": 54},
+        "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}})
+    assert ok and any("54 heroes (1 announced, not yet playable)" in l for l in lines)
     ok, lines = orchestrator.verdict({"data": {"status": "ok", "tables": 42, "heroes": 53,
                                         "pending_migrations": ["099_future.sql"]},
                                "inference": {"status": "ok", "strategies": 0},

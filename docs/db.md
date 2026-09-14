@@ -186,7 +186,7 @@ same refresh from a shell, against whichever database `DATABASE_URL` names:
 ```mermaid
 stateDiagram-v2
     [*] --> Empty: docker compose up<br/>(or pgserver first touch)
-    Empty --> Schema: db_init<br/>10 migrations, 41 tables
+    Empty --> Schema: db_init<br/>every migration, no data
     Schema --> Populated: sync_all<br/>7 pull tools + load_authored
     Empty --> Populated: db_rebuild<br/>(the entrypoint's move<br/>on an empty database)
     Populated --> Populated: pull_rates + pull_counters daily,<br/>sync_all weekly (the refresher)<br/>entities upsert in place,<br/>rates APPEND a dated snapshot

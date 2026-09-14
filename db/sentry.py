@@ -39,9 +39,8 @@ from db import RAW_DIR, AUTHORED_DIR
 from inference import catalog as catalog_module
 
 EVERY = float(os.environ.get("COUNTER_MATRIX_SENTRY_EVERY", "30"))
-AUDIT_PATH = os.environ.get("COUNTER_MATRIX_AUDIT", os.path.join(RAW_DIR, "audit.jsonl"))
+from db.mcp.server import AUDIT_PATH, RATE_LIMIT   # one definition: the door's own
 REPORT_PATH = os.path.join(RAW_DIR, "sentry.json")
-RATE_LIMIT = 120
 QUARANTINE = ".quarantined"
 
 # What a strategy, a note or a description never legitimately says.
