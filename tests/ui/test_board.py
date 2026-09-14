@@ -194,6 +194,7 @@ def test_the_page_is_a_shell_over_static_files():
     kinds = script[script.index("var KINDS = ["):script.index("function renderPlaybook")]
     assert kinds.index("'constraint'") < kinds.index("'heuristic'") < kinds.index("'assumption'")
     assert "class='pbgroup " in script and "none in the playbook in force" in script
+    assert "class='what'" not in script                       # the group heading is its count alone
     assert "commas(shown) + ' of ' + commas(total) + ' facts'" in script   # the total, with commas
     assert "function commas(n)" in script and "commas(d.considered)" in script
     assert "set by you" not in script and "' constraints, '" not in script   # no counts

@@ -402,13 +402,9 @@ function setWeight(id, value, inferred) {
   save(); refresh();
 }
 /* the playbook, one group per kind in the equation's order - constraints,
-   heuristics, assumptions - each headed with its count and what the kind
-   does, an empty group saying so; a card's left edge carries its kind's colour */
-var KINDS = [
-  ['constraint', 'constraints', 'limits the comp may not cross, and scored adjustments while a condition holds - the solver prunes or charges'],
-  ['heuristic', 'heuristics', 'a metric pushed up or down with a weight - the sliders below set the weights'],
-  ['assumption', 'assumptions', 'taken as given: shown with every result, read by the session, never scored']
-];
+   heuristics, assumptions - each headed with its count, an empty group saying
+   so; a card's left edge carries its kind's colour */
+var KINDS = [['constraint', 'constraints'], ['heuristic', 'heuristics'], ['assumption', 'assumptions']];
 function renderPlaybook(d) {
   if (!d || !d.strategies) { el('playbook').innerHTML = "<div class='warnbox'>" + esc(d && d.error ? d.error : 'the strategies are not answering') + '</div>'; return; }
   /* anchors first: one per group with its count, so a long playbook is a click
@@ -419,7 +415,7 @@ function renderPlaybook(d) {
   }).join('') + '</nav>';
   KINDS.forEach(function (k) {
     var these = d.strategies.filter(function (h) { return h.kind === k[0]; });
-    out += "<section class='pbgroup " + k[0] + "' id='pb-" + k[0] + "'><h3>" + k[1] + " <span class='n'>" + these.length + "</span><span class='what'>" + esc(k[2]) + '</span></h3>';
+    out += "<section class='pbgroup " + k[0] + "' id='pb-" + k[0] + "'><h3>" + k[1] + " <span class='n'>" + these.length + '</span></h3>';
     out += these.length ? "<div class='hcards'>" + these.map(card).join('') + '</div>' : "<p class='legend none'>none in the playbook in force</p>";
     out += '</section>';
   });

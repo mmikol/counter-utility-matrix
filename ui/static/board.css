@@ -245,7 +245,6 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .pbgroup h3 { font-family:"Bebas Neue",Impact,sans-serif; font-size:20px; letter-spacing:.06em; margin:0 0 8px;
   display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
 .pbgroup h3 .n { font-size:14px; color:var(--gold); }
-.pbgroup h3 .what { font-family:-apple-system,"Segoe UI",sans-serif; font-size:12px; letter-spacing:0; color:var(--muted); font-weight:400; text-transform:none; }
 .pbgroup.constraint h3 { color:var(--blue); } .pbgroup.heuristic h3 { color:var(--green); } .pbgroup.assumption h3 { color:#d9b36a; }
 .pbgroup .none { margin:0 0 4px; }
 .hcard.constraint { border-left:3px solid var(--blue); } .hcard.heuristic { border-left:3px solid var(--green); } .hcard.assumption { border-left:3px solid #d9b36a; }
