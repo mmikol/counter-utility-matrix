@@ -14,7 +14,9 @@ pytestmark = pytest.mark.invariant
 def test_board_page_has_two_rosters_and_the_three_panels():
     body = board.view_board()
     assert "team red" in body and "team blue" in body
-    assert "tab-comps" in body and "tab-facts" in body and "tab-playbook" in body
+    assert "tab-comps" in body and "tab-facts" in body and "tab-playbook" in body and "tab-recorded" in body
+    assert "FACTS = HEROES" not in body and "href='/recs'" not in body   # the equation moved to /math
+    assert "href='/math'" in body and "id='captured'" in body
     assert "data-tab='comps'" in body
     # the two old panels were merged into comps: both seats side by side, the
     # current comp below, in one section
@@ -25,10 +27,10 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     script = board.static_file("board.js")[0].decode()
     assert "/api/roster" in script and "/api/facts" in script and "/api/infer" in script
     assert "localStorage" in script
-    assert "var TABS = ['comps', 'facts', 'playbook']" in script
+    assert "var TABS = ['comps', 'facts', 'playbook', 'recorded']" in script
     assert "normalized" in script and "/ 100" in script    # the 0-100 figure, raw score beside it
     # the playbook holds three kinds; the badge appends the form only when it differs
-    assert "STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS" in body
+    assert "STRATEGIES = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS" in board.view_math()   # the equation lives on /math now
     assert "h.form !== h.kind ?" in script and "'assumption' ? 'assumption - taken as given" in script
     assert "prose -" not in script
     assert b".kind.assumption" in board.static_file("board.css")[0]
@@ -101,6 +103,10 @@ def test_infer_endpoint_serves_both_seats_and_the_current_comp(db):
 def test_strategies_and_recs_endpoints(db):
     data = board.api_strategies()
     assert len(data["strategies"]) >= 30
+    recorded = board.api_recorded(db)
+    assert set(recorded) == {"tally", "recs", "unlinked"} and set(recorded["tally"]) >= {"win", "loss", "draw"}
+    for r in recorded["recs"]:
+        assert set(r) >= {"rec_id", "date", "map", "question", "playstyle", "model", "picks", "outcomes"}
     data = board.api_recs(db)
     assert isinstance(data["latest"], int)
     assert json.dumps(data)
@@ -124,12 +130,18 @@ def test_the_page_is_a_shell_over_static_files():
     body = board.view_board()
     assert "/static/board.css" in body and "/static/board.js" in body
     assert "id='momentum'" in body and "id='plan'" in body
-    assert "id='bluescore'" in body and "id='cur'" not in body      # the score lives in the blue box
+    assert "id='bluescore'" in body and "id='redscore'" in body and "id='cur'" not in body  # scores live in the boxes
+    assert "data-clear='red'" in body and "data-clear='blue'" in body
+    assert body.index("id='momentum'") < body.index("id='redslots'")   # the momentum strip sits above both boxes
+    assert "id='momentum'" not in body[body.index("id='tab-comps'"):]
     assert body.index("id='inf-red'") < body.index("id='inf-blue'")  # red first, then blue, like the boxes
     script = board.static_file("board.js")[0].decode()
     assert "their comp as revealed" in script and "red_current" in script and "d.momentum" in script
     assert "game plan" in script and "d.plan" in script
     assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
+    assert "el('swapbtn').disabled = !sided" in script        # swap sides is off on maps without sides
+    assert "near('[data-clear]')" in script                    # a team's clear button empties that team only
+    assert "redscore" in script and "el('redslots')" not in script[script.index("function paintSuggestions"):script.index("function renderResult")]
     assert "renderFill" not in script and "el('cur')" not in script
     assert "var TEAM = 6, BANS = 5;" in body
     data, ctype = board.static_file("board.js")
@@ -137,3 +149,15 @@ def test_the_page_is_a_shell_over_static_files():
     data, ctype = board.static_file("board.css")
     assert ctype.startswith("text/css") and b".tile.banned" in data
     assert board.static_file("../board.py") is None and board.static_file("nope.js") is None
+
+
+def test_the_math_page_states_the_equation_and_the_layers():
+    page = board.view_math()
+    for line in ("FACTS      = HEROES &cup; MAPS &cup; META",
+                 "STRATEGIES = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS",
+                 "COMP       = ARGMAX[ STRATEGIES( FACTS ) ]"):
+        assert line in page
+    assert "The data layer" in page and "The inference layer" in page and "The board" in page
+    assert "never calls a language model" in page
+    script = board.static_file("board.js")[0].decode()
+    assert "'recorded'" in script and "/api/recorded" in script and "loadRecorded" in script

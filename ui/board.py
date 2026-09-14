@@ -135,6 +135,37 @@ def api_recs(cx):
     return {"latest": rec_id, "summary": "%s (%s)" % (picks or "", playstyle)}
 
 
+def api_recorded(cx):
+    """Every recorded composition with the outcomes played on it, newest
+    first, plus the outcomes recorded without one and the running tally."""
+    recs = [{"rec_id": r, "date": str(d), "map": m or "", "question": q, "playstyle": p,
+             "model": mo, "picks": (picks or "").split(", ") if picks else [], "outcomes": []}
+            for r, d, q, m, p, mo, picks in cx.execute("""
+                select r.rec_id, r.created_at::date, r.request, m.name, r.playstyle, r.model,
+                       (select string_agg(h.name, ', ' order by p.position)
+                        from recommendation_picks p join heroes h using(hero_id)
+                        where p.rec_id = r.rec_id)
+                from recommendations r left join maps m using(map_id)
+                order by r.rec_id desc limit 200""").fetchall()]
+    by_rec = {r["rec_id"]: r for r in recs}
+    tally = {"win": 0, "loss": 0, "draw": 0}
+    unlinked = []
+    for oid, played, rec_id, m, side, result, note, blue in cx.execute("""
+            select o.outcome_id, o.played_at::date, o.rec_id, m.name, o.side, o.result, o.note,
+                   (select string_agg(h.name, ', ' order by p.position)
+                    from outcome_picks p join heroes h using(hero_id)
+                    where p.outcome_id = o.outcome_id and p.team = 'blue')
+            from outcomes o left join maps m using(map_id) order by o.outcome_id desc""").fetchall():
+        tally[result] = tally.get(result, 0) + 1
+        row = {"outcome_id": oid, "date": str(played), "map": m or "", "side": side or "",
+               "result": result, "note": note or "", "blue": blue.split(", ") if blue else []}
+        if rec_id in by_rec:
+            by_rec[rec_id]["outcomes"].append(row)
+        else:
+            unlinked.append(row)
+    return {"tally": tally, "recs": recs, "unlinked": unlinked}
+
+
 def api_record(cx, payload):
     if INFERENCE_URL:
         return remote("/record", payload=payload)
@@ -183,17 +214,13 @@ HEAD = ("<!doctype html><meta charset='utf-8'>"
 def view_board():
     return (HEAD + "<title>Counter Utility Matrix</title><main>"
             "<header class='top'><h1>Counter <span>Utility Matrix</span></h1>"
-            "<span class='sub' title='FACTS = HEROES ∪ MAPS ∪ META (authoritative: pulled and set)"
-            "&#10;STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS (the playbook: markdown files, tuned by what history shows)"
-            "&#10;COMP = ARGMAX[ STRATEGIES( FACTS ) ]'>"
-            "FACTS = HEROES ∪ MAPS ∪ META &nbsp; STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS &nbsp; "
-            "COMP = ARGMAX[ STRATEGIES( FACTS ) ] &nbsp;·&nbsp; "
-            "<a href='/recs'>recorded comps</a> &nbsp;·&nbsp; <span id='captured'></span></span>"
+            "<a class='mathlink' href='/math' title='the equation and how the pieces fit'>the math</a>"
             "<div class='mapsel'><select id='mapsel'></select><span class='mode' id='mode'></span>"
             "<span class='sideseg' id='sideseg' title='blue attacks or defends; red gets the other side'>"
             "<button data-side='attack'>attack</button><button data-side='defense'>defense</button></span>"
             "<button id='swapbtn' title='swap red and blue'>swap sides</button>"
-            "<button id='clearbtn'>new game</button><span class='status' id='status'></span></div>"
+            "<button id='clearbtn'>new game</button><span class='status' id='status'>"
+            "<span id='captured'></span></span></div>"
             "</header>"
             "<div class='bans' id='bans'><div class='banhead' id='banhead' title='open or close the ban picker'>"
             "<h3>bans</h3><span class='bancount' id='bancount'></span><span class='banmini' id='banmini'></span>"
@@ -203,20 +230,24 @@ def view_board():
             "<div class='roles' id='banroster'></div></div></div>"
             "<div class='warnbox' id='vintage' style='display:none'></div>"
             "<div class='notice' id='newrec'></div>"
+            "<div class='momentum' id='momentum'></div>"
             "<div class='teams'>"
-            "<section class='team red'><h2>red team <small>the enemy - click their heroes as they reveal</small>"
-            "<small style='margin-left:auto' id='redcount'></small></h2>"
+            "<section class='team red'><h2>red team <span class='tscore' id='redscore' title=\"their picks so far, as a share of their best counter to yours\"></span>"
+            "<small>the enemy - click their heroes as they reveal</small>"
+            "<small style='margin-left:auto' id='redcount'></small>"
+            "<button class='clearteam' data-clear='red' title='clear every red pick'>clear</button></h2>"
             "<div class='slots' id='redslots'></div><div class='roles' id='redroster'></div></section>"
             "<section class='team blue'><h2>blue team <span class='tscore' id='bluescore' title=\"your picks so far, as a share of blue's optimal\"></span>"
             "<small>your locked picks - the inference layer fills the rest</small>"
-            "<small style='margin-left:auto' id='bluecount'></small></h2>"
+            "<small style='margin-left:auto' id='bluecount'></small>"
+            "<button class='clearteam' data-clear='blue' title='clear every blue pick'>clear</button></h2>"
             "<div class='slots' id='blueslots'></div><div class='roles' id='blueroster'></div></section>"
             "</div>"
             "<nav class='tabs'><button data-tab='comps'>comps</button>"
             "<button data-tab='facts'>facts <span id='factsn'></span></button>"
-            "<button data-tab='playbook'>playbook</button></nav>"
-            "<section class='panel' id='tab-comps'><div class='plan' id='plan'></div>"
-            "<div class='momentum' id='momentum'></div><div class='seats'>"
+            "<button data-tab='playbook'>playbook</button>"
+            "<button data-tab='recorded'>recorded <span id='recn'></span></button></nav>"
+            "<section class='panel' id='tab-comps'><div class='plan' id='plan'></div><div class='seats'>"
             "<div class='seat red' id='inf-red'></div><div class='seat blue' id='inf-blue'></div></div></section>"
             "<section class='panel' id='tab-facts'><div class='tools'>"
             "<input type='text' id='filter' placeholder='filter facts - try a hero, CAUTION, derived:, team.'>"
@@ -224,6 +255,7 @@ def view_board():
             "<table class='facts'><tbody id='factbody'></tbody></table>"
             "<p class='legend'>every line is a row or a formula over the database, numbered for citation;"
             " the /comp skill and the inference layer read exactly these.</p></section>"
+            "<section class='panel' id='tab-recorded'><div id='recorded'></div></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
             "</main><script>var TEAM = %d, BANS = 5;</script>"
             "<script src='/static/board.js'></script>" % TEAM_SIZE)
@@ -235,6 +267,66 @@ def _page(title, body):
     return (HEAD + "<title>%s</title>"
             "<main><header class='top'><h1><a href='/'>Counter <span>Utility Matrix</span></a></h1>"
             "<span class='sub'>%s</span></header>%s</main>" % (esc(title), esc(title), body))
+
+
+MATH = """
+<article class='math'>
+<h2>The equation</h2>
+<pre class='eq'>FACTS      = HEROES &cup; MAPS &cup; META
+STRATEGIES = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS
+COMP       = ARGMAX[ STRATEGIES( FACTS ) ]</pre>
+<p><b>FACTS</b> is the authoritative data, and only that: what is pulled from the sources and set
+in the database. <b>HEROES</b> are the kits - roles, subroles, health pools, every ability with its
+published numbers, who counters whom, which pairs work together. <b>MAPS</b> are the pool - the
+mode, the stages, whether a map has sides, and the authored note on what kind of fight it
+rewards. <b>META</b> is the record - win, pick and ban rates per hero, per map, per rank, captured
+as dated snapshots, plus the patches that shipped since. On one board (a map, a side, red's
+picks, yours, the bans) the facts are numbered F1, F2, ... and every claim the board makes cites
+them.</p>
+<p><b>STRATEGIES</b> is the playbook: markdown files, one per strategy, in three kinds.
+A <b>constraint</b> is a limit the comp may not cross (at most two tanks), a scored adjustment
+(a bonus or a penalty when a condition holds), or a ground rule in prose. A <b>heuristic</b> is a
+metric to push in a direction with a weight: effective HP up, exposure down, cohesion up.
+An <b>assumption</b> is prose by definition - what the model takes as given (players play
+optimally; rates are role queue on console) - shown with every result and never scored. A
+strategy is written as a name, a kind and a paragraph; the formula, the metric and the weight
+are inferred from that and stored in the same file. What history shows moves the weights: every
+recorded match is fitted back onto the heuristics.</p>
+<p><b>COMP</b> is the argmax: of every legal six under the constraints, the one the weighted
+heuristics score highest on the facts of this board. Each heuristic reads a metric off the six
+(its pool, its range, its answers to red's picks), normalises it against a fixed reference sample
+of comps so scores are comparable across boards, multiplies by its weight, and the sum is the
+score. 100 is the optimal's score on this board; every other comp on the board - yours as you
+pick, theirs as they reveal - is a share of it. Nothing in this is sampled or guessed: the same
+board gives the same six every time, in a second or two.</p>
+<h2>How the pieces fit</h2>
+<pre class='eq'>sources  &rarr;  db/data (fetch)  &rarr;  db/psql (the database)  &rarr;  ui/facts (FACTS for one board)
+                                                                    &darr;
+                        inference/strategies (STRATEGIES)  &rarr;  inference/solver (ARGMAX)  &rarr;  the board</pre>
+<p><b>The data layer</b> (<code>db/</code>) pulls the sources - Blizzard's hero pages, the wiki, the
+counter lists, the authored files - into one Postgres schema, and exposes it through one door:
+thirty-odd MCP tools over stdio and HTTP. Everything else, including this page, reads through
+those tools or the same functions behind them. A sentry container watches the strategy files and
+the audit log while the stack runs.</p>
+<p><b>The inference layer</b> (<code>inference/</code>) holds the playbook and the solver. It
+compiles each strategy's expression once, whitelists what an expression may do, and runs the
+search deterministically - no model in the loop, no network. It also records recommendations and
+outcomes, and fits the weights from them.</p>
+<p><b>The board</b> (<code>ui/</code>) is this page: it turns the database into the facts of one
+board and asks the inference layer for the answer at every stage of a draft - no map, a map, a
+side, bans, red's picks as they reveal. Clicking around never calls a language model.</p>
+<p><b>Claude's part</b> is offline and on your word: the skills and the headless agents refresh
+the sources, re-derive the inferred half of a strategy from its prose, and tune the weights - then
+they are done, and the deterministic pieces above serve what they left in the database and the
+files. The <code>/comp</code> skill is the conversational front of the same solver.</p>
+<p class='legend'>The longer version, with the folder map and the deployment, is in
+<code>docs/architecture.md</code>; the schema in <code>docs/db.md</code>; the playbook's catalog in
+<code>docs/inference.md</code>.</p>
+</article>"""
+
+
+def view_math():
+    return _page("the math", MATH)
 
 
 def view_recs(cx):
@@ -315,6 +407,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_bytes(*served)
             if path == "/api/strategies":
                 return self._json(api_strategies())
+            if path == "/math":
+                return self._send(view_math())
             with psycopg.connect(dsn()) as cx:
                 if path == "/api/roster":
                     return self._json(api_roster(cx))
@@ -324,6 +418,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(*api_infer(cx, query))
                 if path == "/api/recs":
                     return self._json(api_recs(cx))
+                if path == "/api/recorded":
+                    return self._json(api_recorded(cx))
                 if path == "/recs":
                     return self._send(view_recs(cx))
                 if path.startswith("/rec/"):

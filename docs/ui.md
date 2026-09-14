@@ -52,6 +52,8 @@ the script has no constant to keep in step with the Python.
 | `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, the momentum verdict and the game plan - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
 | `/api/strategies` | the strategies catalog: every constraint and heuristic with its kind, form, frontmatter and body |
 | `/api/record` (POST) | record a comp shown on the board through the inference layer's `record`: the gates hold (six real heroes, citations the board showed) and a transcript is written |
+| `/api/recorded` | every recorded composition with the outcomes played on it, the outcomes recorded without one, and the win-loss-draw tally - what the *recorded* tab shows |
+| `/math` | the equation and how the layers fit, in prose - linked from the board's header |
 | `/recs`, `/rec/<id>` | the recorded compositions, and one transcript rendered |
 
 Every request opens its own connection and loads a fresh World, so a
@@ -91,18 +93,22 @@ side, what to play and how, what red's picks mean and which of the six
 answer them, the family of heroes to stay in when you stray from the six,
 and what the six is built for - from the same facts and strategies the
 solver scored, so picks can be tailored toward the optimal without
-matching it; a last line says what it rests on. Then a momentum strip:
-the verdict from the two current comps, each on its own optimal's scale -
-red's picks as a share of their best counter to yours, yours as a share
-of blue's best counter to red's selection - and, when you have picks, how
-you hold if red answers you perfectly. Then, in the order of the boxes
-above, red's comp as revealed (left, scored against yours) and blue's
-optimal six (right: the counter to red's selection as revealed, whatever
-you have locked, so it never collapses into your own six). Your own
-picks are scored in the blue box itself: the badge by its name is your
-picks so far as a share of blue's optimal, and the empty slots carry the
-solver's suggestions - the optimal six before any pick, then the best
-six that keeps what you have locked - each a click away from locking. The comp is
+matching it; a last line says what it rests on. Then, in the order of
+the boxes above, red's comp as revealed (left, scored against yours) and
+blue's optimal six (right: the counter to red's selection as revealed,
+whatever you have locked, so it never collapses into your own six).
+
+The scores live with the selections. Above the two boxes sits the
+momentum strip: the verdict from the two current comps, each on its own
+optimal's scale - red's picks as a share of their best counter to yours,
+yours as a share of blue's best counter to red's selection - and, when
+you have picks, how you hold if red answers you perfectly. Each box
+carries its own share as a badge by its name, and a *clear* button that
+empties that team's picks alone (*new game* in the header clears both,
+the map, the side and the bans). Red's box only records and
+scores what they reveal; the blue box also fills its empty slots with the
+solver's suggestions - the optimal six before any pick, then the best six
+that keeps what you have locked - each a click away from locking. The comp is
 full width below. Each result shows its 0-100 figure large (`normalized`:
 100 for an optimal six, the current comp's share of blue's optimal on
 that board) with the raw score small beside it and as the tooltip, and
@@ -112,6 +118,12 @@ alternatives (each with its own 0-100 figure when present), the partial
 notice, and on blue's optimal a "record this comp" button. *facts*
 filters by text and by scope (meta, bans, map, hero, team, matchup,
 playbook). *playbook* renders the catalog with each constraint's form.
+*recorded* lists every recorded composition, newest first, with how each
+went - the outcomes logged against it (win, loss or draw, the date, the
+side, the note), or "not played yet" - and the running tally; outcomes
+recorded without a comp are listed under it. The header carries a link to
+*the math*, a page stating the equation and how the layers fit; the
+rates' capture date and patch sit under the status line.
 `board.css` is the game's hero select: role columns, portrait tiles, red
 and blue seats, the dark palette.
 

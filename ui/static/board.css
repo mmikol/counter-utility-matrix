@@ -17,6 +17,17 @@ header.top { display:flex; align-items:center; gap:18px; flex-wrap:wrap;
 header.top h1 { margin:0; font-size:30px; }
 header.top h1 span { color:var(--gold); }
 header.top .sub { color:var(--muted); font-size:13px; }
+header.top .mathlink { color:var(--muted); font-size:12px; letter-spacing:.14em; text-transform:uppercase; text-decoration:none;
+  border:1px solid var(--line); border-radius:999px; padding:5px 11px; }
+header.top .mathlink:hover { color:var(--gold); border-color:var(--gold); }
+.status #captured { display:block; font-size:11px; }
+.math { max-width:860px; line-height:1.6; font-size:14px; }
+.math h2 { font-family:"Bebas Neue",Impact,sans-serif; letter-spacing:.06em; font-size:26px; margin:26px 0 8px; color:var(--gold); }
+.math .eq { background:#0b0e14; border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; font-size:13px; }
+.math code { background:#0b0e14; padding:1px 5px; border-radius:4px; }
+.tally { font-family:"Bebas Neue",Impact,sans-serif; letter-spacing:.06em; font-size:22px; margin:0 0 10px; }
+.rec-list .res { font-weight:700; text-transform:uppercase; font-size:11px; letter-spacing:.1em; }
+.rec-list .res.win { color:#5fd38d; } .rec-list .res.loss { color:var(--red); } .rec-list .res.draw { color:var(--gold); }
 .mapsel { margin-left:auto; display:flex; align-items:center; gap:10px; }
 .mapsel select { background:#0b0e14; color:var(--text); border:1px solid var(--line);
   border-radius:6px; padding:9px 12px; font-family:"Bebas Neue",Impact,sans-serif;
@@ -31,6 +42,7 @@ header.top .sub { color:var(--muted); font-size:13px; }
 button { background:#263041; color:#fff; border:1px solid #35435a; border-radius:6px;
   padding:8px 14px; font:inherit; cursor:pointer; }
 button:hover { background:#31405a; }
+button:disabled { opacity:.4; cursor:not-allowed; } button:disabled:hover { background:#263041; }
 button.primary { background:var(--blue2); border-color:var(--blue); }
 .status { color:var(--muted); font-size:12px; min-width:160px; text-align:right; }
 
@@ -157,7 +169,7 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .plan { padding:12px 14px; margin-bottom:10px; border-radius:10px; border:1px solid var(--line); background:linear-gradient(170deg,#1b2436 0%,#161a24 70%); }
 .plan .lbl, .momentum .lbl { font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
 .plan .text { margin-top:6px; line-height:1.55; font-size:13.5px; }
-.momentum { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 14px; margin-bottom:14px; border-radius:10px; border:1px solid var(--line); background:#151a24; }
+.momentum { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:10px 14px; margin:14px 0 0; border-radius:10px; border:1px solid var(--line); background:#151a24; }
 .momentum b { font-weight:600; }
 .momentum .gauge { display:inline-flex; flex-direction:column; gap:3px; width:220px; }
 .momentum .gauge span { display:block; height:5px; border-radius:3px; }
@@ -195,7 +207,11 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .slot.suggested .sug { position:absolute; top:4px; right:6px; color:var(--blue); font-size:10px; letter-spacing:.12em; text-transform:uppercase; }
 .team h2 .tscore { font:600 15px/1 -apple-system,"Segoe UI",sans-serif; letter-spacing:0; color:var(--text);
   background:rgba(62,166,255,.18); border:1px solid var(--blue); border-radius:999px; padding:4px 10px; }
+.team.red h2 .tscore { background:rgba(255,75,87,.18); border-color:var(--red); }
 .team h2 .tscore:empty { display:none; }
+.team h2 .clearteam { font:600 11px/1 -apple-system,"Segoe UI",sans-serif; letter-spacing:.1em; text-transform:uppercase;
+  padding:5px 9px; background:transparent; color:var(--muted); border-color:var(--line); }
+.team h2 .clearteam:hover { color:var(--text); border-color:var(--muted); background:transparent; }
 .plan .basis { margin-top:6px; color:var(--muted); font-size:11.5px; }
 .card .body { padding:8px 10px 10px; }
 .card .body b { font-family:"Bebas Neue",Impact,sans-serif; font-size:19px; letter-spacing:.06em; }

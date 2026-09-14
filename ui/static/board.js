@@ -5,7 +5,7 @@ try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
       if (saved && saved.red && saved.blue) st = saved; } catch (e) {}
 if (!st.bans) st.bans = [];
 if (!st.side) st.side = '';
-var TABS = ['comps', 'facts', 'playbook'];   /* the panels; the first is the default */
+var TABS = ['comps', 'facts', 'playbook', 'recorded'];   /* the panels; the first is the default */
 var bansOpen = false;                        /* the ban picker starts collapsed */
 
 /* An announced hero the database does not carry yet. It is drawn on both
@@ -132,6 +132,8 @@ function paint() {
   el('mode').textContent = m ? m.mode + (m.style ? ' · rewards ' + m.style : '') +
     (sided ? (st.side ? ' · blue ' + (st.side === 'attack' ? 'attacks' : 'defends') : ' · pick a side') : ' · no sides') : 'map unknown';
   el('sideseg').className = 'sideseg' + (sided ? ' show' : '');
+  el('swapbtn').disabled = !sided;                     /* nothing to swap sides of on a map without them */
+  el('swapbtn').title = sided ? 'swap red and blue, and the side' : (m ? 'this map has no sides' : 'pick a sided map first');
   var sb = el('sideseg').querySelectorAll('button');
   for (var s = 0; s < sb.length; s++) sb[s].className = sb[s].getAttribute('data-side') === st.side ? 'on' : '';
 }
@@ -140,6 +142,8 @@ document.addEventListener('click', function (e) {
   var near = function (sel) { return e.target.closest ? e.target.closest(sel) : null; };
   var sideBtn = near('[data-side]');
   if (sideBtn) { var sd = sideBtn.getAttribute('data-side'); st.side = st.side === sd ? '' : sd; save(); paint(); refresh(); return; }
+  var clear = near('[data-clear]');                   /* a team's clear button: that team's picks only */
+  if (clear) { st[clear.getAttribute('data-clear')] = []; save(); paint(); refresh(); return; }
   var ban = near('[data-ban]');                       /* a ban slot or a header chip: un-ban */
   if (ban) { toggleBan(ban.getAttribute('data-ban')); return; }
   if (near('#banhead')) { bansOpen = !bansOpen; paintBans(); return; }
@@ -177,7 +181,7 @@ function refresh() {
       if (mine !== seq) return;
       if (d.error) { flash(d.error); return; }
       FACTS = d; renderFacts(); el('factsn').textContent = d.count;
-      el('status').textContent = d.count + ' facts + ' + (d.playbook_count || 0) + ' playbook notes · ' + new Date().toLocaleTimeString();
+      el('status').textContent = d.count + ' facts + ' + (d.playbook_count || 0) + ' playbook notes · ' + new Date().toLocaleTimeString() + (CAPTURED ? ' · ' + CAPTURED : '');
     }).catch(function () { flash('the database is not answering'); });
     el('inf-blue').innerHTML = "<p class='legend'>searching both seats…</p>"; el('inf-red').innerHTML = '';
     fetch('/api/infer?' + q).then(function (r) { return r.json(); }).then(function (d) {
@@ -236,7 +240,7 @@ function altScore(a) {
 /* the comps panel: blue's optimal six and red's side by side, the current comp below */
 function renderInf() {
   var d = INF;
-  if (!d || d.error) { el('inf-blue').innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; el('inf-red').innerHTML = ''; el('momentum').innerHTML = ''; el('plan').innerHTML = ''; el('bluescore').textContent = ''; return; }
+  if (!d || d.error) { el('inf-blue').innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; el('inf-red').innerHTML = ''; el('momentum').innerHTML = ''; el('plan').innerHTML = ''; el('bluescore').textContent = ''; el('redscore').textContent = ''; return; }
   var text = (d.plan || '').split('\n'), basis = text.length && text[text.length - 1].indexOf('Based on:') === 0 ? text.pop() : '';
   el('plan').innerHTML = "<span class='lbl'>game plan</span><div class='text'>" + text.map(esc).join('<br>') + '</div>' + (basis ? "<div class='basis'>" + esc(basis) + '</div>' : '');
   var mo = d.momentum || {};
@@ -249,6 +253,7 @@ function renderInf() {
   renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''), true);
   var c = d.current;
   el('bluescore').textContent = (c && c.blue && c.blue.length && typeof c.normalized === 'number') ? c.normalized + ' / 100' : '';
+  el('redscore').textContent = (rc && rc.blue && rc.blue.length && typeof rc.normalized === 'number') ? rc.normalized + ' / 100' : '';
   paintSuggestions();
 }
 
@@ -330,13 +335,37 @@ function showTab(name) {
   try { localStorage.setItem('owdb-tab', name); } catch (e) {}
 }
 
-var lastRec = null;
+var lastRec = null, CAPTURED = '';
 function pollRecs() {
   fetch('/api/recs').then(function (r) { return r.json(); }).then(function (d) {
     if (lastRec !== null && d.latest > lastRec) { var n = el('newrec'); n.style.display = 'block';
-      n.innerHTML = 'the session just recorded <a href="/rec/' + d.latest + '">recommendation #' + d.latest + '</a> - ' + esc(d.summary); }
+      n.innerHTML = 'the session just recorded <a href="/rec/' + d.latest + '">recommendation #' + d.latest + '</a> - ' + esc(d.summary); loadRecorded(); }
     lastRec = d.latest;
   }).catch(function () {});
+}
+
+/* the recorded tab: every recorded comp, newest first, with how it went */
+function loadRecorded() {
+  fetch('/api/recorded').then(function (r) { return r.json(); }).then(function (d) {
+    var t = d.tally || {}, out = "<p class='tally'>" + (t.win || 0) + ' won · ' + (t.loss || 0) + ' lost · ' + (t.draw || 0) + ' drawn' +
+      (d.recs.length ? ' · ' + d.recs.length + ' recorded comp' + (d.recs.length === 1 ? '' : 's') : '') + '</p>';
+    el('recn').textContent = d.recs.length || '';
+    if (!d.recs.length) out += "<p class='legend'>nothing recorded yet - record a comp from the board or the /comp skill, and log how it went with /outcome.</p>";
+    else {
+      out += "<table class='rec-list'><tr><th>id</th><th>date</th><th>map</th><th>comp</th><th>question</th><th>model</th><th>how it went</th></tr>";
+      d.recs.forEach(function (r) {
+        var how = r.outcomes.length ? r.outcomes.map(function (o) { return "<span class='res " + esc(o.result) + "'>" + esc(o.result) + '</span> ' + esc(o.date) + (o.side ? ' on ' + esc(o.side) : '') + (o.note ? " <span class='legend'>" + esc(o.note) + '</span>' : ''); }).join('<br>') : "<span class='legend'>not played yet</span>";
+        out += "<tr><td><a href='/rec/" + r.rec_id + "'>#" + r.rec_id + '</a></td><td>' + esc(r.date) + '</td><td>' + esc(r.map || 'any') + '</td><td>' + esc(r.picks.join(', ')) +
+          (r.playstyle ? " <span class='legend'>" + esc(r.playstyle) + '</span>' : '') + '</td><td>' + esc(r.question.slice(0, 90)) + '</td><td>' + esc(r.model) + '</td><td>' + how + '</td></tr>';
+      });
+      out += '</table>';
+    }
+    if (d.unlinked && d.unlinked.length) {
+      out += "<h3>outcomes without a recorded comp</h3><table class='rec-list'><tr><th>date</th><th>map</th><th>blue's six</th><th>result</th></tr>" +
+        d.unlinked.map(function (o) { return '<tr><td>' + esc(o.date) + '</td><td>' + esc(o.map || 'any') + (o.side ? ' (' + esc(o.side) + ')' : '') + '</td><td>' + esc(o.blue.join(', ')) + "</td><td><span class='res " + esc(o.result) + "'>" + esc(o.result) + '</span>' + (o.note ? " <span class='legend'>" + esc(o.note) + '</span>' : '') + '</td></tr>'; }).join('') + '</table>';
+    }
+    el('recorded').innerHTML = out;
+  }).catch(function () { el('recorded').innerHTML = "<div class='warnbox'>the recorded comps are not answering</div>"; });
 }
 
 fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
@@ -348,7 +377,7 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   if (!d.maps.some(function (m) { return m.name === st.map; })) st.map = '';
   buildTeam('red'); buildTeam('blue'); buildBanPicker(); paint();
   var blz = (d.snapshots || []).filter(function (s) { return s.source === 'blizzard'; })[0];
-  if (blz) el('captured').textContent = 'rates captured ' + blz.captured + ' (' + (blz.patch || 'unknown patch') + ')';
+  if (blz) { CAPTURED = 'rates captured ' + blz.captured + ' (' + (blz.patch || 'unknown patch') + ')'; el('captured').textContent = CAPTURED; }
   if (d.newer_patches && d.newer_patches.length) { var w = el('vintage'); w.style.display = 'block';
     w.textContent = d.newer_patches.length + ' patch(es) shipped since the rates were captured (newest ' + d.newer_patches[0][0] + ') - rates are pre-patch; run pull_rates'; }
   el('mapsel').onchange = function () { st.map = this.value; save(); paint(); refresh(); };
@@ -360,5 +389,5 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
     scopeOn[s] = !scopeOn[s]; c.classList.toggle('on', scopeOn[s]); renderFacts(); };
   fetch('/api/strategies').then(function (r) { return r.json(); }).then(renderPlaybook);
   showTab((function () { try { return localStorage.getItem('owdb-tab'); } catch (e) { return null; } })());
-  refresh(); pollRecs(); setInterval(pollRecs, 8000);
+  refresh(); pollRecs(); loadRecorded(); setInterval(pollRecs, 8000);
 });
