@@ -12,12 +12,16 @@ from inference import catalog, tune
 pytestmark = pytest.mark.invariant
 
 
+FIXTURE_PLAYBOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures",
+                                "playbook")   # the former shipped playbook: every form to tune
+
+
 @pytest.fixture()
 def catalog_copy(tmp_path):
-    """A private copy of the strategies to tune without touching the repo."""
-    for name in os.listdir(catalog.STRATEGIES_DIR):
+    """A private copy of the reference playbook to tune without touching the repo."""
+    for name in os.listdir(FIXTURE_PLAYBOOK):
         if name.endswith(".md") and name not in catalog.NOT_HEURISTICS:
-            shutil.copy(os.path.join(catalog.STRATEGIES_DIR, name), tmp_path / name)
+            shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
     return str(tmp_path)
 
 
@@ -25,8 +29,8 @@ def catalog_copy(tmp_path):
 
 def test_a_strategy_is_three_sentences_at_most(catalog_copy):
     """The user's rule: the add tool refuses a fourth sentence, counts a code
-    span as one token and the title line as none, and the from-scratch
-    playbook's own files keep to it."""
+    span as one token and the title line as none, and the playbook's own
+    files keep to it."""
     assert tune.sentences("# Title\n\nOne. Two! Three?") == 3
     assert tune.sentences("One `require: a == 2.` two.") == 1
     assert tune.sentences("One (as noted). Two \"quoted.\" Three.") == 3
@@ -36,8 +40,7 @@ def test_a_strategy_is_three_sentences_at_most(catalog_copy):
     added = tune.add("three-sentences", "Three sentences", "assumption",
                      "One. Two. Three.", directory=catalog_copy)
     assert added["form"] == "assumption"
-    scratch = os.path.join("inference", "experiments", "from-scratch")
-    for h in catalog.load(scratch):
+    for h in catalog.load():
         assert tune.sentences(h.body) <= tune.MAX_SENTENCES, h.id
 
 
@@ -270,13 +273,14 @@ def test_an_experiment_playbook_is_chosen_by_the_environment(monkeypatch, tmp_pa
     shipped playbook is the default, and the docs are written from it alone."""
     monkeypatch.delenv("COUNTER_MATRIX_STRATEGIES", raising=False)
     assert catalog.strategies_dir() == catalog.SHIPPED_DIR
-    monkeypatch.setenv("COUNTER_MATRIX_STRATEGIES", "inference/experiments/from-scratch")
+    experiment = tmp_path / "experiment"            # one rule, copied from the playbook
+    experiment.mkdir()
+    shutil.copy(os.path.join(catalog.SHIPPED_DIR, "open-queue-tanks.md"), experiment)
+    monkeypatch.setenv("COUNTER_MATRIX_STRATEGIES", str(experiment))
     chosen = catalog.strategies_dir()
-    assert chosen.endswith(os.path.join("inference", "experiments", "from-scratch"))
+    assert chosen == str(experiment)
     two = catalog.load(chosen)
-    ids = {h.id for h in two}                      # a living playbook: at least its founding rule
-    assert {"open-queue-tanks", "fliers-need-cover", "optimal-play"} <= set(ids)
-    assert len(ids) < 30
+    assert {h.id for h in two} == {"open-queue-tanks"}
     monkeypatch.setattr(catalog, "STRATEGIES_DIR", chosen)
     assert catalog.write_docs(two, path=str(tmp_path / "never.md")) is None
     assert not (tmp_path / "never.md").exists()

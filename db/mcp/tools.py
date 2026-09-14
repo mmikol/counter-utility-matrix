@@ -553,8 +553,8 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
       " against red's best counter, your locked picks with the empty slots filled,"
       " a momentum verdict, the game plan in prose, the shapes the playbook's"
       " limits allow - what the roster enforces as you pick - and red's likely six"
-      " from the map and the meta alone (the most-picked heroes here, past the"
-      " bans; static for the board, no strategy read).",
+      " from the data alone (a two-two-two from the map's pick rates and the"
+      " authored synergies, past the bans; static for the board, no strategy read).",
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
                                                           " search keeps (default 6)"},
            weights={"type": "object",

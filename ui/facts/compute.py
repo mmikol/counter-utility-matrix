@@ -177,32 +177,43 @@ def _mean(values):
 
 
 OPEN_QUEUE_TANKS = 2      # the queue's own limit, not a strategy: no more than two tanks
+EXPECTED_SHAPE = {"tank": 2, "damage": 2, "support": 2}   # what a lobby fields: two of each
+SYNERGY_PULL = 2.0        # pick-rate points a hero gains per authored partner already on the six
 
 
-def expected_picks(world, m, revealed=(), bans=(), size=TEAM_SIZE, max_tanks=OPEN_QUEUE_TANKS):
-    """What the other side is likely to field, from the map and the meta alone -
-    no strategy read: any picks given as revealed first, then the most-picked
-    heroes on this map (the overall meta when no map is set) until the six is
-    full, within the queue's own two-tank limit and past the bans. The board
-    calls it with nothing revealed, so the six is static for the board. Each
-    entry says where its rate comes from -> [{hero, role, rate, locked, why}]."""
+def expected_picks(world, m, revealed=(), bans=(), shape=None):
+    """What the other side is likely to field, from the data alone - no
+    strategy read: any picks given as revealed first, then slot by slot the
+    hero the map's pick rates (the overall meta with no map set) and the
+    authored synergies make likeliest - a hero's likelihood is its pick rate
+    plus SYNERGY_PULL per partner already on the six - into a two-two-two,
+    past the bans. Deterministic; the board calls it with nothing revealed,
+    so the six is static for the board. Each entry says what it rests on
+    -> [{hero, role, rate, locked, why}]."""
+    shape = dict(shape or EXPECTED_SHAPE)
     revealed, banned = list(revealed), {h.id for h in bans}
-    out = [{"hero": h.name, "role": h.role, "rate": None, "locked": True, "why": "revealed"}
-           for h in revealed]
+    chosen = list(revealed)
+    for h in revealed:
+        shape[h.role] = max(0, shape.get(h.role, 0) - 1)
     taken = {h.id for h in revealed} | banned
-    tanks = sum(1 for h in revealed if h.role == "tank")
 
     def rate(h):
         r = h.map_pick(m.id) if m is not None else None
         return (r if r is not None else h.pick, r is not None)
-    field = [h for h in world.heroes.values() if h.released and h.id not in taken]
-    field.sort(key=lambda h: (-(rate(h)[0] or 0.0), h.name))
-    for h in field:
-        if len(out) >= size:
+
+    def partners(h):
+        return [c for c in chosen if world.synergy(c.id, h.id)]
+
+    picked = []
+    while any(shape.values()):
+        field = [h for h in world.heroes.values()
+                 if h.released and h.id not in taken and shape.get(h.role, 0) > 0]
+        if not field:
             break
-        if h.role == "tank" and tanks >= max_tanks:
-            continue
-        value, on_map = rate(h)
+        best = max(field, key=lambda h: ((rate(h)[0] or 0.0) + SYNERGY_PULL * len(partners(h)),
+                                         [-ord(c) for c in h.name]))
+        value, on_map = rate(best)
+        with_ = partners(best)
         if value is None:
             why = "no pick rate on record"
         elif on_map:
@@ -210,9 +221,17 @@ def expected_picks(world, m, revealed=(), bans=(), size=TEAM_SIZE, max_tanks=OPE
         else:
             why = "picked in %.1f%% of matches overall%s" % (
                 value, " (no rate on this map)" if m is not None else " (no map set)")
-        out.append({"hero": h.name, "role": h.role, "rate": value, "locked": False, "why": why})
-        tanks += h.role == "tank"
-    return out
+        if with_:
+            why += "; pairs with " + ", ".join(c.name for c in with_)
+        picked.append({"hero": best.name, "role": best.role, "rate": value, "locked": False,
+                       "why": why})
+        chosen.append(best)
+        taken.add(best.id)
+        shape[best.role] -= 1
+    order = {"tank": 0, "damage": 1, "support": 2}
+    out = [{"hero": h.name, "role": h.role, "rate": None, "locked": True, "why": "revealed"}
+           for h in revealed]
+    return out + sorted(picked, key=lambda p: (order.get(p["role"], 3), p["hero"]))
 
 
 def team_metrics(world, heroes, m=None, enemies=(), lean=False):

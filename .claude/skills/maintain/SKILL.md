@@ -92,6 +92,12 @@ what catches it now. Every run that finds such a thing adds a line here,
 in the same shape, before it reports - a lesson that is not written down
 is a lesson the next run relearns.
 
+- **An invariant proven under one playbook.** "An announced hero is
+  never fielded" held under the shipped 38 rules and failed under a
+  playbook of one limit: with most sixes tied, the local search swapped
+  the announced hero in through a path the pools had filtered. Now: a
+  test of a solver invariant runs under a minimal, limit-only catalog as
+  well as the shipped one - ties expose the paths a rich playbook hides.
 - **Green here, red on GitHub.** Four pushes failed CI while the local
   CI-mode run passed: on a fresh clone, a served endpoint's
   `default_dsn()` let pgserver initdb an empty cluster, the `dsn` fixture

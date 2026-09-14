@@ -87,8 +87,7 @@ tiles in tank, damage and support columns, lit when picked, dotted when
 on the other team, crossed out when banned, and dimmed once the
 playbook's shape limits leave no legal six that seats one more of that
 role - the board result carries the `(tanks, damage, supports)` triples
-the hard limits allow, the column header says the cap when there is one
-(`(max 2)` over the tanks, in grey), and a click on a dimmed tile is refused with a
+the hard limits allow, and a click on a dimmed tile is refused with a
 note rather than sent; both teams are held to it, since the limit is the
 game's form and not blue's alone. A hero the roster carries as
 **announced** - one the wiki knows ahead of release, with its role,
@@ -118,12 +117,13 @@ matching it; a last line says what it rests on. Then, in the order of
 the boxes above, blue's optimal six (left: the counter to red's
 selection as revealed, whatever you have locked, so it never collapses
 into your own six; until red reveals a pick it counters their likely
-six) and, on the right, red's likely picks: what the map and the meta
-say they field - the most-picked heroes on this map (the overall meta
-with no map set), past the bans and within the queue's two-tank limit,
-each with the pick rate it rests on; static for the board, no strategy
-read for it, and as red reveals picks it stays while blue's optimal and
-the scores move. The optimal carries no score -
+six) and, on the right, red's likely picks: what the data says they
+field - a two-two-two filled slot by slot with the hero the map's pick
+rates (the overall meta with no map set) and the authored synergies make
+likeliest (a hero's likelihood is its pick rate plus two points per
+partner already on the six), past the bans, each saying the rate and the
+partners it rests on; static for the board, no strategy read for it, and
+as red reveals picks it stays while blue's optimal and the scores move. The optimal carries no score -
 it is its seat's reference, the 100 the picks are measured against -
 and neither does the likely six, so the only scores on the board are
 the picks': the badges above the pickers, each comp's share of its own

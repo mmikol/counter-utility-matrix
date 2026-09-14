@@ -1,11 +1,18 @@
 """The inference layer: the expression language and catalog are pure; the
 solver and evaluation run against the built database."""
 
+import os
+
 import pytest
 
 from inference import catalog, expr
 from inference.expr import Expr, ExprError
 from ui.facts import compute
+
+# the former shipped playbook - every form, every category - kept as the reference the
+# solver's behaviours are proven against; the live playbook is the user's own
+FIXTURE_PLAYBOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures",
+                                "playbook")
 
 # --- the expression language (pure) --------------------------------------
 
@@ -41,8 +48,11 @@ def test_frontmatter_parses_scalars_lists_and_params():
     assert body == "# X\nbody"
 
 
-def test_shipped_catalog_is_valid_and_references_real_metrics():
-    cat = catalog.load()
+def test_the_reference_and_the_live_playbooks_are_valid_and_reference_real_metrics():
+    live = catalog.load()                       # the user's playbook: whatever it holds today
+    assert live and {h.kind for h in live} <= set(catalog.KINDS)
+    assert all(h.metric in compute.registry() for h in live if h.kind == "heuristic")
+    cat = catalog.load(FIXTURE_PLAYBOOK)        # the reference: every kind and every form
     kinds = {h.kind for h in cat}
     assert kinds == set(catalog.KINDS) == {"constraint", "heuristic", "assumption"}
     forms = {h.form for h in cat}
@@ -88,7 +98,8 @@ def world(db):
 @pytest.mark.invariant
 def test_infer_keeps_locked_picks_and_the_open_queue_shape(world):
     from inference import engine
-    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
+    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"],
+                     catalog=catalog.load(FIXTURE_PLAYBOOK))
     assert len(r.blue) == 6 and "Ana" in r.blue
     roles = [world.hero(n).role for n in r.blue]
     assert roles.count("tank") <= 2
@@ -107,7 +118,8 @@ def test_infer_keeps_locked_picks_and_the_open_queue_shape(world):
 @pytest.mark.invariant
 def test_infer_honours_a_hitscan_answer_to_a_flier(world):
     from inference import engine
-    r = engine.infer(world, "Havana", ["Pharah", "Mercy"], [])
+    r = engine.infer(world, "Havana", ["Pharah", "Mercy"], [],
+                     catalog=catalog.load(FIXTURE_PLAYBOOK))
     assert any(world.hero(n).hitscan for n in r.blue)
     anti = next(c for c in r.contributions if c["id"] == "anti-air")
     assert anti["applies"] and anti["ok"]
@@ -162,15 +174,18 @@ def test_infer_never_drafts_a_banned_hero(world):
 @pytest.mark.invariant
 def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world):
     from inference import engine
-    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack")
+    fix = catalog.load(FIXTURE_PLAYBOOK)        # the reference playbook has the side rules
+    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack", catalog=fix)
     blue, red, cur = b["blue"], b["red"], b["current"]
     assert blue.seat == "blue" and blue.side == "attack" and blue.locked == []
-    absolute = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], side="attack")
+    absolute = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], side="attack",
+                            catalog=fix)
     assert blue.blue == absolute.blue                     # blue's optimal ignores your picks
     assert red.seat == "red" and red.side == "defense" and len(red.blue) == 6
     # red's optimal: their best counter to ours
     assert red.locked == [] and red.red == ["Ana"]
-    theirs = engine.infer(world, "King's Row", ["Ana"], [], side="defense", seat="red")
+    theirs = engine.infer(world, "King's Row", ["Ana"], [], side="defense", seat="red",
+                          catalog=fix)
     assert red.blue == theirs.blue
     assert cur.kind == "current" and cur.partial and cur.blue == ["Ana"]
     assert cur.contributions and cur.score is not None
@@ -188,7 +203,8 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert "Ana" in fill.blue
     assert [p["locked"] for p in fill.picks].count(True) == 1
     assert 0 < fill.to_dict()["normalized"] <= 100
-    around = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack")
+    around = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack",
+                          catalog=fix)
     assert fill.blue == around.blue
     mo = b["momentum"]
     assert set(mo) >= {"blue", "red", "countered", "verdict", "partial"} and mo["partial"]
@@ -290,7 +306,7 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world, monkeypatch):
     """Hard limits and prose alone tie every legal six at zero: the results
     carry no share of a best, say so, and the verdict is the one line."""
     from inference import engine
-    shipped = catalog.load()
+    shipped = catalog.load(FIXTURE_PLAYBOOK)
     assert catalog.scores(shipped)
     limit_only = [h for h in shipped if h.form == "limit" and not h.soft]
     assert limit_only and not catalog.scores(limit_only)
@@ -317,11 +333,11 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     fields a flier) scores nothing until the guard holds: the best six itself
     is zero, so no comp is a share of anything - the board says which
     strategy waits and for what, and scores once the flier appears."""
-    import os
-
     from inference import engine
-    scratch = catalog.load(os.path.join("inference", "experiments", "from-scratch"))
-    assert catalog.scores(scratch)
+    # the two-tank limit and the guarded hitscan heuristic alone, whatever else the
+    # playbook holds today: the premise is one scoring term that waits on red
+    scratch = [h for h in catalog.load() if h.id in ("open-queue-tanks", "fliers-need-cover")]
+    assert len(scratch) == 2 and catalog.scores(scratch)
     monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
     grounded = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Ana"],
                                               ["Reinhardt", "Cassidy"], catalog=scratch))
@@ -425,22 +441,24 @@ def test_scores_share_one_scale_per_board(world):
     # infer, evaluate and the current comp normalise against the same
     # seeded reference sample, so the same six scores the same everywhere
     from inference import engine
-    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
-    e = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"], r.blue)
+    fix = catalog.load(FIXTURE_PLAYBOOK)       # a rich playbook: alternatives fall below the best
+    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], catalog=fix)
+    e = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"], r.blue, catalog=fix)
     assert abs(r.score - e.score) < 1e-9 and e.rank == 1
     assert r.to_dict()["normalized"] == 100 and e.to_dict()["normalized"] == 100
     assert all(0 <= a["normalized"] <= 100 for a in r.alternatives)
     assert r.alternatives[0]["score"] < r.score        # below the optimum, if only by a hair
     assert r.alternatives[0]["normalized"] <= 100
-    best = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [])
-    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], best.blue)
+    best = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], catalog=fix)
+    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], best.blue, catalog=fix)
     assert abs(b["current"].score - best.score) < 1e-9 and b["blue"].blue == best.blue
     assert b["current"].to_dict()["normalized"] == 100 and b["red"].to_dict()["normalized"] == 100
-    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], r.blue)     # a six around Ana
+    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], r.blue, catalog=fix)  # around Ana
     assert b["blue"].blue == best.blue and b["current"].to_dict()["normalized"] <= 100
-    again = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], pool_size=4)
+    again = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], pool_size=4,
+                         catalog=fix)
     assert abs(again.score - engine.evaluate(
-        world, "King's Row", ["Zarya", "Pharah"], again.blue).score) < 1e-9
+        world, "King's Row", ["Zarya", "Pharah"], again.blue, catalog=fix).score) < 1e-9
 
 
 def test_a_constraint_is_a_limit_or_scored_or_prose_never_a_heuristic(tmp_path):
@@ -526,6 +544,11 @@ def test_an_announced_hero_is_described_but_never_picked(world):
     r = engine.infer(world, None, [], [])
     assert h.name not in r.blue and all(a["blue"] for a in r.alternatives)
     assert not any(h.name in a["blue"] for a in r.alternatives)   # nor does the field hold it
+    # and under a playbook that ties most sixes, where the local search swaps freely:
+    # the announced hero reached the alternatives through refine once
+    limit_only = [s for s in catalog.load() if s.form == "limit" and not s.soft]
+    r = engine.infer(world, None, [], [], catalog=limit_only)
+    assert h.name not in r.blue and not any(h.name in a["blue"] for a in r.alternatives)
 
 
 @pytest.mark.invariant

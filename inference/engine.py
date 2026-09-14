@@ -717,10 +717,11 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
         plan         the game plan in prose, from the same facts
         shapes       the (tanks, damage, supports) triples the playbook's shape
                      limits allow - what the roster enforces as you pick
-        expected     red's likely six from the map and the meta alone - the
-                     most-picked heroes here, past the bans - static for the
-                     board, no strategy read; what the comps tab shows for red
-                     and what blue counters until red reveals a pick
+        expected     red's likely six from the data alone - a two-two-two from
+                     the map's pick rates and the authored synergies, past the
+                     bans - static for the board, no strategy read; what the
+                     comps tab shows for red and what blue counters until red
+                     reveals a pick
 
     `weights` ({heuristic id: 0..10}) overrides the files' weights for this
     board only - the playbook tab's sliders; the files stay as they are and

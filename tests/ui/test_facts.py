@@ -204,17 +204,24 @@ def test_expected_picks_read_the_map_and_the_meta_and_no_strategy(world):
     heroes on the map, never a banned hero, never a third tank (the queue's
     own limit), the overall meta when no map is set - each with the rate
     it rests on. No strategy is read: the same six under any playbook."""
+    from collections import Counter
     m = world.map("King's Row")
     zarya, sombra = world.hero("Zarya"), world.hero("Sombra")
     six = compute.expected_picks(world, m, [zarya], [sombra])
     assert six[0]["hero"] == "Zarya" and six[0]["locked"] and six[0]["why"] == "revealed"
     assert len(six) == compute.TEAM_SIZE and "Sombra" not in [p["hero"] for p in six]
-    assert sum(1 for p in six if p["role"] == "tank") <= compute.OPEN_QUEUE_TANKS
+    assert Counter(p["role"] for p in six) == compute.EXPECTED_SHAPE      # a two-two-two
     rest = [p for p in six if not p["locked"]]
-    rates = [p["rate"] for p in rest if p["rate"] is not None]
-    assert rates == sorted(rates, reverse=True) and rates          # by pick rate, highest first
     assert all(p["why"].startswith("picked in ") and "King's Row" in p["why"] for p in rest
                if p["rate"] is not None)
+    assert six == compute.expected_picks(world, m, [zarya], [sombra])      # deterministic
+    # the synergies pull: a partner already on the six is named in the reason
+    heroes = [world.hero(p["hero"]) for p in six]
+    paired = any(world.synergy(x.id, y.id) for x in heroes for y in heroes if x is not y)
+    assert paired == any("pairs with" in p["why"] for p in rest)
     anywhere = compute.expected_picks(world, None, [], [])
-    assert len(anywhere) == compute.TEAM_SIZE
+    assert Counter(p["role"] for p in anywhere) == compute.EXPECTED_SHAPE
     assert all("overall" in p["why"] for p in anywhere if p["rate"] is not None)
+    # no strategy is read: nothing here takes a catalog
+    import inspect
+    assert "catalog" not in inspect.signature(compute.expected_picks).parameters

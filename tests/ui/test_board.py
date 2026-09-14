@@ -122,8 +122,10 @@ def test_infer_endpoint_serves_both_seats_and_the_current_comp(db):
 
 
 def test_strategies_endpoint():
+    from inference import catalog
     data = board.api_strategies()
-    assert len(data["strategies"]) >= 30
+    assert len(data["strategies"]) == len(catalog.load()) and data["strategies"]
+    assert data["playbook"] == catalog.playbook_name()
     assert json.dumps(data)
     assert not hasattr(board, "api_recs") and not hasattr(board, "api_record")   # recording is gone
 
@@ -157,7 +159,8 @@ def test_the_page_is_a_shell_over_static_files():
     assert body.index("id='inf-blue'") < body.index("id='inf-red'")
     assert body.index("id='blueslots'") < body.index("id='redslots'")
     script = board.static_file("board.js")[0].decode()
-    assert "red - likely picks: what the map and the meta say they field" in script
+    assert "'red - most likely starting comp'" in script
+    assert "'blue - optimal counter to current picks'" in script
     assert "renderResult(d.expected, el('inf-red')" in script and "d.momentum" in script
     assert "their comp as revealed" not in script   # red's picks score in the badge only
     assert "if (d.kind === 'infer' || d.kind === 'expected') return '';" in script   # no score
@@ -178,7 +181,7 @@ def test_the_page_is_a_shell_over_static_files():
     # the playbook's shape limits hold on the roster: a capped role dims and refuses
     assert "function roleCap" in script and "' capped'" in script and "d.shapes" in script
     assert "the playbook allows at most" in script
-    assert "'(max ' + cap + ')'" in script                      # the cap note, in parentheses
+    assert "'(max '" not in script and ".cap" not in script    # no cap note; the tiles still dim
     # a heuristic's weight is a slider under its card; the setting rides with each request
     assert "function weightRow" in script and "type='range' min='1' max='10' step='0.01'" in script
     assert "type='number' class='wval' min='1' max='10' step='0.01'" in script

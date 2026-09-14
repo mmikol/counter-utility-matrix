@@ -17,10 +17,6 @@ next feature opens its own branch.
   so; the joins the data can still yield are listed under "Fact engine"
   below, best first - the pairwise numbers, blue pick against red pick,
   are the one to start with.
-- **Trim the shipped playbook's prose to three sentences.** The user's
-  rule for every strategy; the from-scratch three follow it and the
-  add tool enforces it, but the 38 shipped files still run long. Cost:
-  an hour, if the shipped playbook is kept at all.
 - **Weights that learn on their own.** The user wants them to, with the
   sliders as the manual override. Learning needs a signal, and the one
   it had - recorded comps with a win or loss - was removed on the user's
@@ -102,6 +98,12 @@ counters table is a list).
 
 ## Done
 
+- **The playbook is the user's own rules** - `team-headers` branch.
+  `inference/strategies/` holds the four rules built one at a time (the
+  two-tank limit, hitscan cover against fliers, the counters with a
+  grain of salt, optimal play); the 38-rule playbook it replaced is the
+  tests' reference at `tests/fixtures/playbook/`, and no experiment
+  ships.
 - **Red's likely picks from the map and the meta** - `team-headers`
   branch. `compute.expected_picks`: their revealed picks, then the
   most-picked heroes on the map, within the queue's two-tank limit;

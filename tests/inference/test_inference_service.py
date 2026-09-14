@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 import pytest
 
-from inference import serve
+from inference import catalog, serve
 from ui import board
 
 pytestmark = pytest.mark.invariant
@@ -21,7 +21,7 @@ def test_service_infers_evaluates_and_lists(db):
     data, code = serve.handle_evaluate(db, {"blue": ["Ana"]})
     assert code == 400 and "exactly 6" in data["error"]
     data, code = serve.handle_heuristics()
-    assert code == 200 and len(data["strategies"]) >= 30
+    assert code == 200 and len(data["strategies"]) == len(catalog.load())
     data, code = serve.handle_board(db, {"map": ["King's Row"], "red": ["Zarya"],
                                          "blue": ["Ana"], "side": ["defense"]})
     assert code == 200 and data["red"]["side"] == "attack" and data["current"]["partial"]
@@ -31,7 +31,8 @@ def test_service_infers_evaluates_and_lists(db):
 
 def test_health_reports_the_catalog_and_the_database():
     data, code = serve.handle_health()
-    assert code == 200 and data["strategies"] >= 30 and data["status"] in ("ok", "degraded")
+    assert code == 200 and data["strategies"] == len(catalog.load())
+    assert data["status"] in ("ok", "degraded")
 
 
 def test_board_forwards_to_a_named_inference_service(monkeypatch):
@@ -85,9 +86,9 @@ def _get(url):
 def test_health_and_strategies_are_served_without_a_database(served, monkeypatch):
     monkeypatch.setattr(serve.psql, "default_dsn", lambda: "postgresql://nobody@127.0.0.1:9/nowhere")
     code, data = _get(served + "/health")
-    assert code == 200 and data["strategies"] >= 30
+    assert code == 200 and data["strategies"] == len(catalog.load())
     code, data = _get(served + "/strategies")
-    assert code == 200 and len(data["strategies"]) >= 30
+    assert code == 200 and len(data["strategies"]) == len(catalog.load())
     assert _get(served + "/nothing")[0] == 404
     code, data = _get(served + "/board?map=Ilios")           # no database: the error, as JSON
     assert code == 500 and "error" in data

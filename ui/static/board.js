@@ -143,13 +143,6 @@ function paint() {
       tiles[t].className = 'tile' + (on ? ' on' : '') + (st[other].indexOf(n) >= 0 ? ' other' : '') +
         (st.bans.indexOf(n) >= 0 ? ' banned' : '') + (!on && hh && capped[hh.role] ? ' capped' : '');
     }
-    var heads = el(team + 'roster').querySelectorAll('.rolecol h4');   /* the cap, when the playbook sets one */
-    for (var r = 0; r < heads.length; r++) {
-      var cap = caps[ROLES[r]], note = heads[r].querySelector('.cap');
-      if (!note) { note = document.createElement('span'); note.className = 'cap'; heads[r].appendChild(note); }
-      note.textContent = cap !== null && cap < TEAM ? '(max ' + cap + ')' : '';
-      note.title = 'the playbook seats at most ' + cap + ' on a team';
-    }
   });
   paintSuggestions();
   el('mapsel').value = st.map;
@@ -305,9 +298,9 @@ function renderInf() {
      what red is likely to field, from the map and the meta alone, no strategy
      read; the picks' scores are the badges above the pickers */
   var rc = d.red_current;
-  renderResult(d.expected, el('inf-red'), 'red - likely picks: what the map and the meta say they field' + (d.map ? ' on ' + d.map : ''));
+  renderResult(d.expected, el('inf-red'), 'red - most likely starting comp' + (d.map ? ' on ' + d.map : ''));
   var c = d.current;
-  renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
+  renderResult(d.blue, el('inf-blue'), 'blue - optimal counter to current picks' + (d.side ? ', on ' + d.side : ''));
   /* the badge above each seat's picks and picker always carries a figure: the
      current comp's share while the seat holds picks, else the suggested six's -
      this seat's optimal, 100 by definition - or "unscored" with the reason */

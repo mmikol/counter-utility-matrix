@@ -286,8 +286,8 @@ class Solver:
                         continue
                     for other in self.world.heroes.values():
                         if (other.role != hero.role or other.id in current.key
-                                or other.id in self.banned):
-                            continue
+                                or other.id in self.banned or not other.released):
+                            continue                  # announced heroes wait here too
                         heroes = list(current.heroes)
                         heroes[index] = other
                         cand = Candidate(heroes)
