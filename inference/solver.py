@@ -119,7 +119,8 @@ class Solver:
             ",".join(str(i) for i in sorted(h.id for h in self.red)),
             ",".join(str(i) for i in sorted(self.banned))))
         by_role = {r: [h for h in self.world.heroes.values()
-                       if h.role == r and h.id not in self.banned] for r in ROLE_KEY}
+                       if h.role == r and h.released and h.id not in self.banned]
+                   for r in ROLE_KEY}
         shapes = self._shapes(locked_counts={r: 0 for r in ROLE_KEY})
         out, seen = [], set()
         if shapes:
@@ -237,8 +238,8 @@ class Solver:
         locked_ids = {h.id for h in self.locked} | self.banned
         pools = {}
         for role in ROLE_KEY:
-            heroes = [h for h in self.world.heroes.values()
-                      if h.role == role and h.id not in locked_ids]
+            heroes = [h for h in self.world.heroes.values()      # announced heroes wait
+                      if h.role == role and h.released and h.id not in locked_ids]
             heroes.sort(key=self.prior, reverse=True)
             pools[role] = heroes[:self.pool_size]
         return pools

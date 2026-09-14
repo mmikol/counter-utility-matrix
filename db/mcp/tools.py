@@ -452,17 +452,22 @@ BOARD = {
 }
 
 
-@tool("roster", "Every hero with role, subrole, health pool and portrait,"
-      " plus the map pool with modes - the vocabulary the board tools accept.")
+@tool("roster", "Every hero with role, subrole, health pool, portrait and status"
+      " (released, or announced with its release day - shown, never picked), plus"
+      " the map pool with modes - the vocabulary the board tools accept.")
 def roster(ctx):
     from ui.facts import model
     with ctx.connect() as cx:
         world = model.load(cx)
     heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
-               "pool": h.pool, "portrait": h.portrait}
+               "pool": h.pool, "portrait": h.portrait, "status": h.status,
+               "release_date": str(h.release_date) if h.release_date else None}
               for h in world.heroes_by_role()]
     maps = [{"name": m.name, "mode": m.mode} for m in world.maps_sorted()]
-    text = "\n".join("%-9s %-14s %s" % (h["role"], h["subrole"], h["name"])
+    text = "\n".join("%-9s %-14s %s%s" % (h["role"], h["subrole"], h["name"],
+                                          "" if h["status"] == "released" else
+                                          "  (announced%s)" % (", releases " + h["release_date"]
+                                                               if h["release_date"] else ""))
                      for h in heroes) + "\n\nmaps: " + ", ".join(
         "%s (%s)" % (m["name"], m["mode"]) for m in maps)
     return text, {"heroes": heroes, "maps": maps}

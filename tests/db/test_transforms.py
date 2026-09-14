@@ -100,3 +100,29 @@ def test_prose_only_maps_have_no_stages():
 
 def test_fewer_than_two_bullets_is_not_a_stage_list():
     assert parse_stages("==Gameplay==\n* Lone bullet\n") == []
+
+
+# --- an announced hero, from its article ----------------------------------------------
+
+UPCOMING = """{{Upcoming}}
+{{Infobox character
+| name = Doctrine
+| role = Support
+| sub-role = Survivor
+| health = 250
+}}
+'''Doctrine''' is a [[Sub-Roles#Survivor|Survivor]] [[Roles#Support|Support]] hero. He is set to
+release in [[Season/2026|Season 5]] on October 6, 2026, which will make him the 54th hero.
+"""
+
+
+def test_an_upcoming_article_yields_the_announcement_and_a_released_one_does_not():
+    import datetime
+    from db.data.wiki.heroes import parse_announcement
+    found = parse_announcement(UPCOMING)
+    assert found == {"role": "support", "subrole": "survivor", "health": 250,
+                     "release_date": datetime.date(2026, 10, 6)}
+    assert parse_announcement(UPCOMING.replace("{{Upcoming}}", "")) is None     # released
+    assert parse_announcement(UPCOMING.replace("| role = Support", "")) is None  # no role, no row
+    undated = parse_announcement(UPCOMING.replace("on October 6, 2026", "soon"))
+    assert undated and undated["release_date"] is None

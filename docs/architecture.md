@@ -22,7 +22,7 @@ never during one.
 | `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet | [ui.md](ui.md) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints and heuristics in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
 | `tests/` | one folder per layer: `tests/db`, `tests/ui`, `tests/inference`; `pytest -q` runs them, skipping what needs a built database when there is none | |
-| `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/refresh`, `/maintain` | [skills.md](skills.md) |
+| `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain` | [skills.md](skills.md) |
 | `.github/workflows/` | `ci.yml`: lint, and the tests that need no built database | |
 | `.cache-blizzard/` `.cache-wiki/` `.cache-counterpick/` | the page caches (gitignored): every build after the first costs almost no requests | |
 
@@ -178,6 +178,9 @@ the servers and every tool.
 | `/comp` | "comp for King's Row, they have Zarya and Pharah, I'm on Ana": calls `infer` and `facts`, argues against the solver's optimum under the prose constraints, answers with `[F#]` citations |
 | `/tune` | changes a weight, a dial or an expression through `tune` |
 | `/strategy` | asks for a name, a kind and prose, infers the frontmatter and stores the strategy through `add_strategy` |
+| `/patches` | pulls the patch list, and when a patch shipped since the capture refetches what it changes: rates, kits, Blizzard's text |
+| `/heroes` | adds or refreshes heroes: Blizzard's roster, the wiki's kits, the announced heroes ahead of release, counters |
+| `/maps` | adds or refreshes maps and names the ones without an authored playstyle note |
 | `/refresh` | the agents' run, the one `orchestrator.py agents` executes headless: refresh, derive drafts, re-infer with restraint, regenerate, report |
 | `/maintain` | the repo's maintainer: lint and tests three ways, docs current, stale names, dead code, layout, security posture, a report |
 

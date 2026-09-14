@@ -6,9 +6,9 @@ and the steps to take, naming the MCP tools ([docs/mcp.md](mcp.md)) it
 calls in which order and the ground rules it keeps. They live in
 `.claude/skills/<name>/SKILL.md` and are yours the moment the repo is open
 in a session - type `/name`, or just say what you want and the description
-matches. Six of them, and together they are the whole loop: bring the app
-up, get a comp, tune the engine, grow the playbook, refresh everything,
-keep the repo clean.
+matches. Nine of them, and together they are the whole loop: bring the app
+up, get a comp, tune the engine, grow the playbook, keep the game's
+patches, heroes and maps current, refresh everything, keep the repo clean.
 
 No API key, no per-token bill: a skill runs inside your session on your
 subscription. The `/refresh` skill also runs headless, driven by
@@ -130,6 +130,45 @@ or a file the catalog refuses; drafts move through inference and weights
 through `tune` with a reason grounded in the data and written in the log,
 nothing else; the report is honest about failures.
 
+## `/patches` - stay on the current patch
+
+**Say:** "a patch dropped", "are we on the latest patch", "update for the
+patch".
+
+**Does:** `pull_patches` for the wiki's patch list, then `db_status` and the
+first lines of `facts` to see whether a patch shipped since the rates were
+captured. Nothing new: it says so and stops. A patch shipped: `pull_rates`
+(a new dated snapshot stamped with the patch), `pull_kits` (the numbers a
+patch changes), `pull_heroes` (Blizzard's text and any hero the patch
+released), `pull_counters` if a hero was reworked, then `db_docs` and
+`export_csv`, one call at a time. Reports the patch on record, the capture
+date and each pull's summary.
+
+## `/heroes` - add or update characters
+
+**Say:** "add Doctrine", "is X in the database", "update the heroes".
+
+**Does:** `roster` first (every hero with its status - released, or
+announced with its release day). Then `pull_heroes` (Blizzard's roster: a
+released hero's role, subrole, portrait and text; an announced hero
+Blizzard now lists flips to released), `pull_kits` (the wiki's numbers,
+and the announced heroes: an upcoming article becomes a row with role,
+subrole, health and release day, so the kit loads and the board shows the
+hero in its role column, never picked until it ships), `pull_counters` for
+a released hero, `pull_rates` on request, then `load_authored`, `db_docs`,
+`export_csv`. Reports what was added or flipped, and what the facts now
+say about the hero.
+
+## `/maps` - add or update maps
+
+**Say:** "add the new map", "is X in the pool", "update the maps".
+
+**Does:** `roster` for the pool, `pull_maps` (the wiki's maps, modes and
+stages), `load_authored` for the playstyle notes - and names the maps that
+have none, offering the line to add to `map_playstyle.csv` (a person edits
+the file; the skill does not), `pull_rates` and `pull_counters` for the
+per-map rates and each hero's best maps, then `db_docs` and `export_csv`.
+
 ## `/maintain` - keep the repo clean
 
 **Say:** "maintain", "clean up", "check the repo", "is everything
@@ -155,6 +194,9 @@ unasked.
 /comp        a cited six from a question                 during
 /tune        a weight moved, with a reason                between games
 /strategy    a new file from a name, a kind and prose     when you learn something
+/patches     the database on the current patch          when a patch drops
+/heroes      a hero added, announced or refreshed         when the roster moves
+/maps        a map added or refreshed, its note checked   when the pool moves
 /refresh     all of the above the engine can do alone    every night, headless
 /maintain    the repo itself: checks, docs, stale, dead   after changes
 ```

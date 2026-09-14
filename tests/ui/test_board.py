@@ -53,29 +53,27 @@ def test_the_ban_picker_is_a_roster_and_the_dropdown_is_gone():
     assert ".bans select" not in css
 
 
-def test_doctrine_is_a_placeholder_card_that_never_enters_state():
+def test_an_announced_hero_is_a_coming_soon_tile_in_its_role_column():
     script = board.static_file("board.js")[0].decode()
-    assert "var DOCTRINE = {" in script and "name: 'Doctrine'" in script
-    assert "role: 'announced'" in script and "'coming soon'" in script
-    # rendered by its own function under its own heading, with no data-h and
-    # no data-team on the card, so the click handler and the state never see it
-    assert "announcedTile(DOCTRINE)" in script and ">announced</h4>" in script
-    start = script.index("function announcedTile")
-    card = script[start:script.index("function rosterHTML")]
+    assert "DOCTRINE" not in script and "announcedTile" not in script   # no constant: the roster carries the status
+    assert "if (h.status === 'announced') return soonTile(h);" in script
+    card = script[script.index("function soonTile"):script.index("function rosterHTML")]
     assert "class='tile soon'" in card and "data-h" not in card and "data-team" not in card
-    assert "SILHOUETTE" in card and "portrait(" not in card    # a silhouette, no image
-    assert 'var SILHOUETTE = "<svg' in script
-    assert "Doctrine" not in script[script.index("function qs()"):script.index("function refresh")]
+    assert "coming soon" in card and "SILHOUETTE" in card and "releases" in card
+    assert 'var SILHOUETTE = "<svg' in script and ">announced</h4>" not in script
     css = board.static_file("board.css")[0].decode()
-    assert ".tile.soon" in css and ".rolecol.announced" in css
+    assert ".tile.soon" in css and ".rolecol.announced" not in css
 
 
 def test_roster_endpoint_carries_portraits_and_maps(db):
     data = board.api_roster(db)
     assert {h["role"] for h in data["heroes"]} == {"tank", "damage", "support"}
-    assert all(h["portrait"] for h in data["heroes"])
+    assert all(h["status"] in ("released", "announced") for h in data["heroes"])
+    assert all(h["portrait"] for h in data["heroes"] if h["status"] == "released")
     assert any(m["name"] == "King's Row" for m in data["maps"])
-    assert not any(h["name"] == "Doctrine" for h in data["heroes"])   # the page's placeholder only
+    for h in data["heroes"]:                          # an announced hero rides in its role, dated
+        if h["status"] == "announced":
+            assert h["role"] in ("tank", "damage", "support") and "release_date" in h
     db.rollback()
 
 
@@ -136,7 +134,8 @@ def test_the_page_is_a_shell_over_static_files():
     assert body.index("id='blueslots'") < body.index("id='redslots'")
     script = board.static_file("board.js")[0].decode()
     assert "their comp as revealed" in script and "red_current" in script and "d.momentum" in script
-    assert "'blue - your picks'" in script and "className = 'optimal'" in script   # blue's picks scored above its optimal
+    assert "'blue - your picks'" not in script                                # blue's seat is the optimal six only
+    assert "function meaning(d)" in script and "100 is the best six the solver can build" in script
     assert "game plan" in script and "d.plan" in script
     assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
     assert "swapbtn" not in script and "clearbtn" not in script            # swap sides and new game are gone

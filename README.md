@@ -58,7 +58,8 @@ Without Docker:
 ```
 
 Open the repo in a Claude Code session and the skills are there: `/up`,
-`/comp`, `/tune`, `/strategy`, `/refresh`, `/maintain`.
+`/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`,
+`/maintain`.
 
 ## License
 

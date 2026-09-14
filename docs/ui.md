@@ -67,13 +67,14 @@ change debounces, then fetches facts and inference together.
 **The rosters.** One tile renderer draws the red roster, the blue roster
 and the ban picker, so all three read as the same hero select: portrait
 tiles in tank, damage and support columns, lit when picked, dotted when
-on the other team, crossed out when banned. A fourth, small group at the
-end of every roster - **announced** - carries `DOCTRINE`, a placeholder
-card for the newly announced hero the database does not carry yet: the
-same tile, dimmed, a silhouette instead of a portrait, a "coming soon"
-tag, and no click handler. It is one constant in `board.js`, never enters
-the state and is never sent to the API; delete the constant (and the
-group it renders) once the hero lands in the database.
+on the other team, crossed out when banned. A hero the roster carries as
+**announced** - one the wiki knows ahead of release, with its role,
+subrole, health, kit and release day - sits in its own role column as
+the same tile, dimmed, tagged "coming soon", its portrait when the wiki
+has one and a silhouette otherwise, and with no click handler: it never
+enters the state, so it is never sent as a pick, and the solver never
+fields it. Blizzard listing the hero flips it to released and the tile
+comes alive on the next refresh.
 
 **The bans bar.** Collapsed by default: a header with the count and the
 current bans as small portraits (click one to un-ban). Clicking the header
@@ -91,12 +92,13 @@ answer them, the family of heroes to stay in when you stray from the six,
 and what the six is built for - from the same facts and strategies the
 solver scored, so picks can be tailored toward the optimal without
 matching it; a last line says what it rests on. Then, in the order of
-the boxes above, blue's seat (left) and red's (right), each headed by
-that team's picks as they stand with their score - yours against red's
-selection on the scale of blue's optimal, theirs against yours on the
-scale of their best counter - and, under blue's, the optimal six: the
-counter to red's selection as revealed, whatever you have locked, so it
-never collapses into your own six.
+the boxes above, blue's optimal six (left: the counter to red's
+selection as revealed, whatever you have locked, so it never collapses
+into your own six) and red's comp as revealed (right, scored against
+yours on the scale of their best counter). Every score says what it
+means under the number: 100 is the best six the solver can build for
+this board, and any other comp's number is its score as a share of that
+best; the momentum strip states the scale once and links to the math.
 
 The scores live with the selections. Above the two boxes sits the
 momentum strip: the verdict from the two current comps, each on its own

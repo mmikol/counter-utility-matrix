@@ -8,14 +8,6 @@ if (!st.side) st.side = '';
 var TABS = ['comps', 'facts', 'playbook'];   /* the panels; the first is the default */
 var bansOpen = false;                        /* the ban picker starts collapsed */
 
-/* An announced hero the database does not carry yet. It is drawn on both
-   rosters and on the ban picker as a non-selectable card - no data-h, no
-   data-team, so the click handler never sees it - and it never enters
-   st.red, st.blue or st.bans, so it is never sent to the API. Delete this
-   constant (and the 'announced' group rosterHTML renders from it) once the
-   hero lands in the database and /api/roster carries it. */
-var DOCTRINE = { name: 'Doctrine', role: 'announced', subrole: 'role not yet known', tag: 'coming soon' };
-
 function currentMap() { return ROSTER ? ROSTER.maps.filter(function (x) { return x.name === st.map; })[0] : null; }
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
@@ -33,12 +25,15 @@ var SILHOUETTE = "<svg class='sil' viewBox='0 0 48 64' aria-hidden='true'><circl
   "<path d='M7 64c0-14 7.5-23 17-23s17 9 17 23z'/></svg>";
 
 function tile(h, team) {
+  if (h.status === 'announced') return soonTile(h);
   return "<div class='tile' data-team='" + team + "' data-h=\"" + esc(h.name) + "\" title=\"" + esc(h.name + ' - ' + h.subrole) + "\">" +
     portrait(h) + "<span class='nm'>" + esc(h.name) + '</span></div>';
 }
-function announcedTile(h) {
-  return "<div class='tile soon' title=\"" + esc(h.name + ' - announced, not in the database yet (' + h.subrole + ')') + "\">" +
-    SILHOUETTE + "<span class='tag'>" + esc(h.tag) + "</span><span class='nm'>" + esc(h.name) + '</span></div>';
+/* an announced hero: the same tile in its role column, dimmed, tagged, with
+   no data-h and no data-team - the click handler and the state never see it */
+function soonTile(h) {
+  return "<div class='tile soon' title=\"" + esc(h.name + ' - announced, not yet playable' + (h.release_date ? ' (releases ' + h.release_date + ')' : '') + ' - ' + h.subrole) + "\">" +
+    (h.portrait ? portrait(h) : SILHOUETTE) + "<span class='tag'>coming soon</span><span class='nm'>" + esc(h.name) + '</span></div>';
 }
 function rosterHTML(team) {
   var cols = '';
@@ -48,7 +43,6 @@ function rosterHTML(team) {
     ROSTER.heroes.filter(function (h) { return h.role === role; }).forEach(function (h) { cols += tile(h, team); });
     cols += '</div></div>';
   });
-  cols += "<div class='rolecol announced'><h4>announced</h4><div class='grid'>" + announcedTile(DOCTRINE) + '</div></div>';
   return cols;
 }
 
@@ -224,11 +218,21 @@ function bars(contribs) {
 /* the 0-100 figure (`normalized`: 100 for an optimal six, the current comp's
    share of blue's optimal) large, the raw score small beside it and as the
    tooltip; a response without `normalized` shows the raw score alone */
+/* what a number means: 100 is the best six the solver can build for this
+   board; any other comp's number is its score as a share of that best */
+function meaning(d) {
+  var n = typeof d.normalized === 'number' ? Math.round(d.normalized) : null;
+  if (d.kind === 'infer') return 'the best six the solver can build for this board - the 100 every other comp here is measured against';
+  if (d.seat === 'red') return n === null ? '' : 'their picks reach ' + n + '% of the score of their best possible counter to yours';
+  if (d.kind === 'countered') return n === null ? '' : 'your picks would keep ' + n + '% of the best six if red answered you perfectly';
+  return n === null ? '' : 'your picks reach ' + n + '% of the score of the best six for this board';
+}
 function scoreHTML(d) {
-  var raw = 'score ' + (+d.score).toFixed(2);
+  var raw = 'score ' + (+d.score).toFixed(2) + (typeof d.best === 'number' && d.kind !== 'infer' ? ' of the best ' + (+d.best).toFixed(2) : '');
   if (typeof d.normalized === 'number')
-    return "<span class='score' title='" + raw + "'>" + Math.round(d.normalized) + "<small>/ 100</small></span><span class='raw'>" + raw + '</span>';
-  return "<span class='score' title='the raw score under the catalog'>" + raw + '</span>';
+    return "<span class='score' title='" + esc(raw) + "'>" + Math.round(d.normalized) + "<small>/ 100</small></span><span class='raw'>" + esc(raw) +
+      "<span class='meaning'>" + esc(meaning(d)) + '</span></span>';
+  return "<span class='score' title='the raw score under the catalog'>" + esc(raw) + '</span>';
 }
 function altScore(a) {
   return (typeof a.normalized === 'number' ? "<span class='altn'>" + Math.round(a.normalized) + ' / 100</span> ' : '') +
@@ -243,19 +247,14 @@ function renderInf() {
   el('plan').innerHTML = "<span class='lbl'>game plan</span><div class='text'>" + text.map(esc).join('<br>') + '</div>' + (basis ? "<div class='basis'>" + esc(basis) + '</div>' : '');
   var mo = d.momentum || {};
   el('momentum').innerHTML = "<span class='lbl'>momentum</span> <b>" + esc(mo.verdict || '') + '</b>' +
-    (typeof mo.blue === 'number' && typeof mo.red === 'number' ? "<span class='gauge'><span class='b' style='width:" + mo.blue + "%'></span><span class='r' style='width:" + mo.red + "%'></span></span>" : '');
+    (typeof mo.blue === 'number' && typeof mo.red === 'number' ? "<span class='gauge'><span class='b' style='width:" + mo.blue + "%'></span><span class='r' style='width:" + mo.red + "%'></span></span>" : '') +
+    "<span class='scale'>100 is the best six the solver can build for this board; a comp's number is its score as a share of that best - yours against blue's optimal, theirs against their best counter to you. <a href='/math'>the math</a></span>";
   var rc = d.red_current;
   if (!rc || !rc.blue || !rc.blue.length) el('inf-red').innerHTML = "<div class='inf-head'><h3>red - their comp as revealed</h3></div>" +
     "<p class='legend'>click red picks as they reveal; their comp is scored against yours, on the scale of their best counter to you.</p>";
   else renderResult(rc, el('inf-red'), 'red - their comp as revealed' + (rc.kind === 'evaluate' ? ', ranked' : ' (' + rc.blue.length + ' of ' + TEAM + ')'));
   var c = d.current;
-  /* blue's seat mirrors red's: your picks as they stand, scored, above the optimal six */
-  if (!c || !c.blue || !c.blue.length) el('inf-blue').innerHTML = "<div class='inf-head'><h3>blue - your picks</h3></div>" +
-    "<p class='legend'>lock blue picks; they are scored against red's selection, on the scale of blue's optimal.</p>";
-  else renderResult(c, el('inf-blue'), 'blue - your picks' + (c.kind === 'evaluate' ? ', ranked' : ' (' + c.blue.length + ' of ' + TEAM + ')'));
-  var opt = document.createElement('div'); opt.className = 'optimal';
-  el('inf-blue').appendChild(opt);
-  renderResult(d.blue, opt, 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
+  renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
   el('bluescore').textContent = (c && c.blue && c.blue.length && typeof c.normalized === 'number') ? c.normalized + ' / 100' : '';
   el('redscore').textContent = (rc && rc.blue && rc.blue.length && typeof rc.normalized === 'number') ? rc.normalized + ' / 100' : '';
   paintSuggestions();

@@ -87,6 +87,9 @@ MUST_NAME = {   # a skill is a playbook over these tools; if a tool is renamed, 
     "refresh": {"db_status", "sync_all", "infer_strategy", "db_docs",
                 "export_csv", "load_authored"},
     "maintain": {"db_docs", "db_status", "strategies"},
+    "patches": {"pull_patches", "pull_rates", "pull_kits", "pull_heroes", "db_docs", "export_csv"},
+    "heroes": {"roster", "pull_heroes", "pull_kits", "pull_counters", "load_authored"},
+    "maps": {"roster", "pull_maps", "load_authored", "pull_rates", "pull_counters"},
 }
 
 

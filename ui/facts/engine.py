@@ -125,7 +125,7 @@ def generate(world, map_name=None, red=(), blue=(), bans=(), side=""):
     cannot be recommended."""
     if side not in ("",) + SIDES:
         raise ValueError("side must be attack or defense, got %r" % side)
-    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
+    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans, allow_announced=True)
     side = side if is_sided(m) else ""
     fs = FactSet(m.name if m else None, [h.name for h in red_h],
                  [h.name for h in blue_h], [h.name for h in bans_h], side)
@@ -257,6 +257,11 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
                "; weapon: " + ", ".join(sorted(h.weapon_kinds)) if h.weapon_kinds else "",
                ult),
            value={"role": h.role, "subrole": h.subrole}, source="heroes", team=team)
+    if not h.released:
+        fs.add("hero", name, "hero.announced", "CAUTION: %s is announced, not yet playable%s -"
+               " the kit is the wiki's preview and there are no rates" % (
+                   name, " (releases %s)" % h.release_date if h.release_date else ""),
+               value=str(h.release_date) if h.release_date else None, source="heroes", team=team)
     fs.add("hero", name, "hero.pool", "%s pool: %d (%d health, %d shield, %d armor)"
            % (name, h.pool, h.health, h.shield, h.armor), value=h.pool, unit="hp",
            source="heroes", team=team)

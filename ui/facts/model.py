@@ -74,10 +74,15 @@ class Kit:
         return max(values) if values else None
 
 class Hero:
+    @property
+    def released(self):
+        return self.status == "released"
+
     def __init__(self, hid, slug, name, role, subrole, health, shield, armor,
-                 portrait):
+                 portrait, status="released", release_date=None):
         self.id, self.slug, self.name = hid, slug, name
         self.role, self.subrole = role, subrole
+        self.status, self.release_date = status, release_date   # announced: shown, never picked
         self.health, self.shield, self.armor = health or 0, shield or 0, armor or 0
         self.portrait = portrait
         self.styles = set()
@@ -226,12 +231,20 @@ class World:
         mid = self.maps_by_key.get(name_key(name))
         return self.maps[mid] if mid is not None else None
 
-    def resolve(self, map_name, red, blue, bans=()):
+    def resolve(self, map_name, red, blue, bans=(), allow_announced=False):
         """Names -> (map or None, [Hero] red, [Hero] blue, [Hero] banned);
-        unknown names raise, and so does a pick that is banned."""
+        unknown names raise, and so does a pick that is banned - or, unless
+        `allow_announced`, a hero announced but not yet released."""
         unknown = [n for n in list(red) + list(blue) + list(bans) if self.hero(n) is None]
         if unknown:
             raise ValueError("unknown heroes: %s" % ", ".join(unknown))
+        if not allow_announced:
+            early = [self.hero(n) for n in list(red) + list(blue) + list(bans)
+                     if not self.hero(n).released]
+            if early:
+                raise ValueError("announced, not yet playable: %s" % ", ".join(
+                    "%s (releases %s)" % (h.name, h.release_date) if h.release_date else h.name
+                    for h in early))
         m = None
         if map_name:
             m = self.map(map_name)
@@ -276,12 +289,12 @@ def _rows(cx, sql, *args):
 def load(cx):
     """The whole database -> World."""
     w = World()
-    for hid, slug, name, role, sub, hp, sh, ar, portrait in _rows(cx, """
+    for hid, slug, name, role, sub, hp, sh, ar, portrait, status, released in _rows(cx, """
             select h.hero_id, h.slug, h.name, r.code, sr.name, h.health,
-                   h.shield, h.armor, h.portrait_url
+                   h.shield, h.armor, h.portrait_url, h.status, h.release_date
             from heroes h join roles r using(role_id)
             join subroles sr on sr.subrole_id = h.subrole_id"""):
-        w.heroes[hid] = Hero(hid, slug, name, role, sub, hp, sh, ar, portrait)
+        w.heroes[hid] = Hero(hid, slug, name, role, sub, hp, sh, ar, portrait, status, released)
         w.by_key[name_key(name)] = hid
     for code, url in _rows(cx, "select code, icon_url from roles"):
         w.role_icons[code] = url

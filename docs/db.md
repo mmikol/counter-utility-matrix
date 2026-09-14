@@ -66,7 +66,7 @@ them.
 | --- | --- | --- |
 | `blizzard/` | `heroes.py` | the roster: heroes, roles, subroles, portraits and icons, ability and perk text. Runs first; everything links to heroes. Blizzard publishes prose and no numbers. |
 | | `meta.py` | win, pick and ban rates as a dated snapshot, sliced by skill tier and by map. Competitive Role Queue (the page offers no Open Queue), console, Americas - all recorded on the snapshot. |
-| `wiki/` | `heroes.py` | hero kits from the Cargo Abilities table: weapons and their firing configs, abilities, perks, keywords, and every stat as a measurement. Supplements the interaction flags from article wikitext. Runs after `blizzard.heroes`. |
+| `wiki/` | `heroes.py` | hero kits from the Cargo Abilities table: weapons and their firing configs, abilities, perks, keywords, and every stat as a measurement. Also the announced heroes: a Cargo hero the roster lacks whose article is marked upcoming gets a row (role, subrole, health, release day, status `announced`) so its kit loads ahead of release; Blizzard listing it later flips the status to released. Supplements the interaction flags from article wikitext. Runs after `blizzard.heroes`. |
 | | `maps.py` | maps, game modes and stages from the Maps article's Standard Play section. |
 | | `patches.py` | game versions from the Patches cargo table; snapshots link to the patch current at capture. Runs before the rates pulls. |
 | | `playstyles.py` | the team-composition playstyles (dive, brawl, poke) and the heroes listed under each. |
@@ -624,6 +624,8 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 | `shield` | smallint | yes |  |
 | `armor` | smallint | yes |  |
 | `portrait_url` | text | yes |  |
+| `status` | text | no |  |
+| `release_date` | date | yes |  |
 
 #### `map_meta`
 

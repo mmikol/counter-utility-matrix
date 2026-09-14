@@ -88,7 +88,8 @@ def _board(query):
 def api_roster(cx):
     world = model.load(cx)
     heroes = [{"name": h.name, "slug": h.slug, "role": h.role, "subrole": h.subrole,
-               "pool": h.pool, "portrait": h.portrait,
+               "pool": h.pool, "portrait": h.portrait, "status": h.status,
+               "release_date": str(h.release_date) if h.release_date else None,
                "subrole_icon": (world.subrole_passives.get(h.subrole) or (None, None, None))[2]}
               for h in world.heroes_by_role()]
     maps = [{"name": m.name, "mode": m.mode, "style": m.style_top,

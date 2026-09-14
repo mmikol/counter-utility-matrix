@@ -20,6 +20,7 @@ grouping them into weapons is weapons.py's job.
 """
 
 import collections
+import datetime
 import requests
 from db import psql
 from db.data import fetch
@@ -118,6 +119,7 @@ def parse_rows(rows):
 
         weapons, abilities, perks = heroes.setdefault(hero_name, ([], [], []))
         if "perk" in base_type.lower():
+            entry["tier"] = "major" if "major" in base_type.lower() else "minor"
             perks.append(entry)
         elif base_type.lower().startswith("weapon"):
             entry["kind_id"] = WEAPON_KIND
@@ -151,6 +153,77 @@ def parse_hero_profile(text):
             profile[field] = int(digits.group(1)) if digits else None
         return profile
     return {}
+
+
+UPCOMING_RE = re.compile(r"\{\{\s*Upcoming\s*\}\}", re.I)
+RELEASE_RE = re.compile(r"release[^.]{0,80}?\bon\s+([A-Z][a-z]+ \d{1,2}, \d{4})")
+
+
+def parse_announcement(text):
+    """An article marked {{Upcoming}} -> {role, subrole, health, release_date}
+    from its infobox and its release sentence; None for a released hero (no
+    marker) or an infobox without a role."""
+    if not UPCOMING_RE.search(text or ""):
+        return None
+    for block in markup.find_templates(text, r"Infobox character"):
+        params = markup.parse_params(block)
+        role = markup.wikitext_to_text(params.get("role", "")).strip().lower()
+        subrole = markup.wikitext_to_text(params.get("sub-role", "")).strip().lower()
+        if role not in ("tank", "damage", "support"):
+            return None
+        health = re.match(r"\s*(\d+)", markup.wikitext_to_text(params.get("health", "")))
+        released = RELEASE_RE.search(markup.wikitext_to_text(text))
+        release_date = None
+        if released:
+            try:
+                release_date = datetime.datetime.strptime(released.group(1), "%B %d, %Y").date()
+            except ValueError:
+                release_date = None
+        return {"role": role, "subrole": subrole, "health": int(health.group(1)) if health else None,
+                "release_date": release_date}
+    return None
+
+
+def announce_heroes(cursor, session, names, hero_ids, cache_dir, source_id, log=print):
+    """Heroes the Cargo table names that the roster lacks: those whose
+    article is marked upcoming get a row - role, subrole, health, release
+    day, status announced - so their kit loads and the board can show
+    them; Blizzard listing them later flips the status to released. Returns
+    the names stored; the rest stay unknown."""
+    stored = []
+    for hero_name in sorted(names):
+        if hero_name.lower() in hero_ids:
+            continue
+        try:
+            text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
+        except (WikiError, requests.RequestException):
+            continue
+        found = parse_announcement(text)
+        if not found:
+            continue
+        cursor.execute("SELECT s.subrole_id, r.role_id FROM subroles s JOIN roles r USING (role_id)"
+                       " WHERE r.code = %s AND s.code = %s", (found["role"], found["subrole"]))
+        row = cursor.fetchone()
+        if row is None:
+            log("announced hero %s: subrole %s/%s not on the roster yet, skipped"
+                % (hero_name, found["role"], found["subrole"]))
+            continue
+        subrole_id, role_id = row
+        slug = re.sub(r"[^a-z0-9]+", "-", hero_name.lower()).strip("-")
+        cursor.execute(
+            "INSERT INTO heroes (slug, name, role_id, subrole_id, health, status,"
+            " release_date, source_id) VALUES (%s, %s, %s, %s, %s, 'announced', %s, %s)"
+            " ON CONFLICT (slug) DO UPDATE SET release_date = EXCLUDED.release_date,"
+            " health = coalesce(EXCLUDED.health, heroes.health), cao = now()"
+            " RETURNING hero_id",
+            (slug, hero_name, role_id, subrole_id, found["health"], found["release_date"],
+             source_id))
+        hero_ids[hero_name.lower()] = cursor.fetchone()[0]
+        stored.append(hero_name)
+        log("announced hero stored: %s (%s, %s%s)" % (
+            hero_name, found["role"], found["subrole"],
+            ", releases %s" % found["release_date"] if found["release_date"] else ""))
+    return stored
 
 
 # --- store ---------------------------------------------------------------------
@@ -409,6 +482,26 @@ def load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
             "SELECT name, perk_id FROM perks WHERE hero_id = %s", (hero_id,)
         ).fetchall()
     }
+    if not perk_ids and perks and cursor.execute(
+            "SELECT status FROM heroes WHERE hero_id = %s", (hero_id,)).fetchone()[0] == "announced":
+        # Blizzard has not published the hero yet: the wiki's perks are the
+        # only ones, so they get rows of their own (Blizzard's replace them)
+        position = {"minor": 0, "major": 0}
+        for entry in perks:
+            tier = entry.get("tier", "minor")
+            position[tier] += 1
+            if position[tier] > 2:
+                continue
+            cursor.execute(
+                "INSERT INTO perks (hero_id, tier_id, name, description, position, source_id)"
+                " VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (hero_id, name) DO NOTHING"
+                " RETURNING perk_id",
+                (hero_id, 2 if tier == "major" else 1, entry["name"], entry["description"],
+                 position[tier], source_id))
+            row = cursor.fetchone()
+            if row:
+                perk_ids[ability_key(entry["name"])] = row[0]
+                tally["perks_announced"] += 1
     for entry in perks:
         perk_id = perk_ids.get(ability_key(entry["name"]))
         if perk_id is None:
@@ -463,6 +556,7 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
             all_codes.update(entry["stats"])
     key_ids = stat_key_ids(cursor, all_codes, source_id)
     hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
+    announced = announce_heroes(cursor, session, by_hero, hero_ids, cache_dir, source_id, log)
 
     tally = collections.Counter()
     unknown_heroes = []
@@ -491,7 +585,7 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
     summary = dict(tally)
     summary.update({
         "cargo_rows": len(rows), "supplemented": supplemented,
-        "unknown_heroes": sorted(unknown_heroes),
+        "unknown_heroes": sorted(unknown_heroes), "announced": announced,
         "tables": ["abilities", "ability_stats", "ability_modifiers", "weapons",
                    "weapon_configs", "weapon_stats", "perk_stats",
                    "perk_ability_effects", "stat_keys", "heroes"],

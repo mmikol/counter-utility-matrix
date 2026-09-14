@@ -229,6 +229,7 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
             " ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name,"
             " role_id = EXCLUDED.role_id, subrole_id = EXCLUDED.subrole_id,"
             " portrait_url = coalesce(EXCLUDED.portrait_url, heroes.portrait_url),"
+            " status = 'released',"          # Blizzard listing a hero is the release
             " source_id = EXCLUDED.source_id, cao = now()"
             " RETURNING hero_id",
             (

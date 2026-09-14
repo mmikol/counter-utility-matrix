@@ -200,7 +200,7 @@ def test_no_hero_has_two_abilities_that_fold_together(rows):
 # --- the three-layer additions ------------------------------------------------
 
 def test_every_hero_has_a_portrait_and_every_role_an_icon(one):
-    assert one("select count(*) from heroes where portrait_url is null") == 0
+    assert one("select count(*) from heroes where portrait_url is null and status = 'released'") == 0
     assert one("select count(*) from roles where icon_url is null") == 0
 
 

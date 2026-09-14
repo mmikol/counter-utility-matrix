@@ -308,3 +308,21 @@ def test_the_plan_reads_every_authored_map_note(world):
             assert engine._sentence(note) in plan, m.name
     assert engine._and(["A"]) == "A" and engine._and(["A", "B", "C"]) == "A, B and C"
     assert engine._hero_names(world, "winston d.va wrecking ball nobody") == ["Winston", "D.Va", "Wrecking Ball"]
+
+
+def test_an_announced_hero_is_described_but_never_picked(world):
+    from inference import engine
+    from ui.facts import engine as facts_engine
+    early = [h for h in world.heroes.values() if not h.released]
+    if not early:
+        pytest.skip("no announced hero in the database")
+    h = early[0]
+    fs = facts_engine.generate(world, None, [], [h.name])          # the facts may describe it
+    assert fs.find("hero.announced", h.name)
+    with pytest.raises(ValueError, match="announced, not yet playable"):
+        engine.infer(world, None, [], [h.name])                    # a pick may not
+    with pytest.raises(ValueError, match="announced"):
+        engine.board(world, None, [h.name], [])
+    r = engine.infer(world, None, [], [], pool_size=8)
+    assert h.name not in r.blue and all(a["blue"] for a in r.alternatives)
+    assert not any(h.name in a["blue"] for a in r.alternatives)   # nor does the field hold it
