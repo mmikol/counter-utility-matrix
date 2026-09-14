@@ -193,6 +193,10 @@ dead code and duplicated definitions; the layout and the one-door rule
 held; the security posture checked against `docs/security.md` and one
 sentry pass. Then a report of under fifteen lines and a proposed commit.
 
+**Lessons learned:** the skill keeps a log of what a run caught that its
+checks did not - what slipped, why the checks missed it, what catches it
+now - and every run that finds such a thing adds a line before it reports.
+
 **Ground rules:** fix what a check points at, report what needs a
 decision, never skip a failing test to get green, never commit or push
 unasked.

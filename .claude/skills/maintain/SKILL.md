@@ -70,11 +70,56 @@ or the user points at, and leave a report.
    the sentry's patterns, the compose hardening). `python -m db.sentry
    --once` must exit 0 on a clean tree.
 
+## Lessons learned
+
+What a run caught that the checks above did not, why they missed it, and
+what catches it now. Every run that finds such a thing adds a line here,
+in the same shape, before it reports - a lesson that is not written down
+is a lesson the next run relearns.
+
+- **Prose that parses and still says the wrong thing.** "a few polite
+  minutes" sat in the README through a spell check and two grammar reads:
+  every word real, every sentence well-formed, the adjective on the wrong
+  noun. Now: proofreading reads each sentence for what it claims, and
+  checks that every adjective and adverb modifies the thing it should.
+- **A definition stated in many places.** The equation gained a third
+  term and seven copies kept the old two - docs, a tool description, a
+  docstring, the fact the board shows, a strategy's prose. Now: when a
+  definition changes, `git grep` every phrasing of the old one, in code,
+  docs, skills and strategies, before calling the change done.
+- **Numbers and lists go stale as quietly as names.** "five containers",
+  "two kinds of file", "six skills", a migration list ending three files
+  early, an entrypoint role list missing two. Now: check 3 greps counts
+  and enumerations too - containers, kinds, skills, migrations, roles -
+  against what `compose.yaml`, the catalog, `.claude/skills/` and
+  `db/psql/migrations/` actually hold.
+- **A migration's comment feeds the data dictionary.** The `strategies`
+  table's comment named two kinds after a third existed. Now: a change
+  to a vocabulary updates the comment in the migration that created the
+  table, and `db_docs` carries it into `docs/db.md`.
+- **The image bakes the tests in.** `orchestrator.py test` ran the old
+  tests until the image was rebuilt. Now: `orchestrator.py up` (which
+  rebuilds) before `orchestrator.py test`, always.
+- **The container is small and read-only.** A pool of 8 with no locks
+  needs more than the data container's 1 GiB, and coverage cannot write
+  `/app/.coverage`. Now: tests solve at the default pool, and the image
+  run points `COVERAGE_FILE` at the tmpfs.
+- **Single pulls make the mirror lie.** Any `pull_*` against the Docker
+  database leaves `db/raw` behind until `export_csv` runs, and a rates or
+  counters pull appends a dated snapshot every time. Now: tests run the
+  pulls inside a rolled-back transaction, and a pull run by hand is
+  followed by `export_csv` before the in-image parity test.
+- **Hash order reached the answer.** Style ties broke by the iteration
+  order of a set of names, so PYTHONHASHSEED changed the solver's six.
+  Now: every tie in the scoring path breaks by name, and a test flips
+  the iteration order to prove it.
+
 ## The report
 
 Under fifteen lines: each check and its result, what you changed and
-why, what you found and left for the user (with the file and line), and
-the commit you propose (a branch, a fast-forward merge to `main`, a push -
+why, the lesson you logged if a check was blind to something, what you
+found and left for the user (with the file and line), and the commit you
+propose (a branch, a fast-forward merge to `main`, a push -
 the project's habit). Never commit or push without being asked; never
 run `docker compose down -v`.
 
