@@ -267,7 +267,7 @@ function meaning(d) {
 }
 var UNSCORED = 'the playbook in force holds no heuristic, scored constraint or soft limit, so every legal six ties at zero - add one and the board scores';
 function scoreHTML(d) {
-  if (d.kind === 'infer') return '';                 /* an optimal is the reference, not a score */
+  if (d.kind === 'infer' || d.kind === 'expected') return '';   /* a reference or a likelihood, not a score */
   if (d.scoring === false || typeof d.normalized !== 'number')
     return "<span class='score unscored' title='" + esc(d.unscored || UNSCORED) + "'>unscored</span>";
   return "<span class='score' title='" + esc(meaning(d)) + "'>" + Math.round(d.normalized) + "<small>/ 100</small></span><span class='raw'>" +
@@ -301,10 +301,11 @@ function renderInf() {
   };
   el('momentum').innerHTML = "<span class='lbl' title='each side\'s comp as a share of the best six it could field here - the higher bar holds the fight'>fight odds</span>" +
     "<span class='mbars'>" + bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current) + '</span>';
-  /* the two optimals, side by side, neither scored - each is its seat's
-     reference; the picks' scores are the badges above the pickers */
+  /* blue's optimal on the left, unscored - it is the reference; on the right
+     what red is likely to field, from the map and the meta alone, no strategy
+     read; the picks' scores are the badges above the pickers */
   var rc = d.red_current;
-  renderResult(d.red, el('inf-red'), 'red - optimal six: their best counter to your selection' + (d.side ? ', on ' + opposite(d.side) : ''));
+  renderResult(d.expected, el('inf-red'), 'red - likely picks: what the map and the meta say they field' + (d.map ? ' on ' + d.map : ''));
   var c = d.current;
   renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
   /* the badge above each seat's picks and picker always carries a figure: the
@@ -344,12 +345,11 @@ function paintSuggestions() {
 }
 
 /* a count with thousands separators: 14,101 candidates */
-function opposite(side) { return side === 'attack' ? 'defense' : side === 'defense' ? 'attack' : ''; }
 function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function renderResult(d, container, title) {
   if (!d || d.error) { container.innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
   var out = "<div class='inf-head'><h3>" + esc(title) + '</h3>' + scoreHTML(d) + "<span class='legend'>" +
-    (d.rank ? 'rank ' + commas(d.rank) + ' among the feasible field · ' : '') + (d.considered ? commas(d.considered) + ' candidates · ' : '') + d.seconds + 's' +
+    (d.rank ? 'rank ' + commas(d.rank) + ' among the feasible field · ' : '') + (d.considered ? commas(d.considered) + ' candidates · ' : '') + (typeof d.seconds === 'number' ? d.seconds + 's' : '') +
     (d.playstyle ? ' · leans ' + d.playstyle : '') + '</span>' +
     '</div>';
   if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search\'s field</div>';
@@ -361,7 +361,7 @@ function renderResult(d, container, title) {
       "</div><div class='body'><b>" + esc(p.hero) + "</b><div class='why'>" + esc(p.why) + '</div>' +
       p.evidence.map(function (id) { return "<span class='ev' title=\"" + esc(d.cited[id] || id) + "\">" + id + '</span>'; }).join('') + '</div></div>';
   });
-  out += '</div>' + bars(d.contributions || []);
+  out += '</div>' + (d.contributions && d.contributions.length ? bars(d.contributions) : '');
   if (d.alternatives && d.alternatives.length) {
     out += "<div class='alts'><b>" + (d.kind === 'infer' ? 'alternatives' : 'the field\'s best') + "</b><ol>" +
       d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + ' ' + altScore(a, d) + '</li>'; }).join('') + '</ol></div>';

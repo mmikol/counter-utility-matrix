@@ -176,6 +176,45 @@ def _mean(values):
     return sum(values) / len(values) if values else 0.0
 
 
+OPEN_QUEUE_TANKS = 2      # the queue's own limit, not a strategy: no more than two tanks
+
+
+def expected_picks(world, m, revealed=(), bans=(), size=TEAM_SIZE, max_tanks=OPEN_QUEUE_TANKS):
+    """What the other side is likely to field, from the map and the meta alone -
+    no strategy read: any picks given as revealed first, then the most-picked
+    heroes on this map (the overall meta when no map is set) until the six is
+    full, within the queue's own two-tank limit and past the bans. The board
+    calls it with nothing revealed, so the six is static for the board. Each
+    entry says where its rate comes from -> [{hero, role, rate, locked, why}]."""
+    revealed, banned = list(revealed), {h.id for h in bans}
+    out = [{"hero": h.name, "role": h.role, "rate": None, "locked": True, "why": "revealed"}
+           for h in revealed]
+    taken = {h.id for h in revealed} | banned
+    tanks = sum(1 for h in revealed if h.role == "tank")
+
+    def rate(h):
+        r = h.map_pick(m.id) if m is not None else None
+        return (r if r is not None else h.pick, r is not None)
+    field = [h for h in world.heroes.values() if h.released and h.id not in taken]
+    field.sort(key=lambda h: (-(rate(h)[0] or 0.0), h.name))
+    for h in field:
+        if len(out) >= size:
+            break
+        if h.role == "tank" and tanks >= max_tanks:
+            continue
+        value, on_map = rate(h)
+        if value is None:
+            why = "no pick rate on record"
+        elif on_map:
+            why = "picked in %.1f%% of matches on %s" % (value, m.name)
+        else:
+            why = "picked in %.1f%% of matches overall%s" % (
+                value, " (no rate on this map)" if m is not None else " (no map set)")
+        out.append({"hero": h.name, "role": h.role, "rate": value, "locked": False, "why": why})
+        tanks += h.role == "tank"
+    return out
+
+
 def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     """Every TEAM_METRICS key for these picks, on this map, vs these enemies.
     lean=True leaves the name lists empty (the solver never reads them)."""

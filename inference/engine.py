@@ -401,7 +401,10 @@ def board_dict(b):
             "current": b["current"].to_dict(), "red_current": b["red_current"].to_dict(),
             "countered": b["countered"].to_dict() if b["countered"] else None,
             "fill": b["fill"].to_dict() if b["fill"] else None, "momentum": b["momentum"],
-            "shapes": b["shapes"]}
+            "shapes": b["shapes"],
+            "expected": {"kind": "expected", "seat": "red",
+                         "blue": [p["hero"] for p in b["expected"]],
+                         "picks": [dict(p, evidence=[]) for p in b["expected"]], "cited": {}}}
 
 
 def board_rendered(b):
@@ -695,7 +698,8 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
     they reveal:
 
         blue         blue's optimal six: the best counter to red's selection
-                     as revealed, on this map, side and bans - blue's own
+                     as revealed - or, before they reveal a pick, to their
+                     likely six - on this map, side and bans; blue's own
                      picks never constrain it
         red          red's optimal six: their best counter to blue's
                      selection, on the other side - the scale red's current
@@ -713,6 +717,10 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
         plan         the game plan in prose, from the same facts
         shapes       the (tanks, damage, supports) triples the playbook's shape
                      limits allow - what the roster enforces as you pick
+        expected     red's likely six from the map and the meta alone - the
+                     most-picked heroes here, past the bans - static for the
+                     board, no strategy read; what the comps tab shows for red
+                     and what blue counters until red reveals a pick
 
     `weights` ({heuristic id: 0..10}) overrides the files' weights for this
     board only - the playbook tab's sliders; the files stay as they are and
@@ -720,28 +728,32 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
     """
     parallel = parallel_available(catalog)
     catalog = catalog_module.weighted(catalog or catalog_module.load(), weights)
-    m, red_h, _, _ = world.resolve(map_name, red, blue, bans)
+    m, red_h, _, bans_h = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
+    # red's likely six - the map and the meta alone, past the bans - is static
+    # for the board; until red reveals a pick it is what blue's seat counters
+    expected = compute.expected_picks(world, m, [], bans_h)
+    enemy = list(red) if red else [p["hero"] for p in expected]
     fill = None
     if parallel:
         try:
             pool = _workers()
-            seats = [pool.submit(_seat, world, map_name, list(red), list(blue), top, pool_size,
+            seats = [pool.submit(_seat, world, map_name, enemy, list(blue), top, pool_size,
                                  list(bans), side, "blue", weights),
                      pool.submit(_seat, world, map_name, list(blue), list(red), top, pool_size,
                                  list(bans), opposite(side), "red", weights)]
             if 0 < len(blue) < TEAM_SIZE:              # the fill, here, meanwhile
-                fill = infer(world, map_name, red, blue, top, pool_size, catalog, bans, side,
-                             "blue")
+                fill = infer(world, map_name, enemy, blue, top, pool_size, catalog, bans,
+                             side, "blue")
             (blue_r, cur), (red_r, red_cur) = seats[0].result(), seats[1].result()
         except concurrent.futures.process.BrokenProcessPool:
             _drop_workers()                          # a worker died: this board, sequentially
             parallel = False
     if not parallel:
-        blue_r = infer(world, map_name, red, [], top, pool_size, catalog, bans, side, "blue")
+        blue_r = infer(world, map_name, enemy, [], top, pool_size, catalog, bans, side, "blue")
         red_r = infer(world, map_name, blue, [], top, pool_size, catalog, bans, opposite(side),
                       "red")
-        cur = current(world, blue_r, map_name, red, blue, catalog, bans, side, pool_size)
+        cur = current(world, blue_r, map_name, enemy, blue, catalog, bans, side, pool_size)
         _finish(cur, blue_r.score)                 # 100 is blue's optimal, whatever you hold
         red_cur = current(world, red_r, map_name, blue, red, catalog, bans, opposite(side),
                           pool_size, "red")
@@ -756,7 +768,7 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
         countered.kind = "countered"
         _finish(countered, against.score)
     if fill is None and 0 < len(blue) < TEAM_SIZE:
-        fill = infer(world, map_name, red, blue, top, pool_size, catalog, bans, side, "blue")
+        fill = infer(world, map_name, enemy, blue, top, pool_size, catalog, bans, side, "blue")
     if fill is not None:
         fill.kind = "fill"
         _finish(fill, blue_r.score)                # how close the best completion comes
@@ -764,4 +776,4 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
             "blue": blue_r, "red": red_r, "current": cur, "red_current": red_cur, "fill": fill,
             "countered": countered, "momentum": _momentum(cur, red_cur, countered, blue_r, red_r),
             "plan": _plan(world, m, side, list(bans), red_h, blue_r),
-            "shapes": [list(s) for s in legal_shapes(catalog)]}
+            "shapes": [list(s) for s in legal_shapes(catalog)], "expected": expected}

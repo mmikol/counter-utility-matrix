@@ -86,9 +86,6 @@ yield, best first:
   names who answers whom and with what, from the kit keywords plus a small
   authored table of which tool beats which. Cost: two days, half of it the
   table.
-- **The map's expected opposition.** The most-picked heroes on this map
-  (the leaders fact ranks by win rate), and the picks red is likely to add
-  given what it has. Cost: half a day.
 - **History across captures.** Seven snapshots exist; only the last step
   is a fact. A hero's win-rate series, who is rising and falling this
   season, and the patch each change followed. Cost: a day.
@@ -105,6 +102,10 @@ counters table is a list).
 
 ## Done
 
+- **Red's likely picks from the map and the meta** - `team-headers`
+  branch. `compute.expected_picks`: their revealed picks, then the
+  most-picked heroes on the map, within the queue's two-tank limit;
+  the comps tab's right seat.
 - **A heuristic's weight stores into its file from the board** - `f131f80`.
 - **A heuristic's weight is a slider under its card** - `2156473`.
   Only heuristics have one; 1 to 10 to the hundredth with a number box for

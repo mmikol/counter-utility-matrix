@@ -157,9 +157,10 @@ def test_the_page_is_a_shell_over_static_files():
     assert body.index("id='inf-blue'") < body.index("id='inf-red'")
     assert body.index("id='blueslots'") < body.index("id='redslots'")
     script = board.static_file("board.js")[0].decode()
-    assert "red - optimal six: their best counter" in script and "d.momentum" in script
+    assert "red - likely picks: what the map and the meta say they field" in script
+    assert "renderResult(d.expected, el('inf-red')" in script and "d.momentum" in script
     assert "their comp as revealed" not in script   # red's picks score in the badge only
-    assert "if (d.kind === 'infer') return '';" in script        # an optimal carries no score
+    assert "if (d.kind === 'infer' || d.kind === 'expected') return '';" in script   # no score
     # blue's seat is the optimal six only
     assert "'blue - your picks'" not in script
     assert "function meaning(d)" in script

@@ -337,9 +337,12 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     assert countered["scoring"] is (countered["unscored"] is None)
     assert grounded["momentum"]["verdict"].startswith("unscored on this board")
     assert "waits for matchup.flyers >= 1" in grounded["momentum"]["verdict"]
+    # no picks at all: blue's seat counters red's likely six, the optimal is the
+    # reference (100), and the verdict is the plain "no picks yet"
     empty = engine.board_dict(engine.board(world, None, [], [], catalog=scratch))
-    assert "waits for matchup.flyers >= 1" in empty["momentum"]["verdict"]   # read off the optimal
+    assert empty["momentum"]["verdict"] == "no picks yet on either side"
     assert empty["blue"]["normalized"] == 100 and empty["blue"]["unscored"] is None
+    assert empty["blue"]["red"] == empty["expected"]["blue"]           # countering the likely six
     flying = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
                                             ["Reinhardt", "Cassidy"], catalog=scratch))
     assert flying["blue"]["scoring"] is True and flying["blue"]["normalized"] == 100
@@ -368,7 +371,29 @@ def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
     assert seated and all(t == 2 and d >= 3 for t, d, _ in seated)
     b = engine.board(world, "King's Row", ["Zarya"], ["Ana"], catalog=cat)
     assert b["shapes"] == [list(s) for s in shapes]
-    assert engine.board_dict(b)["shapes"] == b["shapes"]
+    d = engine.board_dict(b)
+    assert d["shapes"] == b["shapes"]
+    # red's likely six rides along - static: the map and the meta, not their reveal
+    assert d["expected"]["kind"] == "expected" and "Zarya" not in d["expected"]["blue"]
+    assert len(d["expected"]["picks"]) == 6 and all(p["why"] for p in d["expected"]["picks"])
+    assert not any(p["locked"] for p in d["expected"]["picks"])
+
+
+def test_blue_counters_the_likely_six_until_red_reveals_a_pick(world, monkeypatch):
+    """With no red pick the board solves blue against red's likely six, so the
+    opening suggestion is a counter to what the map and the meta say red
+    fields; the first reveal replaces that with red's actual picks."""
+    from inference import engine
+    from ui.facts import compute
+    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
+    m = world.map("King's Row")
+    likely = [p["hero"] for p in compute.expected_picks(world, m, [], [])]
+    b = engine.board(world, "King's Row", [], ["Ana"])
+    assert b["blue"].red == likely and b["current"].red == likely and b["fill"].red == likely
+    assert [p["hero"] for p in b["expected"]] == likely
+    revealed = engine.board(world, "King's Row", ["Zarya"], ["Ana"])
+    assert revealed["blue"].red == ["Zarya"] and revealed["current"].red == ["Zarya"]
+    assert [p["hero"] for p in revealed["expected"]] == likely     # static
 
 
 def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):

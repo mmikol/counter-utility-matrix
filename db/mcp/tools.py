@@ -547,11 +547,14 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
 
 @tool("board", "The whole board at any stage of the draft (no map, a map, a side,"
       " bans, red's picks as they reveal): blue's optimal six as the best counter"
-      " to red's selection (blue's own picks never constrain it), red's best"
+      " to red's selection - to their likely six until they reveal a pick"
+      " (blue's own picks never constrain it), red's best"
       " counter to yours, both current comps scored on those scales, your picks"
       " against red's best counter, your locked picks with the empty slots filled,"
-      " a momentum verdict, the game plan in prose, and the shapes the playbook's"
-      " limits allow - what the roster enforces as you pick.",
+      " a momentum verdict, the game plan in prose, the shapes the playbook's"
+      " limits allow - what the roster enforces as you pick - and red's likely six"
+      " from the map and the meta alone (the most-picked heroes here, past the"
+      " bans; static for the board, no strategy read).",
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
                                                           " search keeps (default 6)"},
            weights={"type": "object",

@@ -197,3 +197,24 @@ def test_the_map_fact_carries_this_maps_ban_rate_and_the_team_its_availability_h
     assert 0 <= t["map_availability"] <= 1
     anywhere = compute.team_metrics(world, picks, None, [])
     assert anywhere["map_availability"] == anywhere["availability"]
+
+
+def test_expected_picks_read_the_map_and_the_meta_and_no_strategy(world):
+    """Red's likely six: their revealed picks first, then the most-picked
+    heroes on the map, never a banned hero, never a third tank (the queue's
+    own limit), the overall meta when no map is set - each with the rate
+    it rests on. No strategy is read: the same six under any playbook."""
+    m = world.map("King's Row")
+    zarya, sombra = world.hero("Zarya"), world.hero("Sombra")
+    six = compute.expected_picks(world, m, [zarya], [sombra])
+    assert six[0]["hero"] == "Zarya" and six[0]["locked"] and six[0]["why"] == "revealed"
+    assert len(six) == compute.TEAM_SIZE and "Sombra" not in [p["hero"] for p in six]
+    assert sum(1 for p in six if p["role"] == "tank") <= compute.OPEN_QUEUE_TANKS
+    rest = [p for p in six if not p["locked"]]
+    rates = [p["rate"] for p in rest if p["rate"] is not None]
+    assert rates == sorted(rates, reverse=True) and rates          # by pick rate, highest first
+    assert all(p["why"].startswith("picked in ") and "King's Row" in p["why"] for p in rest
+               if p["rate"] is not None)
+    anywhere = compute.expected_picks(world, None, [], [])
+    assert len(anywhere) == compute.TEAM_SIZE
+    assert all("overall" in p["why"] for p in anywhere if p["rate"] is not None)

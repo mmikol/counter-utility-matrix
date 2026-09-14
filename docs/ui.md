@@ -117,11 +117,18 @@ solver scored, so picks can be tailored toward the optimal without
 matching it; a last line says what it rests on. Then, in the order of
 the boxes above, blue's optimal six (left: the counter to red's
 selection as revealed, whatever you have locked, so it never collapses
-into your own six) and red's optimal six (right: their best counter to
-your selection). Neither optimal carries a score - each is its seat's
-reference, the 100 its picks are measured against - so the only scores
-on the board are the picks': the badges above the pickers, each comp's
-share of its own optimal. The strip above the boxes, labelled *fight odds*, is two bars
+into your own six; until red reveals a pick it counters their likely
+six) and, on the right, red's likely picks: what the map and the meta
+say they field - the most-picked heroes on this map (the overall meta
+with no map set), past the bans and within the queue's two-tank limit,
+each with the pick rate it rests on; static for the board, no strategy
+read for it, and as red reveals picks it stays while blue's optimal and
+the scores move. The optimal carries no score -
+it is its seat's reference, the 100 the picks are measured against -
+and neither does the likely six, so the only scores on the board are
+the picks': the badges above the pickers, each comp's share of its own
+optimal (red's optimal, their best counter to your selection, is solved
+for that scale and not shown). The strip above the boxes, labelled *fight odds*, is two bars
 stacked on one track, blue's over red's. With both seats scored each bar
 is its side's odds - its share over the two shares' sum, so the pair
 splits 100 and the higher bar holds the fight (the share stays in the
