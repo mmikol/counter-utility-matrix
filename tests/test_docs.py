@@ -71,9 +71,10 @@ def test_the_overview_names_everything_at_the_root():
 
 def test_mcp_json_registers_the_two_servers():
     servers = json.loads(_read(".mcp.json"))["mcpServers"]
-    assert set(servers) == {"overwatch-db", "overwatch-db-docker"}
-    assert servers["overwatch-db"]["args"] == ["-m", "db.mcp"]
-    assert servers["overwatch-db-docker"]["url"].endswith(":8020/mcp")
+    assert set(servers) == {"counter-utility-matrix", "counter-utility-matrix-docker"}
+    assert servers["counter-utility-matrix"]["args"] == ["-m", "db.mcp"]
+    assert servers["counter-utility-matrix-docker"]["url"].endswith(":8020/mcp")
+    assert servers["counter-utility-matrix-docker"]["headers"]["Authorization"].startswith("Bearer ${")
 
 
 # --- the skills ---------------------------------------------------------------------------------
@@ -86,11 +87,13 @@ MUST_NAME = {   # a skill is a playbook over these tools; if a tool is renamed, 
     "strategy": {"metrics", "strategies", "add_strategy", "infer_strategy"},
     "refresh": {"db_status", "sync_all", "infer_strategy", "fit_weights", "db_docs",
                 "export_csv", "load_authored"},
+    "maintain": {"db_docs", "db_status", "strategies"},
 }
 
 
 def _skills():
-    return {name: _read(".claude", "skills", name, "SKILL.md") for name in sorted(os.listdir(SKILLS))}
+    return {name: _read(".claude", "skills", name, "SKILL.md") for name in sorted(os.listdir(SKILLS))
+            if os.path.isfile(os.path.join(SKILLS, name, "SKILL.md"))}
 
 
 @needs_skills

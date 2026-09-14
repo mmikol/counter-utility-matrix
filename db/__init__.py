@@ -32,7 +32,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # caches - so it is gitignored, not committed.
 DEFAULT_DB_DIR = os.path.join(ROOT, "db", "psql", "cluster")
 RAW_DIR = os.path.join(ROOT, "db", "raw")
-AUTHORED_DIR = os.path.join(ROOT, "db", "db", "data", "authored")
+AUTHORED_DIR = os.path.join(ROOT, "db", "data", "authored")
 
 CACHE_DIRS = {
     "blizzard": os.path.join(ROOT, ".cache-blizzard"),

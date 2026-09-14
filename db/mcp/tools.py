@@ -11,6 +11,7 @@ the summary back. There is no other door.
 
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -374,6 +375,26 @@ def db_docs(ctx):
 
 
 READ_ONLY_STARTS = ("select", "with", "explain", "show", "table", "values")
+# Belt to the reader role's braces: names that reach the file system or the
+# network from inside SQL, refused before the database sees them.
+SQL_DENIED = re.compile(r"\b(pg_read_file|pg_read_binary_file|pg_ls_dir|pg_stat_file|"
+                        r"lo_import|lo_export|lo_get|lo_put|pg_execute_server_program|"
+                        r"dblink|pg_sleep|pg_terminate_backend|pg_cancel_backend|"
+                        r"set_config|query_to_xml|query_to_xmlschema|query_to_xml_and_xmlschema|"
+                        r"cursor_to_xml|cursor_to_xmlschema|pg_reload_conf)\b", re.I)
+READER_ROLE = "matrix_reader"          # a login of its own (migration 012): SELECT, nothing else
+MAX_QUERY_BYTES = 1 << 20              # what one query may return
+MAX_CELL = 2000                        # characters per cell
+
+
+def reader_dsn(dsn):
+    """The same database, connected as the reader: a non-superuser session
+    cannot SET ROLE its way back up, whatever the SQL says."""
+    import psycopg
+    parts = psycopg.conninfo.conninfo_to_dict(dsn)
+    parts["user"] = READER_ROLE
+    parts["password"] = READER_ROLE
+    return psycopg.conninfo.make_conninfo(**parts)
 
 
 @tool("query", "Run read-only SQL against the database (SELECT/WITH only,"
@@ -384,13 +405,32 @@ def query(ctx, sql):
     body = sql.strip().rstrip(";").strip()
     if ";" in body or not body.lower().startswith(READ_ONLY_STARTS):
         raise ToolError("query is read-only: one SELECT/WITH statement")
-    with ctx.connect() as cx:
+    if len(body) > 20000:
+        raise ToolError("query too long")
+    denied = SQL_DENIED.search(body)
+    if denied:
+        raise ToolError("query refuses %r: SQL here reads tables, not files or servers"
+                        % denied.group(1))
+    import psycopg
+    with psycopg.connect(reader_dsn(ctx.dsn)) as cx:
         cx.execute("SET TRANSACTION READ ONLY")
+        cx.execute("SET LOCAL statement_timeout = '10s'")
         cursor = cx.execute(body)
         columns = [d.name for d in cursor.description] if cursor.description else []
         rows = cursor.fetchmany(200)
         cx.rollback()
-    out = [[_plain(v) for v in row] for row in rows]
+    out, size = [], 0
+    for row in rows:
+        cells = []
+        for v in row:
+            v = _plain(v)
+            if isinstance(v, str) and len(v) > MAX_CELL:
+                v = v[:MAX_CELL] + "…"
+            cells.append(v)
+            size += len(str(v))
+        if size > MAX_QUERY_BYTES:
+            break
+        out.append(cells)
     text = "\t".join(columns) + "\n" + "\n".join(
         "\t".join(str(v) for v in row) for row in out) if columns else "(no rows)"
     return text, {"columns": columns, "rows": out, "truncated": len(rows) == 200}
@@ -460,6 +500,11 @@ def facts_tool(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines")
     return text, payload
 
 
+def _clamp(pool, top=5):
+    """The search is bounded: a pool past twelve per role is a million sixes."""
+    return max(2, min(int(pool or 6), 12)), max(1, min(int(top or 5), 20))
+
+
 @tool("infer", "The INFERENCE LAYER: the optimal six for this board under"
       " the markdown strategies in inference/strategies/ (players assumed"
       " to play optimally). Locked blue picks are kept; the rest is"
@@ -470,6 +515,7 @@ def facts_tool(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines")
            pool={"type": "integer", "description": "candidates per role the"
                                                    " search keeps (default 6)"}))
 def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6):
+    pool, top = _clamp(pool, top)
     from ui.facts import model
     from inference import engine
     with ctx.connect() as cx:
@@ -505,6 +551,7 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
                                                           " search keeps (default 6)"}))
 def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6):
+    pool, _ = _clamp(pool)
     from ui.facts import model
     from inference import engine
     with ctx.connect() as cx:
@@ -635,7 +682,7 @@ STRATEGY_FIELDS = {
 @tool("add_strategy", "Store a new strategy in inference/strategies/ from its name,"
       " kind and prose plus the frontmatter /strategy inferred - a heuristic's"
       " metric/direction/weight, or a constraint's require or when/bonus/penalty"
-      " and params, or prose: true for a ground rule. Validated through the"
+      " and params,; an assumption is prose and needs nothing. Validated through the"
       " catalog before the file exists, mirrored into the database, logged."
       " Left with nothing inferred it lands as a draft the solver ignores.",
       dict({"id": {"type": "string", "description": "lowercase-kebab, becomes the filename"},
@@ -649,6 +696,7 @@ def add_strategy(ctx, id, name, kind, body, reason="", **fields):
     from inference import catalog, tune
     try:
         category = fields.pop("category", "general")
+        fields.pop("kind", None)
         added = tune.add(id, name, kind, body, fields, reason, category=category)
         with ctx.connect() as cx:
             catalog.mirror(cx, catalog.load())
@@ -705,7 +753,7 @@ def derive_strategies(ctx, ids=None):
                                                           " (default 10)"}})
 def fit_weights_tool(ctx, apply=False, min_outcomes=None):
     from inference import catalog, fit
-    kwargs = {"min_outcomes": min_outcomes} if min_outcomes else {}
+    kwargs = {"min_outcomes": max(int(min_outcomes), fit.MIN_OUTCOMES)} if min_outcomes else {}
     with ctx.connect() as cx:
         proposal = fit.propose(cx, **kwargs)
         text = fit.rendered(proposal)

@@ -30,7 +30,7 @@ from inference import catalog as catalog_module
 from inference import engine
 from inference import record as record_module
 
-PORT = int(os.environ.get("OVERWATCH_DB_INFERENCE_PORT", "8019"))
+PORT = int(os.environ.get("COUNTER_MATRIX_INFERENCE_PORT", "8019"))
 
 
 def board(query):
@@ -154,13 +154,13 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default=os.environ.get("OVERWATCH_DB_INFERENCE_HOST",
+    parser.add_argument("--host", default=os.environ.get("COUNTER_MATRIX_INFERENCE_HOST",
                                                          "127.0.0.1"))
     parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
-    print("overwatch-db inference: http://%s:%d" % (args.host, args.port))
+    print("counter-utility-matrix inference: http://%s:%d" % (args.host, args.port))
     server.serve_forever()
 
 

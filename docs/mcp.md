@@ -1,6 +1,6 @@
 # The MCP servers
 
-Everything in overwatch-db happens through one set of tools, served over
+Everything in counter-utility-matrix happens through one set of tools, served over
 the [Model Context Protocol](https://modelcontextprotocol.io) by the data
 layer (`db/mcp/`). A Claude Code session calls them as MCP tools; the
 board, the refresher, Docker's entrypoint and the shell call the same
@@ -14,13 +14,25 @@ the repo:
 
 | server | transport | reaches | started by |
 | --- | --- | --- | --- |
-| `overwatch-db` | stdio: `.venv/bin/python -m db.mcp` | the local embedded cluster at `db/psql/cluster` (or whatever `DATABASE_URL` names) | the session, on demand |
-| `overwatch-db-docker` | Streamable HTTP: `http://localhost:8020/mcp` | the compose stack's PostgreSQL - the database the board at :8017 shows | the `data` container, after it has built the database |
+| `counter-utility-matrix` | stdio: `.venv/bin/python -m db.mcp` | the local embedded cluster at `db/psql/cluster` (or whatever `DATABASE_URL` names) | the session, on demand |
+| `counter-utility-matrix-docker` | Streamable HTTP: `http://localhost:8020/mcp` | the compose stack's PostgreSQL - the database the board at :8017 shows | the `data` container, after it has built the database |
 
-They expose the same tools. The skills prefer `overwatch-db-docker` when
+They expose the same tools. The skills prefer `counter-utility-matrix-docker` when
 the stack is up, so what a session changes is what the board shows; the
-headless agents' run (`orchestrator.py agents`) is allowed exactly these
-two servers and nothing else.
+headless agents' run (`orchestrator.py agents`) is allowed an explicit list
+of tools on these two servers and no built-in tool at all.
+
+The HTTP door checks who is knocking: it binds to 127.0.0.1, refuses
+non-local browser origins, caps a request at one megabyte and a batch at
+twenty messages, allows 120 tool calls per client address per minute, and
+requires `Authorization: Bearer <token>`
+when `COUNTER_MATRIX_MCP_TOKEN` is set (in `.env`; `.mcp.json` sends it from
+the same variable). Every tool call over either transport is a line in
+the audit log, `db/raw/audit.jsonl`, that the sentry reads. The `query`
+tool connects as `matrix_reader`, a login that can only `SELECT`, runs one
+read-only statement with a timeout, and refuses SQL that reaches for files
+or servers. The whole
+threat model is in [security.md](security.md).
 
 The server is dependency-free (`db/mcp/server.py`): JSON-RPC 2.0, one
 message per line over stdio, and the same surface over HTTP with a
@@ -85,7 +97,7 @@ is the audit trail of every change to them.
 | `record_outcome` | Record what happened after a match: the result, the map and blue's side, both sixes and the bans, and the recommendation it followed (rec_id) if any. Outcomes are what fit_weights learns from and are restored after every rebuild. | `map` (string): map name (any spelling)<br>`red` (array): the enemy team's revealed heroes<br>`blue` *required* (array): your team's locked heroes<br>`bans` (array): the match's bans, up to five (each team's two and the lobby's), all optional; neither team can pick them<br>`side` (attack \| defense \| ): blue's side on an Escort or Hybrid map (red gets the other); ignored on Control, Push, Flashpoint<br>`result` *required* (win \| loss \| draw)<br>`rec_id` (integer): the recommendation that was played, if any<br>`note` (string): what decided it, in a line |
 | `tune` | Change one strategy's frontmatter - its weight, a params dial, or a when/require/bonus/penalty expression - validated through the catalog before it is written, mirrored into the database, and logged with the reason in inference/tuning-log.md. | `id` *required* (string): the strategy's id (its filename)<br>`field` *required* (string): weight \| direction \| soft \| when \| require \| bonus \| penalty \| metric \| params.NAME<br>`value` *required* (any): the new value: a number, a boolean, or an expression<br>`reason` *required* (string): why, in a sentence |
 | `metrics` | The vocabulary a strategy may reference: every metric key with its meaning - team.*, enemy.* (the same for the red side), matchup.*, map.*, world.* - and which are text. What /strategy reads to infer a heuristic's metric or a constraint's expression from prose. | none |
-| `add_strategy` | Store a new strategy in inference/strategies/ from its name, kind and prose plus the frontmatter /strategy inferred - a heuristic's metric/direction/weight, or a constraint's require or when/bonus/penalty and params, or prose: true for a ground rule. Validated through the catalog before the file exists, mirrored into the database, logged. Left with nothing inferred it lands as a draft the solver ignores. | `id` *required* (string): lowercase-kebab, becomes the filename<br>`name` *required* (string)<br>`kind` *required* (constraint \| heuristic)<br>`body` *required* (string): the prose: what it means and why<br>`reason` (string): why it was added, in a sentence<br>`metric` (string): heuristics: a numeric key from `metrics`<br>`direction` (maximize \| minimize)<br>`weight` (number): 0..10; 1-4 is the working range<br>`when` (string): a guard expression; optional<br>`require` (string): constraints: a limit expression<br>`soft` (boolean): with require: charge `penalty` instead of discarding<br>`bonus` (string): constraints: an expression added while `when` holds<br>`penalty` (string): constraints: an expression (or a number with soft) subtracted<br>`params` (object): NAME: number dials the expressions read as params.NAME<br>`prose` (boolean): true: a ground rule with nothing to score<br>`category` (string) |
+| `add_strategy` | Store a new strategy in inference/strategies/ from its name, kind and prose plus the frontmatter /strategy inferred - a heuristic's metric/direction/weight, or a constraint's require or when/bonus/penalty and params,; an assumption is prose and needs nothing. Validated through the catalog before the file exists, mirrored into the database, logged. Left with nothing inferred it lands as a draft the solver ignores. | `id` *required* (string): lowercase-kebab, becomes the filename<br>`name` *required* (string)<br>`kind` *required* (constraint \| heuristic)<br>`body` *required* (string): the prose: what it means and why<br>`reason` (string): why it was added, in a sentence<br>`metric` (string): heuristics: a numeric key from `metrics`<br>`direction` (maximize \| minimize)<br>`weight` (number): 0..10; 1-4 is the working range<br>`when` (string): a guard expression; optional<br>`require` (string): constraints: a limit expression<br>`soft` (boolean): with require: charge `penalty` instead of discarding<br>`bonus` (string): constraints: an expression added while `when` holds<br>`penalty` (string): constraints: an expression (or a number with soft) subtracted<br>`params` (object): NAME: number dials the expressions read as params.NAME<br>`prose` (boolean): true: a ground rule with nothing to score<br>`category` (string) |
 | `infer_strategy` | Complete a draft (or rewrite a strategy's scoring): set several frontmatter fields at once - metric/direction/weight, when/require/bonus/penalty, params, prose - validated as a whole, mirrored, logged as one line. | `id` *required* (string)<br>`reason` *required* (string): how the fields follow from the prose<br>`metric` (string): heuristics: a numeric key from `metrics`<br>`direction` (maximize \| minimize)<br>`weight` (number): 0..10; 1-4 is the working range<br>`when` (string): a guard expression; optional<br>`require` (string): constraints: a limit expression<br>`soft` (boolean): with require: charge `penalty` instead of discarding<br>`bonus` (string): constraints: an expression added while `when` holds<br>`penalty` (string): constraints: an expression (or a number with soft) subtracted<br>`params` (object): NAME: number dials the expressions read as params.NAME<br>`prose` (boolean): true: a ground rule with nothing to score<br>`category` (string) |
 | `derive_strategies` | Complete every draft (a strategy with only a name, a kind and prose) by asking Claude Code in print mode - the subscription, no key - for the frontmatter, validated through the catalog and logged. Runs where the claude CLI is signed in (the host); elsewhere drafts stay pending. | `ids` (array): which drafts (default: all) |
 | `fit_weights` | Fit the heuristic weights to the recorded outcomes: for every decided match, how each heuristic's metric ran in wins versus losses, and a bounded nudge per weight. A dry run unless apply is true; refuses to apply below the minimum sample. | `apply` (boolean): write the nudges through tune (default false: propose only)<br>`min_outcomes` (integer): decided matches required before weights move (default 10) |

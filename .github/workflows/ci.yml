@@ -3,7 +3,7 @@
 # CI deliberately does NOT build the database: a rebuild scrapes Blizzard and
 # the wiki, which is slow, flaky, and unkind to the sources on every push.
 # The invariant tests skip themselves when db/psql/cluster is absent (see
-# tests/conftest.py; OVERWATCH_DB_NO_DATABASE=1 reproduces this locally), so
+# tests/conftest.py; COUNTER_MATRIX_NO_DATABASE=1 reproduces this locally), so
 # CI runs the linter, the pure tests (transforms, authored inputs, the
 # expression language, the strategies catalog, tuning and deriving on a copy
 # of the playbook, the refresh and orchestrator logic), the MCP protocol

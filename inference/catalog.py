@@ -2,13 +2,13 @@
 inference/strategies/, validated against the facts layer's metric
 registry, and mirrored into the `strategies` table.
 
-    STRATEGIES = CONSTRAINTS ∪ HEURISTICS
+    STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS
 
 A strategy file:
 
     ---
     name: Answer every revealed enemy
-    kind: heuristic           # constraint | heuristic
+    kind: heuristic           # constraint | heuristic | assumption
     category: matchup
     direction: maximize       # heuristics: maximize | minimize
     metric: team.coverage_share
@@ -17,25 +17,29 @@ A strategy file:
     ---
     prose: what it means, why it is weighted this way, how to read it
 
-Two kinds. A HEURISTIC names a numeric fact key (`metric`) that is
+Three kinds. A HEURISTIC names a numeric fact key (`metric`) that is
 min-max normalised against a seeded reference sample of legal sixes for
 the board and weighted; `direction` says which end is good. A CONSTRAINT
-takes one of three forms, read off its frontmatter (`form`):
+takes one of two forms, read off its frontmatter (`form`):
 
     limit    `require: <expr>` must hold. Hard by default - a comp that
              fails is discarded; `soft: true` with `penalty: <number>`
              subtracts instead.
     scored   `bonus: <expr>` and/or `penalty: <expr>`: the solver adds
              `weight x (bonus - penalty)` while `when` holds.
-    prose    `prose: true` and nothing to score: a ground rule the /comp
-             session holds a comp to and the board shows.
 
-A file with only a name, a kind and prose - no metric, no expression, no
-`prose: true` - is a DRAFT: it loads, it is shown and served, the solver
+An ASSUMPTION is prose by definition: what the solver takes as given and
+the /comp session holds a comp to (players play optimally, rates are a
+proxy, trust the kit when the rates are stale); it carries nothing to
+score and is never a draft.
+
+A constraint or heuristic with only a name, a kind and prose - no metric,
+no expression - is a DRAFT: it loads, it is shown and served, the solver
 ignores it, and the `/strategy` skill infers the rest (a heuristic's
 metric, direction and weight; a constraint's limit or bonus/penalty and
-params) from the prose and writes it through `infer_strategy`. Nothing
-here derives a formula on its own.
+params) from the prose and writes it through `infer_strategy` - or turns
+it into an assumption when nothing measurable captures it. Nothing here
+derives a formula on its own.
 
 `params:` (an indented block of NAME: number) are the dials an expression
 reads as params.NAME - tuning is editing the file.
@@ -50,14 +54,14 @@ from inference.expr import ExprError, Section, compile_expr
 
 STRATEGIES_DIR = os.path.join(ROOT, "inference", "strategies")
 DOCS_PATH = os.path.join(ROOT, "docs", "inference.md")
-KINDS = ("constraint", "heuristic")
-FORMS = ("limit", "scored", "prose", "draft", "heuristic")
+KINDS = ("constraint", "heuristic", "assumption")
+FORMS = ("limit", "scored", "draft", "heuristic", "assumption")
 NOT_HEURISTICS = ("README.md", "tuning-log.md")     # markdown that lives beside the files
 KIND_ORDER = {k: i for i, k in enumerate(KINDS)}
 
 
 class CatalogError(ValueError):
-    pass
+    file = None         # the strategy file at fault, when one is
 
 
 # --- the frontmatter dialect --------------------------------------------------
@@ -132,9 +136,15 @@ class Strategy:
         self.category = str(meta.get("category") or "general")
         self.direction = meta.get("direction")
         self.metric = meta.get("metric")
-        self.weight = float(meta.get("weight", 1.0) or 0.0)
+        try:
+            self.weight = float(meta.get("weight", 1.0) or 0.0)
+        except (TypeError, ValueError):
+            raise CatalogError("%s: weight must be a number" % hid)
+        if not 0.0 <= self.weight <= 10.0:
+            raise CatalogError("%s: weight must be within 0..10" % hid)
         self.soft = bool(meta.get("soft", False))
-        self.prose = bool(meta.get("prose", False))
+        if "prose" in meta:
+            raise CatalogError("%s: prose: is gone - a ground rule is kind: assumption" % hid)
         self.params = {k: v for k, v in (meta.get("params") or {}).items()}
         self.params_section = Section(self.params)
         try:
@@ -157,10 +167,10 @@ class Strategy:
                                    % (self.id, self.metric))
             if self.metric in compute.TEXT_METRICS:
                 raise CatalogError("%s: metric %r is text, not a number" % (self.id, self.metric))
-        if self.prose and (self.metric or self.require is not None or self.bonus is not None
-                           or self.penalty is not None):
-            raise CatalogError("%s: prose: true means nothing to score; drop the metric or"
-                               " the expressions" % self.id)
+        if self.kind == "assumption" and (self.metric or self.require is not None
+                                          or self.bonus is not None or self.penalty is not None
+                                          or self.when is not None):
+            raise CatalogError("%s: an assumption is prose; it carries nothing to score" % self.id)
         if self.kind == "heuristic" and (self.require is not None or self.bonus is not None):
             raise CatalogError("%s: a heuristic weighs a metric; require/bonus belong to a constraint"
                                % self.id)
@@ -187,19 +197,21 @@ class Strategy:
 
     @property
     def form(self):
-        """heuristic, or a constraint's form (limit, scored), or prose (a declared
-        ground rule), or draft (name, kind and prose only - awaiting /strategy)."""
+        """heuristic, a constraint's form (limit, scored), assumption (prose by
+        definition), or draft (name, kind and prose only - awaiting /strategy)."""
+        if self.kind == "assumption":
+            return "assumption"
         if self.kind == "heuristic" and self.metric:
             return "heuristic"
         if self.require is not None:
             return "limit"
         if self.bonus is not None or self.penalty is not None:
             return "scored"
-        return "prose" if self.prose else "draft"
+        return "draft"
 
     @property
     def scored(self):
-        """Whether the solver reads this strategy at all (prose and drafts it does not)."""
+        """Whether the solver reads this strategy at all (assumptions and drafts it does not)."""
         return self.form in ("heuristic", "limit", "scored")
 
     @property
@@ -218,7 +230,7 @@ class Strategy:
 
     def to_dict(self):
         return {"id": self.id, "name": self.name, "kind": self.kind, "form": self.form,
-                "pending": self.pending, "prose": self.prose,
+                "pending": self.pending,
                 "category": self.category, "direction": self.direction,
                 "metric": self.metric, "weight": self.weight, "soft": self.soft,
                 "when": self.when.source if self.when else None,
@@ -229,8 +241,8 @@ class Strategy:
 
 
 def load(directory=STRATEGIES_DIR):
-    """Every strategy file, validated, ordered constraints (limits, scored, prose)
-    then heuristics."""
+    """Every strategy file, validated, ordered constraints (limits, scored) then
+    heuristics, then assumptions; drafts sit last within their kind."""
     if not os.path.isdir(directory):
         raise CatalogError("no strategies directory at %s" % directory)
     out, ids = [], set()
@@ -238,19 +250,29 @@ def load(directory=STRATEGIES_DIR):
         if not name.endswith(".md") or name in NOT_HEURISTICS:
             continue
         path = os.path.join(directory, name)
-        with open(path, encoding="utf-8") as handle:
-            raw = handle.read()
+        hid = name[:-3]                       # the id IS the filename; nothing overrides it
         try:
+            if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", hid):
+                raise CatalogError("%s: the filename must be lowercase-kebab" % name)
+            with open(path, encoding="utf-8") as handle:
+                raw = handle.read()
             meta, body = parse_frontmatter(raw)
+            if "id" in meta and str(meta["id"]) != hid:
+                raise CatalogError("%s: id: is the filename; drop it" % name)
+            if hid in ids:
+                raise CatalogError("%s: duplicate id %r" % (name, hid))
+            strategy = Strategy(hid, meta, body, raw, path)
         except CatalogError as error:
-            raise CatalogError("%s: %s" % (name, error))
-        hid = str(meta.get("id") or name[:-3])
-        if not re.match(r"^[a-z0-9][a-z0-9-]*$", hid):
-            raise CatalogError("%s: id %r must be lowercase-kebab" % (name, hid))
-        if hid in ids:
-            raise CatalogError("%s: duplicate id %r" % (name, hid))
+            text = str(error)
+            wrapped = CatalogError(text if text.startswith((name, hid)) else "%s: %s" % (name, text))
+            wrapped.file = name
+            raise wrapped
+        except Exception as error:            # bytes that are not text, a directory, ...
+            wrapped = CatalogError("%s: %s: %s" % (name, type(error).__name__, error))
+            wrapped.file = name
+            raise wrapped
         ids.add(hid)
-        out.append(Strategy(hid, meta, body, raw, path))
+        out.append(strategy)
     if not out:
         raise CatalogError("no strategies in %s" % directory)
     out.sort(key=lambda h: (KIND_ORDER[h.kind], FORMS.index(h.form), h.category, h.id))
@@ -281,7 +303,7 @@ def mirror(cx, catalog):
 def render(catalog):
     lines = []
     for h in catalog:
-        head = "%-5s %-7s %-28s %-9s" % (h.kind, h.form, h.id, h.category)
+        head = "%-10s %-10s %-28s %-9s" % (h.kind, h.form, h.id, h.category)
         if h.form == "heuristic":
             head += " %s %s x%g" % (h.direction, h.metric, h.weight)
         elif h.form == "limit":
@@ -301,10 +323,10 @@ def write_docs(catalog, path=DOCS_PATH):
     counts = {k: sum(1 for h in catalog if h.kind == k) for k in KINDS}
     forms = {f: sum(1 for h in catalog if h.form == f) for f in FORMS}
     reg = compute.registry()
-    out = ["%d files in `inference/strategies/`: %d constraints (%d limits, %d scored,"
-           " %d prose) and %d heuristics%s. Regenerated by `python -m db.mcp call db_docs`."
+    out = ["%d files in `inference/strategies/`: %d constraints (%d limits, %d scored),"
+           " %d heuristics and %d assumptions%s. Regenerated by `python -m db.mcp call db_docs`."
            % (len(catalog), counts["constraint"], forms["limit"], forms["scored"],
-              forms["prose"], counts["heuristic"],
+              counts["heuristic"], counts["assumption"],
               "; %d draft(s) awaiting /strategy" % forms["draft"] if forms["draft"] else ""),
            ""]
     for kind in KINDS:
@@ -314,7 +336,7 @@ def write_docs(catalog, path=DOCS_PATH):
         out += ["#### %ss" % kind.capitalize(), ""]
         for h in items:
             out.append("##### %s (`%s`, %s%s)" % (
-                h.name, h.id, h.category, ", %s" % h.form if h.kind == "constraint" else ""))
+                h.name, h.id, h.category, ", %s" % h.form if h.form not in (h.kind,) else ""))
             out.append("")
             if h.form == "heuristic":
                 out.append("`%s %s` - %s. weight %g%s" % (
@@ -327,6 +349,8 @@ def write_docs(catalog, path=DOCS_PATH):
                     "; when `%s`" % h.when.source if h.when else ""))
             elif h.form == "draft":
                 out.append("*draft* - name, kind and prose only; `/strategy` infers the rest")
+            elif h.form == "assumption":
+                out.append("*assumption* - prose the solver takes as given and the session holds a comp to")
             elif h.form == "scored":
                 out.append("weight %g; %s" % (h.weight, "; ".join(
                     "%s `%s`" % (label, expr.source) for label, expr in (

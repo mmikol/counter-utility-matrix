@@ -115,7 +115,7 @@ def cached_get(session, url, cache_dir, key, params=None, suffix=".html",
     return text
 
 
-USER_AGENT = "overwatch-db/0.1 (personal project; contact via repo)"
+USER_AGENT = "counter-utility-matrix/0.1 (personal project; contact via repo)"
 
 
 def session(existing=None):

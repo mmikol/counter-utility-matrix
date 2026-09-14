@@ -9,8 +9,8 @@ Three kinds of test:
 Only the first runs anywhere. The other two default to the repo's own build
 at db/psql/cluster - the same database `python -m db.mcp call db_rebuild` produces -
 and skip themselves when there is nothing there, so `pytest` on a fresh clone
-is still green. OVERWATCH_DB_LOCAL_SERVER or DATABASE_URL override the target;
-OVERWATCH_DB_NO_DATABASE=1 runs the suite the way CI does, with no database.
+is still green. COUNTER_MATRIX_LOCAL_SERVER or DATABASE_URL override the target;
+COUNTER_MATRIX_NO_DATABASE=1 runs the suite the way CI does, with no database.
 """
 
 import os
@@ -19,9 +19,9 @@ import pytest
 
 
 def _dsn():
-    if os.environ.get("OVERWATCH_DB_NO_DATABASE"):
+    if os.environ.get("COUNTER_MATRIX_NO_DATABASE"):
         return None            # what CI sees: no cluster, the db-bound tests skip
-    local = os.environ.get("OVERWATCH_DB_LOCAL_SERVER")
+    local = os.environ.get("COUNTER_MATRIX_LOCAL_SERVER")
     if not local and not os.environ.get("DATABASE_URL"):
         default = os.path.join(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__))), "db", "psql", "cluster")
@@ -77,7 +77,7 @@ def fetch():
 
     session = requests.Session()
     session.headers.update({"User-Agent":
-                            "overwatch-db/0.1 (personal project; contact via repo)"})
+                            "counter-utility-matrix/0.1 (personal project; contact via repo)"})
 
     def get(url):
         try:

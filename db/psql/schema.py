@@ -23,7 +23,9 @@ DOC_DOMAIN = {"001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES"
               "007_three_layers.sql": "PLAYBOOK",
               "008_schema_migrations.sql": "foundation",
               "009_outcomes.sql": "INFERENCE",
-              "010_constraints_and_heuristics.sql": "INFERENCE"}
+              "010_constraints_and_heuristics.sql": "INFERENCE",
+              "011_reader_role.sql": "foundation", "012_reader_login.sql": "foundation",
+              "013_assumptions.sql": "INFERENCE"}
 
 
 class SchemaError(Exception):
@@ -134,11 +136,20 @@ def restore_recommendations(connection, raw_dir=RAW_DIR):
         return 0
     restored = 0
     try:
+        # provenance ids are assigned per database; every restored row is the
+        # authored source's, whatever id it carried where it was exported
+        from db.data.authored import AUTHORED
+        from db.psql import register_source, now
+        source_id = register_source(cursor, AUTHORED, now())
         for table, path in paths:
+            cursor.execute("CREATE TEMP TABLE staging (LIKE %s INCLUDING DEFAULTS)" % table)
             with open(path, encoding="utf-8") as handle:
-                with cursor.copy("COPY %s FROM STDIN WITH (FORMAT csv,"
-                                 " HEADER true)" % table) as copy:
+                with cursor.copy("COPY staging FROM STDIN WITH (FORMAT csv,"
+                                 " HEADER true)") as copy:
                     copy.write(handle.read())
+            cursor.execute("UPDATE staging SET source_id = %s", (source_id,))
+            cursor.execute("INSERT INTO %s OVERRIDING SYSTEM VALUE SELECT * FROM staging" % table)
+            cursor.execute("DROP TABLE staging")
             restored += cursor.execute(
                 "SELECT count(*) FROM " + table).fetchone()[0]
         for table, column in SEQUENCED:
@@ -192,18 +203,22 @@ def generate_docs(connection, path=None):
         " WHERE table_schema='public' AND table_name=%s ORDER BY ordinal_position",
         (t,)).fetchall() for t in tables}
     fks = connection.execute(
-        "SELECT tc.table_name, kcu.column_name, ccu.table_name, ccu.column_name"
-        " FROM information_schema.table_constraints tc"
-        " JOIN information_schema.key_column_usage kcu"
-        "   ON tc.constraint_name = kcu.constraint_name"
-        " JOIN information_schema.constraint_column_usage ccu"
-        "   ON tc.constraint_name = ccu.constraint_name"
-        " WHERE tc.constraint_type='FOREIGN KEY' AND tc.table_schema='public'"
-        " ORDER BY 1, 2").fetchall()
-    counts = {t: connection.execute("SELECT count(*) FROM " + t).fetchone()[0]
-              for t in tables}
+        "SELECT c.conrelid::regclass::text, a.attname, c.confrelid::regclass::text, af.attname,"
+        " array_length(c.conkey, 1)"
+        " FROM pg_constraint c"
+        " JOIN unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord) ON true"
+        " JOIN unnest(c.confkey) WITH ORDINALITY AS f(attnum, ord) ON f.ord = k.ord"
+        " JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum"
+        " JOIN pg_attribute af ON af.attrelid = c.confrelid AND af.attnum = f.attnum"
+        " WHERE c.contype = 'f' AND c.connamespace = 'public'::regnamespace"
+        " ORDER BY 1, 2, 5, 3, 4").fetchall()
+    # a column under two keys (its own, and part of a composite) is documented
+    # by the narrower one; the composite still draws its edge in the diagram
+    fks = [(c, col, p, pc) for c, col, p, pc, _ in fks]
     dom = {t: DOC_DOMAIN.get(mig.get(t, ("", ""))[0], "foundation") for t in tables}
-    ref = {(c, col): (pt, pc) for c, col, pt, pc in fks}
+    ref = {}
+    for c, col, pt, pc in fks:
+        ref.setdefault((c, col), (pt, pc))
 
     def edges(pred):
         seen = []
@@ -246,7 +261,7 @@ def generate_docs(connection, path=None):
     dd.append("")
     for t in tables:
         fn, prose = mig.get(t, ("", ""))
-        dd += ["", "#### `%s`" % t, "", "*%s · %d rows · `%s`*" % (dom[t], counts[t], fn)]
+        dd += ["", "#### `%s`" % t, "", "*%s · `%s`*" % (dom[t], fn)]
         if prose:
             dd += ["", prose]
         dd += ["", "| column | type | null | references |", "| --- | --- | --- | --- |"]

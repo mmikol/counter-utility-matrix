@@ -45,13 +45,14 @@ def test_frontmatter_parses_scalars_lists_and_params():
 def test_shipped_catalog_is_valid_and_references_real_metrics():
     cat = catalog.load()
     kinds = {h.kind for h in cat}
-    assert kinds == set(catalog.KINDS) == {"constraint", "heuristic"}
+    assert kinds == set(catalog.KINDS) == {"constraint", "heuristic", "assumption"}
     forms = {h.form for h in cat}
-    assert forms == {"limit", "scored", "prose", "heuristic"}
+    assert forms == {"limit", "scored", "heuristic", "assumption"}
     assert all(h.form == "heuristic" for h in cat if h.kind == "heuristic")
     assert any(h.form == "limit" for h in cat)         # open-queue-tanks
     assert any(h.form == "scored" for h in cat)        # peel, under-healed...
-    assert any(h.form == "prose" and not h.scored for h in cat)     # optimal-play...
+    assert all(h.form == "assumption" and not h.scored for h in cat if h.kind == "assumption")
+    assert {h.id for h in cat if h.kind == "assumption"} >= {"optimal-play", "vintage", "objective"}
     registry = compute.registry()
     for h in cat:
         if h.kind == "heuristic":
@@ -222,8 +223,11 @@ def test_scores_share_one_scale_per_board(world):
     r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
     e = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"], r.blue)
     assert abs(r.score - e.score) < 1e-9 and e.rank == 1
+    assert r.to_dict()["normalized"] == 100 and e.to_dict()["normalized"] == 100
+    assert all(0 <= a["normalized"] <= 100 for a in r.alternatives) and r.alternatives[0]["normalized"] < 100
     b = engine.board(world, "King's Row", ["Zarya", "Pharah"], r.blue)
     assert abs(b["current"].score - r.score) < 1e-9
+    assert b["current"].to_dict()["normalized"] == 100 and b["red"].to_dict()["normalized"] == 100
     again = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], pool_size=4)
     assert abs(again.score - engine.evaluate(
         world, "King's Row", ["Zarya", "Pharah"], again.blue).score) < 1e-9
@@ -235,9 +239,10 @@ def test_a_constraint_is_a_limit_or_scored_or_prose_never_a_heuristic(tmp_path):
         return catalog.load(str(tmp_path))[0]
     assert load_one("---\nname: l\nkind: constraint\nrequire: team.tanks <= 2\n---\nx\n").form == "limit"
     assert load_one("---\nname: s\nkind: constraint\nbonus: team.tanks\n---\nx\n").form == "scored"
-    assert load_one("---\nname: p\nkind: constraint\nprose: true\n---\nx\n").form == "prose"
+    assert load_one("---\nname: p\nkind: assumption\n---\nx\n").form == "assumption"
     assert load_one("---\nname: d\nkind: constraint\n---\nx\n").form == "draft"     # awaiting /strategy
     assert load_one("---\nname: d\nkind: heuristic\n---\nx\n").pending
+    assert not load_one("---\nname: p\nkind: assumption\n---\nx\n").pending
     assert load_one("---\nname: g\nkind: heuristic\ndirection: maximize\nmetric: team.tanks\n"
                     "---\nx\n").form == "heuristic"
     for bad in ("---\nname: b\nkind: constraint\nrequire: team.tanks <= 2\nbonus: 1\n---\nx\n",
@@ -246,7 +251,19 @@ def test_a_constraint_is_a_limit_or_scored_or_prose_never_a_heuristic(tmp_path):
                 "require: team.tanks <= 2\n---\nx\n",
                 "---\nname: b\nkind: constraint\nrequire: team.tanks <= 2\nsoft: true\n---\nx\n",
                 "---\nname: b\nkind: rule\nrequire: team.tanks <= 2\n---\nx\n",
+                "---\nname: b\nkind: assumption\nrequire: team.tanks <= 2\n---\nx\n",
+                "---\nname: b\nkind: constraint\nprose: true\n---\nx\n",
                 "---\nname: b\nkind: goal\ndirection: maximize\nmetric: team.tanks\n---\nx\n",
                 "---\nname: b\nkind: strategy\n---\nx\n"):
         with pytest.raises(catalog.CatalogError):
             load_one(bad)
+
+
+def test_the_sandbox_refuses_what_would_hang_or_exhaust_it():
+    from inference.expr import Expr, ExprError
+    for bomb in ("9 ** 9 ** 9", "2 ** team.tanks", "'a' * 1000000000", "'x' + 'y'",
+                 "'" + "s" * 201 + "' == team.style_lean", "-" * 45 + "1"):
+        with pytest.raises(ExprError):
+            Expr(bomb)
+    assert Expr("team.tanks ** 2").eval({"team": {"tanks": 3}}) == 9
+    assert Expr("team.style_lean == 'dive'").eval({"team": {"style_lean": "dive"}}) is True

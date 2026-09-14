@@ -1,13 +1,16 @@
-# overwatch-db: one image for every layer - the data layer's tools and MCP
+# counter-utility-matrix: one image for every layer - the data layer's tools and MCP
 # server, the inference engine, the board - and the tests. compose.yaml
 # runs one container per layer from it (docker-entrypoint.sh picks the role).
 FROM python:3.12-slim
 
 # Nothing here runs as root. The uid matters for the bind mounts: files the
-# data layer writes (caches, db/raw, transcripts) stay owned by uid 1000.
+# data layer writes (caches, db/raw, transcripts) stay owned by the bind
+# mounts' owner: uid 1000 by default, COUNTER_MATRIX_UID/GID on a Linux host
+# whose checkout belongs to someone else (compose.yaml).
 RUN useradd --create-home --uid 1000 app
 WORKDIR /app
 
+ENV PYTHONDONTWRITEBYTECODE=1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

@@ -32,6 +32,13 @@ def test_the_agents_run_is_headless_claude_on_the_refresh_skill(monkeypatch):
     assert command[:3] == ["/x/claude", "-p", "/refresh"]
     assert "--allowedTools" in command and orchestrator.AGENT_TOOLS in command
     assert "--no-session-persistence" in command and "--output-format" in command
+    assert command[command.index("--tools") + 1] == "" and "--max-turns" in command
+    allowed = set(orchestrator.AGENT_TOOLS.split(","))
+    assert "mcp__counter-utility-matrix-docker__sync_all" in allowed
+    assert "mcp__counter-utility-matrix__infer_strategy" in allowed
+    assert "mcp__counter-utility-matrix-docker__query" in allowed      # read-only, its own login
+    for never in ("add_strategy", "db_rebuild", "db_init", "db_migrate", "record", "record_outcome"):
+        assert not any(t.endswith("__" + never) for t in allowed), never
     from inference import derive
     monkeypatch.setattr(derive, "cli", lambda: None)
     with pytest.raises(RuntimeError, match="no claude CLI"):

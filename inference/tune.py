@@ -32,9 +32,10 @@ from inference import catalog as catalog_module
 
 LOG_PATH = os.path.join(catalog_module.STRATEGIES_DIR, "tuning-log.md")
 SCALARS = ("weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric",
-           "prose", "category")
+           "kind", "category")
 WEIGHT_RANGE = (0.0, 10.0)
-ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
+PARAM_RE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
 
 
 class TuneError(ValueError):
@@ -53,12 +54,16 @@ def edit_frontmatter(text, field, value):
     """The file's text with one frontmatter field set -> (new text, old value)."""
     if not text.startswith("---"):
         raise TuneError("no frontmatter")
+    if isinstance(value, str) and ("\n" in value or "\r" in value or value.lstrip().startswith("---")):
+        raise TuneError("a value is one line")
     end = text.find("\n---", 3)
     header, rest = text[3:end], text[end:]
     lines = header.split("\n")
     old = None
     if field.startswith("params."):
         name = field[7:]
+        if not PARAM_RE.match(name):
+            raise TuneError("a param is NAME: capitals, digits, underscores")
         block = next((i for i, l in enumerate(lines) if l.strip() == "params:"), None)
         if block is None:
             lines.insert(len(lines) - (1 if lines and not lines[-1].strip() else 0),
@@ -119,9 +124,15 @@ def _coerce(field, value):
             value = float(value)
         except (TypeError, ValueError):
             raise TuneError("a param must be a number")
-    elif field in ("soft", "prose"):
+    elif field == "soft":
         if not isinstance(value, bool):
-            raise TuneError("%s must be true or false" % field)
+            raise TuneError("soft must be true or false")
+    elif field == "kind":
+        if value not in catalog_module.KINDS:
+            raise TuneError("kind must be one of %s" % "/".join(catalog_module.KINDS))
+    elif field in ("when", "require", "bonus", "penalty", "metric", "direction", "category"):
+        if not isinstance(value, str) or len(value) > 500:
+            raise TuneError("%s is a string under 500 characters" % field)
     return value
 
 
@@ -168,6 +179,8 @@ def tune(hid, field, value, reason, directory=None, by="claude-code-session",
     directory, log_path = _where(directory, log_path)
     if not reason or not reason.strip():
         raise TuneError("a tuning change needs a reason")
+    if not ID_RE.fullmatch(hid or ""):
+        raise TuneError("no strategy %r" % hid)          # ids are kebab: no paths here
     path = os.path.join(directory, hid + ".md")
     if not os.path.exists(path):
         raise TuneError("no strategy %r" % hid)
@@ -192,6 +205,8 @@ def complete(hid, fields, reason, directory=None, by="claude-code-session", log_
     directory, log_path = _where(directory, log_path)
     if not reason or not reason.strip():
         raise TuneError("an inferred strategy needs a reason")
+    if not ID_RE.fullmatch(hid or ""):
+        raise TuneError("no strategy %r" % hid)
     path = os.path.join(directory, hid + ".md")
     if not os.path.exists(path):
         raise TuneError("no strategy %r" % hid)
@@ -220,12 +235,14 @@ def add(hid, name, kind, body, fields=None, reason="", directory=None,
     """A new strategy file from its name, kind, prose and (inferred) fields,
     validated through the catalog before it exists -> {"id", "form", "path", "line"}."""
     directory, log_path = _where(directory, log_path)
-    if not ID_RE.match(hid or ""):
+    if not ID_RE.fullmatch(hid or ""):
         raise TuneError("id must be lowercase-kebab, got %r" % hid)
     if kind not in catalog_module.KINDS:
         raise TuneError("kind must be one of %s" % "/".join(catalog_module.KINDS))
     if not (name or "").strip() or not (body or "").strip():
         raise TuneError("a strategy needs a name and its prose")
+    if len(name) > 120 or len(body) > 20000:
+        raise TuneError("a strategy is a name under 120 characters and prose under 20,000")
     path = os.path.join(directory, hid + ".md")
     if os.path.exists(path):
         raise TuneError("%r exists; tune or infer_strategy changes it, delete is a human's" % hid)

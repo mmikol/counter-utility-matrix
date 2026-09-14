@@ -30,7 +30,7 @@ ui/
   board.py         the page, its JSON endpoints, the recorded-comp pages
   static/
     board.css      the look: the game's hero select, dark, red and blue
-    board.js       the behaviour: state, fetches, the four panels
+    board.js       the behaviour: state, fetches, the ban picker, the three panels
   facts/           everything the database knows about a board
     model.py       the World: the database in memory, per request
     compute.py     the metrics registry: every number, one function each
@@ -45,7 +45,7 @@ the script has no constant to keep in step with the Python.
 
 | route | serves |
 | --- | --- |
-| `/` | the board: map selector, attack/defense switch (Escort and Hybrid maps), the bans bar (up to five, all optional), the red and blue rosters grouped by role, and four panels - **facts**, **optimal comps**, **current comp**, **playbook** |
+| `/` | the board: map selector, attack/defense switch (Escort and Hybrid maps), the bans bar (a collapsible picker of the same portrait tiles, up to five, all optional), the red and blue rosters grouped by role with the announced hero at the end, and three panels - **comps**, **facts**, **playbook** |
 | `/static/<file>` | `board.css` and `board.js` |
 | `/api/roster` | every hero (role, subrole, portrait, icon) and every map (mode, sided or not), the rosters are built from |
 | `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
@@ -63,13 +63,39 @@ Every request opens its own connection and loads a fresh World, so a
 red picks, the blue picks - in `localStorage`, so a reload mid-game keeps
 the board. A click on a portrait toggles that hero on that team (a banned
 hero cannot be picked; a hero on one team cannot be on the other); a
-change debounces, then fetches facts and inference together. The facts
-panel filters by text and by scope (meta, bans, map, hero, team, matchup,
-playbook); the comps panels render each pick with its reasons and `[F#]`
-citations, the score bars per strategy, the alternatives, and a
-"record this comp" button; the playbook panel renders the catalog with
-each constraint's form. `board.css` is the game's hero select: role
-columns, portrait tiles, red and blue seats, the dark palette.
+change debounces, then fetches facts and inference together.
+
+**The rosters.** One tile renderer draws the red roster, the blue roster
+and the ban picker, so all three read as the same hero select: portrait
+tiles in tank, damage and support columns, lit when picked, dotted when
+on the other team, crossed out when banned. A fourth, small group at the
+end of every roster - **announced** - carries `DOCTRINE`, a placeholder
+card for the newly announced hero the database does not carry yet: the
+same tile, dimmed, a silhouette instead of a portrait, a "coming soon"
+tag, and no click handler. It is one constant in `board.js`, never enters
+the state and is never sent to the API; delete the constant (and the
+group it renders) once the hero lands in the database.
+
+**The bans bar.** Collapsed by default: a header with the count and the
+current bans as small portraits (click one to un-ban). Clicking the header
+opens the picker - the five slots (two red, two blue, the lobby's) above
+the same portrait grid the rosters use. A click on a tile bans that hero,
+which leaves both rosters and the search; a click on a banned tile or on
+its slot un-bans it; at five, the rest dim.
+
+**The panels.** *comps* is the default: blue's optimal six (left) and
+red's optimal six (right) side by side, the current comp - your picks -
+full width below. Each result shows its 0-100 figure large (`normalized`:
+100 for an optimal six, the current comp's share of blue's optimal on
+that board) with the raw score small beside it and as the tooltip, and
+falls back to the raw score when the figure is absent; then each pick
+with its reasons and `[F#]` citations, the score bars per strategy, the
+alternatives (each with its own 0-100 figure when present), the partial
+notice, and on blue's optimal a "record this comp" button. *facts*
+filters by text and by scope (meta, bans, map, hero, team, matchup,
+playbook). *playbook* renders the catalog with each constraint's form.
+`board.css` is the game's hero select: role columns, portrait tiles, red
+and blue seats, the dark palette.
 
 ## `facts/` - everything the database knows about a board
 

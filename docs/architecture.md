@@ -22,7 +22,7 @@ never during one.
 | `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet | [ui.md](ui.md) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints and heuristics in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
 | `tests/` | one folder per layer: `tests/db`, `tests/ui`, `tests/inference`; `pytest -q` runs them, skipping what needs a built database when there is none | |
-| `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/outcome`, `/tune`, `/strategy`, `/refresh` | [skills.md](skills.md) |
+| `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/outcome`, `/tune`, `/strategy`, `/refresh`, `/maintain` | [skills.md](skills.md) |
 | `.github/workflows/` | `ci.yml`: lint, and the tests that need no built database | |
 | `.cache-blizzard/` `.cache-wiki/` `.cache-counterpick/` | the page caches (gitignored): every build after the first costs almost no requests | |
 
@@ -112,13 +112,14 @@ a stated problem, a lobby's habits, a patch the rates predate.
 | file | purpose |
 | --- | --- |
 | `orchestrator.py` | the end-to-end run. `python orchestrator.py` brings the stack up (the data container pulls and ingests when the database is empty or stale), runs the agents headless on the `/refresh` skill (refresh, derive draft strategies, re-fit the weights, regenerate the docs), and leaves the app running. Verbs: `run` (default) · `up` · `agents` · `status` · `refresh` · `test` · `down` |
-| `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock). Every published port binds to 127.0.0.1. Bind mounts keep the caches, `db/raw`, `db/data/authored` and `inference/strategies` on the host, so tuning or authoring needs no rebuild |
-| `Dockerfile` | the one image; `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty or its schema is behind the migrations |
+| `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock), `sentry` (the guard). Every container is unprivileged on a read-only root with no capabilities; every published port binds to 127.0.0.1. Bind mounts keep the caches, `db/raw`, `db/data/authored`, `inference/strategies` and `docs` on the host, so tuning, authoring and regenerating need no rebuild |
+| `Dockerfile` | the one image, run as an unprivileged user (uid 1000, or `COUNTER_MATRIX_UID`/`GID` from `.env` on a Linux host whose checkout is owned by someone else); `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty or its schema is behind the migrations |
 | `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'` |
-| `.mcp.json` | registers the two MCP servers a Claude Code session sees: `overwatch-db` (stdio, the local cluster) and `overwatch-db-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
+| `.mcp.json` | registers the two MCP servers a Claude Code session sees: `counter-utility-matrix` (stdio, the local cluster) and `counter-utility-matrix-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
 | `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pyflakes, and pgserver (the embedded PostgreSQL a local build uses) |
 | `pytest.ini` | the `invariant` marker for tests that need a built database |
-| `.gitignore` `.dockerignore` | the caches, the cluster, the mirror, the venv |
+| `SECURITY.md` | how to report a vulnerability; the measures themselves are in [security.md](security.md) |
+| `.gitignore` `.dockerignore` | the caches, the cluster, the mirror, the venv, `.env` |
 
 ## Deployment
 
@@ -135,8 +136,9 @@ flowchart LR
         UI["ui - UI LAYER<br/>:8017 the board<br/>facts in-process,<br/>comps via INFERENCE_URL"]
         DBC["db - postgres:16<br/>volume pgdata"]
         REF["refresher - the clock<br/>rates + counters daily,<br/>every source weekly,<br/>and on start when stale"]
+        SEN["sentry - the guard<br/>the playbook, the inputs,<br/>the door's audit log"]
     end
-    SESSION -->|".mcp.json: overwatch-db-docker"| DATA
+    SESSION -->|".mcp.json: counter-utility-matrix-docker"| DATA
     BROWSER --> UI
     UI -->|"HTTP"| INF
     UI --> DBC
@@ -144,7 +146,11 @@ flowchart LR
     DATA --> DBC
     SHELL --> DBC
     REF --> DBC
+    SEN --> DBC
 ```
+
+The containers share one network; only `data` and `refresher` ever open
+a connection out. [security.md](security.md) has the rest of the measures.
 
 `docker-entrypoint.sh` takes the role as its argument (`data`,
 `inference`, `ui`); `inference` and `ui` wait until the data layer reports
@@ -173,6 +179,7 @@ the servers and every tool.
 | `/tune` | changes a weight, a dial or an expression through `tune`, or fits the weights to recorded outcomes through `fit_weights` |
 | `/strategy` | asks for a name, a kind and prose, infers the frontmatter and stores the strategy through `add_strategy` |
 | `/refresh` | the agents' run, the one `orchestrator.py agents` executes headless: refresh, derive drafts, re-fit, re-infer with restraint, regenerate, report |
+| `/maintain` | the repo's maintainer: lint and tests three ways, docs current, stale names, dead code, layout, security posture, a report |
 
 No API key, no per-token bill: the skills run on your subscription.
 

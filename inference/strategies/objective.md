@@ -1,8 +1,7 @@
 ---
 name: What the score is
-kind: constraint
+kind: assumption
 category: assumptions
-prose: true
 ---
 # What the score is
 

@@ -6,12 +6,51 @@ speaks the parts a tool host needs: `initialize`, `ping`, `tools/list`,
 Logs go to stderr - stdout is the wire.
 """
 
+import hmac
 import json
+import os
 import sys
+import threading
+import time
 import traceback
+from datetime import datetime, timezone
+
+from db import RAW_DIR
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
-SERVER_INFO = {"name": "overwatch-db", "version": "2.0.0"}
+SERVER_INFO = {"name": "counter-utility-matrix", "version": "2.1.0"}
+
+# Every tools/call is one JSON line here: when, over which transport, from
+# whom, which tool, the shape of its arguments (names and sizes, never the
+# values), whether it succeeded, and how long it took. The sentry reads it.
+AUDIT_PATH = os.environ.get("COUNTER_MATRIX_AUDIT", os.path.join(RAW_DIR, "audit.jsonl"))
+_client = threading.local()
+
+
+def audit(entry, path=None):
+    """Append one audit line; never raise - the door stays open if the log fails."""
+    try:
+        path = path or AUDIT_PATH
+        directory = os.path.dirname(path)
+        if directory and not os.path.isdir(directory):
+            os.makedirs(directory)
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def _shape(arguments):
+    """{name: size} - what was passed, not what it said."""
+    out = {}
+    for key, value in (arguments or {}).items():
+        if isinstance(value, (list, dict)):
+            out[key] = len(value)
+        elif isinstance(value, str):
+            out[key] = len(value)
+        else:
+            out[key] = value if isinstance(value, (bool, int, float)) else str(type(value).__name__)
+    return out
 
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL = (
     -32700, -32600, -32601, -32602, -32603)
@@ -22,12 +61,14 @@ class ToolError(Exception):
 
 
 class Server:
-    def __init__(self, tools, resources=None, log=None):
+    def __init__(self, tools, resources=None, log=None, transport="stdio", audit_path=None):
         """tools: [Tool]; resources: object with list() and read(uri)."""
         self.tools = {t.name: t for t in tools}
         self.resources = resources
         self.log = log or (lambda msg: sys.stderr.write(msg + "\n"))
         self.initialized = False
+        self.transport = transport
+        self.audit_path = audit_path
 
     # --- dispatch ------------------------------------------------------
 
@@ -84,7 +125,7 @@ class Server:
                              "prompts": {"listChanged": False}},
             "serverInfo": SERVER_INFO,
             "instructions": (
-                "overwatch-db: the data layer (pull_* tools scrape, clean and"
+                "Counter Utility Matrix: the data layer (pull_* tools scrape, clean and"
                 " store each source; sync_all does them all in order), the"
                 " UI layer (facts: every fact the database holds about a"
                 " board of map + red + blue picks) and the inference layer"
@@ -102,11 +143,22 @@ class Server:
         if tool is None:
             raise KeyError("tool %r" % name)
         arguments = params.get("arguments") or {}
+        started = time.time()
+        entry = {"t": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                 "transport": self.transport, "client": getattr(_client, "id", None),
+                 "tool": name, "args": _shape(arguments)}
         try:
             text, structured = tool(arguments)
         except ToolError as refused:
+            audit(dict(entry, ok=False, refused=str(refused)[:200],
+                       ms=int((time.time() - started) * 1000)), self.audit_path)
             return {"content": [{"type": "text", "text": str(refused)}],
                     "isError": True}
+        except Exception:
+            audit(dict(entry, ok=False, crashed=True,
+                       ms=int((time.time() - started) * 1000)), self.audit_path)
+            raise
+        audit(dict(entry, ok=True, ms=int((time.time() - started) * 1000)), self.audit_path)
         result = {"content": [{"type": "text", "text": text}],
                   "isError": False}
         if structured is not None:
@@ -188,10 +240,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+MAX_BODY = 1 << 20            # one request is a tool call, not an upload
+MAX_BATCH = 20                # messages in one JSON-RPC batch
+RATE_LIMIT = 120              # tool calls per client address per minute
+TOKEN_ENV = "COUNTER_MATRIX_MCP_TOKEN"
 
 
 class HttpHandler(BaseHTTPRequestHandler):
-    server_version = "overwatch-db-mcp/2.0"
+    server_version = "counter-utility-matrix-mcp/2.1"
 
     def log_message(self, fmt, *args):
         pass
@@ -219,6 +275,8 @@ class HttpHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urlparse(self.path).path
+        if not self._origin_allowed():
+            return self._reply(403, {"error": "origin not allowed"})
         if path == "/health":
             return self._reply(200, self.server.status())
         if path == "/mcp":
@@ -230,12 +288,37 @@ class HttpHandler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         self._reply(200 if urlparse(self.path).path == "/mcp" else 404)
 
+    def _authorized(self):
+        """With a token configured, every /mcp request must carry it."""
+        token = self.server.token
+        if not token:
+            return True
+        header = self.headers.get("Authorization") or ""
+        return header.startswith("Bearer ") and hmac.compare_digest(header[7:].strip(), token)
+
     def do_POST(self):
         if urlparse(self.path).path != "/mcp":
             return self._reply(404, {"error": "nothing here"})
         if not self._origin_allowed():
             return self._reply(403, {"error": "origin not allowed"})
-        length = int(self.headers.get("Content-Length") or 0)
+        if not self._authorized():
+            return self._reply(401, {"error": "a bearer token is required"},
+                               {"WWW-Authenticate": "Bearer"})
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = -1
+        if length < 0:
+            return self._reply(400, {"error": "a Content-Length is required"})
+        if length > MAX_BODY:
+            drained = 0
+            while drained < min(length, 16 * MAX_BODY):     # let the client finish sending
+                chunk = self.rfile.read(min(65536, length - drained))
+                if not chunk:
+                    break
+                drained += len(chunk)
+            self.close_connection = True
+            return self._reply(413, {"error": "request too large"})
         try:
             message = json.loads(self.rfile.read(length) or b"")
         except ValueError:
@@ -243,6 +326,14 @@ class HttpHandler(BaseHTTPRequestHandler):
                                      "error": {"code": PARSE_ERROR,
                                                "message": "bad JSON"}})
         messages = message if isinstance(message, list) else [message]
+        if len(messages) > MAX_BATCH:
+            return self._reply(413, {"error": "at most %d messages per batch" % MAX_BATCH})
+        client = self.client_address[0]         # the budget is per host, not per claimed session
+        calls = sum(1 for m in messages if isinstance(m, dict) and m.get("method") == "tools/call")
+        if calls and not self.server.admit(client, calls):
+            return self._reply(429, {"error": "too many calls; try again in a minute"},
+                               {"Retry-After": "60"})
+        _client.id = "http:%s/%s" % (client, (self.headers.get("Mcp-Session-Id") or "-")[:8])
         responses = [r for r in (self.server.mcp.handle(m) for m in messages)
                      if r is not None]
         headers = {}
@@ -258,15 +349,36 @@ class HttpHandler(BaseHTTPRequestHandler):
 class HttpServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address, mcp, status, allowed_hosts=()):
+    def __init__(self, address, mcp, status, allowed_hosts=(), token=None,
+                 rate_limit=RATE_LIMIT):
         super().__init__(address, HttpHandler)
         self.mcp = mcp
         self.status = status
         self.allowed_hosts = set(allowed_hosts)
+        self.token = token if token is not None else os.environ.get(TOKEN_ENV) or None
+        self.rate_limit = rate_limit
+        self._calls = {}
+        self._lock = threading.Lock()
+
+    def admit(self, client, calls=1):
+        """Sliding one-minute window per client address; False past the limit."""
+        now = time.time()
+        with self._lock:
+            recent = [t for t in self._calls.get(client, ()) if now - t < 60]
+            if len(recent) + calls > self.rate_limit:
+                self._calls[client] = recent
+                return False
+            recent.extend([now] * calls)
+            self._calls[client] = recent
+            if len(self._calls) > 1000:       # forget clients we have not seen in a minute
+                self._calls = {c: ts for c, ts in self._calls.items() if ts and now - ts[-1] < 60}
+        return True
 
 
 def serve_http(mcp, host, port, status, allowed_hosts=()):
     """Serve `mcp` (a Server) over HTTP until interrupted."""
+    mcp.transport = "http"
     httpd = HttpServer((host, port), mcp, status, allowed_hosts)
-    sys.stderr.write("overwatch-db mcp: http://%s:%d/mcp\n" % (host, port))
+    sys.stderr.write("counter-utility-matrix mcp: http://%s:%d/mcp%s\n" % (
+        host, port, " (bearer token required)" if httpd.token else ""))
     httpd.serve_forever()

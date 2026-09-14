@@ -27,6 +27,8 @@ def record_outcome(cx, result, map_name=None, side="", blue=(), red=(), bans=(),
         raise ValueError("result must be one of %s" % "/".join(RESULTS))
     if side not in ("", "attack", "defense"):
         raise ValueError("side must be attack, defense or empty")
+    if note and len(note) > 500:
+        raise ValueError("a note is under 500 characters")
     world = model.load(cx)
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     if len(blue_h) != TEAM_SIZE:

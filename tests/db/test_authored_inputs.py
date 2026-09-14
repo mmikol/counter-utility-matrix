@@ -83,3 +83,18 @@ def test_seasons_reject_duplicate_names(tmp_path):
     with pytest.raises(AuthoredError, match="duplicate"):
         read_seasons(write(tmp_path,
             "name,started,note\nSeason 1,2022-10-04,\nseason 1,2022-12-06,\n"))
+
+
+def test_every_path_the_layer_declares_exists():
+    # the folder move once doubled a segment of one of these; the containers
+    # found out, the suite did not - now it does
+    import os
+    import db
+    from db.psql import schema
+    from inference import catalog
+    for path in (db.AUTHORED_DIR, schema.MIGRATIONS_DIR, catalog.STRATEGIES_DIR,
+                 os.path.join(db.ROOT, "docs")):
+        assert os.path.isdir(path), path
+    assert os.path.exists(os.path.join(db.AUTHORED_DIR, "seasons.csv"))
+    assert os.path.exists(os.path.join(db.AUTHORED_DIR, "__init__.py"))
+    assert os.path.isdir(db.RAW_DIR) or True          # created on first export

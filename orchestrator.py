@@ -113,13 +113,34 @@ def verdict(h):
     return ok, lines
 
 
+def dotenv():
+    """KEY=VALUE lines of .env beside this file, if any: what compose reads."""
+    out = {}
+    try:
+        with open(os.path.join(ROOT, ".env"), encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, _, value = line.partition("=")
+                    out[key.strip()] = value.strip().strip("'\"")
+    except OSError:
+        pass
+    return out
+
+
+def token():
+    return os.environ.get("COUNTER_MATRIX_MCP_TOKEN") or dotenv().get("COUNTER_MATRIX_MCP_TOKEN")
+
+
 def mcp(name, arguments=None, timeout=600):
     """Call one tool on the stack's MCP endpoint -> its text."""
     payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                           "params": {"name": name, "arguments": arguments or {}}})
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if token():
+        headers["Authorization"] = "Bearer " + token()
     request = urllib.request.Request("http://localhost:8020/mcp", data=payload.encode(),
-                                     headers={"Content-Type": "application/json",
-                                              "Accept": "application/json"})
+                                     headers=headers)
     with urllib.request.urlopen(request, timeout=timeout) as response:
         body = json.loads(response.read().decode())
     if "error" in body:
@@ -144,8 +165,8 @@ def up():
     sh("docker", "compose", "up", "-d", "--remove-orphans")
     print("waiting for the layers (a first build scrapes the sources: minutes)...")
     wait_for(URLS["data"], 1800, "the data layer")
-    wait_for(URLS["inference"], 300, "the inference engine")
-    wait_for(URLS["ui"], 120, "the board")
+    wait_for(URLS["inference"], 600, "the inference engine")
+    wait_for(URLS["ui"], 300, "the board")
     h = health()
     derive_pending(h)
     ok, lines = verdict(h)
@@ -158,14 +179,46 @@ def up():
     return report(ok, lines)
 
 
+def sentry_line():
+    """What the sentry last saw, from the report it leaves in db/raw."""
+    path = os.path.join(ROOT, "db", "raw", "sentry.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            seen = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    parts = ["sentry: %s at %s" % ("ok" if seen.get("ok") else "FLAGS", seen.get("checked_at", "?"))]
+    if seen.get("quarantined"):
+        parts.append("quarantined %s" % ", ".join(seen["quarantined"]))
+    if seen.get("flags"):
+        parts.append("%d flag(s): %s" % (len(seen["flags"]), "; ".join(seen["flags"][:3])))
+    parts.append("%d tool call(s) in the last minute" % seen.get("calls_last_minute", 0))
+    return " - ".join(parts)
+
+
 def status():
     h = health()
     derive_pending(h)
-    ok, lines = verdict(h if not h.get("inference", {}).get("pending") else health())
+    ok, lines = verdict(h if not (h.get("inference") or {}).get("pending") else health())
+    seen = sentry_line()
+    if seen:
+        lines.append(seen)
     return report(ok, lines)
 
 
-AGENT_TOOLS = "mcp__overwatch-db-docker,mcp__overwatch-db"   # the stack's tools, nothing else
+# The agents' run may call exactly these tools, on either server, and no
+# built-in tool at all: no shell, no file edits, no web. Least privilege is
+# what makes a headless run safe to schedule.
+AGENT_TOOL_NAMES = ("db_status", "strategies", "tuning_log", "metrics", "facts", "infer",
+                    "board", "query", "sync_all", "pull_rates", "pull_counters",
+                    "load_authored", "infer_strategy", "fit_weights", "tune", "db_docs",
+                    "export_csv")
+# A refresh pull fetches dozens of pages at a polite pace: minutes, not the
+# seconds a tool call is given by default. The run's client waits this long.
+AGENT_TOOL_TIMEOUT_MS = str(45 * 60 * 1000)
+AGENT_TOOLS = ",".join("mcp__%s__%s" % (server, name)
+                       for server in ("counter-utility-matrix-docker", "counter-utility-matrix")
+                       for name in AGENT_TOOL_NAMES)
 
 
 def agents_command(claude=None):
@@ -176,7 +229,9 @@ def agents_command(claude=None):
     if not binary:
         raise RuntimeError("no claude CLI on this machine (set %s)" % derive.CLI_ENV)
     return [binary, "-p", "/refresh", "--output-format", "text",
-            "--allowedTools", AGENT_TOOLS, "--no-session-persistence"]
+            "--mcp-config", os.path.join(ROOT, ".mcp.json"), "--strict-mcp-config",
+            "--allowedTools", AGENT_TOOLS, "--tools", "", "--max-turns", "80",
+            "--no-session-persistence"]
 
 
 def agents():
@@ -189,8 +244,11 @@ def agents():
     except RuntimeError as error:
         return report(False, [str(error)])
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
+    env.update({k: v for k, v in dotenv().items() if k not in env})   # the token, for .mcp.json
+    env.setdefault("MCP_TOOL_TIMEOUT", AGENT_TOOL_TIMEOUT_MS)
+    env.setdefault("MCP_TIMEOUT", AGENT_TOOL_TIMEOUT_MS)
     done = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True,
-                          timeout=3600)
+                          timeout=4 * 3600)
     said = (done.stdout.strip() + "\n" + done.stderr.strip()).strip()
     if done.returncode != 0 and ("Not logged in" in said or "/login" in said):
         print("agents: skipped - the claude CLI is not signed in; run `%s login` once on"
@@ -236,7 +294,8 @@ def refresh():
 
 
 def test():
-    sh("docker", "compose", "run", "--rm", "data", "python", "-m", "pytest", "-q")
+    sh("docker", "compose", "run", "--rm", "data", "python", "-m", "pytest", "-q",
+       "-p", "no:cacheprovider")
     return 0
 
 

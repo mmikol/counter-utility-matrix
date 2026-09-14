@@ -1,8 +1,8 @@
-# overwatch-db
+# Counter Utility Matrix
 
-[![ci](https://github.com/mmikol/overwatch-db/actions/workflows/ci.yml/badge.svg)](https://github.com/mmikol/overwatch-db/actions/workflows/ci.yml)
+[![ci](https://github.com/mmikol/counter-utility-matrix/actions/workflows/ci.yml/badge.svg)](https://github.com/mmikol/counter-utility-matrix/actions/workflows/ci.yml)
 
-Optimal Overwatch 2 team compositions: a database pulled from the sources,
+Counter Utility Matrix: optimal Overwatch 2 team compositions from a database pulled from the sources,
 a board that turns every pick into facts, and a deterministic solver over a
 markdown playbook of constraints and heuristics. Free to run - no accounts,
 no keys, no API billing.
@@ -14,7 +14,7 @@ no keys, no API billing.
 - [Claude Code](https://claude.com/claude-code), for the skills and the agents' run - signed in once with `claude login`
 
 ```bash
-git clone git@github.com:mmikol/overwatch-db.git && cd overwatch-db
+git clone git@github.com:mmikol/counter-utility-matrix.git && cd counter-utility-matrix
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
@@ -58,7 +58,7 @@ Without Docker:
 ```
 
 Open the repo in a Claude Code session and the skills are there: `/up`,
-`/comp`, `/outcome`, `/tune`, `/strategy`, `/refresh`.
+`/comp`, `/outcome`, `/tune`, `/strategy`, `/refresh`, `/maintain`.
 
 ## Documentation
 
@@ -68,3 +68,4 @@ Open the repo in a Claude Code session and the skills are there: `/up`,
 - [docs/inference.md](docs/inference.md) - the INFERENCE LAYER: the strategy files, the solver, the tuning loop, the deriver, the catalog
 - [docs/skills.md](docs/skills.md) - the six skills a Claude Code session runs here: what each takes, does, and refuses
 - [docs/mcp.md](docs/mcp.md) - the two MCP servers and every tool they expose
+- [docs/security.md](docs/security.md) - the threat model and what stands in the way: prompt injection, the door, SQL, files, the containers, the sentry

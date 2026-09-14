@@ -171,13 +171,18 @@ def test_a_bare_file_is_a_draft_the_solver_ignores(catalog_copy):
     cat = catalog.load(catalog_copy)
     draft = next(h for h in cat if h.id == "heal-line")
     assert draft.form == "draft" and draft.pending and not draft.scored
-    assert all(h.form == "prose" and not h.pending for h in cat
+    assert all(h.form == "assumption" and not h.pending for h in cat
                if h.id in ("vintage", "objective", "locked-picks"))
-    with pytest.raises(catalog.CatalogError, match="prose: true means nothing to score"):
+    with pytest.raises(catalog.CatalogError, match="carries nothing to score"):
         with open(path, "w", encoding="utf-8") as handle:
-            handle.write("---\nname: x\nkind: heuristic\nprose: true\nmetric: team.tanks\n"
+            handle.write("---\nname: x\nkind: assumption\nmetric: team.tanks\n"
                          "direction: maximize\n---\nx\n")
         catalog.load(catalog_copy)
+    # a draft that turns out to be a ground rule becomes an assumption in one step
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("---\nname: Trust the kit\nkind: constraint\n---\nx\n")
+    assert tune.complete("heal-line", {"kind": "assumption"}, "nothing measurable",
+                         directory=catalog_copy)["form"] == "assumption"
 
 
 def test_add_stores_a_validated_strategy_and_complete_finishes_a_draft(catalog_copy):
@@ -286,3 +291,50 @@ def test_derive_without_a_signed_in_cli_leaves_drafts_pending(catalog_copy, monk
     result = derive.derive(directory=catalog_copy, runner=not_logged_in, log=lambda m: None)
     assert "not signed in" in result["skipped"] and "not signed in" in derive.rendered(result)
     assert next(h for h in catalog.load(catalog_copy) if h.id == "heal-line").pending
+
+
+def test_tune_and_complete_refuse_ids_that_are_paths(catalog_copy):
+    for bad in ("../../README", "coverage/../vintage", "Coverage", ""):
+        with pytest.raises(tune.TuneError, match="no strategy"):
+            tune.tune(bad, "weight", 1, "r", directory=catalog_copy)
+        with pytest.raises(tune.TuneError, match="no strategy"):
+            tune.complete(bad, {"weight": 1}, "r", directory=catalog_copy)
+    with pytest.raises(tune.TuneError, match="under 120 characters"):
+        tune.add("too-long", "x" * 121, "constraint", "prose", None, "r", directory=catalog_copy)
+
+
+def test_frontmatter_cannot_be_injected_through_a_field_or_a_value(catalog_copy):
+    for field, value in (("params.A\nweight: 99\nB", 1), ("params.lower", 1),
+                         ("when", "1 == 1\nweight: 99"), ("bonus", "---\nx"),
+                         ("bonus", "x" * 501)):
+        with pytest.raises(tune.TuneError):
+            tune.tune("coverage", field, value, "r", directory=catalog_copy)
+    text = open(os.path.join(catalog_copy, "coverage.md"), encoding="utf-8").read()
+    assert "weight: 99" not in text
+    with pytest.raises(tune.TuneError, match="within 0..10"):
+        tune.tune("coverage", "weight", 11, "r", directory=catalog_copy)
+    (open(os.path.join(catalog_copy, "heavy.md"), "w", encoding="utf-8")
+     .write("---\nname: h\nkind: heuristic\nmetric: team.tanks\ndirection: maximize\nweight: 1e308\n---\nx\n"))
+    with pytest.raises(catalog.CatalogError, match="within 0..10"):
+        catalog.load(catalog_copy)
+
+
+def test_the_deriver_accepts_only_a_strategys_fields():
+    from inference import derive
+    with pytest.raises(ValueError, match="fields a strategy does not have"):
+        derive.parse('{"fields": {"prose": true, "weight": 2}, "reason": "r"}')
+    with pytest.raises(ValueError, match="keeps its kind"):
+        derive.parse('{"fields": {"kind": "constraint"}, "reason": "r"}')
+    assert derive.parse('{"fields": {"kind": "assumption"}, "reason": "r"}')[0] == {"kind": "assumption"}
+    with pytest.raises(ValueError, match="params must be"):
+        derive.parse('{"fields": {"params": {"A": "1 == 1"}}, "reason": "r"}')
+    fields, reason = derive.parse('{"fields": {"weight": 2, "params": {"A": 1.5}}, "reason": "r"}')
+    assert fields == {"weight": 2, "params": {"A": 1.5}} and reason == "r"
+
+
+def test_a_file_named_for_another_id_cannot_hijack_it(catalog_copy):
+    (open(os.path.join(catalog_copy, "aaa.md"), "w", encoding="utf-8")
+     .write("---\nname: x\nkind: assumption\nid: coverage\n---\nx\n"))
+    with pytest.raises(catalog.CatalogError) as caught:
+        catalog.load(catalog_copy)
+    assert caught.value.file == "aaa.md" and "id: is the filename" in str(caught.value)

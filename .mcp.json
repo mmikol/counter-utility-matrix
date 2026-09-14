@@ -1,12 +1,13 @@
 {
   "mcpServers": {
-    "overwatch-db": {
+    "counter-utility-matrix": {
       "command": ".venv/bin/python",
       "args": ["-m", "db.mcp"]
     },
-    "overwatch-db-docker": {
+    "counter-utility-matrix-docker": {
       "type": "http",
-      "url": "http://localhost:8020/mcp"
+      "url": "http://localhost:8020/mcp",
+      "headers": {"Authorization": "Bearer ${COUNTER_MATRIX_MCP_TOKEN:-}"}
     }
   }
 }

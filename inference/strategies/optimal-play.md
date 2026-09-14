@@ -1,8 +1,7 @@
 ---
 name: Players play optimally
-kind: constraint
+kind: assumption
 category: assumptions
-prose: true
 ---
 # Players play optimally
 

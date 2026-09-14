@@ -75,6 +75,7 @@ class Expr:
             if any(part.startswith("_") for part in name.split(".")):
                 raise ExprError("%r: underscore names are not allowed" % name)
         self._check(self.tree)
+        self._guard(self.tree, 0)
         self.code = compile(ast.Expression(body=self.tree), "<strategy>", "eval")
 
     def __repr__(self):
@@ -103,6 +104,28 @@ class Expr:
             parts.append(node.id)
             return ".".join(reversed(parts))
         return None
+
+    def _guard(self, node, depth):
+        """What the whitelist alone would let through: an exponent tower, a
+        string multiplied a billion times, an expression nested past reason -
+        each a way to hang or exhaust the solver from one frontmatter line."""
+        if depth > 40:
+            raise ExprError("%r: nested too deep" % self.source)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and len(node.value) > 200:
+            raise ExprError("%r: a string constant over 200 characters" % self.source)
+        if isinstance(node, ast.BinOp):
+            if isinstance(node.op, ast.Pow):
+                exp = node.right
+                if not (isinstance(exp, ast.Constant) and isinstance(exp.value, (int, float))
+                        and not isinstance(exp.value, bool) and 0 <= exp.value <= 8):
+                    raise ExprError("%r: an exponent must be a number between 0 and 8" % self.source)
+            if isinstance(node.op, (ast.Mult, ast.Add)):
+                for side in (node.left, node.right):
+                    if isinstance(side, ast.Constant) and isinstance(side.value, str):
+                        raise ExprError("%r: strings are compared, not added or multiplied"
+                                        % self.source)
+        for child in ast.iter_child_nodes(node):
+            self._guard(child, depth + 1)
 
     def _check(self, node):
         """The whitelist, enforced once at compile time."""
@@ -157,6 +180,8 @@ class Expr:
             return 0.0
         except TypeError as error:            # e.g. a text metric in arithmetic
             raise ExprError("%r: %s" % (self.source, error))
+        except (RecursionError, MemoryError, OverflowError) as error:
+            raise ExprError("%r: %s" % (self.source, type(error).__name__))
 
 
 _GLOBALS = dict(FUNCTIONS, __builtins__={})

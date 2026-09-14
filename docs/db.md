@@ -28,6 +28,7 @@ step with the tools.
 db/
   __init__.py        where things live, and the scope; the package's map
   refresh.py         the daily refresh (the refresher container's process)
+  sentry.py          the guard (the sentry container's process)
   mcp/               the MCP server and the tools - the one door
   data/              the sources, page to table
     blizzard/        overwatch.blizzard.com
@@ -49,7 +50,8 @@ db/
 | `__init__.py` | What the whole layer must agree on: where the repo, the caches, the authored inputs and the mirror live, and the scope every rates snapshot is pinned to - console, controller, Americas - declared once. |
 | `data/fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `set_max_age`: the freshness policy - a build keeps every cached page, the refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `prepare_cache`: the cache directory a tool hands a pull. |
 | `data/names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. Two keys because they solve two problems. |
-| `refresh.py` | The clock. Daily at `OVERWATCH_DB_REFRESH_AT` it refetches what moves between patches (rates, counters), re-mirrors the authored inputs and the strategies, re-exports the mirror; once the wiki cache is older than `OVERWATCH_DB_REFRESH_FULL_DAYS` it runs `sync_all` on every source. Refreshes on start when the caches are older than a day. |
+| `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the authored CSVs and the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `python -m db.sentry --once` is one pass from a shell. |
+| `refresh.py` | The clock. Daily at `COUNTER_MATRIX_REFRESH_AT` it refetches what moves between patches (rates, counters), re-mirrors the authored inputs and the strategies, re-exports the mirror; once the wiki cache is older than `COUNTER_MATRIX_REFRESH_FULL_DAYS` it runs `sync_all` on every source. Refreshes on start when the caches are older than a day. |
 
 ### `data/` - one package per source
 
@@ -91,7 +93,7 @@ The servers, the transport and the full tool reference are in
 | --- | --- |
 | `__init__.py` | Where the database is (`DATABASE_URL`, or the embedded cluster at `db/cluster`); how a source registers the `sources` row its rows carry; how names look up ids; what a capture is stamped with (now, the current patch and season); the CSV export and its `EXPORT.json` mark naming the database it came from. Knows no particular source or table. |
 | `schema.py` | Applies migrations and records them in the `schema_migrations` ledger; `pending` says which files the database has not seen; `rebuild` drops everything and reapplies; `restore` brings recorded recommendations and outcomes back from the mirror after a rebuild; `generate_docs` writes the ER diagrams and the data dictionary at the end of this document from the live schema. |
-| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` outcomes, `010` constraints and heuristics (the `strategies` table). A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
+| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` outcomes, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
 | `cluster/` | The embedded Postgres cluster `pgserver` creates on first touch (gitignored). The compose stack uses its own `postgres` container instead, reachable from the host through `./docker-db`. |
 
 ### `data/authored/` - what we write
@@ -162,7 +164,7 @@ is ready when a game starts. The daily refresh refetches what moves day to
 day - the rates (a new dated snapshot, the series the trend facts
 difference) and counterpick's counters - then re-mirrors the authored
 inputs and the strategies and re-exports `raw/`. Once a week (when the
-wiki cache is older than `OVERWATCH_DB_REFRESH_FULL_DAYS`) it refetches
+wiki cache is older than `COUNTER_MATRIX_REFRESH_FULL_DAYS`) it refetches
 every page of every source, hero pages and articles included. It also
 refreshes right away on start when the cached pages are older than a day.
 A page that fails to fetch keeps its cached copy, so a flaky source
@@ -171,9 +173,9 @@ header shows the capture date and warns when patches shipped since.
 
 | setting | default | meaning |
 | --- | --- | --- |
-| `OVERWATCH_DB_REFRESH_AT` | `05:00` | daily time, in the container's `TZ` (UTC unless set) |
-| `OVERWATCH_DB_REFRESH_MAX_AGE_HOURS` | `20` | refresh on start when the cache is older than this |
-| `OVERWATCH_DB_REFRESH_FULL_DAYS` | `7` | refetch every source (not just rates and counters) when the wiki cache is older than this |
+| `COUNTER_MATRIX_REFRESH_AT` | `05:00` | daily time, in the container's `TZ` (UTC unless set) |
+| `COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS` | `20` | refresh on start when the cache is older than this |
+| `COUNTER_MATRIX_REFRESH_FULL_DAYS` | `7` | refetch every source (not just rates and counters) when the wiki cache is older than this |
 
 Set them in the environment or a `.env` file next to `compose.yaml`. The
 same refresh from a shell, against whichever database `DATABASE_URL` names:
@@ -208,7 +210,7 @@ Docker's `data` container runs `rebuild` on an empty or stale database and
 the `refresher` container refreshes once a day (and on start when the
 cached pages are older than a day): the daily refresh refetches the rates
 and the counters and re-mirrors the playbook and the strategies; once the
-wiki cache is older than `OVERWATCH_DB_REFRESH_FULL_DAYS` (7) it runs
+wiki cache is older than `COUNTER_MATRIX_REFRESH_FULL_DAYS` (7) it runs
 `sync_all` with refresh on, every page of every source. A page that fails
 to refetch keeps its cached copy, so a bad day at a source degrades to
 yesterday's numbers rather than an empty table.
@@ -514,7 +516,7 @@ are on all of them: `source_id` (which source the row came from, see
 
 #### `abilities`
 
-*HEROES · 288 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 kind_id is NULL until the wiki pipeline sets it. Blizzard's markup labels neither weapons nor ultimates, and its ordering does not identify them either, so nothing is guessed at scrape time.
 
@@ -530,7 +532,7 @@ kind_id is NULL until the wiki pipeline sets it. Blizzard's markup labels neithe
 
 #### `ability_kinds`
 
-*HEROES · 4 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -539,7 +541,7 @@ kind_id is NULL until the wiki pipeline sets it. Blizzard's markup labels neithe
 
 #### `ability_modifiers`
 
-*HEROES · 116 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 affects names the quantity scaled, so a query can find every effect on outgoing damage without knowing which stat it was published under. damage_dealt · damage_taken · healing_received · healing_dealt · movement_speed magnitude is a signed percentage: +50 amplifies, -45 reduces.
 
@@ -555,7 +557,7 @@ affects names the quantity scaled, so a query can find every effect on outgoing 
 
 #### `ability_stats`
 
-*HEROES · 2809 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 One row per measurement, not per stat. A wiki value like "0.67 shots/s (max charge); 3.33 shots/s (min charge)" becomes two rows sharing a stat_key, separated by `condition`. Units are split into the unit on top and the unit underneath, so nothing has to parse a "/" to know what a number means. denominator_value carries the magnitude underneath - 1 for a plain rate, or the window a burst spans: "125 m/s"              -> 125,  meters  / seconds,  denominator_value 1 "1.25 shots/s"         -> 1.25, shots   / seconds,  denominator_value 1 "75 over 0.59 seconds" -> 75,   hp      / seconds,  denominator_value 0.59 "14 seconds"           -> 14,   seconds / NULL A rate is therefore always value / denominator_value per unit_denominator. value is NULL where the measurement is not numeric (shot types, "partial"). value_text and raw_value always keep the source strings, so anything the parser misreads stays recoverable.
 
@@ -574,7 +576,7 @@ One row per measurement, not per stat. A wiki value like "0.67 shots/s (max char
 
 #### `comp_archetypes`
 
-*PLAYBOOK · 9 rows · `005_playbook.sql`*
+*PLAYBOOK · `005_playbook.sql`*
 
 What a composition IS, by archetype: the role shape a playstyle wants. playstyle tags heroes; this defines the comp those heroes assemble into - dive wants one engage tank, two flankers who arrive with him, two mobile supports. Authored in db/data/authored/archetypes.csv; the style vocabulary follows the playstyle table by convention. slots describe the standard 1-2-2 shape; Open Queue may flex them, and note says with whom.
 
@@ -587,7 +589,7 @@ What a composition IS, by archetype: the role shape a playstyle wants. playstyle
 
 #### `competitive_tiers`
 
-*META · 9 rows · `004_meta.sql`*
+*META · `004_meta.sql`*
 
 'all' is a real member of the tier dimension: it is the unfiltered figure the page reports, and keeping it as a row avoids a nullable dimension key. Region has no such member. Everything here is the Americas, so an "all regions" row would be a second population mixed in beside it. Bronze through Champion, plus the "All Tiers" aggregate the source reports alongside them. rank_order follows the source's own ordering.
 
@@ -600,7 +602,7 @@ What a composition IS, by archetype: the role shape a playstyle wants. playstyle
 
 #### `counters`
 
-*PLAYBOOK · 450 rows · `005_playbook.sql`*
+*PLAYBOOK · `005_playbook.sql`*
 
 Who answers whom: one row means countered_by_id answers hero_id. The source publishes two directional columns per hero - "countered by" and "counters" - but they are one claim seen from either side: "X counters Y" IS "Y countered by X". The loader normalises both into this one direction and keeps the union, so a pairing the source lists on only one hero's row (about a third of them) still loads, and one it lists on both collapses to a single row. Beware the source's own naming: its field called `counters` is displayed as "Countered by". The loader follows the columns as labelled and explained by their tooltips, not the field names.
 
@@ -611,7 +613,7 @@ Who answers whom: one row means countered_by_id answers hero_id. The source publ
 
 #### `game_modes`
 
-*MAPS · 5 rows · `003_maps.sql`*
+*MAPS · `003_maps.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -621,7 +623,7 @@ Who answers whom: one row means countered_by_id answers hero_id. The source publ
 
 #### `hero_meta`
 
-*META · 530 rows · `004_meta.sql`*
+*META · `004_meta.sql`*
 
 Rates by region and tier. All rates are percentages as published (47.9 means 47.9%). These rows are across all maps.
 
@@ -638,7 +640,7 @@ Rates by region and tier. All rates are percentages as published (47.9 means 47.
 
 #### `heroes`
 
-*HEROES · 53 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 The composite foreign key makes it impossible to pair a hero with a subrole belonging to a different role than the hero's own. health, shield and armor are the hero's own pool, all in hp. Blizzard publishes none of them, so the wiki pipeline fills them in; a hero with no shield or armor leaves those NULL rather than storing a zero the source never states.
 
@@ -656,7 +658,7 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 
 #### `map_meta`
 
-*META · 1590 rows · `004_meta.sql`*
+*META · `004_meta.sql`*
 
 Rates per map, and per tier within a map. The source's filters compose, so a hero's rates on King's Row in Bronze are a different figure from the same hero's rates on King's Row overall - and both are published. tier_id 'all' is the unfiltered figure for that map, which keeps the dimension key non-nullable. Region is not broken out here: map x tier is already 240 requests, and map x tier x region would be 720.
 
@@ -675,7 +677,7 @@ Rates per map, and per tier within a map. The source's filters compose, so a her
 
 #### `map_modes`
 
-*MAPS · 30 rows · `003_maps.sql`*
+*MAPS · `003_maps.sql`*
 
 One row per playable combination: this table is the set of matches that can actually be drawn in Open Queue Competitive. Every map currently belongs to exactly one mode, so today this holds one row per map. It is modelled many-to-many anyway because that is what the domain allows - a map can be re-released under a second mode - and because a degenerate join here costs nothing.
 
@@ -686,7 +688,7 @@ One row per playable combination: this table is the set of matches that can actu
 
 #### `map_playstyle`
 
-*PLAYBOOK · 20 rows · `005_playbook.sql`*
+*PLAYBOOK · `005_playbook.sql`*
 
 Which playstyle suits which map: the bridge between MAPS and the playbook. map_strategy picks heroes for a map; this says what KIND of fight the map rewards, which is what a comp is built around. Authored in db/data/authored/map_playstyle.csv, same score scale as synergies.
 
@@ -699,7 +701,7 @@ Which playstyle suits which map: the bridge between MAPS and the playbook. map_s
 
 #### `map_stages`
 
-*MAPS · 36 rows · `003_maps.sql`*
+*MAPS · `003_maps.sql`*
 
 Stages within a map: King's Row's first point, Ilios' Well. Defined and deliberately empty. No source publishes per-stage rates - Blizzard's map filter lists thirty whole maps and stops - so there is nothing to load here yet. It exists so map_meta can carry a stage_id now rather than needing the column bolted on later.
 
@@ -712,7 +714,7 @@ Stages within a map: King's Row's first point, Ilios' Well. Defined and delibera
 
 #### `map_strategy`
 
-*PLAYBOOK · 159 rows · `005_playbook.sql`*
+*PLAYBOOK · `005_playbook.sql`*
 
 The maps a hero is strongest on, best first. The source ranks them but publishes no per-map figure, so position is the whole of what it says.
 
@@ -724,7 +726,7 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 
 #### `maps`
 
-*MAPS · 30 rows · `003_maps.sql`*
+*MAPS · `003_maps.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -733,7 +735,7 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 
 #### `meta_snapshots`
 
-*META · 2 rows · `004_meta.sql`*
+*META · `004_meta.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -747,7 +749,7 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 
 #### `outcome_picks`
 
-*INFERENCE · 0 rows · `009_outcomes.sql`*
+*INFERENCE · `009_outcomes.sql`*
 
 team is 'blue', 'red' or 'ban'; position orders the picks within a team.
 
@@ -760,7 +762,7 @@ team is 'blue', 'red' or 'ban'; position orders the picks within a team.
 
 #### `outcomes`
 
-*INFERENCE · 0 rows · `009_outcomes.sql`*
+*INFERENCE · `009_outcomes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -774,7 +776,7 @@ team is 'blue', 'red' or 'ban'; position orders the picks within a team.
 
 #### `patches`
 
-*META · 371 rows · `004_meta.sql`*
+*META · `004_meta.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -786,7 +788,7 @@ team is 'blue', 'red' or 'ban'; position orders the picks within a team.
 
 #### `perk_ability_effects`
 
-*HEROES · 194 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -795,7 +797,7 @@ team is 'blue', 'red' or 'ban'; position orders the picks within a team.
 
 #### `perk_stats`
 
-*HEROES · 680 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -812,7 +814,7 @@ team is 'blue', 'red' or 'ban'; position orders the picks within a team.
 
 #### `perk_tiers`
 
-*HEROES · 2 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -823,7 +825,7 @@ team is 'blue', 'red' or 'ban'; position orders the picks within a team.
 
 #### `perks`
 
-*HEROES · 212 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -836,7 +838,7 @@ team is 'blue', 'red' or 'ban'; position orders the picks within a team.
 
 #### `playstyle`
 
-*PLAYBOOK · 89 rows · `005_playbook.sql`*
+*PLAYBOOK · `005_playbook.sql`*
 
 Which playstyle a hero belongs to, straight from the wiki's team composition page. The style vocabulary (dive, brawl, poke) is whatever the page says, kept as text rather than a three-row lookup table: the page is the vocabulary, and a new style there should load, not break.
 
@@ -847,7 +849,7 @@ Which playstyle a hero belongs to, straight from the wiki's team composition pag
 
 #### `recommendation_evidence`
 
-*INFERENCE · 17 rows · `006_inference.sql`*
+*INFERENCE · `006_inference.sql`*
 
 The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a citation to the specific pick it justified; NULL means it supported the comp as a whole.
 
@@ -861,7 +863,7 @@ The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a 
 
 #### `recommendation_picks`
 
-*INFERENCE · 5 rows · `006_inference.sql`*
+*INFERENCE · `006_inference.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -872,7 +874,7 @@ The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a 
 
 #### `recommendations`
 
-*INFERENCE · 1 rows · `006_inference.sql`*
+*INFERENCE · `006_inference.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -888,7 +890,7 @@ The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a 
 
 #### `regions`
 
-*META · 1 rows · `004_meta.sql`*
+*META · `004_meta.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -898,7 +900,7 @@ The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a 
 
 #### `roles`
 
-*HEROES · 3 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -909,7 +911,7 @@ The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a 
 
 #### `schema_migrations`
 
-*foundation · 10 rows · `008_schema_migrations.sql`*
+*foundation · `008_schema_migrations.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -918,7 +920,7 @@ The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a 
 
 #### `seasons`
 
-*META · 20 rows · `004_meta.sql`*
+*META · `004_meta.sql`*
 
 The game versions the meta moves with. A win rate is true of a patch, so a snapshot records which patch was live when it was captured - that is what makes an accumulated series interpretable ("these rates predate the nerf"). Scraped from the wiki's Patches cargo table; name is the wiki's own page name, since Blizzard ships most balance patches unversioned. Seasons: the coarser delineator. A patch tweaks numbers; a season swaps the hero pool and map rotation, so a snapshot records both. Authored in db/data/authored/seasons.csv rather than scraped: the wiki's season pages are lore articles, and its current-era page carries no dates at all.
 
@@ -931,7 +933,7 @@ The game versions the meta moves with. A win rate is true of a patch, so a snaps
 
 #### `sources`
 
-*foundation · 4 rows · `001_initial_schema.sql`*
+*foundation · `001_initial_schema.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -941,7 +943,7 @@ The game versions the meta moves with. A win rate is true of a patch, so a snaps
 
 #### `stat_keys`
 
-*HEROES · 48 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 The stat vocabulary. `unit` is the canonical unit for the stat, used when a value carries no unit of its own ("damage = 90" is 90 hp).
 
@@ -954,7 +956,7 @@ The stat vocabulary. `unit` is the canonical unit for the stat, used when a valu
 
 #### `strategies`
 
-*INFERENCE · 38 rows · `010_constraints_and_heuristics.sql`*
+*INFERENCE · `010_constraints_and_heuristics.sql`*
 
 The mirror of the playbook: one row per markdown file in inference/strategies/ - its kind (constraint | heuristic), the frontmatter a machine scores by (metric, direction, weight, expressions, params) and the prose body a person argues with. Reloaded whole by load_authored so a recommendation can cite the ids it was scored under; the files remain the truth.
 
@@ -973,7 +975,7 @@ The mirror of the playbook: one row per markdown file in inference/strategies/ -
 
 #### `subroles`
 
-*HEROES · 10 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 The ten subroles, each belonging to exactly one role, each carrying the passive it grants (e.g. "Tactician: Store excess ultimate charge.").
 
@@ -988,7 +990,7 @@ The ten subroles, each belonging to exactly one role, each carrying the passive 
 
 #### `synergies`
 
-*PLAYBOOK · 41 rows · `005_playbook.sql`*
+*PLAYBOOK · `005_playbook.sql`*
 
 Which heroes work WITH which. Proprietary, not scraped: hand-authored in db/data/authored/synergies.csv. No snapshot, region or tier, because an authored judgement has no population behind it. Bidirectional, unlike counters. Synergy is a property of the PAIR: if Mei works with Tracer then Tracer works with Mei - one fact, one row. A counter is an arrow: Mei answering Tracer says nothing about the reverse. So this table stores each pair once, in canonical order (lower hero_id first, enforced below), and a query reads it from either side. score is whatever scale the author keeps consistently; note carries the reasoning, which is the part a model actually wants.
 
@@ -1001,7 +1003,7 @@ Which heroes work WITH which. Proprietary, not scraped: hand-authored in db/data
 
 #### `weapon_config_slots`
 
-*HEROES · 5 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -1010,7 +1012,7 @@ Which heroes work WITH which. Proprietary, not scraped: hand-authored in db/data
 
 #### `weapon_configs`
 
-*HEROES · 82 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 weapon_type lives here rather than on the weapon because it varies by config: Ana's Biotic Rifle is a projectile from the hip and hitscan in ADS.
 
@@ -1026,7 +1028,7 @@ weapon_type lives here rather than on the weapon because it varies by config: An
 
 #### `weapon_stats`
 
-*HEROES · 1305 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -1043,7 +1045,7 @@ weapon_type lives here rather than on the weapon because it varies by config: An
 
 #### `weapons`
 
-*HEROES · 60 rows · `002_heroes.sql`*
+*HEROES · `002_heroes.sql`*
 
 One row per weapon. A weapon's firing modes are configs, not weapons: Ana carries one Biotic Rifle, fired from the hip or down the sights.
 

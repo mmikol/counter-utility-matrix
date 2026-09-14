@@ -14,10 +14,54 @@ pytestmark = pytest.mark.invariant
 def test_board_page_has_two_rosters_and_the_three_panels():
     body = board.view_board()
     assert "team red" in body and "team blue" in body
-    assert "tab-facts" in body and "tab-inf" in body and "tab-playbook" in body
+    assert "tab-comps" in body and "tab-facts" in body and "tab-playbook" in body
+    assert "data-tab='comps'" in body
+    # the two old panels were merged into comps: both seats side by side, the
+    # current comp below, in one section
+    assert "tab-inf" not in body and "tab-cur" not in body
+    assert "data-tab='inf'" not in body and "data-tab='cur'" not in body
+    comps = body[body.index("id='tab-comps'"):body.index("id='tab-facts'")]
+    assert "id='inf-blue'" in comps and "id='inf-red'" in comps and "id='cur'" in comps
     script = board.static_file("board.js")[0].decode()
     assert "/api/roster" in script and "/api/facts" in script and "/api/infer" in script
     assert "localStorage" in script
+    assert "var TABS = ['comps', 'facts', 'playbook']" in script
+    assert "normalized" in script and "/ 100" in script    # the 0-100 figure, raw score beside it
+    # the playbook holds three kinds; the badge appends the form only when it differs
+    assert "STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS" in body
+    assert "h.form !== h.kind ?" in script and "'assumption' ? 'assumption - taken as given" in script
+    assert "prose -" not in script
+    assert b".kind.assumption" in board.static_file("board.css")[0]
+
+
+def test_the_ban_picker_is_a_roster_and_the_dropdown_is_gone():
+    body = board.view_board()
+    assert "bansel" not in body and "<select id='bansel'" not in body
+    assert "id='banhead'" in body and "id='banslots'" in body and "id='banroster'" in body
+    assert "id='banmini'" in body and "id='bancount'" in body
+    script = board.static_file("board.js")[0].decode()
+    assert "function buildBanPicker" in script and "rosterHTML('ban')" in script
+    assert "bansOpen = false" in script                     # collapsed by default
+    css = board.static_file("board.css")[0].decode()
+    assert ".bans.open .banbody" in css and ".bans .tile.banned" in css
+    assert ".bans select" not in css
+
+
+def test_doctrine_is_a_placeholder_card_that_never_enters_state():
+    script = board.static_file("board.js")[0].decode()
+    assert "var DOCTRINE = {" in script and "name: 'Doctrine'" in script
+    assert "role: 'announced'" in script and "'coming soon'" in script
+    # rendered by its own function under its own heading, with no data-h and
+    # no data-team on the card, so the click handler and the state never see it
+    assert "announcedTile(DOCTRINE)" in script and ">announced</h4>" in script
+    start = script.index("function announcedTile")
+    card = script[start:script.index("function rosterHTML")]
+    assert "class='tile soon'" in card and "data-h" not in card and "data-team" not in card
+    assert "SILHOUETTE" in card and "portrait(" not in card    # a silhouette, no image
+    assert 'var SILHOUETTE = "<svg' in script
+    assert "Doctrine" not in script[script.index("function qs()"):script.index("function refresh")]
+    css = board.static_file("board.css")[0].decode()
+    assert ".tile.soon" in css and ".rolecol.announced" in css
 
 
 def test_roster_endpoint_carries_portraits_and_maps(db):
@@ -25,6 +69,7 @@ def test_roster_endpoint_carries_portraits_and_maps(db):
     assert {h["role"] for h in data["heroes"]} == {"tank", "damage", "support"}
     assert all(h["portrait"] for h in data["heroes"])
     assert any(m["name"] == "King's Row" for m in data["maps"])
+    assert not any(h["name"] == "Doctrine" for h in data["heroes"])   # the page's placeholder only
     db.rollback()
 
 

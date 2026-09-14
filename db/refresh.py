@@ -1,11 +1,11 @@
 """The daily refresh: the database, the playbook and the strategies mirror
 brought up to date on a schedule, so the board is ready when a game starts.
 
-    python -m db.refresh              run daily at OVERWATCH_DB_REFRESH_AT
+    python -m db.refresh              run daily at COUNTER_MATRIX_REFRESH_AT
                                         (05:00 by default, container time);
                                         refresh right away first if the
                                         cached pages are older than
-                                        OVERWATCH_DB_REFRESH_MAX_AGE_HOURS (20)
+                                        COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS (20)
     python -m db.refresh --now        one refresh, then exit
 
 A refresh comes in two sizes. The DAILY one refetches what moves day to
@@ -13,7 +13,7 @@ day - the rates and counterpick's counters - then re-mirrors the authored
 inputs and the strategies and re-exports db/raw. The FULL one is
 `sync_all` with refresh on: every page of every source, including the
 hero pages and wiki articles that only change with a patch; it runs when
-the wiki cache is older than OVERWATCH_DB_REFRESH_FULL_DAYS (7). Either
+the wiki cache is older than COUNTER_MATRIX_REFRESH_FULL_DAYS (7). Either
 way a page that fails keeps its cached copy, so a flaky source degrades
 to yesterday's numbers rather than an empty table. The `refresher`
 container runs this loop.
@@ -28,9 +28,9 @@ from db import CACHE_DIRS
 from db import psql
 from db.mcp import tools
 
-DEFAULT_AT = os.environ.get("OVERWATCH_DB_REFRESH_AT", "05:00")
-DEFAULT_MAX_AGE_HOURS = float(os.environ.get("OVERWATCH_DB_REFRESH_MAX_AGE_HOURS", "20"))
-DEFAULT_FULL_DAYS = float(os.environ.get("OVERWATCH_DB_REFRESH_FULL_DAYS", "7"))
+DEFAULT_AT = os.environ.get("COUNTER_MATRIX_REFRESH_AT", "05:00")
+DEFAULT_MAX_AGE_HOURS = float(os.environ.get("COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS", "20"))
+DEFAULT_FULL_DAYS = float(os.environ.get("COUNTER_MATRIX_REFRESH_FULL_DAYS", "7"))
 DAILY = ("pull_rates", "pull_counters")     # what moves between patches
 
 

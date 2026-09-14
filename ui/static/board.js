@@ -5,33 +5,60 @@ try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
       if (saved && saved.red && saved.blue) st = saved; } catch (e) {}
 if (!st.bans) st.bans = [];
 if (!st.side) st.side = '';
+var TABS = ['comps', 'facts', 'playbook'];   /* the panels; the first is the default */
+var bansOpen = false;                        /* the ban picker starts collapsed */
+
+/* An announced hero the database does not carry yet. It is drawn on both
+   rosters and on the ban picker as a non-selectable card - no data-h, no
+   data-team, so the click handler never sees it - and it never enters
+   st.red, st.blue or st.bans, so it is never sent to the API. Delete this
+   constant (and the 'announced' group rosterHTML renders from it) once the
+   hero lands in the database and /api/roster carries it. */
+var DOCTRINE = { name: 'Doctrine', role: 'announced', subrole: 'role not yet known', tag: 'coming soon' };
+
 function currentMap() { return ROSTER ? ROSTER.maps.filter(function (x) { return x.name === st.map; })[0] : null; }
 
 function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 function save() { try { localStorage.setItem('owdb-board2', JSON.stringify(st)); } catch (e) {} }
 function hero(name) { return ROSTER.byName[name]; }
-function portrait(h, cls) {
+function portrait(h) {
   var initials = h.name.split(/[\s:.]+/).map(function (w) { return w[0]; }).join('').slice(0, 2);
   return h.portrait
     ? "<img src='" + esc(h.portrait) + "' alt='' loading='lazy' onerror=\"this.style.display='none';this.nextSibling.style.display='flex'\"><span class='ph' style='display:none'>" + esc(initials) + '</span>'
     : "<span class='ph'>" + esc(initials) + '</span>';
 }
 
-function buildTeam(team) {
-  var slots = '';
-  for (var i = 0; i < TEAM; i++) slots += "<div class='slot' data-team='" + team + "' data-i='" + i + "'></div>";
-  el(team + 'slots').innerHTML = slots;
+/* --- the rosters: one tile renderer for red, blue and the ban picker ------ */
+var SILHOUETTE = "<svg class='sil' viewBox='0 0 48 64' aria-hidden='true'><circle cx='24' cy='23' r='10'/>" +
+  "<path d='M7 64c0-14 7.5-23 17-23s17 9 17 23z'/></svg>";
+
+function tile(h, team) {
+  return "<div class='tile' data-team='" + team + "' data-h=\"" + esc(h.name) + "\" title=\"" + esc(h.name + ' - ' + h.subrole) + "\">" +
+    portrait(h) + "<span class='nm'>" + esc(h.name) + '</span></div>';
+}
+function announcedTile(h) {
+  return "<div class='tile soon' title=\"" + esc(h.name + ' - announced, not in the database yet (' + h.subrole + ')') + "\">" +
+    SILHOUETTE + "<span class='tag'>" + esc(h.tag) + "</span><span class='nm'>" + esc(h.name) + '</span></div>';
+}
+function rosterHTML(team) {
   var cols = '';
   ['tank', 'damage', 'support'].forEach(function (role) {
     var icon = ROSTER.role_icons[role] ? "<img src='" + esc(ROSTER.role_icons[role]) + "' alt=''>" : '';
     cols += "<div class='rolecol'><h4>" + icon + role + "</h4><div class='grid'>";
-    ROSTER.heroes.filter(function (h) { return h.role === role; }).forEach(function (h) {
-      cols += "<div class='tile' data-team='" + team + "' data-h=\"" + esc(h.name) + "\" title=\"" + esc(h.name + ' - ' + h.subrole) + "\">" + portrait(h) + "<span class='nm'>" + esc(h.name) + '</span></div>';
-    });
+    ROSTER.heroes.filter(function (h) { return h.role === role; }).forEach(function (h) { cols += tile(h, team); });
     cols += '</div></div>';
   });
-  el(team + 'roster').innerHTML = cols;
+  cols += "<div class='rolecol announced'><h4>announced</h4><div class='grid'>" + announcedTile(DOCTRINE) + '</div></div>';
+  return cols;
 }
+
+function buildTeam(team) {
+  var slots = '';
+  for (var i = 0; i < TEAM; i++) slots += "<div class='slot' data-team='" + team + "' data-i='" + i + "'></div>";
+  el(team + 'slots').innerHTML = slots;
+  el(team + 'roster').innerHTML = rosterHTML(team);
+}
+function buildBanPicker() { el('banroster').innerHTML = rosterHTML('ban'); }
 
 function toggle(team, name) {
   if (st.bans.indexOf(name) >= 0) { flash(name + ' is banned this match'); return; }
@@ -50,24 +77,32 @@ function toggleBan(name) {
     ['red', 'blue'].forEach(function (team) {          /* a banned hero cannot be picked */
       var i = st[team].indexOf(name); if (i >= 0) st[team].splice(i, 1);
     });
-  } else { flash('five bans already - click a chip to free one'); return; }
+  } else { flash(BANS + ' bans already - click a banned hero or its slot to free one'); return; }
   save(); paint(); refresh();
 }
 
+/* the bans bar: a header (count and small portraits, click to open), the five
+   slots, and the same portrait grid the rosters use - a click bans, a click on
+   a banned tile or its slot un-bans */
 function paintBans() {
-  var out = '';
+  var slots = '', mini = '';
   st.bans.forEach(function (name) {
-    var h = hero(name);
-    out += "<span class='banchip' data-ban=\"" + esc(name) + "\" title='click to unban'>" +
-      (h && h.portrait ? "<img src='" + esc(h.portrait) + "' alt=''>" : '') + '<b>✕</b>' + esc(name) + '</span>';
+    var h = hero(name) || { name: name, portrait: '' };
+    slots += "<div class='slot full' data-ban=\"" + esc(name) + "\" title='click to unban'>" + portrait(h) + "<span class='nm'>" + esc(name) + '</span></div>';
+    mini += "<span class='banchip' data-ban=\"" + esc(name) + "\" title='click to unban'>" +
+      (h.portrait ? "<img src='" + esc(h.portrait) + "' alt=''>" : '') + '<b>✕</b>' + esc(name) + '</span>';
   });
-  for (var i = st.bans.length; i < BANS; i++) out += "<span class='banslot'>" + (i < 4 ? (i < 2 ? 'red' : 'blue') : 'lobby') + '</span>';
-  el('banslots').innerHTML = out;
-  var sel = el('bansel');
-  sel.innerHTML = "<option value=''>add a ban…</option>" + ROSTER.heroes.filter(function (h) {
-    return st.bans.indexOf(h.name) < 0; }).map(function (h) {
-    return "<option value=\"" + esc(h.name) + "\">" + esc(h.name) + ' (' + h.role + ')</option>'; }).join('');
-  sel.disabled = st.bans.length >= BANS;
+  for (var i = st.bans.length; i < BANS; i++) slots += "<div class='slot'><span class='idx'>" + (i < 4 ? (i < 2 ? 'red' : 'blue') : 'lobby') + '</span></div>';
+  el('banslots').innerHTML = slots;
+  el('banmini').innerHTML = mini;
+  el('bancount').textContent = st.bans.length + '/' + BANS;
+  var tiles = el('banroster').querySelectorAll('.tile[data-h]');
+  for (var t = 0; t < tiles.length; t++) {
+    var n = tiles[t].getAttribute('data-h');
+    tiles[t].className = 'tile' + (st.bans.indexOf(n) >= 0 ? ' banned' : '') +
+      (st.red.indexOf(n) >= 0 ? ' inred' : '') + (st.blue.indexOf(n) >= 0 ? ' inblue' : '');
+  }
+  el('bans').className = 'bans' + (bansOpen ? ' open' : '') + (st.bans.length >= BANS ? ' maxed' : '');
 }
 
 function paint() {
@@ -81,7 +116,7 @@ function paint() {
         s.innerHTML = portrait(h) + "<span class='nm'>" + esc(name) + '</span>'; }
       else { s.className = 'slot'; s.removeAttribute('data-h'); s.innerHTML = "<span class='idx'>" + (i + 1) + '</span>'; }
     }
-    var tiles = el(team + 'roster').querySelectorAll('.tile');
+    var tiles = el(team + 'roster').querySelectorAll('.tile[data-h]');   /* the announced card keeps its own class */
     for (var t = 0; t < tiles.length; t++) {
       var n = tiles[t].getAttribute('data-h');
       tiles[t].className = 'tile' + (st[team].indexOf(n) >= 0 ? ' on' : '') + (st[other].indexOf(n) >= 0 ? ' other' : '') +
@@ -101,13 +136,19 @@ function paint() {
 }
 
 document.addEventListener('click', function (e) {
-  var sideBtn = e.target.closest ? e.target.closest('[data-side]') : null;
+  var near = function (sel) { return e.target.closest ? e.target.closest(sel) : null; };
+  var sideBtn = near('[data-side]');
   if (sideBtn) { var sd = sideBtn.getAttribute('data-side'); st.side = st.side === sd ? '' : sd; save(); paint(); refresh(); return; }
-  var ban = e.target.closest ? e.target.closest('[data-ban]') : null;
+  var ban = near('[data-ban]');                       /* a ban slot or a header chip: un-ban */
   if (ban) { toggleBan(ban.getAttribute('data-ban')); return; }
-  var hit = e.target.closest ? e.target.closest('[data-h][data-team]') : null;
-  if (hit) toggle(hit.getAttribute('data-team'), hit.getAttribute('data-h'));
-  var tab = e.target.closest ? e.target.closest('nav.tabs button') : null;
+  if (near('#banhead')) { bansOpen = !bansOpen; paintBans(); return; }
+  var hit = near('[data-h][data-team]');              /* a roster tile, a team slot, or a picker tile */
+  if (hit) {
+    var team = hit.getAttribute('data-team'), name = hit.getAttribute('data-h');
+    if (team === 'ban') toggleBan(name); else toggle(team, name);
+    return;
+  }
+  var tab = near('nav.tabs button');
   if (tab) showTab(tab.getAttribute('data-tab'));
 });
 
@@ -156,7 +197,7 @@ function renderFacts() {
     if (f && (x.id + ' ' + x.key + ' ' + x.subject + ' ' + x.text).toLowerCase().indexOf(f) < 0) return;
     var head = x.scope === 'hero' ? (x.team + ' · ' + x.subject) : x.scope === 'team' ? (x.subject + ' team') : x.scope;
     if (x.scope === 'bans') head = 'bans';
-    if (x.scope === 'playbook') head = 'the playbook\u2019s record \u00b7 what it holds, decided and saw \u2014 not facts';
+    if (x.scope === 'playbook') head = 'the playbook’s record · what it holds, decided and saw — not facts';
     if (head !== last) { out += "<tr class='h'><td colspan='3' class='head'>" + esc(head) + '</td></tr>'; last = head; }
     var cls = (x.team || '') + (/^(WARNING|CAUTION)/.test(x.text) ? ' warn' : '') + (x.source.indexOf('derived:') === 0 ? ' derived' : '');
     out += "<tr class='" + cls + "'><td class='tag'>[" + x.id + "]</td><td class='text'>" + esc(x.text) + "</td><td class='src'>" + esc(x.source) + '</td></tr>';
@@ -178,24 +219,40 @@ function bars(contribs) {
   return out + '</div>';
 }
 
+/* the 0-100 figure (`normalized`: 100 for an optimal six, the current comp's
+   share of blue's optimal) large, the raw score small beside it and as the
+   tooltip; a response without `normalized` shows the raw score alone */
+function scoreHTML(d) {
+  var raw = 'score ' + (+d.score).toFixed(2);
+  if (typeof d.normalized === 'number')
+    return "<span class='score' title='" + raw + "'>" + Math.round(d.normalized) + "<small>/ 100</small></span><span class='raw'>" + raw + '</span>';
+  return "<span class='score' title='the raw score under the catalog'>" + raw + '</span>';
+}
+function altScore(a) {
+  return (typeof a.normalized === 'number' ? "<span class='altn'>" + Math.round(a.normalized) + ' / 100</span> ' : '') +
+    "<span class='legend'>(score " + (+a.score).toFixed(2) + ')</span>';
+}
+
+/* the comps panel: blue's optimal six and red's side by side, the current comp below */
 function renderInf() {
   var d = INF;
   if (!d || d.error) { el('inf-blue').innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; el('inf-red').innerHTML = ''; el('cur').innerHTML = ''; return; }
   renderResult(d.blue, el('inf-blue'), 'blue - optimal six' + (d.side ? ' on ' + d.side : ''), true);
   renderResult(d.red, el('inf-red'), 'red - their optimal six' + (d.side ? ' on ' + (d.side === 'attack' ? 'defense' : 'attack') : ''), false);
   var c = d.current;
-  if (!c.blue || !c.blue.length) el('cur').innerHTML = "<p class='legend'>lock a blue pick to score the current comp; six picks are ranked against the whole field.</p>";
-  else renderResult(c, el('cur'), c.kind === 'evaluate' ? 'current comp - your six, ranked' : 'current comp - ' + c.blue.length + ' of ' + TEAM + ' picked', false);
+  if (!c.blue || !c.blue.length) el('cur').innerHTML = "<div class='inf-head'><h3>current comp - your picks</h3></div>" +
+    "<p class='legend'>lock a blue pick to score the current comp; six picks are ranked against the whole field.</p>";
+  else renderResult(c, el('cur'), 'current comp - your picks' + (c.kind === 'evaluate' ? ', ranked' : ' (' + c.blue.length + ' of ' + TEAM + ')'), false);
 }
 
 function renderResult(d, container, title, recordable) {
   if (!d || d.error) { container.innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
-  var out = "<div class='inf-head'><h3>" + esc(title) + "</h3><span class='score'>score " + (+d.score).toFixed(2) + "</span><span class='legend'>" +
+  var out = "<div class='inf-head'><h3>" + esc(title) + '</h3>' + scoreHTML(d) + "<span class='legend'>" +
     (d.rank ? 'rank ' + d.rank + ' among the feasible field · ' : '') + (d.considered ? d.considered + ' candidates · ' : '') + d.seconds + 's · ' +
     d.strategies.constraint + ' constraints, ' + d.strategies.heuristic + ' heuristics' +
     (d.playstyle ? ' · leans ' + d.playstyle : '') + '</span>' +
     (recordable ? "<button class='primary' id='recbtn'>record this comp</button>" : '') + '</div>';
-  if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search\u2019s field</div>';
+  if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search’s field</div>';
   if (d.violations && d.violations.length) out += "<div class='warnbox'>violates: " + esc(d.violations.join(', ')) + '</div>';
   out += "<div class='comp'>";
   d.picks.forEach(function (p) {
@@ -206,8 +263,8 @@ function renderResult(d, container, title, recordable) {
   });
   out += '</div>' + bars(d.contributions || []);
   if (d.alternatives && d.alternatives.length) {
-    out += "<div class='alts'><b>" + (d.kind === 'infer' ? 'alternatives' : 'the field\u2019s best') + "</b><ol>" +
-      d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + " <span class='legend'>(" + (+a.score).toFixed(2) + ')</span></li>'; }).join('') + '</ol></div>';
+    out += "<div class='alts'><b>" + (d.kind === 'infer' ? 'alternatives' : 'the field’s best') + "</b><ol>" +
+      d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + ' ' + altScore(a) + '</li>'; }).join('') + '</ol></div>';
   }
   if (recordable) out += "<div class='notice' id='recnote'></div>";
   container.innerHTML = out;
@@ -234,16 +291,18 @@ function renderPlaybook(d) {
              : h.form === 'limit' ? 'require ' + h.require + (h.soft ? ' · soft, penalty ' + h.penalty : ' · hard') + (h.when ? ' · when ' + h.when : '')
              : h.form === 'scored' ? [h.when ? 'when ' + h.when : '', h.bonus ? 'bonus ' + h.bonus : '', h.penalty ? 'penalty ' + h.penalty : ''].filter(Boolean).join(' · ') + ' · weight ' + h.weight
              : h.form === 'draft' ? 'draft - name, kind and prose only; /strategy infers the rest, not scored until then'
-             : 'prose - read by the session, shown here, not scored';
+             : h.form === 'assumption' ? 'assumption - taken as given, read by the session, shown here, not scored'
+             : h.form;
     var params = Object.keys(h.params || {}).map(function (k) { return k + '=' + h.params[k]; }).join(', ');
     var body = h.body.replace(/^#[^\n]*\n/, '').split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.replace(/\s+/g, ' ')) + '</p>'; }).join('');
-    out += "<div class='hcard'><span class='kind " + h.kind + "'>" + h.kind + (h.form !== 'heuristic' ? ' · ' + h.form : '') + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
+    out += "<div class='hcard'><span class='kind " + h.kind + "'>" + h.kind + (h.form !== h.kind ? ' · ' + h.form : '') + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
       "<div class='legend'>inference/strategies/" + esc(h.id) + '.md · ' + esc(h.category) + '</div></div>';
   });
   el('playbook').innerHTML = out + '</div>';
 }
 
 function showTab(name) {
+  if (TABS.indexOf(name) < 0) name = TABS[0];   /* an unknown or stale tab (the old 'inf' / 'cur') lands on comps */
   document.querySelectorAll('nav.tabs button').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
   document.querySelectorAll('.panel').forEach(function (p) { p.classList.toggle('active', p.id === 'tab-' + name); });
   try { localStorage.setItem('owdb-tab', name); } catch (e) {}
@@ -262,16 +321,15 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   ROSTER = d; ROSTER.byName = {};
   d.heroes.forEach(function (h) { ROSTER.byName[h.name] = h; });
   el('mapsel').innerHTML = "<option value=''>MAP UNKNOWN / ANY</option>" + d.maps.map(function (m) { return "<option value=\"" + esc(m.name) + "\">" + esc(m.name) + '</option>'; }).join('');
-  st.red = st.red.filter(function (h) { return ROSTER.byName[h]; });
-  st.blue = st.blue.filter(function (h) { return ROSTER.byName[h]; });
+  var known = function (h) { return !!ROSTER.byName[h]; };   /* the roster is the only source of a name in state */
+  st.red = st.red.filter(known); st.blue = st.blue.filter(known); st.bans = st.bans.filter(known);
   if (!d.maps.some(function (m) { return m.name === st.map; })) st.map = '';
-  buildTeam('red'); buildTeam('blue'); paint();
+  buildTeam('red'); buildTeam('blue'); buildBanPicker(); paint();
   var blz = (d.snapshots || []).filter(function (s) { return s.source === 'blizzard'; })[0];
   if (blz) el('captured').textContent = 'rates captured ' + blz.captured + ' (' + (blz.patch || 'unknown patch') + ')';
   if (d.newer_patches && d.newer_patches.length) { var w = el('vintage'); w.style.display = 'block';
     w.textContent = d.newer_patches.length + ' patch(es) shipped since the rates were captured (newest ' + d.newer_patches[0][0] + ') - rates are pre-patch; run pull_rates'; }
   el('mapsel').onchange = function () { st.map = this.value; save(); paint(); refresh(); };
-  el('bansel').onchange = function () { if (this.value) toggleBan(this.value); };
   el('filter').oninput = renderFacts;
   el('clearbtn').onclick = function () { st = { map: '', red: [], blue: [], bans: [], side: '' }; save(); paint(); refresh(); };
   el('swapbtn').onclick = function () { var r = st.red; st.red = st.blue; st.blue = r; st.side = st.side === 'attack' ? 'defense' : st.side === 'defense' ? 'attack' : ''; save(); paint(); refresh(); };
@@ -279,6 +337,6 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   chips.onclick = function (e) { var c = e.target.closest('.chip'); if (!c) return; var s = c.getAttribute('data-scope');
     scopeOn[s] = !scopeOn[s]; c.classList.toggle('on', scopeOn[s]); renderFacts(); };
   fetch('/api/strategies').then(function (r) { return r.json(); }).then(renderPlaybook);
-  showTab((function () { try { return localStorage.getItem('owdb-tab') || 'facts'; } catch (e) { return 'facts'; } })());
+  showTab((function () { try { return localStorage.getItem('owdb-tab'); } catch (e) { return null; } })());
   refresh(); pollRecs(); setInterval(pollRecs, 8000);
 });

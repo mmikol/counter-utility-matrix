@@ -37,7 +37,7 @@ def test_initialize_then_list_tools_over_stdio():
     ])
     assert replies[0]["id"] == 1
     assert replies[0]["result"]["protocolVersion"] == "2025-06-18"
-    assert replies[0]["result"]["serverInfo"]["name"] == "overwatch-db"
+    assert replies[0]["result"]["serverInfo"]["name"] == "counter-utility-matrix"
     names = {t["name"] for t in replies[1]["result"]["tools"]}
     assert {"pull_heroes", "pull_rates", "sync_all", "db_rebuild", "db_migrate", "query",
             "facts", "infer", "evaluate", "board", "strategies", "record", "load_authored",
@@ -177,7 +177,7 @@ def test_http_transport_initializes_lists_and_calls(http_server):
         "jsonrpc": "2.0", "id": 1, "method": "initialize",
         "params": {"protocolVersion": "2025-06-18", "capabilities": {},
                    "clientInfo": {"name": "test", "version": "0"}}})
-    assert status == 200 and reply["result"]["serverInfo"]["name"] == "overwatch-db"
+    assert status == 200 and reply["result"]["serverInfo"]["name"] == "counter-utility-matrix"
     assert headers.get("Mcp-Session-Id")
     status, _, reply = _post(http_server, {"jsonrpc": "2.0",
                                            "method": "notifications/initialized"})
@@ -218,3 +218,71 @@ def test_metrics_tool_serves_the_vocabulary(ctx):
 def test_derive_strategies_is_idle_with_nothing_pending(ctx):
     text, data = tools.run_tool(ctx, "derive_strategies")
     assert data["skipped"] == "nothing pending" and "nothing pending" in text
+
+
+# --- the door's guards: token, size, rate, audit ------------------------------------------
+
+def _http_server(tmp_path, token=None, rate_limit=120):
+    import threading
+    from db.mcp.server import HttpServer
+    mcp = Server(tools.build(tools.Context(dsn="postgresql://nowhere")), None,
+                 transport="http", audit_path=str(tmp_path / "audit.jsonl"))
+    httpd = HttpServer(("127.0.0.1", 0), mcp, lambda: {"status": "ok"}, token=token,
+                       rate_limit=rate_limit)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd, "http://127.0.0.1:%d" % httpd.server_address[1]
+
+
+def _knock(url, body, headers=None):
+    import urllib.error
+    import urllib.request
+    data = body if isinstance(body, bytes) else json.dumps(body).encode()
+    request = urllib.request.Request(url + "/mcp", data=data, headers=dict(
+        {"Content-Type": "application/json"}, **(headers or {})))
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:
+            return response.status, json.loads(response.read() or b"null")
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read() or b"null")
+
+
+def test_the_door_requires_its_token_when_one_is_set(tmp_path):
+    httpd, url = _http_server(tmp_path, token="s3cret")
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "list_sources", "arguments": {}}}
+    assert _knock(url, call)[0] == 401
+    assert _knock(url, call, {"Authorization": "Bearer wrong"})[0] == 401
+    code, reply = _knock(url, call, {"Authorization": "Bearer s3cret"})
+    assert code == 200 and reply["result"]["isError"] is False
+    httpd.shutdown()
+
+
+def test_the_door_refuses_huge_bodies_and_rate_limits_a_client_and_audits_every_call(tmp_path):
+    httpd, url = _http_server(tmp_path, rate_limit=3)
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "list_sources", "arguments": {}}}
+    assert _knock(url, b"x" * ((1 << 20) + 1))[0] == 413
+    codes = [_knock(url, call, {"Mcp-Session-Id": "one"})[0] for _ in range(4)]
+    assert codes == [200, 200, 200, 429]
+    assert _knock(url, call, {"Mcp-Session-Id": "two"})[0] == 429     # the budget is the host's
+    batch = [dict(call, id=i) for i in range(21)]
+    assert _knock(url, batch)[0] == 413
+    lines = [json.loads(l) for l in (tmp_path / "audit.jsonl").read_text().splitlines()]
+    assert len(lines) == 3 and all(l["tool"] == "list_sources" and l["ok"] for l in lines)
+    assert lines[0]["transport"] == "http" and lines[0]["client"].startswith("http:127.0.0.1/one")
+    assert set(lines[0]) >= {"t", "args", "ms"}
+    httpd.shutdown()
+
+
+def test_query_refuses_file_and_server_reaching_sql_before_connecting():
+    nowhere = tools.Context(dsn="postgresql://nowhere")
+    for sql in ("select pg_read_file('/etc/passwd')", "select * from pg_ls_dir('.')",
+                "COPY heroes TO PROGRAM 'id'", "select pg_sleep(10)"):
+        with pytest.raises(ToolError, match="refuses|read-only"):
+            tools.run_tool(nowhere, "query", sql=sql)
+
+
+@pytest.mark.invariant
+def test_query_runs_as_the_reader_role(ctx):
+    text, data = tools.run_tool(ctx, "query", sql="select current_user, count(*) from heroes")
+    assert data["rows"][0][0] == "matrix_reader" and data["rows"][0][1] > 0

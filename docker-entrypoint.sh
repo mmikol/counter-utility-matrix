@@ -9,6 +9,8 @@
 #   ui          UI LAYER: wait for the database, serve the board on 8017
 #   refresh     DATA LAYER's clock: wait for the database, then refresh it
 #               daily (db/refresh.py)
+#   sentry      the guard: the playbook, the inputs and the door, every
+#               COUNTER_MATRIX_SENTRY_EVERY seconds (db/sentry.py)
 #
 # Anything else is run as a command in the image:
 #   docker compose run data python -m db.mcp call sync_all
@@ -16,7 +18,7 @@
 set -e
 role="${1:-ui}"
 case "$role" in
-    data|inference|ui|refresh) ;;
+    data|inference|ui|refresh|sentry) ;;
     *) exec "$@" ;;
 esac
 
@@ -44,6 +46,8 @@ END
 }
 
 case "$role" in
+    sentry)
+        exec python -m db.sentry ;;
     data)
         state=$(db_state)
         case "$state" in

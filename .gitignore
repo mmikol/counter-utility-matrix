@@ -217,7 +217,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# overwatch-db - pipeline working directories
+# counter-utility-matrix - pipeline working directories
 .cache-blizzard/
 .cache-wiki/
 .cache-counterpick/
@@ -239,3 +239,6 @@ db/raw/
 # ...except the authored inputs: they cannot be re-fetched, so the
 # repo is their home and their backup.
 !db/data/authored/*.csv
+
+# what the sentry set aside: never a commit, a person looks first
+*.md.quarantined

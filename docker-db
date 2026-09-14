@@ -11,5 +11,5 @@
 # builds it when empty or stale); this script is how host-side tools - the
 # MCP server a Claude Code session drives, the board, the tests - read what
 # Docker built.
-export DATABASE_URL="postgresql://overwatch:overwatch@localhost:5433/overwatch"
+export DATABASE_URL="postgresql://overwatch:${POSTGRES_PASSWORD:-overwatch}@localhost:5433/overwatch"
 exec "$@"

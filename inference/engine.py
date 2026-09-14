@@ -20,6 +20,22 @@ from inference.solver import Candidate, Solver, evaluate_comp
 ROLE_ORDER = {"tank": 0, "damage": 1, "support": 2}
 
 
+def _pct(score, best):
+    """A score as a share of the board's best, 0-100: the optimal six is 100,
+    the current comp its percentage of blue's optimal, an alternative its
+    share of the winner. A best at or below zero makes the scale meaningless,
+    so only the best itself scores 100 there."""
+    if best is None or best <= 0:
+        return 100 if score >= (best if best is not None else score) else 0
+    return max(0, min(100, int(round(100.0 * score / best))))
+
+
+def _finish(result, best):
+    result.best = best
+    for alt in result.alternatives:
+        alt["normalized"] = _pct(alt["score"], best)
+
+
 class Result:
     def __init__(self, kind, map_name, red, blue, locked, catalog, bans=(), side="",
                  seat="blue"):
@@ -38,10 +54,11 @@ class Result:
         self.seconds = 0.0
         self.rank = None
         self.playstyle = ""
-        # the prose constraints - no score to add: what the agent reconciles the
+        self.best = None            # the board's best score: what 100 means here
+        # the assumptions - nothing to score: what the agent reconciles the
         # facts against beyond the arithmetic
         self.considerations = [{"id": h.id, "name": h.name}
-                               for h in catalog if h.form == "prose"]
+                               for h in catalog if h.kind == "assumption"]
         # drafts: name, kind and prose only - shown, not scored, until /strategy
         self.pending = [h.id for h in catalog if h.pending]
 
@@ -57,6 +74,7 @@ class Result:
                 "red": self.red, "blue": self.blue, "locked": self.locked,
                 "bans": self.bans, "side": self.side, "partial": self.partial,
                 "score": round(self.score, 3),
+                "normalized": _pct(self.score, self.best if self.best is not None else self.score),
                 "playstyle": self.playstyle, "picks": self.picks,
                 "contributions": self.contributions, "violations": self.violations,
                 "alternatives": self.alternatives, "rank": self.rank,
@@ -77,12 +95,13 @@ class Result:
             " (banned: %s)" % ", ".join(self.bans) if self.bans else "")
         counts = {k: sum(1 for h in self.catalog if h.kind == k)
                   for k in catalog_module.KINDS}
-        lines = [head, "  %s%s - score %.2f%s, %d candidates considered in %.1fs"
-                 " under %d constraints and %d heuristics"
+        lines = [head, "  %s%s - score %.2f (%d/100)%s, %d candidates considered in %.1fs"
+                 " under %d constraints, %d heuristics and %d assumptions"
                  % (", ".join(self.blue), " (%s)" % self.playstyle if self.playstyle else "",
-                    self.score, " (rank %d among the feasible field)" % self.rank
+                    self.score, _pct(self.score, self.best if self.best is not None else self.score),
+                    " (rank %d among the feasible field)" % self.rank
                     if self.rank else "", self.considered, self.seconds,
-                    counts["constraint"], counts["heuristic"])]
+                    counts["constraint"], counts["heuristic"], counts["assumption"])]
         if self.partial:
             lines.append("  PARTIAL: %d of %d picked - sums read low until the team is full"
                          % (len(self.blue), TEAM_SIZE))
@@ -232,6 +251,7 @@ def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=Non
     _fill(result, best, fs, solver)
     result.alternatives = [{"blue": _order(c.heroes), "score": round(c.score, 3)}
                            for c in ranked[1:top + 1]]
+    _finish(result, result.score)
     result.seconds = time.time() - started
     result.solver = solver
     return result
@@ -260,6 +280,7 @@ def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
     result.alternatives = [{"blue": _order(c.heroes), "score": round(c.score, 3)}
                            for c in field[:3]]
     result.seconds = time.time() - started
+    _finish(result, max([result.score] + [a["score"] for a in result.alternatives]))
     return result
 
 
@@ -281,6 +302,7 @@ def current(world, blue_result, map_name=None, red=(), blue=(), catalog=None, ba
         result.seconds = time.time() - started
         return result
     solver = blue_result.solver
+    result.best = blue_result.score
     cand = solver.prepare(Candidate(blue_h))
     solver.score(cand)
     fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans,

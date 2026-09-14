@@ -114,6 +114,10 @@ def record(cx, question, answer, map_name=None, red=(), blue=(),
     The evidence board is (map, red, the six picks): the facts a pick
     cites are the ones the UI layer shows for that exact board."""
     validate_answer(answer)
+    if len(question or "") > 2000 or len(answer.get("reasoning") or "") > 8000 \
+            or any(len(p.get("why") or "") > 600 for p in answer["picks"]):
+        raise ValueError("too long: a question under 2,000 characters, reasoning under"
+                         " 8,000, each pick's why under 600")
     world = model.load(cx)
     picks = [p["hero"] for p in answer["picks"]]
     fs = facts_engine.generate(world, map_name, list(red), picks, list(bans), side)

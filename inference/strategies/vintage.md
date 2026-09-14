@@ -1,8 +1,7 @@
 ---
 name: When patches shipped since capture, trust the kit
-kind: constraint
+kind: assumption
 category: uncertainty
-prose: true
 ---
 # When patches shipped since capture, trust the kit
 

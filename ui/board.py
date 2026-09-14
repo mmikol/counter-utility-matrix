@@ -5,10 +5,11 @@ and the inference layer.
     python -m ui.board            # serves http://localhost:8017
 
 Standard library only. Every click re-reads the database: the facts
-panel is the FactSet for (map, red, blue), the optimal-comp panel is the
-inference layer's answer around the locked blue picks (or the evaluation
-of a full six), and the playbook panel is the strategies catalog as it
-sits on disk. JSON endpoints under /api/ serve the same three things.
+panel is the FactSet for (map, red, blue), the comps panel is the
+inference layer's answer for both seats around the locked picks with the
+current blue picks scored, and the playbook panel is the strategies
+catalog as it sits on disk. JSON endpoints under /api/ serve the same
+three things.
 """
 
 import html
@@ -31,7 +32,7 @@ from inference import catalog as catalog_module
 from inference import engine as inference_engine
 from inference import record as record_module
 
-PORT = int(os.environ.get("OVERWATCH_DB_UI_PORT", "8017"))
+PORT = int(os.environ.get("COUNTER_MATRIX_UI_PORT", "8017"))
 
 # The inference layer runs in-process unless a service is named: in the
 # compose stack the `inference` container serves it (inference/serve.py).
@@ -179,12 +180,12 @@ HEAD = ("<!doctype html><meta charset='utf-8'>"
 
 
 def view_board():
-    return (HEAD + "<title>overwatch-db board</title><main>"
-            "<header class='top'><h1>overwatch<span>-db</span></h1>"
+    return (HEAD + "<title>Counter Utility Matrix</title><main>"
+            "<header class='top'><h1>Counter <span>Utility Matrix</span></h1>"
             "<span class='sub' title='FACTS = HEROES ∪ MAPS ∪ META (authoritative: pulled and set)"
-            "&#10;STRATEGIES = CONSTRAINTS ∪ HEURISTICS (the playbook: markdown files, tuned by what history shows)"
+            "&#10;STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS (the playbook: markdown files, tuned by what history shows)"
             "&#10;COMP = ARGMAX[ STRATEGIES( FACTS ) ]'>"
-            "FACTS = HEROES ∪ MAPS ∪ META &nbsp; STRATEGIES = CONSTRAINTS ∪ HEURISTICS &nbsp; "
+            "FACTS = HEROES ∪ MAPS ∪ META &nbsp; STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS &nbsp; "
             "COMP = ARGMAX[ STRATEGIES( FACTS ) ] &nbsp;·&nbsp; "
             "<a href='/recs'>recorded comps</a> &nbsp;·&nbsp; <span id='captured'></span></span>"
             "<div class='mapsel'><select id='mapsel'></select><span class='mode' id='mode'></span>"
@@ -193,10 +194,12 @@ def view_board():
             "<button id='swapbtn' title='swap red and blue'>swap sides</button>"
             "<button id='clearbtn'>new game</button><span class='status' id='status'></span></div>"
             "</header>"
-            "<div class='bans'><h3>bans</h3><span id='banslots'></span>"
-            "<select id='bansel'></select>"
+            "<div class='bans' id='bans'><div class='banhead' id='banhead' title='open or close the ban picker'>"
+            "<h3>bans</h3><span class='bancount' id='bancount'></span><span class='banmini' id='banmini'></span>"
             "<span class='hint'>up to five, all optional: each team's two and the lobby's -"
-            " a banned hero leaves both rosters and the search</span></div>"
+            " a banned hero leaves both rosters and the search</span><span class='caret'>&#9656;</span></div>"
+            "<div class='banbody' id='banbody'><div class='slots' id='banslots'></div>"
+            "<div class='roles' id='banroster'></div></div></div>"
             "<div class='warnbox' id='vintage' style='display:none'></div>"
             "<div class='notice' id='newrec'></div>"
             "<div class='teams'>"
@@ -207,18 +210,18 @@ def view_board():
             "<small style='margin-left:auto' id='bluecount'></small></h2>"
             "<div class='slots' id='blueslots'></div><div class='roles' id='blueroster'></div></section>"
             "</div>"
-            "<nav class='tabs'><button data-tab='facts'>facts <span id='factsn'></span></button>"
-            "<button data-tab='inf'>optimal comps</button><button data-tab='cur'>current comp</button>"
+            "<nav class='tabs'><button data-tab='comps'>comps</button>"
+            "<button data-tab='facts'>facts <span id='factsn'></span></button>"
             "<button data-tab='playbook'>playbook</button></nav>"
+            "<section class='panel' id='tab-comps'><div class='seats'>"
+            "<div class='seat blue' id='inf-blue'></div><div class='seat red' id='inf-red'></div></div>"
+            "<div class='seat blue cur' id='cur'></div></section>"
             "<section class='panel' id='tab-facts'><div class='tools'>"
             "<input type='text' id='filter' placeholder='filter facts - try a hero, CAUTION, derived:, team.'>"
             "<span id='chips'></span></div>"
             "<table class='facts'><tbody id='factbody'></tbody></table>"
             "<p class='legend'>every line is a row or a formula over the database, numbered for citation;"
             " the /comp skill and the inference layer read exactly these.</p></section>"
-            "<section class='panel' id='tab-inf'><div class='seat blue' id='inf-blue'></div>"
-            "<div class='seat red' id='inf-red'></div></section>"
-            "<section class='panel' id='tab-cur'><div class='seat blue' id='cur'></div></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
             "</main><script>var TEAM = %d, BANS = 5;</script>"
             "<script src='/static/board.js'></script>" % TEAM_SIZE)
@@ -228,7 +231,7 @@ def view_board():
 
 def _page(title, body):
     return (HEAD + "<title>%s</title>"
-            "<main><header class='top'><h1><a href='/'>overwatch<span>-db</span></a></h1>"
+            "<main><header class='top'><h1><a href='/'>Counter <span>Utility Matrix</span></a></h1>"
             "<span class='sub'>%s</span></header>%s</main>" % (esc(title), esc(title), body))
 
 
@@ -344,11 +347,11 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default=os.environ.get("OVERWATCH_DB_UI_HOST", "127.0.0.1"))
+    parser.add_argument("--host", default=os.environ.get("COUNTER_MATRIX_UI_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print("overwatch-db board: http://%s:%d" % (args.host, args.port))
+    print("Counter Utility Matrix: http://%s:%d" % (args.host, args.port))
     server.serve_forever()
 
 
