@@ -164,7 +164,10 @@ def test_the_page_is_a_shell_over_static_files():
     assert "'blue - your picks'" not in script
     assert "function meaning(d)" in script
     assert "class='scale'" not in script                      # the strip carries no scale note
-    assert "replace(/unscored( on this board)?" in script      # an unscored seat is the word alone
+    # the strip is two bars, blue's and red's, empty until a seat has a figure
+    assert "bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current)" in script
+    assert "mo.verdict" not in script                          # no verdict sentence on the board
+    assert "click red picks as they reveal" not in script       # the red seat carries no hint
     assert "game plan" in script and "d.plan" in script
     assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
     assert "leadReason" not in script and "class='sug'" not in script   # the hero alone

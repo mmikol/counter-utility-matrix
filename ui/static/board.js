@@ -285,14 +285,18 @@ function renderInf() {
   var text = (d.plan || '').split('\n'), basis = text.length && text[text.length - 1].indexOf('Based on:') === 0 ? text.pop() : '';
   el('plan').innerHTML = "<span class='lbl'>game plan</span><div class='text'>" + text.map(esc).join('<br>') + '</div>' + (basis ? "<div class='basis'>" + esc(basis) + '</div>' : '');
   var mo = d.momentum || {};
-  /* the strip says the verdict and nothing more: an unscored seat is the word,
-     its reason stays in the badge's tooltip; the scale is the math page's */
-  var verdict = (mo.verdict || '').replace(/unscored( on this board)?( - [^;]*)?(: [^;]*)?/g, 'unscored');
-  el('momentum').innerHTML = "<span class='lbl'>momentum</span> <b>" + esc(verdict) + '</b>' +
-    (typeof mo.blue === 'number' && typeof mo.red === 'number' ? "<span class='gauge'><span class='b' style='width:" + mo.blue + "%'></span><span class='r' style='width:" + mo.red + "%'></span></span>" : '');
+  /* the strip is two bars, blue's and red's, empty until a seat has a figure
+     and filled to its share as the picks come in; a seat that cannot be
+     scored reads the word, its reason in the badge's tooltip */
+  var bar = function (side, value, res) {
+    var word = res && res.blue && res.blue.length && res.scoring === false ? 'unscored'
+             : typeof value === 'number' ? value + ' / 100' : '';
+    return "<span class='mbar " + side + "'><span class='side'>" + side + "</span><span class='trk'><span class='fill' style='width:" +
+      (typeof value === 'number' ? value : 0) + "%'></span></span><span class='val'>" + word + '</span></span>';
+  };
+  el('momentum').innerHTML = "<span class='lbl'>momentum</span>" + bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current);
   var rc = d.red_current;
-  if (!rc || !rc.blue || !rc.blue.length) el('inf-red').innerHTML = "<div class='inf-head'><h3>red - their comp as revealed</h3></div>" +
-    "<p class='legend'>click red picks as they reveal; their comp is scored against yours, on the scale of their best counter to you.</p>";
+  if (!rc || !rc.blue || !rc.blue.length) el('inf-red').innerHTML = "<div class='inf-head'><h3>red - their comp as revealed</h3></div>";
   else renderResult(rc, el('inf-red'), 'red - their comp as revealed' + (rc.kind === 'evaluate' ? ', ranked' : ' (' + rc.blue.length + ' of ' + TEAM + ')'));
   var c = d.current;
   renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));

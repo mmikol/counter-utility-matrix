@@ -121,13 +121,14 @@ into your own six) and red's comp as revealed (right, scored against
 yours on the scale of their best counter). Every score says what it
 means under the number: 100 is the best six the solver can build for
 this board, and any other comp's number is its score as a share of that
-best; the momentum strip is the verdict alone, and an unscored seat is
-the word alone there and in the comps, its reason kept in the badge's
-tooltip; the scale is the math page's to explain.
+best; the momentum strip is two bars, blue's and red's, empty until a
+seat has a figure and filled to its share as the picks come in - an
+unscored seat reads the word alone there and in the comps, its reason
+kept in the badge's tooltip; the scale is the math page's to explain.
 
 The scores live with the selections. Above the two boxes sits the
-momentum strip: the verdict from the two current comps, each on its own
-optimal's scale - your picks as a share of blue's best counter to red's
+momentum strip: two bars, blue's and red's, one per current comp, each
+filled to its share on its own optimal's scale - your picks as a share of blue's best counter to red's
 selection, red's as a share of their best counter to yours - and, when
 you have picks, how you hold if red answers you perfectly. Each box
 carries its own share as a badge by its name - the current comp's while
