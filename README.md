@@ -54,7 +54,8 @@ Without Docker:
 ```bash
 .venv/bin/python -m db.mcp call db_rebuild   # build the database (the embedded cluster)
 .venv/bin/python -m ui.board                 # the board, http://localhost:8017
-.venv/bin/python -m pytest -q                # the test suite
+.venv/bin/ruff check db ui inference tests orchestrator.py   # the linter
+.venv/bin/python -m pytest -q --cov=db --cov=ui --cov=inference --cov=orchestrator   # the tests, under the 75% coverage bar
 ```
 
 Open the repo in a Claude Code session and the skills are there: `/up`,

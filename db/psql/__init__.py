@@ -17,7 +17,7 @@ generated docs - is db.schema. Nothing here knows a particular source.
 import argparse
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from db import DEFAULT_DB_DIR, RAW_DIR
 
@@ -65,7 +65,7 @@ def lookup_ids(cursor, table, name_column, id_column):
 
 def now():
     """One timestamp for a run."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def register_source(cursor, source, cao):
@@ -132,13 +132,11 @@ def export(connection, raw_dir=RAW_DIR):
     counts = []
     for table in table_names(connection):
         path = os.path.join(raw_dir, table + ".csv")
-        with open(path, "w", encoding="utf-8", newline="") as handle:
-            with connection.cursor().copy(
-                "COPY (SELECT * FROM %s) TO STDOUT WITH (FORMAT csv, HEADER true)"
-                % table
-            ) as copy:
-                for chunk in copy:
-                    handle.write(bytes(chunk).decode("utf-8"))
+        with open(path, "w", encoding="utf-8", newline="") as handle, connection.cursor().copy(
+                "COPY (SELECT * FROM %s) TO STDOUT WITH (FORMAT csv, HEADER true)" % table
+                ) as copy:
+            for chunk in copy:
+                handle.write(bytes(chunk).decode("utf-8"))
         # Counted from the database, not by counting newlines: descriptions
         # embed newlines, which inflates the latter.
         counts.append(

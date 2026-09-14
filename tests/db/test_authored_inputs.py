@@ -5,8 +5,13 @@ rejection here must be loud, name the line, and leave nothing half-loaded."""
 
 import pytest
 
-from db.data.authored import (AuthoredError, read_archetypes, read_map_playstyle,
-                           read_seasons, read_synergies)
+from db.data.authored import (
+    AuthoredError,
+    read_archetypes,
+    read_map_playstyle,
+    read_seasons,
+    read_synergies,
+)
 
 
 def write(tmp_path, text):
@@ -89,6 +94,7 @@ def test_every_path_the_layer_declares_exists():
     # the folder move once doubled a segment of one of these; the containers
     # found out, the suite did not - now it does
     import os
+
     import db
     from db.psql import schema
     from inference import catalog

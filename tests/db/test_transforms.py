@@ -1,27 +1,26 @@
 """Unit tests: the pure functions the pipelines lean on. No database, no
 network - every lesson here was paid for once already."""
 
+from db.data.names import name_key
 from db.data.wiki.maps import parse_stages
 from db.data.wiki.measurements import parse_measurements
-from db.data.names import name_key
-
 
 # --- measurements: value / numerator / denominator / window ------------
 
 def test_rate_splits_into_numerator_and_denominator():
-    [(value, num, den, window, cond, text)] = parse_measurements("125 m/s")
+    [(value, num, den, window, _cond, _text)] = parse_measurements("125 m/s")
     assert (value, num, den, window) == (125, "meters", "seconds", 1)
 
 
 def test_plain_quantity_has_no_denominator():
-    [(value, num, den, window, *_)] = parse_measurements("14 seconds")
+    [(value, num, den, _window, *_)] = parse_measurements("14 seconds")
     assert (value, num, den) == (14, "seconds", None)
 
 
 def test_window_that_is_not_one_second_is_kept():
     # 75 over 0.59s is a published total, not 127/s; normalising it away
     # would turn a total into a derived rate.
-    [(value, num, den, window, *_)] = parse_measurements(
+    [(value, _num, den, window, *_)] = parse_measurements(
         "75 over 0.59 seconds", default_unit="hp")
     assert (value, den, window) == (75, "seconds", 0.59)
 
@@ -118,6 +117,7 @@ release in [[Season/2026|Season 5]] on October 6, 2026, which will make him the 
 
 def test_an_upcoming_article_yields_the_announcement_and_a_released_one_does_not():
     import datetime
+
     from db.data.wiki.heroes import parse_announcement
     found = parse_announcement(UPCOMING)
     assert found == {"role": "support", "subrole": "survivor", "health": 250,

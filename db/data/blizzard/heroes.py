@@ -12,13 +12,14 @@ prose only - no numbers - and omits some abilities outright, which the wiki
 supplies.
 """
 
+import re
+
 from bs4 import BeautifulSoup
-from db.data.fetch import cache_key, cached_get
+
 from db import psql
 from db.data import fetch
 from db.data.blizzard import BASE_URL, BLIZZARD, HEROES_URL
-import re
-
+from db.data.fetch import cache_key, cached_get
 
 # --- extract: markup -> Python ---------------------------------------------
 

@@ -24,8 +24,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-from db import CACHE_DIRS
-from db import psql
+from db import CACHE_DIRS, psql
 from db.mcp import tools
 
 DEFAULT_AT = os.environ.get("COUNTER_MATRIX_REFRESH_AT", "05:00")
@@ -40,7 +39,7 @@ def parse_at(text):
         hour, minute = text.strip().split(":")
         hour, minute = int(hour), int(minute)
     except ValueError:
-        raise ValueError("refresh time must be HH:MM, got %r" % text)
+        raise ValueError("refresh time must be HH:MM, got %r" % text) from None
     if not (0 <= hour < 24 and 0 <= minute < 60):
         raise ValueError("refresh time must be HH:MM, got %r" % text)
     return hour, minute

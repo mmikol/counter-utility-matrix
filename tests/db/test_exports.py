@@ -12,9 +12,9 @@ import os
 
 import pytest
 
-pytestmark = pytest.mark.invariant
-
 from db import RAW_DIR as RAW
+
+pytestmark = pytest.mark.invariant
 
 
 def _tables(rows):

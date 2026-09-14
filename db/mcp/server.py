@@ -13,7 +13,10 @@ import sys
 import threading
 import time
 import traceback
-from datetime import datetime, timezone
+import uuid
+from datetime import UTC, datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse
 
 from db import RAW_DIR
 
@@ -44,9 +47,7 @@ def _shape(arguments):
     """{name: size} - what was passed, not what it said."""
     out = {}
     for key, value in (arguments or {}).items():
-        if isinstance(value, (list, dict)):
-            out[key] = len(value)
-        elif isinstance(value, str):
+        if isinstance(value, (list, dict, str)):
             out[key] = len(value)
         else:
             out[key] = value if isinstance(value, (bool, int, float)) else str(type(value).__name__)
@@ -144,7 +145,7 @@ class Server:
             raise KeyError("tool %r" % name)
         arguments = params.get("arguments") or {}
         started = time.time()
-        entry = {"t": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        entry = {"t": datetime.now(UTC).isoformat(timespec="seconds"),
                  "transport": self.transport, "client": getattr(_client, "id", None),
                  "tool": name, "args": _shape(arguments)}
         try:
@@ -234,10 +235,6 @@ class Tool:
 # JSON-RPC to /mcp and gets the response as JSON (notifications get 202).
 # No server-initiated streams, so GET /mcp is 405; DELETE ends a session.
 # /health reports the database the tools are pointed at.
-
-import uuid
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlparse
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 MAX_BODY = 1 << 20            # one request is a tool call, not an upload

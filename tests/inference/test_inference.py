@@ -3,10 +3,9 @@ solver and evaluation run against the built database."""
 
 import pytest
 
-from ui.facts import compute
 from inference import catalog, expr
 from inference.expr import Expr, ExprError
-
+from ui.facts import compute
 
 # --- the expression language (pure) --------------------------------------
 
@@ -101,7 +100,7 @@ def test_infer_keeps_locked_picks_and_the_open_queue_shape(world):
     for p in r.picks:
         assert p["evidence"] and set(p["evidence"]) <= ids
     # coverage of both enemies is worth 3 points, and the optimum takes them
-    cov = [c for c in r.contributions if c["id"] == "coverage"][0]
+    cov = next(c for c in r.contributions if c["id"] == "coverage")
     assert cov["raw"] == 1.0 and cov.get("fact")
 
 
@@ -110,7 +109,7 @@ def test_infer_honours_a_hitscan_answer_to_a_flier(world):
     from inference import engine
     r = engine.infer(world, "Havana", ["Pharah", "Mercy"], [])
     assert any(world.hero(n).hitscan for n in r.blue)
-    anti = [c for c in r.contributions if c["id"] == "anti-air"][0]
+    anti = next(c for c in r.contributions if c["id"] == "anti-air")
     assert anti["applies"] and anti["ok"]
 
 
@@ -126,8 +125,10 @@ def test_evaluate_ranks_a_full_five_against_the_field(world):
 
 @pytest.mark.invariant
 def test_the_tank_limit_is_the_only_shape_constraint(world, tmp_path):
+    import os
+    import shutil
+
     from inference import engine
-    import shutil, os
     # two tanks is allowed by default; a third is not
     r = engine.infer(world, "King's Row", ["Zarya"], ["Winston", "D.Va"], pool_size=4)
     assert {"Winston", "D.Va"} <= set(r.blue)
@@ -167,33 +168,50 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     absolute = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], side="attack")
     assert blue.blue == absolute.blue                     # blue's optimal ignores your picks
     assert red.seat == "red" and red.side == "defense" and len(red.blue) == 6
-    assert red.locked == [] and red.red == ["Ana"]        # red's optimal: their best counter to ours
-    assert red.blue == engine.infer(world, "King's Row", ["Ana"], [], side="defense", seat="red").blue
+    # red's optimal: their best counter to ours
+    assert red.locked == [] and red.red == ["Ana"]
+    theirs = engine.infer(world, "King's Row", ["Ana"], [], side="defense", seat="red")
+    assert red.blue == theirs.blue
     assert cur.kind == "current" and cur.partial and cur.blue == ["Ana"]
     assert cur.contributions and cur.score is not None
     rc = b["red_current"]                                  # their comp as revealed, scored vs ours
-    assert rc.seat == "red" and set(rc.blue) == {"Zarya", "Pharah"} and rc.red == ["Ana"] and rc.partial
+    assert rc.seat == "red"
+    assert set(rc.blue) == {"Zarya", "Pharah"}
+    assert rc.red == ["Ana"]
+    assert rc.partial
     assert 0 <= rc.to_dict()["normalized"] <= 100
     assert b["countered"] is not None and b["countered"].kind == "countered"
     fill = b["fill"]                                       # the empty slots, filled around Ana
-    assert fill.kind == "fill" and fill.locked == ["Ana"] and len(fill.blue) == 6 and "Ana" in fill.blue
-    assert [p["locked"] for p in fill.picks].count(True) == 1 and 0 < fill.to_dict()["normalized"] <= 100
-    assert fill.blue == engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack").blue
+    assert fill.kind == "fill"
+    assert fill.locked == ["Ana"]
+    assert len(fill.blue) == 6
+    assert "Ana" in fill.blue
+    assert [p["locked"] for p in fill.picks].count(True) == 1
+    assert 0 < fill.to_dict()["normalized"] <= 100
+    around = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack")
+    assert fill.blue == around.blue
     mo = b["momentum"]
     assert set(mo) >= {"blue", "red", "countered", "verdict", "partial"} and mo["partial"]
     assert mo["blue"] == cur.to_dict()["normalized"] and mo["red"] == rc.to_dict()["normalized"]
-    assert ("ahead by" in mo["verdict"] or mo["verdict"].startswith("even")) and "best counter" in mo["verdict"]
-    plan = b["plan"]                                       # prose: the ground, what to play, them, the family
+    assert ("ahead by" in mo["verdict"] or mo["verdict"].startswith("even"))
+    assert "best counter" in mo["verdict"]
+    # prose: the ground, what to play, them, the family
+    plan = b["plan"]
     assert plan.startswith("King's Row is a Hybrid map: a capture point and then the payload path")
     assert "The archetypal brawl map; streets phase is one long corridor." in plan
-    assert "You are attacking: you have to break their hold" in plan and "The map rewards brawl" in plan
+    assert "You are attacking: you have to break their hold" in plan
+    assert "The map rewards brawl" in plan
     assert "Their 2 picks so far (Zarya, Pharah)" in plan and "answer" in plan
-    assert "If you stray from the six, stay in its family. Tanks: " in plan and "Above all: " in plan
-    assert plan.endswith("Based on: the rates and counters, the map, the side, red's 2 revealed picks.")
+    assert "If you stray from the six, stay in its family. Tanks: " in plan
+    assert "Above all: " in plan
+    assert plan.endswith("Based on: the rates and counters, the map, the side,"
+                         " red's 2 revealed picks.")
     assert "Held to" not in plan and "D - " not in plan
     d = engine.board_dict(b)
     assert d["side"] == "attack" and d["red"]["seat"] == "red" and d["current"]["partial"]
-    assert d["red_current"]["seat"] == "red" and d["momentum"]["verdict"] == mo["verdict"] and d["plan"] == plan
+    assert d["red_current"]["seat"] == "red"
+    assert d["momentum"]["verdict"] == mo["verdict"]
+    assert d["plan"] == plan
     assert d["fill"]["kind"] == "fill" and "the rest filled" in engine.board_rendered(b)
     assert "current comp" in engine.board_rendered(b) and "momentum:" in engine.board_rendered(b)
     # the side constraints fire on the right seat
@@ -215,7 +233,8 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     assert 0 <= b["current"].to_dict()["normalized"] <= 100      # against the absolute optimal
     b = engine.board(world, None, [], [])
     assert not b["current"].blue and b["current"].partial
-    assert b["countered"] is None and b["fill"] is None       # nothing locked: the optimal is the fill
+    # nothing locked: the optimal is the fill
+    assert b["countered"] is None and b["fill"] is None
     assert b["momentum"]["verdict"] == "no picks yet on either side"
     assert b["momentum"]["blue"] is None and b["momentum"]["red"] is None
     assert b["plan"].startswith("No map yet, so this is the meta's best six")
@@ -236,7 +255,9 @@ def test_scores_share_one_scale_per_board(world):
     e = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"], r.blue)
     assert abs(r.score - e.score) < 1e-9 and e.rank == 1
     assert r.to_dict()["normalized"] == 100 and e.to_dict()["normalized"] == 100
-    assert all(0 <= a["normalized"] <= 100 for a in r.alternatives) and r.alternatives[0]["normalized"] < 100
+    assert all(0 <= a["normalized"] <= 100 for a in r.alternatives)
+    assert r.alternatives[0]["score"] < r.score        # below the optimum, if only by a hair
+    assert r.alternatives[0]["normalized"] <= 100
     best = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [])
     b = engine.board(world, "King's Row", ["Zarya", "Pharah"], best.blue)
     assert abs(b["current"].score - best.score) < 1e-9 and b["blue"].blue == best.blue
@@ -252,10 +273,12 @@ def test_a_constraint_is_a_limit_or_scored_or_prose_never_a_heuristic(tmp_path):
     def load_one(text):
         (tmp_path / "x.md").write_text(text, encoding="utf-8")
         return catalog.load(str(tmp_path))[0]
-    assert load_one("---\nname: l\nkind: constraint\nrequire: team.tanks <= 2\n---\nx\n").form == "limit"
+    limit = load_one("---\nname: l\nkind: constraint\nrequire: team.tanks <= 2\n---\nx\n")
+    assert limit.form == "limit"
     assert load_one("---\nname: s\nkind: constraint\nbonus: team.tanks\n---\nx\n").form == "scored"
     assert load_one("---\nname: p\nkind: assumption\n---\nx\n").form == "assumption"
-    assert load_one("---\nname: d\nkind: constraint\n---\nx\n").form == "draft"     # awaiting /strategy
+    # awaiting /strategy
+    assert load_one("---\nname: d\nkind: constraint\n---\nx\n").form == "draft"
     assert load_one("---\nname: d\nkind: heuristic\n---\nx\n").pending
     assert not load_one("---\nname: p\nkind: assumption\n---\nx\n").pending
     assert load_one("---\nname: g\nkind: heuristic\ndirection: maximize\nmetric: team.tanks\n"
@@ -296,7 +319,8 @@ def test_the_momentum_verdict_reads_the_two_current_comps():
     assert "your picks hold 30 / 100" in blue["verdict"] and not blue["partial"]
     red = engine._momentum(R(["a"], 2, 10, partial=True), R(["b"] * 6, 9, 10), None)
     assert red["verdict"].startswith("red ahead by 70") and "(partial picks)" in red["verdict"]
-    assert engine._momentum(R([], 0, 10), R(["b"], 5, 10), None)["verdict"].startswith("red has revealed")
+    only_red = engine._momentum(R([], 0, 10), R(["b"], 5, 10), None)
+    assert only_red["verdict"].startswith("red has revealed")
 
 
 def test_the_plan_reads_every_authored_map_note(world):
@@ -307,7 +331,8 @@ def test_the_plan_reads_every_authored_map_note(world):
             plan = engine.board(world, m.name, [], [])["plan"]
             assert engine._sentence(note) in plan, m.name
     assert engine._and(["A"]) == "A" and engine._and(["A", "B", "C"]) == "A, B and C"
-    assert engine._hero_names(world, "winston d.va wrecking ball nobody") == ["Winston", "D.Va", "Wrecking Ball"]
+    names = engine._hero_names(world, "winston d.va wrecking ball nobody")
+    assert names == ["Winston", "D.Va", "Wrecking Ball"]
 
 
 def test_an_announced_hero_is_described_but_never_picked(world):
@@ -323,6 +348,38 @@ def test_an_announced_hero_is_described_but_never_picked(world):
         engine.infer(world, None, [], [h.name])                    # a pick may not
     with pytest.raises(ValueError, match="announced"):
         engine.board(world, None, [h.name], [])
-    r = engine.infer(world, None, [], [])                          # the default pool: a pool of 8 with no locks needs > 1 GiB
+    # the default pool: a pool of 8 with no locks needs more than the container's 1 GiB
+    r = engine.infer(world, None, [], [])
     assert h.name not in r.blue and all(a["blue"] for a in r.alternatives)
     assert not any(h.name in a["blue"] for a in r.alternatives)   # nor does the field hold it
+
+
+@pytest.mark.invariant
+def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
+    """A set of style names iterates in an order that changes with the process's
+    hash seed; the tie-breaks must not depend on it - two views of the same
+    heroes whose style sets iterate in opposite orders agree on every metric,
+    and the same board solves to the same six twice in a row."""
+    from inference import engine
+    heroes = [world.hero(n) for n in ("Reinhardt", "Zarya", "Widowmaker", "Ana", "Lúcio", "Mercy")]
+    forward = compute.team_metrics(world, heroes, world.map("Ilios"), [])
+
+    from ui.facts import model
+
+    class Reversed(model.Hero):                # the same hero, its styles iterated backwards
+        def __init__(self, hero):
+            self.__dict__ = dict(hero.__dict__)
+            self.styles = sorted(hero.styles, reverse=True)   # the other iteration order
+    backward = compute.team_metrics(world, [Reversed(h) for h in heroes], world.map("Ilios"), [])
+    for key in ("style_top", "style_lean", "style_counts", "style_fit"):
+        assert forward[key] == backward[key], key
+    ilios = world.map("Ilios")
+    tied = dict(ilios.styles)
+    ilios.styles = dict(reversed(list(tied.items())))
+    try:
+        assert ilios.style_top == max(sorted(tied), key=lambda st: (tied[st][0] or 0, st))
+    finally:
+        ilios.styles = tied
+    once = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
+    twice = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
+    assert once.blue == twice.blue and abs(once.score - twice.score) < 1e-12

@@ -50,7 +50,7 @@ def test_owherostats_best_map_rankings_broadly_agree(fetch, rows):
         join competitive_tiers t on t.tier_id = m.tier_id
         where t.code = 'all'""")
     ours = {}
-    for map_name, role, hero, rank in ranked:
+    for map_name, _role, hero, rank in ranked:
         if rank <= PER_ROLE:
             ours.setdefault(_normalise(map_name), set()).add(_normalise(hero))
 

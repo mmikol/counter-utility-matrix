@@ -21,25 +21,26 @@ grouping them into weapons is weapons.py's job.
 
 import collections
 import datetime
+import re
+
 import requests
+
 from db import psql
 from db.data import fetch
+from db.data.names import abilities_named_in, ability_key
 from db.data.wiki import (
     WIKI,
     WikiError,
     cargo_query,
     fetch_wikitext,
+    markup,
+    modifiers,
 )
-from db.data.wiki import markup
-from db.data.wiki import modifiers
 from db.data.wiki.measurements import parse_measurements
 from db.data.wiki.weapons import (
     group_weapons,
     slot_id,
 )
-from db.data.names import abilities_named_in, ability_key
-import re
-
 
 # --- extract: markup -> Python ---------------------------------------------
 
@@ -179,7 +180,8 @@ def parse_announcement(text):
                 release_date = datetime.datetime.strptime(released.group(1), "%B %d, %Y").date()
             except ValueError:
                 release_date = None
-        return {"role": role, "subrole": subrole, "health": int(health.group(1)) if health else None,
+        return {"role": role, "subrole": subrole,
+                "health": int(health.group(1)) if health else None,
                 "release_date": release_date}
     return None
 
@@ -483,7 +485,8 @@ def load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
         ).fetchall()
     }
     if not perk_ids and perks and cursor.execute(
-            "SELECT status FROM heroes WHERE hero_id = %s", (hero_id,)).fetchone()[0] == "announced":
+            "SELECT status FROM heroes WHERE hero_id = %s", (hero_id,)
+            ).fetchone()[0] == "announced":
         # Blizzard has not published the hero yet: the wiki's perks are the
         # only ones, so they get rows of their own (Blizzard's replace them)
         position = {"minor": 0, "major": 0}

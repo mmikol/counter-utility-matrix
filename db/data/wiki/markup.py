@@ -18,7 +18,6 @@ import re
 
 from bs4 import BeautifulSoup
 
-
 # --- shared tidying ----------------------------------------------------
 
 FILE_LINK_RE = re.compile(r"\[\[File:[^\]]*\]\]", re.I)

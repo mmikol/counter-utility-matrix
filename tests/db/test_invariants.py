@@ -189,8 +189,9 @@ def test_no_hero_has_two_abilities_that_fold_together(rows):
     # "Biotic Rifle" and "Biotic Rifle (ADS)" fold to one key; two such rows
     # on one hero means a firing config leaked into the abilities table, and
     # every rerun then routes stats to whichever row it finds first.
-    from db.data.names import ability_key
     from collections import Counter
+
+    from db.data.names import ability_key
     folds = Counter((h, ability_key(a)) for h, a in rows(
         "select hero_id, name from abilities"))
     dupes = {k: v for k, v in folds.items() if v > 1}
@@ -200,7 +201,8 @@ def test_no_hero_has_two_abilities_that_fold_together(rows):
 # --- the three-layer additions ------------------------------------------------
 
 def test_every_hero_has_a_portrait_and_every_role_an_icon(one):
-    assert one("select count(*) from heroes where portrait_url is null and status = 'released'") == 0
+    assert one("select count(*) from heroes"
+               " where portrait_url is null and status = 'released'") == 0
     assert one("select count(*) from roles where icon_url is null") == 0
 
 
@@ -220,6 +222,7 @@ def test_heuristics_table_mirrors_the_files(rows):
 
 def test_the_migration_ledger_matches_the_files(rows):
     import os
+
     from db.psql import schema
     assert [r[0] for r in rows("select filename from schema_migrations order by 1")] == \
         [os.path.basename(p) for p, _ in schema.read_migrations()]

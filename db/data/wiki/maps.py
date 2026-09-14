@@ -9,11 +9,11 @@ Only the "Standard Play" section is read; Former Standard Play (Assault,
 Clash), Stadium, Arcade and seasonal modes are out of scope.
 """
 
+import re
+
 from db import psql
 from db.data import fetch
 from db.data.wiki import WIKI, WikiError, fetch_wikitext, markup
-import re
-
 
 # --- extract: markup -> Python ---------------------------------------------
 
@@ -42,7 +42,7 @@ def standard_play_section(text):
     try:
         start = text.index(SECTION_START)
     except ValueError:
-        raise WikiError("Maps: no %r heading" % SECTION_START)
+        raise WikiError("Maps: no %r heading" % SECTION_START) from None
     end = text.find(SECTION_END, start)
     return text[start:end if end != -1 else len(text)]
 

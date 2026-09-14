@@ -12,11 +12,11 @@ current blue picks as they stand.
 
 import time
 
+from inference import catalog as catalog_module
+from inference.solver import Candidate, Solver, evaluate_comp
 from ui.facts import compute
 from ui.facts import engine as facts_engine
 from ui.facts.compute import TEAM_SIZE, is_sided, opposite
-from inference import catalog as catalog_module
-from inference.solver import Candidate, Solver, evaluate_comp
 
 ROLE_ORDER = {"tank": 0, "damage": 1, "support": 2}
 
@@ -28,7 +28,7 @@ def _pct(score, best):
     so only the best itself scores 100 there."""
     if best is None or best <= 0:
         return 100 if score >= (best if best is not None else score) else 0
-    return max(0, min(100, int(round(100.0 * score / best))))
+    return max(0, min(100, round(100.0 * score / best)))
 
 
 def _finish(result, best):
@@ -100,7 +100,8 @@ class Result:
         lines = [head, "  %s%s - score %.2f (%d/100)%s, %d candidates considered in %.1fs"
                  " under %d constraints, %d heuristics and %d assumptions"
                  % (", ".join(self.blue), " (%s)" % self.playstyle if self.playstyle else "",
-                    self.score, _pct(self.score, self.best if self.best is not None else self.score),
+                    self.score,
+                    _pct(self.score, self.best if self.best is not None else self.score),
                     " (rank %d among the feasible field)" % self.rank
                     if self.rank else "", self.considered, self.seconds,
                     counts["constraint"], counts["heuristic"], counts["assumption"])]
@@ -332,7 +333,7 @@ def board_rendered(b):
         parts.append(b["fill"].rendered())
     if b["countered"]:
         parts.append(b["countered"].rendered())
-    return "\n\n".join(parts + ["momentum: " + b["momentum"]["verdict"]])
+    return "\n\n".join([*parts, "momentum: " + b["momentum"]["verdict"]])
 
 
 def _momentum(cur, red_cur, countered):
@@ -347,7 +348,8 @@ def _momentum(cur, red_cur, countered):
     if n is None and m is None:
         out["verdict"] = "no picks yet on either side"
     elif n is None:
-        out["verdict"] = "red has revealed picks and blue has none: red %d / 100 of its best counter" % m
+        out["verdict"] = ("red has revealed picks and blue has none:"
+                          " red %d / 100 of its best counter" % m)
     elif m is None:
         out["verdict"] = "no red picks revealed yet: blue %d / 100 of its optimal" % n
     else:
@@ -370,7 +372,8 @@ MODE_GROUND = {
     "Escort": "a payload path with a choke between phases - the fight moves with the cart",
     "Hybrid": "a capture point and then the payload path - the first fight is at the point,"
               " the rest along the route",
-    "Push": "one long lane with the robot - fights follow the barricade and regrouping costs distance",
+    "Push": "one long lane with the robot - fights follow the barricade and regrouping"
+            " costs distance",
     "Flashpoint": "five points across a wide map - long rotations between fast fights, so"
                   " arriving first and together matters",
 }
@@ -462,7 +465,8 @@ def _plan(world, m, side, bans, red_h, blue_r):
         n = len(red_h)
         theirs = compute.team_metrics(world, red_h, m, [])
         red_lean = theirs["style_lean"] or theirs["style_top"] or ""
-        them = "Their %d pick%s%s (%s)" % (n, "" if n == 1 else "s", " so far" if n < TEAM_SIZE else "",
+        them = "Their %d pick%s%s (%s)" % (n, "" if n == 1 else "s",
+                                            " so far" if n < TEAM_SIZE else "",
                                             ", ".join(h.name for h in red_h))
         them += (" lean %s: %s." % (red_lean, THEIR_LEAN[red_lean])) if red_lean in THEIR_LEAN \
             else " show no lean yet."
@@ -473,9 +477,11 @@ def _plan(world, m, side, bans, red_h, blue_r):
                     for name in part[len("answers "):].split(", "):
                         answered.setdefault(name, []).append(p["hero"])
         names = [h.name for h in red_h]
-        pairs = sorted(((k, v) for k, v in answered.items() if k in names), key=lambda kv: -len(kv[1]))
+        pairs = sorted(((k, v) for k, v in answered.items() if k in names),
+                       key=lambda kv: -len(kv[1]))
         if pairs:
-            them += " " + _sentence("; ".join("%s answer%s %s" % (_and(v), "" if len(v) > 1 else "s", k)
+            them += " " + _sentence("; ".join(
+                "%s answer%s %s" % (_and(v), "" if len(v) > 1 else "s", k)
                                               for k, v in pairs[:4]))
         missing = [k for k in names if k not in answered]
         if missing:
@@ -487,7 +493,7 @@ def _plan(world, m, side, bans, red_h, blue_r):
     if family:
         parts = []
         for role, plural in (("tank", "tanks"), ("damage", "damage"), ("support", "supports")):
-            slots, note = family.get(role, (None, None))
+            _slots, note = family.get(role, (None, None))
             if not note:
                 continue
             desc, _, roster = note.partition(":")
@@ -498,10 +504,12 @@ def _plan(world, m, side, bans, red_h, blue_r):
             lines.append("If you stray from the six, stay in its family. " + " ".join(parts))
     # what it is built for
     names = {h.id: h.name for h in blue_r.catalog}
-    top = sorted((c for c in blue_r.contributions if c.get("applies") and c.get("weighted", 0) > 0.05),
+    top = sorted((c for c in blue_r.contributions
+                  if c.get("applies") and c.get("weighted", 0) > 0.05),
                  key=lambda c: -c["weighted"])[:4]
     if top:
-        lines.append("Above all: " + "; ".join(names.get(c["id"], c["id"]).lower() for c in top) + ".")
+        lines.append("Above all: "
+                     + "; ".join(names.get(c["id"], c["id"]).lower() for c in top) + ".")
     # what it rests on
     basis = ["the rates and counters"]
     if m is not None:

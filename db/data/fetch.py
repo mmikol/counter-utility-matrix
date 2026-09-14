@@ -19,6 +19,7 @@ import random
 import re
 import sys
 import time
+
 import requests
 
 DEFAULT_DELAY = 1.0

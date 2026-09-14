@@ -50,8 +50,8 @@ def abilities_named_in(description, ability_names):
     """
     found = []
     for name in sorted(ability_names, key=len, reverse=True):
-        if re.search(r"\b%s\b" % re.escape(name), description):
-            # Skip a name already covered by a longer one just matched.
-            if not any(name in seen for seen in found):
-                found.append(name)
+        # Skip a name already covered by a longer one just matched.
+        if re.search(r"\b%s\b" % re.escape(name), description) and not any(
+                name in seen for seen in found):
+            found.append(name)
     return found

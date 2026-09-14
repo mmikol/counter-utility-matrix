@@ -1,10 +1,12 @@
 """The inference engine as a service: its handlers speak the same results
 the engine returns in-process, and the board forwards to it when told to."""
 
+from urllib.parse import quote
+
 import pytest
 
-from ui import board
 from inference import serve
+from ui import board
 
 pytestmark = pytest.mark.invariant
 
@@ -52,3 +54,52 @@ def test_board_reports_an_unreachable_inference_service(monkeypatch):
     monkeypatch.setattr(board, "INFERENCE_URL", "http://127.0.0.1:9")
     data, code = board.remote("/health")
     assert code == 502 and "unreachable" in data["error"]
+
+
+# --- served ------------------------------------------------------------------------------
+
+@pytest.fixture()
+def served():
+    import threading
+    from http.server import ThreadingHTTPServer
+    server = ThreadingHTTPServer(("127.0.0.1", 0), serve.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield "http://127.0.0.1:%d" % server.server_address[1]
+    server.shutdown()
+
+
+def _get(url):
+    import json
+    import urllib.error
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            return response.status, json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read())
+
+
+def test_health_and_strategies_are_served_without_a_database(served, monkeypatch):
+    monkeypatch.setattr(serve.psql, "default_dsn", lambda: "postgresql://nobody@127.0.0.1:9/nowhere")
+    code, data = _get(served + "/health")
+    assert code == 200 and data["strategies"] >= 30
+    code, data = _get(served + "/strategies")
+    assert code == 200 and len(data["strategies"]) >= 30
+    assert _get(served + "/nothing")[0] == 404
+    code, data = _get(served + "/board?map=Ilios")           # no database: the error, as JSON
+    assert code == 500 and "error" in data
+
+
+@pytest.mark.invariant
+def test_board_infer_and_evaluate_are_served(served, monkeypatch, dsn):
+    monkeypatch.setattr(serve.psql, "default_dsn", lambda: dsn)
+    code, data = _get(served + "/board?map=Ilios&blue=Ana&red=Zarya")
+    assert code == 200 and data["blue"]["blue"] and data["momentum"]["verdict"]
+    code, data = _get(served + "/infer?map=Ilios&red=Zarya")
+    assert code == 200 and len(data["blue"]) == 6
+    six = "&".join("blue=" + quote(h) for h in data["blue"])
+    code, data = _get(served + "/evaluate?map=Ilios&red=Zarya&" + six)
+    assert code == 200 and data["rank"] == 1
+    code, data = _get(served + "/evaluate?map=Ilios&blue=Ana")
+    assert code == 400 and "error" in data

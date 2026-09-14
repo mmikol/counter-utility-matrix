@@ -183,8 +183,9 @@ per-map rates and each hero's best maps, then `db_docs` and `export_csv`.
 **Say:** "maintain", "clean up", "check the repo", "is everything
 current" - or nothing, after a batch of changes, before a commit.
 
-**Does, in order:** lint and the tests three ways (with the database, as
-CI runs them with none, inside the image); the documentation current -
+**Does, in order:** lint and the tests three ways, under the coverage bar
+(with the database, as CI runs them with none, inside the image); the
+documentation current -
 the generated sections through `db_docs`, the hand-written ones read
 against what changed; a grep for stale names, paths and counts, with
 `db_status` and `strategies` as the truth for the numbers; a pass for

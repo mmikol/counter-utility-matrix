@@ -4,12 +4,15 @@
 # the wiki, which is slow, flaky, and unkind to the sources on every push.
 # The invariant tests skip themselves when db/psql/cluster is absent (see
 # tests/conftest.py; COUNTER_MATRIX_NO_DATABASE=1 reproduces this locally), so
-# CI runs the linter, the pure tests (transforms, authored inputs, the
-# expression language, the strategies catalog, tuning and deriving on a copy
-# of the playbook, the refresh and orchestrator logic), the MCP protocol
+# CI lints with ruff and runs the pure tests (transforms, authored inputs,
+# the expression language, the strategies catalog, tuning and deriving on a
+# copy of the playbook, the refresh and orchestrator logic), the MCP protocol
 # tests, which spawn the server without a database, and the documentation
 # tests: every link resolves, every skill names real tools, and the
-# generated sections of docs/ match what the code generates today.
+# generated sections of docs/ match what the code generates today. Coverage
+# is reported without the bar; the runs with a database - the local one and
+# the one inside the image (orchestrator.py test) - enforce the 75% that
+# pyproject.toml sets.
 
 name: ci
 
@@ -32,8 +35,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Lint (pyflakes)
-        run: python -m pyflakes db ui inference tests
+      - name: Lint (ruff)
+        run: python -m ruff check db ui inference tests orchestrator.py
 
       - name: Tests (pure + protocol; db-bound tests skip without a built cluster)
-        run: python -m pytest -q -rs
+        run: >-
+          python -m pytest -q -rs -p no:cacheprovider
+          --cov=db --cov=ui --cov=inference --cov=orchestrator
+          --cov-report=term-missing:skip-covered --cov-fail-under=0

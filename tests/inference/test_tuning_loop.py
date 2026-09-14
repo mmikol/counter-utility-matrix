@@ -3,6 +3,7 @@ trail, drafts completed from their prose, and the catalog's guards."""
 
 import os
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -37,13 +38,13 @@ def test_tune_edits_validates_mirrors_and_logs(catalog_copy):
         "enemy.flyers >= 1 and map.known == 1"
     tune.tune("map-fit", "params.NEW_DIAL", 2, "a dial added from nothing", catalog_copy)
     assert {h.id: h for h in catalog.load(catalog_copy)}["map-fit"].params["NEW_DIAL"] == 2
-    log = open(os.path.join(catalog_copy, "tuning-log.md"), encoding="utf-8").read()
+    log = Path(catalog_copy, "tuning-log.md").read_text(encoding="utf-8")
     assert "`coverage` weight: 3 -> 3.5 (test: more coverage)" in log
     assert log.count("\n- ") == 4
 
 
 def test_tune_refuses_bad_changes_and_changes_nothing(catalog_copy):
-    before = open(os.path.join(catalog_copy, "coverage.md"), encoding="utf-8").read()
+    before = Path(catalog_copy, "coverage.md").read_text(encoding="utf-8")
     with pytest.raises(tune.TuneError, match="not a registered fact key"):
         tune.tune("coverage", "metric", "team.nope", "test", catalog_copy)
     with pytest.raises(tune.TuneError, match="within"):
@@ -54,7 +55,7 @@ def test_tune_refuses_bad_changes_and_changes_nothing(catalog_copy):
         tune.tune("nope", "weight", 2, "test", catalog_copy)
     with pytest.raises(tune.TuneError):
         tune.tune("coverage", "when", "team.tanks ===", "test", catalog_copy)
-    assert open(os.path.join(catalog_copy, "coverage.md"), encoding="utf-8").read() == before
+    assert Path(catalog_copy, "coverage.md").read_text(encoding="utf-8") == before
     assert not os.path.exists(os.path.join(catalog_copy, "tuning-log.md"))
 
 
@@ -90,10 +91,11 @@ def test_add_stores_a_validated_strategy_and_complete_finishes_a_draft(catalog_c
                       "bonus": "min(team.antiheal, 1) * 1.5", "params": {"HEAL_RATIO": 1.0}},
                      "user: one anti-heal against a heavy heal line", directory=catalog_copy)
     assert added["form"] == "scored"
-    text = open(added["path"], encoding="utf-8").read()
+    text = Path(added["path"]).read_text(encoding="utf-8")
     assert text.startswith("---\nname: Shut off a heavy heal line\nkind: constraint\n")
     assert "when: enemy.heal_ratio >= params.HEAL_RATIO" in text and "  HEAL_RATIO: 1" in text
-    assert text.rstrip().endswith("another damage dealer.") and "# Shut off a heavy heal line" in text
+    assert text.rstrip().endswith("another damage dealer.")
+    assert "# Shut off a heavy heal line" in text
     assert "`shut-off-heals` added as constraint/scored" in tune.log_tail(
         1, os.path.join(catalog_copy, "tuning-log.md"))[0]
     # a draft: name, kind, prose - then completed in one validated step
@@ -158,8 +160,11 @@ def test_derive_completes_a_draft_from_the_models_answer(catalog_copy):
 def test_derive_sends_the_catalogs_objection_back_once(catalog_copy):
     from inference import derive
     _draft(catalog_copy, "sustain-first", "heuristic")
-    answers = iter(['{"fields": {"metric": "team.hps_peak", "direction": "maximize", "weight": 2}, "reason": "r"}',
-                    '{"fields": {"metric": "team.heal_peak_total", "direction": "maximize", "weight": 2}, "reason": "r"}'])
+    answers = iter(['{"fields": {"metric": "team.hps_peak", "direction": "maximize", "weight": 2},'
+                    ' "reason": "r"}',
+                    '{"fields": {"metric": "team.heal_peak_total", "direction": "maximize",'
+                    ' "weight": 2},'
+                    ' "reason": "r"}'])
     seen = []
     def runner(text):
         seen.append(text)
@@ -169,7 +174,8 @@ def test_derive_sends_the_catalogs_objection_back_once(catalog_copy):
     assert "refused by the catalog: sustain-first: metric 'team.hps_peak'" in seen[1]
     # two refusals leave the draft as it was
     _draft(catalog_copy, "stubborn", "heuristic")
-    bad = lambda text: '{"fields": {"metric": "team.nope", "direction": "maximize"}, "reason": "r"}'
+    def bad(text):
+        return '{"fields": {"metric": "team.nope", "direction": "maximize"}, "reason": "r"}'
     result = derive.derive(["stubborn"], directory=catalog_copy, runner=bad, log=lambda m: None)
     assert "stubborn" in result["failed"] and not result["derived"]
     assert next(h for h in catalog.load(catalog_copy) if h.id == "stubborn").pending
@@ -184,7 +190,7 @@ def test_derive_without_a_signed_in_cli_leaves_drafts_pending(catalog_copy, monk
     result = derive.derive(directory=catalog_copy, log=lambda m: None)
     assert result["skipped"].startswith("no claude CLI here") and not result["derived"]
     def not_logged_in(text):
-        raise derive.CliUnavailable("the claude CLI is not signed in: run `claude login` once")
+        raise derive.CliUnavailableError("the claude CLI is not signed in: run `claude login` once")
     result = derive.derive(directory=catalog_copy, runner=not_logged_in, log=lambda m: None)
     assert "not signed in" in result["skipped"] and "not signed in" in derive.rendered(result)
     assert next(h for h in catalog.load(catalog_copy) if h.id == "heal-line").pending
@@ -206,13 +212,15 @@ def test_frontmatter_cannot_be_injected_through_a_field_or_a_value(catalog_copy)
                          ("bonus", "x" * 501)):
         with pytest.raises(tune.TuneError):
             tune.tune("coverage", field, value, "r", directory=catalog_copy)
-    text = open(os.path.join(catalog_copy, "coverage.md"), encoding="utf-8").read()
+    text = Path(catalog_copy, "coverage.md").read_text(encoding="utf-8")
     assert "weight: 99" not in text
-    with pytest.raises(tune.TuneError, match="within 0..10"):
+    with pytest.raises(tune.TuneError, match=r"within 0\.\.10"):
         tune.tune("coverage", "weight", 11, "r", directory=catalog_copy)
-    (open(os.path.join(catalog_copy, "heavy.md"), "w", encoding="utf-8")
-     .write("---\nname: h\nkind: heuristic\nmetric: team.tanks\ndirection: maximize\nweight: 1e308\n---\nx\n"))
-    with pytest.raises(catalog.CatalogError, match="within 0..10"):
+    Path(catalog_copy, "heavy.md").write_text(
+        "---\nname: h\nkind: heuristic\nmetric: team.tanks\ndirection: maximize\n"
+        "weight: 1e308\n---\nx\n",
+        encoding="utf-8")
+    with pytest.raises(catalog.CatalogError, match=r"within 0\.\.10"):
         catalog.load(catalog_copy)
 
 
@@ -222,7 +230,8 @@ def test_the_deriver_accepts_only_a_strategys_fields():
         derive.parse('{"fields": {"prose": true, "weight": 2}, "reason": "r"}')
     with pytest.raises(ValueError, match="keeps its kind"):
         derive.parse('{"fields": {"kind": "constraint"}, "reason": "r"}')
-    assert derive.parse('{"fields": {"kind": "assumption"}, "reason": "r"}')[0] == {"kind": "assumption"}
+    parsed = derive.parse('{"fields": {"kind": "assumption"}, "reason": "r"}')
+    assert parsed[0] == {"kind": "assumption"}
     with pytest.raises(ValueError, match="params must be"):
         derive.parse('{"fields": {"params": {"A": "1 == 1"}}, "reason": "r"}')
     fields, reason = derive.parse('{"fields": {"weight": 2, "params": {"A": 1.5}}, "reason": "r"}')
@@ -230,8 +239,9 @@ def test_the_deriver_accepts_only_a_strategys_fields():
 
 
 def test_a_file_named_for_another_id_cannot_hijack_it(catalog_copy):
-    (open(os.path.join(catalog_copy, "aaa.md"), "w", encoding="utf-8")
-     .write("---\nname: x\nkind: assumption\nid: coverage\n---\nx\n"))
+    Path(catalog_copy, "aaa.md").write_text(
+        "---\nname: x\nkind: assumption\nid: coverage\n---\nx\n",
+                                            encoding="utf-8")
     with pytest.raises(catalog.CatalogError) as caught:
         catalog.load(catalog_copy)
     assert caught.value.file == "aaa.md" and "id: is the filename" in str(caught.value)

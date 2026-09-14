@@ -26,7 +26,7 @@ import os
 import re
 import shutil
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from inference import catalog as catalog_module
 
@@ -54,7 +54,8 @@ def edit_frontmatter(text, field, value):
     """The file's text with one frontmatter field set -> (new text, old value)."""
     if not text.startswith("---"):
         raise TuneError("no frontmatter")
-    if isinstance(value, str) and ("\n" in value or "\r" in value or value.lstrip().startswith("---")):
+    if isinstance(value, str) and ("\n" in value or "\r" in value
+                                   or value.lstrip().startswith("---")):
         raise TuneError("a value is one line")
     end = text.find("\n---", 3)
     header, rest = text[3:end], text[end:]
@@ -64,7 +65,7 @@ def edit_frontmatter(text, field, value):
         name = field[7:]
         if not PARAM_RE.match(name):
             raise TuneError("a param is NAME: capitals, digits, underscores")
-        block = next((i for i, l in enumerate(lines) if l.strip() == "params:"), None)
+        block = next((i for i, line in enumerate(lines) if line.strip() == "params:"), None)
         if block is None:
             lines.insert(len(lines) - (1 if lines and not lines[-1].strip() else 0),
                          "params:")
@@ -86,7 +87,7 @@ def edit_frontmatter(text, field, value):
                 lines[i] = "%s: %s" % (field, _format(value))
                 break
         else:
-            insert_at = next((i for i, l in enumerate(lines) if l.strip() == "params:"),
+            insert_at = next((i for i, line in enumerate(lines) if line.strip() == "params:"),
                              len(lines) - (1 if lines and not lines[-1].strip() else 0))
             lines.insert(insert_at, "%s: %s" % (field, _format(value)))
     else:
@@ -105,7 +106,7 @@ def validate(directory, hid, new_text):
             handle.write(new_text)
         return catalog_module.load(tmp)
     except catalog_module.CatalogError as error:
-        raise TuneError(str(error))
+        raise TuneError(str(error)) from error
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -116,14 +117,14 @@ def _coerce(field, value):
         try:
             value = float(value)
         except (TypeError, ValueError):
-            raise TuneError("weight must be a number")
+            raise TuneError("weight must be a number") from None
         if not WEIGHT_RANGE[0] <= value <= WEIGHT_RANGE[1]:
             raise TuneError("weight must be within %g..%g" % WEIGHT_RANGE)
     elif field.startswith("params."):
         try:
             value = float(value)
         except (TypeError, ValueError):
-            raise TuneError("a param must be a number")
+            raise TuneError("a param must be a number") from None
     elif field == "soft":
         if not isinstance(value, bool):
             raise TuneError("soft must be true or false")
@@ -158,7 +159,7 @@ def _log(log_path, line):
 
 
 def _stamp():
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ")
 
 
 def _where(directory, log_path):
@@ -226,7 +227,7 @@ def complete(hid, fields, reason, directory=None, by="claude-code-session", log_
         _stamp(), hid, form, ", ".join("%s=%s" % (f, _format(v)) for f, v in pairs),
         " ".join(reason.split()), by)
     _log(log_path, line)
-    return {"id": hid, "form": form, "set": dict((f, _format(v)) for f, v in pairs),
+    return {"id": hid, "form": form, "set": {f: _format(v) for f, v in pairs},
             "line": line}
 
 
@@ -271,5 +272,5 @@ def log_tail(n=20, log_path=LOG_PATH):
     if not os.path.exists(log_path):
         return []
     with open(log_path, encoding="utf-8") as handle:
-        lines = [l.rstrip("\n") for l in handle if l.startswith("- ")]
+        lines = [line.rstrip("\n") for line in handle if line.startswith("- ")]
     return lines[-n:]

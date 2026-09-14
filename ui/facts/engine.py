@@ -22,14 +22,29 @@ stable within a board.
 """
 
 from ui.facts import compute
-from ui.facts.compute import (RANK_SENSITIVE, SIDES, SPECIALIST_DELTA, TREND_POINTS,
-                                is_sided, opposite)
+from ui.facts.compute import (
+    RANK_SENSITIVE,
+    SIDES,
+    SPECIALIST_DELTA,
+    TREND_POINTS,
+    is_sided,
+    opposite,
+)
 from ui.facts.model import SQUISHY_POOL
 
 
 class Fact:
-    __slots__ = ("id", "scope", "subject", "team", "key", "text", "value",
-                 "unit", "source")
+    __slots__ = (
+        "id",
+        "key",
+        "scope",
+        "source",
+        "subject",
+        "team",
+        "text",
+        "unit",
+        "value",
+    )
 
     def __init__(self, fid, scope, subject, team, key, text, value, unit, source):
         self.id, self.scope, self.subject, self.team = fid, scope, subject, team
@@ -123,7 +138,7 @@ def generate(world, map_name=None, red=(), blue=(), bans=(), side=""):
     the red and blue picks, and the match's bans (each team's two and the
     lobby's - up to five, all optional). A banned hero cannot be picked and
     cannot be recommended."""
-    if side not in ("",) + SIDES:
+    if side not in ("", *SIDES):
         raise ValueError("side must be attack or defense, got %r" % side)
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans, allow_announced=True)
     side = side if is_sided(m) else ""
@@ -494,7 +509,8 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
             % (label, m.style_top, m.name, 100 * t["style_fit"]))
         add("archetype_deviation", "%s deviation from the %s archetype's role slots: %d"
             " pick(s) over" % (label, m.style_top, t["archetype_deviation"]))
-    add("pool_total", "%s effective HP: %d across %d picks" % (label, t["pool_total"], t["size"]), "hp")
+    add("pool_total", "%s effective HP: %d across %d picks" % (label, t["pool_total"], t["size"]),
+        "hp")
     add("pool_min", "%s weakest link: %s at %d pool - focus fire finds the minimum"
         % (label, t["weakest"], t["pool_min"]), "hp")
     if t["armor_total"]:
@@ -513,7 +529,8 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
     add("dps_floor", "%s sustained damage floor: %g per second summed across the %d of %d"
         " kits that publish a rate" % (label, t["dps_floor"], t["dps_count"], t["size"]), "hp/s")
     if t["burst_max"]:
-        add("burst_max", "%s burst ceiling: %s's %g in one hit" % (label, t["burst_hero"], t["burst_max"]), "hp")
+        add("burst_max", "%s burst ceiling: %s's %g in one hit"
+            % (label, t["burst_hero"], t["burst_max"]), "hp")
     add("dmg_ults", "%s damage-ult census: %d of %d ultimates carry damage, %g summed"
         % (label, t["dmg_ults"], t["size"], t["ult_damage_total"]))
     if t["ult_cost_mean"]:
@@ -537,7 +554,8 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
             " supports vs the roster's ~%.0f two-support bench (ratio %.2f)%s"
             % (label, t["heal_peak_supports"], world.heal_bench, t["heal_ratio"],
                " - UNDER-HEALED" if t["supports"] >= 2 and t["heal_ratio"] < 0.75 else ""))
-    add("lifelines", "%s lifelines: %d of %d picks carry any healing" % (label, t["lifelines"], t["size"]))
+    add("lifelines", "%s lifelines: %d of %d picks carry any healing"
+        % (label, t["lifelines"], t["size"]))
     if t["heal_amp"]:
         add("heal_amp", "%s healing amplification: %d pick(s)" % (label, t["heal_amp"]))
     if t["antiheal"]:
@@ -558,9 +576,11 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
     if t["flyers"]:
         add("flyers", "%s vertical threats: %d pick(s) fly" % (label, t["flyers"]))
     if t["barrier_hp"]:
-        add("barrier_hp", "%s barriers: %g hp across %d pick(s)" % (label, t["barrier_hp"], t["barrier_count"]), "hp")
+        add("barrier_hp", "%s barriers: %g hp across %d pick(s)"
+            % (label, t["barrier_hp"], t["barrier_count"]), "hp")
     if t["barrier_piercers"]:
-        add("barrier_piercers", "%s barrier-piercers: %d pick(s) ignore barriers" % (label, t["barrier_piercers"]))
+        add("barrier_piercers", "%s barrier-piercers: %d pick(s) ignore barriers"
+            % (label, t["barrier_piercers"]))
     if t["deployables"]:
         add("deployables", "%s deployables: %d pick(s)" % (label, t["deployables"]))
     if t["size"] >= 2:
@@ -684,16 +704,17 @@ def _matchup_facts(fs, world, blue_t, red_t):
 def _playbook_record(fs, world, m):
     """S1..: the playbook's record - what it holds - never what the sources
     say, and not the constraints and heuristics themselves."""
-    S = PLAYBOOK_SCOPE
+    scope = PLAYBOOK_SCOPE
     for style in sorted(world.archetypes):
         for role, (slots, note) in world.archetypes[style].items():
-            fs.add(S, style, "playbook.archetype", "a %s comp wants %d %s: %s"
+            fs.add(scope, style, "playbook.archetype", "a %s comp wants %d %s: %s"
                    % (style, slots, role, note or ""), value={"style": style, "role": role,
                                                              "slots": slots},
                    source="comp_archetypes")
     if world.catalog_counts:
         c = world.catalog_counts
-        fs.add(S, "catalog", "playbook.catalog",
-               "the playbook holds %d constraints and %d heuristics (STRATEGIES = CONSTRAINTS ∪ HEURISTICS)"
+        fs.add(scope, "catalog", "playbook.catalog",
+               "the playbook holds %d constraints and %d heuristics"
+               " (STRATEGIES = CONSTRAINTS ∪ HEURISTICS)"
                % (c.get("constraint", 0), c.get("heuristic", 0)),
                value=c, source="strategies")

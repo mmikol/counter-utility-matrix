@@ -35,7 +35,7 @@ class ExprError(ValueError):
 NAMESPACES = ("team", "enemy", "matchup", "map", "world", "params")
 
 
-class Section(object):
+class Section:
     """A namespace dict read by attribute: missing keys and None read 0."""
     __slots__ = ("_d",)
 
@@ -69,7 +69,7 @@ class Expr:
         try:
             self.tree = ast.parse(self.source, mode="eval").body
         except SyntaxError as error:
-            raise ExprError("%r: %s" % (self.source, error.msg))
+            raise ExprError("%r: %s" % (self.source, error.msg)) from error
         self.names = sorted(self._collect_names(self.tree))
         for name in self.names:
             if any(part.startswith("_") for part in name.split(".")):
@@ -118,7 +118,8 @@ class Expr:
                 exp = node.right
                 if not (isinstance(exp, ast.Constant) and isinstance(exp.value, (int, float))
                         and not isinstance(exp.value, bool) and 0 <= exp.value <= 8):
-                    raise ExprError("%r: an exponent must be a number between 0 and 8" % self.source)
+                    raise ExprError("%r: an exponent must be a number between 0 and 8"
+                                    % self.source)
             if isinstance(node.op, (ast.Mult, ast.Add)):
                 for side in (node.left, node.right):
                     if isinstance(side, ast.Constant) and isinstance(side.value, str):
@@ -179,9 +180,9 @@ class Expr:
         except ZeroDivisionError:
             return 0.0
         except TypeError as error:            # e.g. a text metric in arithmetic
-            raise ExprError("%r: %s" % (self.source, error))
+            raise ExprError("%r: %s" % (self.source, error)) from error
         except (RecursionError, MemoryError, OverflowError) as error:
-            raise ExprError("%r: %s" % (self.source, type(error).__name__))
+            raise ExprError("%r: %s" % (self.source, type(error).__name__)) from error
 
 
 _GLOBALS = dict(FUNCTIONS, __builtins__={})

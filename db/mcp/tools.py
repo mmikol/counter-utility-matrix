@@ -17,8 +17,7 @@ from datetime import datetime
 
 import psycopg
 
-from db import CACHE_DIRS, ROOT
-from db import psql
+from db import CACHE_DIRS, ROOT, psql
 from db.data import fetch
 from db.mcp.server import Tool, ToolError
 
@@ -72,7 +71,7 @@ def build(ctx):
 
 def run_tool(ctx, name, **arguments):
     """Call a registered tool by name, in-process (the refresher's and the shell's path)."""
-    for tool_name, _, schema, fn in REGISTRY:
+    for tool_name, _, _schema, fn in REGISTRY:
         if tool_name == name:
             return fn(ctx, **arguments)
     raise KeyError(name)
@@ -250,8 +249,9 @@ def sync_all(ctx, refresh=False):
 @tool("db_status", "Which database the tools are pointed at, its table and"
       " row counts, and the rates snapshots it holds.")
 def db_status(ctx):
-    from db.psql import schema
     import re
+
+    from db.psql import schema
     with ctx.connect() as cx:
         tables = schema.table_count(cx)
         counts, snaps = {}, []
@@ -490,7 +490,7 @@ def facts_tool(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines")
     try:
         fs = engine.generate(world, map, list(red), list(blue), list(bans), side)
     except ValueError as error:
-        raise ToolError(str(error))
+        raise ToolError(str(error)) from error
     payload = fs.to_dict()
     text = fs.rendered() if format == "lines" else json.dumps(payload)
     return text, payload
@@ -512,15 +512,15 @@ def _clamp(pool, top=5):
                                                    " search keeps (default 6)"}))
 def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6):
     pool, top = _clamp(pool, top)
-    from ui.facts import model
     from inference import engine
+    from ui.facts import model
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
         result = engine.infer(world, map, list(red), list(blue), top=top,
                               pool_size=pool, bans=list(bans), side=side)
     except ValueError as error:
-        raise ToolError(str(error))
+        raise ToolError(str(error)) from error
     return result.rendered(), result.to_dict()
 
 
@@ -528,15 +528,15 @@ def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6):
       " searching: the breakdown per strategy, constraint violations, and"
       " how it ranks against the optimum.", BOARD, ["blue"])
 def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
-    from ui.facts import model
     from inference import engine
+    from ui.facts import model
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
         result = engine.evaluate(world, map, list(red), list(blue), bans=list(bans),
                                  side=side)
     except ValueError as error:
-        raise ToolError(str(error))
+        raise ToolError(str(error)) from error
     return result.rendered(), result.to_dict()
 
 
@@ -550,15 +550,15 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
                                                           " search keeps (default 6)"}))
 def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6):
     pool, _ = _clamp(pool)
-    from ui.facts import model
     from inference import engine
+    from ui.facts import model
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
         b = engine.board(world, map, list(red), list(blue), list(bans), side,
                          pool_size=pool)
     except ValueError as error:
-        raise ToolError(str(error))
+        raise ToolError(str(error)) from error
     return engine.board_rendered(b), engine.board_dict(b)
 
 
@@ -593,7 +593,7 @@ def tune_tool(ctx, id, field, value, reason):
         with ctx.connect() as cx:
             catalog.mirror(cx, catalog.load())
     except (tune.TuneError, ValueError) as error:
-        raise ToolError(str(error))
+        raise ToolError(str(error)) from error
     return "tuned %s: %s %s -> %s\n%s" % (change["id"], change["field"], change["old"],
                                          change["new"], change["line"]), change
 
@@ -618,10 +618,14 @@ STRATEGY_FIELDS = {
     "weight": {"type": "number", "description": "0..10; 1-4 is the working range"},
     "when": {"type": "string", "description": "a guard expression; optional"},
     "require": {"type": "string", "description": "constraints: a limit expression"},
-    "soft": {"type": "boolean", "description": "with require: charge `penalty` instead of discarding"},
-    "bonus": {"type": "string", "description": "constraints: an expression added while `when` holds"},
-    "penalty": {"type": "string", "description": "constraints: an expression (or a number with soft) subtracted"},
-    "params": {"type": "object", "description": "NAME: number dials the expressions read as params.NAME"},
+    "soft": {"type": "boolean",
+             "description": "with require: charge `penalty` instead of discarding"},
+    "bonus": {"type": "string",
+              "description": "constraints: an expression added while `when` holds"},
+    "penalty": {"type": "string",
+                "description": "constraints: an expression (or a number with soft) subtracted"},
+    "params": {"type": "object",
+               "description": "NAME: number dials the expressions read as params.NAME"},
     "prose": {"type": "boolean", "description": "true: a ground rule with nothing to score"},
     "category": {"type": "string"},
 }
@@ -649,7 +653,7 @@ def add_strategy(ctx, id, name, kind, body, reason="", **fields):
         with ctx.connect() as cx:
             catalog.mirror(cx, catalog.load())
     except (tune.TuneError, ValueError) as error:
-        raise ToolError(str(error))
+        raise ToolError(str(error)) from error
     note = ("\nstored as a DRAFT: the solver ignores it until /strategy infers its frontmatter"
             if added["form"] == "draft" else "")
     return "added %s as %s/%s -> %s\n%s%s" % (
@@ -670,7 +674,7 @@ def infer_strategy(ctx, id, reason, **fields):
         with ctx.connect() as cx:
             catalog.mirror(cx, catalog.load())
     except (tune.TuneError, ValueError) as error:
-        raise ToolError(str(error))
+        raise ToolError(str(error)) from error
     return "%s is now %s: %s\n%s" % (id, done["form"], ", ".join(
         "%s=%s" % kv for kv in done["set"].items()), done["line"]), done
 

@@ -17,9 +17,9 @@
 import itertools
 import random
 
+from inference.expr import scope
 from ui.facts import compute
 from ui.facts.compute import TEAM_SIZE
-from inference.expr import scope
 
 REFERENCE_SIZE = 1200
 REFERENCE_SEED = 20260913
@@ -30,8 +30,16 @@ ROLE_KEY = {"tank": "tanks", "damage": "damage", "support": "supports"}
 
 
 class Candidate:
-    __slots__ = ("heroes", "key", "ns", "scope", "score", "contributions",
-                 "violations", "raw")
+    __slots__ = (
+        "contributions",
+        "heroes",
+        "key",
+        "ns",
+        "raw",
+        "scope",
+        "score",
+        "violations",
+    )
 
     def __init__(self, heroes):
         self.heroes = tuple(heroes)
@@ -121,7 +129,7 @@ class Solver:
         by_role = {r: [h for h in self.world.heroes.values()
                        if h.role == r and h.released and h.id not in self.banned]
                    for r in ROLE_KEY}
-        shapes = self._shapes(locked_counts={r: 0 for r in ROLE_KEY})
+        shapes = self._shapes(locked_counts=dict.fromkeys(ROLE_KEY, 0))
         out, seen = [], set()
         if shapes:
             while len(out) < size:

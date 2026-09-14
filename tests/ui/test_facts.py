@@ -1,5 +1,7 @@
 """The UI layer: facts for a board, from the built database."""
 
+import pathlib
+
 import pytest
 
 from ui.facts import compute, engine, model
@@ -97,8 +99,9 @@ def test_metrics_without_a_map_fall_back_honestly(world):
 def test_the_whole_database_becomes_facts(world, rows):
     # every data table is read by the World (the ledger is not data)
     import re
+
     from ui.facts import model as model_module
-    src = open(model_module.__file__, encoding="utf-8").read()
+    src = pathlib.Path(model_module.__file__).read_text(encoding="utf-8")
     unread = [t for (t,) in rows("select tablename from pg_tables where schemaname='public'")
               if t != "schema_migrations" and not re.search(r"\b%s\b" % t, src)]
     assert unread == [], unread
@@ -155,5 +158,7 @@ def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_ap
     assert fs.count == len(facts) and fs.to_dict()["playbook_count"] == len(side)
     text = fs.rendered()
     assert text.startswith("[F1]") and engine.PLAYBOOK_DIVIDER in text
-    assert text.index("[S1]") > text.index(engine.PLAYBOOK_DIVIDER) > text.index("[F%d]" % len(facts))
-    assert "STRATEGIES = CONSTRAINTS ∪ HEURISTICS" in [f.text for f in side if f.key == "playbook.catalog"][0]
+    divider = text.index(engine.PLAYBOOK_DIVIDER)
+    assert text.index("[S1]") > divider > text.index("[F%d]" % len(facts))
+    catalog_note = next(f.text for f in side if f.key == "playbook.catalog")
+    assert "STRATEGIES = CONSTRAINTS ∪ HEURISTICS" in catalog_note

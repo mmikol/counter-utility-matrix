@@ -1,0 +1,31 @@
+# Lint and coverage settings. The code itself is configured nowhere else:
+# pytest.ini holds the test paths and markers, requirements.txt the packages.
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["db/psql/cluster", "db/raw", ".venv", ".cache-*"]
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, bugbear, comprehensions, simplify, pyupgrade,
+# naming, ruff's own checks, misc lints - the standard set, minus what the
+# house style does on purpose: %-formatting (UP031/UP032), the ∪ and · in
+# prose (RUF001-003), mutable class attributes as vocabulary (RUF012).
+select = ["E", "W", "F", "I", "B", "C4", "SIM", "UP", "N", "RUF", "PIE"]
+ignore = ["UP031", "UP032", "RUF001", "RUF002", "RUF003", "RUF012"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["db", "ui", "inference"]
+
+[tool.coverage.run]
+source = ["db", "ui", "inference", "orchestrator"]
+omit = ["db/psql/migrations/*"]
+branch = false
+
+[tool.coverage.report]
+# the bar: three quarters of the code under test where the database exists
+# (locally and inside the image); CI, which builds no database, reports only
+fail_under = 75
+show_missing = true
+skip_covered = true
+precision = 1

@@ -19,7 +19,8 @@ LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 
 # two of these read the checkout itself - the git index, the .claude folder -
 # which the Docker image deliberately leaves out; there they skip, not fail
-needs_git = pytest.mark.skipif(not os.path.isdir(os.path.join(ROOT, ".git")) or not shutil.which("git"),
+needs_git = pytest.mark.skipif(
+    not os.path.isdir(os.path.join(ROOT, ".git")) or not shutil.which("git"),
                                reason="needs the git checkout")
 needs_skills = pytest.mark.skipif(not os.path.isdir(SKILLS),
                                   reason="the skills are not in the image")
@@ -48,7 +49,7 @@ def copy_of(tmp_path):
 
 def test_every_relative_link_in_the_docs_resolves():
     broken = []
-    for doc in ["README.md"] + sorted("docs/" + n for n in os.listdir(DOCS) if n.endswith(".md")):
+    for doc in ["README.md", *sorted("docs/" + n for n in os.listdir(DOCS) if n.endswith(".md"))]:
         base = os.path.dirname(os.path.join(ROOT, doc))
         for target in LINK_RE.findall(_read(doc)):
             if target.startswith(("http://", "https://", "mailto:")):
@@ -74,7 +75,8 @@ def test_mcp_json_registers_the_two_servers():
     assert set(servers) == {"counter-utility-matrix", "counter-utility-matrix-docker"}
     assert servers["counter-utility-matrix"]["args"] == ["-m", "db.mcp"]
     assert servers["counter-utility-matrix-docker"]["url"].endswith(":8020/mcp")
-    assert servers["counter-utility-matrix-docker"]["headers"]["Authorization"].startswith("Bearer ${")
+    docker = servers["counter-utility-matrix-docker"]
+    assert docker["headers"]["Authorization"].startswith("Bearer ${")
 
 
 # --- the skills ---------------------------------------------------------------------------------
@@ -94,7 +96,8 @@ MUST_NAME = {   # a skill is a playbook over these tools; if a tool is renamed, 
 
 
 def _skills():
-    return {name: _read(".claude", "skills", name, "SKILL.md") for name in sorted(os.listdir(SKILLS))
+    return {name: _read(".claude", "skills", name, "SKILL.md")
+            for name in sorted(os.listdir(SKILLS))
             if os.path.isfile(os.path.join(SKILLS, name, "SKILL.md"))}
 
 
@@ -160,8 +163,10 @@ def test_the_schema_sections_match_the_live_database(db, copy_of):
 def test_embed_replaces_only_the_marked_section(tmp_path):
     from db.psql import schema
     path = tmp_path / "doc.md"
-    path.write_text("# T\n\nkeep\n\n<!-- generated:x -->\nold\n<!-- /generated:x -->\n\nalso keep\n")
+    path.write_text("# T\n\nkeep\n\n<!-- generated:x -->\nold\n<!-- /generated:x -->"
+                    "\n\nalso keep\n")
     schema.embed(str(path), "x", "new\nlines")
-    assert path.read_text() == "# T\n\nkeep\n\n<!-- generated:x -->\nnew\nlines\n<!-- /generated:x -->\n\nalso keep\n"
+    assert path.read_text() == ("# T\n\nkeep\n\n<!-- generated:x -->\nnew\nlines\n"
+                                "<!-- /generated:x -->\n\nalso keep\n")
     with pytest.raises(schema.SchemaError, match="no y markers"):
         schema.embed(str(path), "y", "z")

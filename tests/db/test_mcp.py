@@ -70,7 +70,7 @@ def test_bad_json_is_a_parse_error_not_a_crash():
                             stderr=subprocess.PIPE, text=True)
     out, _ = proc.communicate("{not json\n" + json.dumps(
         {"jsonrpc": "2.0", "id": 9, "method": "ping"}) + "\n", timeout=60)
-    lines = [json.loads(l) for l in out.splitlines() if l.strip()]
+    lines = [json.loads(line) for line in out.splitlines() if line.strip()]
     assert lines[0]["error"]["code"] == -32700
     assert lines[1]["id"] == 9
 
@@ -103,7 +103,7 @@ def ctx(db, dsn):
 
 @pytest.mark.invariant
 def test_query_is_read_only(ctx):
-    text, data = tools.run_tool(ctx, "query", sql="select count(*) from heroes")
+    _text, data = tools.run_tool(ctx, "query", sql="select count(*) from heroes")
     assert data["rows"][0][0] > 40
     with pytest.raises(ToolError, match="read-only"):
         tools.run_tool(ctx, "query", sql="delete from heroes")
@@ -224,6 +224,7 @@ def test_derive_strategies_is_idle_with_nothing_pending(ctx):
 
 def _http_server(tmp_path, token=None, rate_limit=120):
     import threading
+
     from db.mcp.server import HttpServer
     mcp = Server(tools.build(tools.Context(dsn="postgresql://nowhere")), None,
                  transport="http", audit_path=str(tmp_path / "audit.jsonl"))
@@ -267,8 +268,8 @@ def test_the_door_refuses_huge_bodies_and_rate_limits_a_client_and_audits_every_
     assert _knock(url, call, {"Mcp-Session-Id": "two"})[0] == 429     # the budget is the host's
     batch = [dict(call, id=i) for i in range(21)]
     assert _knock(url, batch)[0] == 413
-    lines = [json.loads(l) for l in (tmp_path / "audit.jsonl").read_text().splitlines()]
-    assert len(lines) == 3 and all(l["tool"] == "list_sources" and l["ok"] for l in lines)
+    lines = [json.loads(line) for line in (tmp_path / "audit.jsonl").read_text().splitlines()]
+    assert len(lines) == 3 and all(line["tool"] == "list_sources" and line["ok"] for line in lines)
     assert lines[0]["transport"] == "http" and lines[0]["client"].startswith("http:127.0.0.1/one")
     assert set(lines[0]) >= {"t", "args", "ms"}
     httpd.shutdown()
@@ -278,11 +279,32 @@ def test_query_refuses_file_and_server_reaching_sql_before_connecting():
     nowhere = tools.Context(dsn="postgresql://nowhere")
     for sql in ("select pg_read_file('/etc/passwd')", "select * from pg_ls_dir('.')",
                 "COPY heroes TO PROGRAM 'id'", "select pg_sleep(10)"):
-        with pytest.raises(ToolError, match="refuses|read-only"):
+        with pytest.raises(ToolError, match=r"refuses|read-only"):
             tools.run_tool(nowhere, "query", sql=sql)
 
 
 @pytest.mark.invariant
 def test_query_runs_as_the_reader_role(ctx):
-    text, data = tools.run_tool(ctx, "query", sql="select current_user, count(*) from heroes")
+    _text, data = tools.run_tool(ctx, "query", sql="select current_user, count(*) from heroes")
     assert data["rows"][0][0] == "matrix_reader" and data["rows"][0][1] > 0
+
+
+# --- the entry point ------------------------------------------------------------------
+
+def test_the_entry_point_lists_tools_and_refuses_nonsense(capsys):
+    from db.mcp.__main__ import main
+    assert main(["list"]) == 0
+    out = capsys.readouterr().out
+    assert "db_status" in out and "infer" in out
+    with pytest.raises(SystemExit):
+        main(["bogus"])
+    with pytest.raises(SystemExit):
+        main(["call", "no_such_tool"])
+
+
+@pytest.mark.invariant
+def test_the_entry_point_calls_a_tool(capsys, dsn, monkeypatch):
+    from db.mcp.__main__ import main
+    monkeypatch.setenv("DATABASE_URL", dsn)
+    assert main(["call", "db_status"]) == 0
+    assert "tables" in capsys.readouterr().out

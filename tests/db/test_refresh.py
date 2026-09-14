@@ -10,8 +10,7 @@ import pytest
 import requests
 
 from db import refresh
-from db.data import fetch
-from db.data import wiki
+from db.data import fetch, wiki
 
 
 class FakeResponse:
@@ -119,7 +118,7 @@ def test_refresh_once_survives_a_bad_day(monkeypatch):
     monkeypatch.setattr(tools, "run_tool", lambda ctx, name, **kw: (_ for _ in ()).throw(
         RuntimeError("blizzard 504")))
     ok, text = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"), logs.append)
-    assert ok is False and "504" in text and any("FAILED" in l for l in logs)
+    assert ok is False and "504" in text and any("FAILED" in line for line in logs)
     monkeypatch.setattr(tools, "run_tool", lambda ctx, name, **kw: ("sync_all: done", {}))
     ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"), logs.append)
     assert ok is True

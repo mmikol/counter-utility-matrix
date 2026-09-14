@@ -15,11 +15,15 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     body = board.view_board()
     assert "team red" in body and "team blue" in body
     assert "tab-comps" in body and "tab-facts" in body and "tab-playbook" in body
-    assert "recorded" not in body and "record this comp" not in board.static_file("board.js")[0].decode()
+    assert "recorded" not in body
+    assert "record this comp" not in board.static_file("board.js")[0].decode()
     assert "FACTS = HEROES" not in body                              # the equation moved to /math
     assert "href='/math'" in body and "id='captured'" in body
-    foot = body[body.index("<footer class='foot'>"):body.index("</footer>")]   # the status and the vintage sit in a footer
-    assert "id='status'" in foot and "id='captured'" in foot and body.index("</footer>") > body.index("id='tab-playbook'")
+    # the status and the vintage sit in a footer
+    foot = body[body.index("<footer class='foot'>"):body.index("</footer>")]
+    assert "id='status'" in foot
+    assert "id='captured'" in foot
+    assert body.index("</footer>") > body.index("id='tab-playbook'")
     assert "id='flash'" in body[:body.index("</header>")]
     assert "data-tab='comps'" in body
     # the two old panels were merged into comps: both seats side by side, the
@@ -34,8 +38,10 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     assert "var TABS = ['comps', 'facts', 'playbook']" in script
     assert "normalized" in script and "/ 100" in script    # the 0-100 figure, raw score beside it
     # the playbook holds three kinds; the badge appends the form only when it differs
-    assert "STRATEGIES = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS" in board.view_math()   # the equation lives on /math now
-    assert "h.form !== h.kind ?" in script and "'assumption' ? 'assumption - taken as given" in script
+    # the equation lives on /math now
+    assert "STRATEGIES = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS" in board.view_math()
+    assert "h.form !== h.kind ?" in script
+    assert "'assumption' ? 'assumption - taken as given" in script
     assert "prose -" not in script
     assert b".kind.assumption" in board.static_file("board.css")[0]
 
@@ -55,7 +61,8 @@ def test_the_ban_picker_is_a_roster_and_the_dropdown_is_gone():
 
 def test_an_announced_hero_is_a_coming_soon_tile_in_its_role_column():
     script = board.static_file("board.js")[0].decode()
-    assert "DOCTRINE" not in script and "announcedTile" not in script   # no constant: the roster carries the status
+    # no constant: the roster carries the status
+    assert "DOCTRINE" not in script and "announcedTile" not in script
     assert "if (h.status === 'announced') return soonTile(h);" in script
     card = script[script.index("function soonTile"):script.index("function rosterHTML")]
     assert "class='tile soon'" in card and "data-h" not in card and "data-team" not in card
@@ -126,25 +133,38 @@ def test_the_page_is_a_shell_over_static_files():
     body = board.view_board()
     assert "/static/board.css" in body and "/static/board.js" in body
     assert "id='momentum'" in body and "id='plan'" in body
-    assert "id='bluescore'" in body and "id='redscore'" in body and "id='cur'" not in body  # scores live in the boxes
+    # scores live in the boxes
+    assert "id='bluescore'" in body
+    assert "id='redscore'" in body
+    assert "id='cur'" not in body
     assert "data-clear='red'" in body and "data-clear='blue'" in body
-    assert body.index("id='momentum'") < body.index("id='blueslots'")  # the momentum strip sits above both boxes
+    # the momentum strip sits above both boxes
+    assert body.index("id='momentum'") < body.index("id='blueslots'")
     assert "id='momentum'" not in body[body.index("id='tab-comps'"):]
-    assert body.index("id='inf-blue'") < body.index("id='inf-red'")  # blue on the left, red on the right, like the boxes
+    # blue on the left, red on the right, like the boxes
+    assert body.index("id='inf-blue'") < body.index("id='inf-red'")
     assert body.index("id='blueslots'") < body.index("id='redslots'")
     script = board.static_file("board.js")[0].decode()
     assert "their comp as revealed" in script and "red_current" in script and "d.momentum" in script
-    assert "'blue - your picks'" not in script                                # blue's seat is the optimal six only
+    # blue's seat is the optimal six only
+    assert "'blue - your picks'" not in script
     assert "function meaning(d)" in script and "100 is the best six the solver can build" in script
     assert "game plan" in script and "d.plan" in script
     assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
-    assert "swapbtn" not in script and "clearbtn" not in script            # swap sides and new game are gone
+    # swap sides and new game are gone
+    assert "swapbtn" not in script and "clearbtn" not in script
     assert "swapbtn" not in board.view_board() and "clearbtn" not in board.view_board()
     header = board.view_board().split("</header>")[0]
-    links = header[header.index("<span class='links'>"):]                     # the two pills, pinned top-right
-    assert "href='/math'" in links and board.REPO_URL in links and links.rstrip().endswith("GitHub</a></span>")
-    assert "near('[data-clear]')" in script                    # a team's clear button empties that team only
-    assert "redscore" in script and "el('redslots')" not in script[script.index("function paintSuggestions"):script.index("function renderResult")]
+    # the two pills, pinned top-right
+    links = header[header.index("<span class='links'>"):]
+    assert "href='/math'" in links
+    assert board.REPO_URL in links
+    assert links.rstrip().endswith("GitHub</a></span>")
+    # a team's clear button empties that team only
+    assert "near('[data-clear]')" in script
+    suggestions = script[script.index("function paintSuggestions"):
+                         script.index("function renderResult")]
+    assert "redscore" in script and "el('redslots')" not in suggestions
     assert "renderFill" not in script and "el('cur')" not in script
     assert "var TEAM = 6, BANS = 5;" in body
     data, ctype = board.static_file("board.js")

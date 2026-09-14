@@ -10,7 +10,7 @@
                                       leave a deterministic playbook for the board
     python orchestrator.py status     what is running, how fresh the data is, the URLs
     python orchestrator.py refresh    refetch every source now (no agents)
-    python orchestrator.py test       the test suite inside the image
+    python orchestrator.py test       the test suite inside the image, with the coverage bar
     python orchestrator.py down       stop everything (the database volume stays)
 
 Everything the board uses at game time is deterministic - the database
@@ -189,7 +189,8 @@ def sentry_line():
             seen = json.load(handle)
     except (OSError, ValueError):
         return None
-    parts = ["sentry: %s at %s" % ("ok" if seen.get("ok") else "FLAGS", seen.get("checked_at", "?"))]
+    parts = ["sentry: %s at %s" % ("ok" if seen.get("ok") else "FLAGS",
+                                    seen.get("checked_at", "?"))]
     if seen.get("quarantined"):
         parts.append("quarantined %s" % ", ".join(seen["quarantined"]))
     if seen.get("flags"):
@@ -296,8 +297,11 @@ def refresh():
 
 
 def test():
-    sh("docker", "compose", "run", "--rm", "data", "python", "-m", "pytest", "-q",
-       "-p", "no:cacheprovider")
+    # the container's filesystem is read-only; coverage writes its data to the tmpfs
+    sh("docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage", "data",
+       "python", "-m", "pytest", "-q",
+       "-p", "no:cacheprovider", "--cov=db", "--cov=ui", "--cov=inference",
+       "--cov=orchestrator", "--cov-report=term-missing:skip-covered")
     return 0
 
 

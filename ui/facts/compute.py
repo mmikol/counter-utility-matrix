@@ -38,7 +38,8 @@ TEAM_METRICS = OrderedDict([
     ("style_top", "the modal playstyle among the picks"),
     ("style_lean", "the playstyle a strict majority of picks carry, else none"),
     ("style_fit", "share of picks tagged with the map's rewarded style (0 without a map)"),
-    ("archetype_deviation", "picks over the map's top-style archetype role slots (0 without a map)"),
+    ("archetype_deviation",
+     "picks over the map's top-style archetype role slots (0 without a map)"),
     # durability
     ("pool_total", "team effective HP: sum of health + shield + armor"),
     ("pool_min", "the weakest pick's pool - focus fire finds the minimum"),
@@ -49,7 +50,8 @@ TEAM_METRICS = OrderedDict([
     ("squishies", "the picks at or under %d pool" % SQUISHY_POOL),
     ("overhealth_total", "summed peak overhealth a kit can grant"),
     # damage
-    ("dps_floor", "summed published per-second damage figures (a floor: misses and healing ignored)"),
+    ("dps_floor",
+     "summed published per-second damage figures (a floor: misses and healing ignored)"),
     ("dps_count", "picks whose kit publishes a per-second damage figure"),
     ("burst_max", "the biggest single damage figure on the team"),
     ("burst_hero", "who holds the biggest single hit"),
@@ -98,7 +100,8 @@ TEAM_METRICS = OrderedDict([
     ("availability", "chance every pick survives the ban screen: product of (1 - ban)"),
     ("max_ban_rate", "the highest ban rate on the team"),
     ("max_ban_hero", "who carries the highest ban rate"),
-    ("rank_sensitive_count", "picks whose win rate swings %g+ points across ranks" % RANK_SENSITIVE),
+    ("rank_sensitive_count",
+     "picks whose win rate swings %g+ points across ranks" % RANK_SENSITIVE),
     ("trend_sum", "summed win-rate movement since the previous snapshot"),
     # map
     ("map_known", "1 if a map is set"),
@@ -199,9 +202,11 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["shape_flags"] = flags
     counts = Counter(s for h in heroes for s in h.styles)
     t["style_counts"] = dict(counts)
-    t["style_top"] = counts.most_common(1)[0][0] if counts else ""
+    t["style_top"] = sorted(counts, key=lambda s: (-counts[s], s))[0] if counts else ""
     lean = [s for s, c in counts.items() if c > n / 2.0]
-    t["style_lean"] = sorted(lean, key=lambda s: -counts[s])[0] if lean else ""
+    # ties fall to the alphabetically first style: the answer must not depend on
+    # the order a set of names happens to iterate in (hash randomisation)
+    t["style_lean"] = sorted(lean, key=lambda s: (-counts[s], s))[0] if lean else ""
     map_style = m.style_top if m is not None else None
     t["style_fit"] = (sum(1 for h in heroes if map_style in h.styles) / n
                       if n and map_style else 0.0)

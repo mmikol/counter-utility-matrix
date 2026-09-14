@@ -22,10 +22,10 @@ from urllib.parse import parse_qs, urlparse
 import psycopg
 
 from db import psql
-from ui.facts import model
-from ui.facts.compute import TEAM_SIZE
 from inference import catalog as catalog_module
 from inference import engine
+from ui.facts import model
+from ui.facts.compute import TEAM_SIZE
 
 PORT = int(os.environ.get("COUNTER_MATRIX_INFERENCE_PORT", "8019"))
 
@@ -113,14 +113,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(*handle_health())
             if path == "/strategies":
                 return self._json(*handle_heuristics())
-            with psycopg.connect(psql.default_dsn()) as cx:
+            if path not in ("/board", "/infer", "/evaluate"):
+                return self._json({"error": "nothing here"}, 404)
+            with psycopg.connect(psql.default_dsn()) as cx:   # only these routes connect
                 if path == "/board":
                     return self._json(*handle_board(cx, query))
                 if path == "/infer":
                     return self._json(*handle_infer(cx, query))
-                if path == "/evaluate":
-                    return self._json(*handle_evaluate(cx, query))
-            self._json({"error": "nothing here"}, 404)
+                return self._json(*handle_evaluate(cx, query))
         except Exception:
             self._json({"error": traceback.format_exc()}, 500)
 

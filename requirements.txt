@@ -4,7 +4,8 @@ requests>=2.31
 
 # Development
 pytest>=7.0
-pyflakes>=3.0        # unused imports and dead names
+ruff>=0.16          # the linter: pycodestyle, pyflakes, isort, bugbear ... (pyproject.toml)
+pytest-cov>=7.0     # coverage; the bar is in pyproject.toml
 
 # The default local build target (db/psql/cluster) is an embedded Postgres.
 # Skipped where no wheel exists (linux/arm64 - i.e. inside the Docker image,

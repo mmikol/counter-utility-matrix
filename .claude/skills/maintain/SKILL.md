@@ -13,12 +13,17 @@ or the user points at, and leave a report.
 
 1. **Lint and tests, three ways.** From the repo root:
 
-       .venv/bin/python -m pyflakes db ui inference tests orchestrator.py
-       .venv/bin/python -m pytest -q -p no:cacheprovider
-       COUNTER_MATRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -p no:cacheprovider
+       .venv/bin/ruff check db ui inference tests orchestrator.py
+       .venv/bin/python -m pytest -q -p no:cacheprovider --cov=db --cov=ui --cov=inference \
+           --cov=orchestrator --cov-report=term-missing:skip-covered
+       COUNTER_MATRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -p no:cacheprovider \
+           --cov=db --cov=ui --cov=inference --cov=orchestrator \
+           --cov-report=term-missing:skip-covered --cov-fail-under=0
        .venv/bin/python orchestrator.py test        # inside the image, if the stack is up
 
-   The second run is what CI sees. A failure is the first thing to fix or
+   The bar is 75% of the code under test where the database exists (the
+   local run and the image); CI, which builds none, reports only. The
+   third run is what CI sees. A failure is the first thing to fix or
    report; never mark a failing test skipped to get green.
 
 2. **The documentation is current.** `tests/test_docs.py` fails when the
@@ -47,7 +52,7 @@ or the user points at, and leave a report.
    constant in `db/`, `ui/`, `inference/` should be referenced outside its
    own module or be private to it on purpose; a constant defined in two
    modules is defined once; a helper that exists only to serve something
-   deleted goes with it. `python -m pyflakes` catches unused imports; the
+   deleted goes with it. `ruff check` catches unused imports; the
    rest is a grep per name. Prefer deleting to documenting.
 
 5. **Simplicity and organisation.** The layout is the three layers at the

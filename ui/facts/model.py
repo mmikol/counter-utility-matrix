@@ -25,8 +25,15 @@ SQUISHY_POOL = 250
 
 
 class Stat:
-    __slots__ = ("code", "value", "unit_num", "unit_den", "den_value",
-                 "condition", "text")
+    __slots__ = (
+        "code",
+        "condition",
+        "den_value",
+        "text",
+        "unit_den",
+        "unit_num",
+        "value",
+    )
 
     def __init__(self, code, value, unit_num, unit_den, den_value, condition, text):
         self.code = code
@@ -60,7 +67,7 @@ class Stat:
 
 class Kit:
     """An ability, a weapon config or a perk: a named thing with stats."""
-    __slots__ = ("name", "kind", "description", "keywords", "stats", "extra")
+    __slots__ = ("description", "extra", "keywords", "kind", "name", "stats")
 
     def __init__(self, name, kind, description="", keywords=""):
         self.name, self.kind, self.description = name, kind, description
@@ -194,7 +201,7 @@ class Map:
     def style_top(self):
         if not self.styles:
             return None
-        return max(self.styles, key=lambda s: (self.styles[s][0] or 0))
+        return sorted(self.styles, key=lambda s: (-(self.styles[s][0] or 0), s))[0]
 
     @property
     def style_margin(self):
@@ -414,7 +421,8 @@ def load(cx):
         w.maps_by_key[name_key(name)] = mid
     for mid, stage in _rows(cx, "select map_id, name from map_stages order by map_id, position"):
         w.maps[mid].stages.append(stage)
-    for mid, style, score, note in _rows(cx, "select map_id, style, score, note from map_playstyle"):
+    for mid, style, score, note in _rows(
+            cx, "select map_id, style, score, note from map_playstyle"):
         w.maps[mid].styles[style] = (score, note)
     for hid, mid, win, pick in _rows(cx, """
             select m.hero_id, m.map_id, m.win_rate, m.pick_rate from map_meta m
@@ -422,7 +430,8 @@ def load(cx):
             where t.code = 'all' and m.snapshot_id = %s""" % LATEST_BLIZZARD):
         if hid in w.heroes and mid in w.maps and win is not None:
             w.heroes[hid].map_rates[mid] = (float(win), float(pick) if pick is not None else None)
-    for hid, mid in _rows(cx, "select hero_id, map_id from map_strategy order by hero_id, position"):
+    for hid, mid in _rows(
+            cx, "select hero_id, map_id from map_strategy order by hero_id, position"):
         if hid in w.heroes and mid in w.maps:
             w.heroes[hid].best_maps.append(mid)
 

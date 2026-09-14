@@ -9,11 +9,11 @@ Extracting team-composition playstyles from the wiki.
 A hero appears under every playstyle they suit, so the lists overlap by design.
 """
 
+import re
+
 from db import psql
 from db.data import fetch
 from db.data.wiki import WIKI, WikiError, fetch_wikitext, markup
-import re
-
 
 # --- extract: markup -> Python ---------------------------------------------
 

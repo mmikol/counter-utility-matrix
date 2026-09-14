@@ -37,8 +37,12 @@ def _dsn():
 @pytest.fixture(scope="session")
 def dsn():
     """The connection string the suite runs against - with its password, which a
-    connection's own `info.dsn` leaves out."""
-    return _dsn()
+    connection's own `info.dsn` leaves out. A test that takes it needs the
+    database as much as one that takes `db`, so it skips the same way."""
+    dsn = _dsn()
+    if not dsn:
+        pytest.skip("no database: run `python -m db.mcp call db_rebuild` first")
+    return dsn
 
 
 @pytest.fixture(scope="session")

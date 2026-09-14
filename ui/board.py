@@ -25,11 +25,11 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import psycopg
 
 from db import psql
+from inference import catalog as catalog_module
+from inference import engine as inference_engine
 from ui.facts import engine as facts_engine
 from ui.facts import model
 from ui.facts.compute import SIDED_MODES, TEAM_SIZE
-from inference import catalog as catalog_module
-from inference import engine as inference_engine
 
 PORT = int(os.environ.get("COUNTER_MATRIX_UI_PORT", "8017"))
 
@@ -38,12 +38,12 @@ PORT = int(os.environ.get("COUNTER_MATRIX_UI_PORT", "8017"))
 INFERENCE_URL = os.environ.get("INFERENCE_URL", "").rstrip("/")
 # The repository the header links to; override when the repo moves.
 REPO_URL = os.environ.get("COUNTER_MATRIX_REPO_URL", "https://github.com/mmikol/counter-utility-matrix")
-GITHUB_MARK = ("<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='true'><path fill='currentColor' d='M8 0C3.58 0 0 3.58 0 8"
-               "c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94"
-               "-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2"
-               "-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0"
-               " 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95"
-               ".29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z'/></svg>")
+GITHUB_MARK = ("<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='true'><path fill='currentColor' d='M8 0C3.58 0 0 3.58 0 8"  # noqa: E501
+               "c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94"  # noqa: E501
+               "-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2"  # noqa: E501
+               "-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0"  # noqa: E501
+               " 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95"  # noqa: E501
+               ".29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z'/></svg>")  # noqa: E501
 
 
 def dsn():
@@ -165,42 +165,63 @@ def view_board():
     return (HEAD + "<title>Counter Utility Matrix</title><main>"
             "<header class='top'><h1>Counter <span>Utility Matrix</span></h1>"
             "<div class='mapsel'><select id='mapsel'></select><span class='mode' id='mode'></span>"
-            "<span class='sideseg' id='sideseg' title='blue attacks or defends; red gets the other side'>"
-            "<button data-side='attack'>attack</button><button data-side='defense'>defense</button></span>"
+            "<span class='sideseg' id='sideseg' title='blue"
+            " attacks or defends; red gets the other side'>"
+            "<button data-side='attack'>attack</button><button data-side='defense'>defense</button>"
+            "</span>"
             "<span class='flash' id='flash'></span></div>"
-            "<span class='links'><a class='mathlink' href='/math' title='the equation and how the pieces fit'>the math</a>"
-            "<a class='gh' href='%s' target='_blank' rel='noopener' title='the repository on GitHub'>%s GitHub</a></span>"
+            "<span class='links'><a class='mathlink' href='/math' title='the"
+            " equation and how the pieces fit'>the math</a>"
+            "<a class='gh' href='%s' target='_blank' rel='noopener'"
+            " title='the repository on GitHub'>%s GitHub</a>"
+            "</span>"
             "</header>"
-            "<div class='bans' id='bans'><div class='banhead' id='banhead' title='open or close the ban picker'>"
-            "<h3>bans</h3><span class='bancount' id='bancount'></span><span class='banmini' id='banmini'></span>"
+            "<div class='bans' id='bans'><div class='banhead' id='banhead'"
+            " title='open or close the ban picker'>"
+            "<h3>bans</h3><span class='bancount' id='bancount'>"
+            "</span><span class='banmini' id='banmini'></span>"
             "<span class='hint'>up to five, all optional: each team's two and the lobby's -"
-            " a banned hero leaves both rosters and the search</span><span class='caret'>&#9656;</span></div>"
+            " a banned hero leaves both rosters and the search</span>"
+            "<span class='caret'>&#9656;</span></div>"
             "<div class='banbody' id='banbody'><div class='slots' id='banslots'></div>"
             "<div class='roles' id='banroster'></div></div></div>"
             "<div class='warnbox' id='vintage' style='display:none'></div>"
             "<div class='momentum' id='momentum'></div>"
             "<div class='teams'>"
-            "<section class='team blue'><h2>blue team <span class='tscore' id='bluescore' title=\"your picks so far, as a share of blue's optimal\"></span>"
+            "<section class='team blue'><h2>blue team <span class='tscore' id='bluescore'"
+            " title=\"your picks so far, as a share of blue's optimal\">"
+            "</span>"
             "<small>your locked picks - the inference layer fills the rest</small>"
             "<small style='margin-left:auto' id='bluecount'></small>"
-            "<button class='clearteam' data-clear='blue' title='clear every blue pick'>clear</button></h2>"
-            "<div class='slots' id='blueslots'></div><div class='roles' id='blueroster'></div></section>"
-            "<section class='team red'><h2>red team <span class='tscore' id='redscore' title=\"their picks so far, as a share of their best counter to yours\"></span>"
+            "<button class='clearteam' data-clear='blue' title='clear every blue pick'>"
+            "clear</button>"
+            "</h2>"
+            "<div class='slots' id='blueslots'></div><div class='roles' id='blueroster'>"
+            "</div></section>"
+            "<section class='team red'><h2>red team <span class='tscore' id='redscore'"
+            " title=\"their picks so far, as a share of their best counter to yours\">"
+            "</span>"
             "<small>the enemy - click their heroes as they reveal</small>"
             "<small style='margin-left:auto' id='redcount'></small>"
-            "<button class='clearteam' data-clear='red' title='clear every red pick'>clear</button></h2>"
-            "<div class='slots' id='redslots'></div><div class='roles' id='redroster'></div></section>"
+            "<button class='clearteam' data-clear='red' title='clear every red pick'>clear</button>"
+            "</h2>"
+            "<div class='slots' id='redslots'></div><div class='roles' id='redroster'>"
+            "</div></section>"
             "</div>"
             "<nav class='tabs'><button data-tab='comps'>comps</button>"
             "<button data-tab='facts'>facts <span id='factsn'></span></button>"
             "<button data-tab='playbook'>playbook</button></nav>"
-            "<section class='panel' id='tab-comps'><div class='plan' id='plan'></div><div class='seats'>"
-            "<div class='seat blue' id='inf-blue'></div><div class='seat red' id='inf-red'></div></div></section>"
+            "<section class='panel' id='tab-comps'><div class='plan' id='plan'>"
+            "</div><div class='seats'>"
+            "<div class='seat blue' id='inf-blue'></div><div class='seat red' id='inf-red'>"
+            "</div></div></section>"
             "<section class='panel' id='tab-facts'><div class='tools'>"
-            "<input type='text' id='filter' placeholder='filter facts - try a hero, CAUTION, derived:, team.'>"
+            "<input type='text' id='filter' placeholder='filter"
+            " facts - try a hero, CAUTION, derived:, team.'>"
             "<span id='chips'></span></div>"
             "<table class='facts'><tbody id='factbody'></tbody></table>"
-            "<p class='legend'>every line is a row or a formula over the database, numbered for citation;"
+            "<p class='legend'>every line is a row or a formula"
+            " over the database, numbered for citation;"
             " the /comp skill and the inference layer read exactly these.</p></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
             "<footer class='foot'><span id='status'></span><span id='captured'></span></footer>"
@@ -246,9 +267,9 @@ score. 100 is the optimal's score on this board; every other comp on the board -
 pick, theirs as they reveal - is a share of it. Nothing in this is sampled or guessed: the same
 board gives the same six every time, in a second or two.</p>
 <h2>How the pieces fit</h2>
-<pre class='eq'>sources  &rarr;  db/data (fetch)  &rarr;  db/psql (the database)  &rarr;  ui/facts (FACTS for one board)
+<pre class='eq'>sources → db/data (fetch) → db/psql (the database) → ui/facts (FACTS of a board)
                                                                     &darr;
-                        inference/strategies (STRATEGIES)  &rarr;  inference/solver (ARGMAX)  &rarr;  the board</pre>
+                   inference/strategies (STRATEGIES) → inference/solver (ARGMAX) → the board</pre>
 <p><b>The data layer</b> (<code>db/</code>) pulls the sources - Blizzard's hero pages, the wiki, the
 counter lists, the authored files - into one Postgres schema, and exposes it through one door:
 thirty-odd MCP tools over stdio and HTTP. Everything else, including this page, reads through
@@ -314,14 +335,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(api_strategies())
             if path == "/math":
                 return self._send(view_math())
-            with psycopg.connect(dsn()) as cx:
+            if path not in ("/api/roster", "/api/facts", "/api/infer"):
+                return self._send(_page("not found", "<p>Nothing here.</p>"), 404)
+            with psycopg.connect(dsn()) as cx:      # only the data routes touch the database
                 if path == "/api/roster":
                     return self._json(api_roster(cx))
                 if path == "/api/facts":
                     return self._json(*api_facts(cx, query))
-                if path == "/api/infer":
-                    return self._json(*api_infer(cx, query))
-            self._send(_page("not found", "<p>Nothing here.</p>"), 404)
+                return self._json(*api_infer(cx, query))
         except Exception:
             self._send(_page("error", "<pre class='warnbox'>%s</pre>"
                              % esc(traceback.format_exc())), 500)

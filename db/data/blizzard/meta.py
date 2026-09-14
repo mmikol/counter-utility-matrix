@@ -16,15 +16,15 @@ The page carries its rows as JSON on a blz-data-table element, and its filter
 vocabularies as ordinary select options.
 """
 
-from db import INPUT_DEVICE, PLATFORM, REGION
-from db import psql
-from db.data import fetch
-from db.psql import current_patch, current_season
-from db.data.fetch import cache_key, cached_get
-from db.data.blizzard import BLIZZARD, RATES_URL
 import json
+
 from bs4 import BeautifulSoup
 
+from db import INPUT_DEVICE, PLATFORM, REGION, psql
+from db.data import fetch
+from db.data.blizzard import BLIZZARD, RATES_URL
+from db.data.fetch import cache_key, cached_get
+from db.psql import current_patch, current_season
 
 # --- extract: markup -> Python ---------------------------------------------
 

@@ -23,9 +23,7 @@ import csv
 import os
 from datetime import date
 
-
-from db import AUTHORED_DIR
-from db import psql
+from db import AUTHORED_DIR, psql
 
 # The sources row these files become. There is nothing to download - the
 # "url" is the directory - but every row still names its source. The code
@@ -44,8 +42,7 @@ def _csv(path, expected):
         if reader.fieldnames != expected:
             raise AuthoredError("%s: header must be %s, found %s"
                                 % (path, ",".join(expected), reader.fieldnames))
-        for n, row in enumerate(reader, start=2):
-            yield n, row
+        yield from enumerate(reader, start=2)
 
 
 def _path(name):
@@ -66,7 +63,7 @@ def read_seasons(path):
         try:
             started = date.fromisoformat(row["started"].strip())
         except ValueError:
-            raise AuthoredError("line %d: started must be YYYY-MM-DD" % n)
+            raise AuthoredError("line %d: started must be YYYY-MM-DD" % n) from None
         rows.append((name, started, row["note"].strip() or None))
     return rows
 

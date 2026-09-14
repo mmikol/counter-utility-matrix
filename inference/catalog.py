@@ -49,8 +49,8 @@ import os
 import re
 
 from db import ROOT
-from ui.facts import compute
 from inference.expr import ExprError, Section, compile_expr
+from ui.facts import compute
 
 STRATEGIES_DIR = os.path.join(ROOT, "inference", "strategies")
 DOCS_PATH = os.path.join(ROOT, "docs", "inference.md")
@@ -139,13 +139,13 @@ class Strategy:
         try:
             self.weight = float(meta.get("weight", 1.0) or 0.0)
         except (TypeError, ValueError):
-            raise CatalogError("%s: weight must be a number" % hid)
+            raise CatalogError("%s: weight must be a number" % hid) from None
         if not 0.0 <= self.weight <= 10.0:
             raise CatalogError("%s: weight must be within 0..10" % hid)
         self.soft = bool(meta.get("soft", False))
         if "prose" in meta:
             raise CatalogError("%s: prose: is gone - a ground rule is kind: assumption" % hid)
-        self.params = {k: v for k, v in (meta.get("params") or {}).items()}
+        self.params = dict((meta.get("params") or {}).items())
         self.params_section = Section(self.params)
         try:
             self.when = compile_expr(str(meta["when"])) if "when" in meta else None
@@ -154,7 +154,7 @@ class Strategy:
             self.penalty = (compile_expr(str(meta["penalty"]))
                             if "penalty" in meta else None)
         except ExprError as error:
-            raise CatalogError("%s: %s" % (hid, error))
+            raise CatalogError("%s: %s" % (hid, error)) from error
         self._check()
 
     def _check(self):
@@ -172,7 +172,8 @@ class Strategy:
                                           or self.when is not None):
             raise CatalogError("%s: an assumption is prose; it carries nothing to score" % self.id)
         if self.kind == "heuristic" and (self.require is not None or self.bonus is not None):
-            raise CatalogError("%s: a heuristic weighs a metric; require/bonus belong to a constraint"
+            raise CatalogError("%s: a heuristic weighs a metric;"
+                               " require/bonus belong to a constraint"
                                % self.id)
         if self.kind == "constraint" and self.metric:
             raise CatalogError("%s: a constraint has no metric; that is a heuristic" % self.id)
@@ -264,13 +265,14 @@ def load(directory=STRATEGIES_DIR):
             strategy = Strategy(hid, meta, body, raw, path)
         except CatalogError as error:
             text = str(error)
-            wrapped = CatalogError(text if text.startswith((name, hid)) else "%s: %s" % (name, text))
+            wrapped = CatalogError(text if text.startswith((name, hid))
+                                   else "%s: %s" % (name, text))
             wrapped.file = name
-            raise wrapped
+            raise wrapped from error
         except Exception as error:            # bytes that are not text, a directory, ...
             wrapped = CatalogError("%s: %s: %s" % (name, type(error).__name__, error))
             wrapped.file = name
-            raise wrapped
+            raise wrapped from error
         ids.add(hid)
         out.append(strategy)
     if not out:
@@ -350,7 +352,8 @@ def write_docs(catalog, path=DOCS_PATH):
             elif h.form == "draft":
                 out.append("*draft* - name, kind and prose only; `/strategy` infers the rest")
             elif h.form == "assumption":
-                out.append("*assumption* - prose the solver takes as given and the session holds a comp to")
+                out.append("*assumption* - prose the solver takes as given"
+                           " and the session holds a comp to")
             elif h.form == "scored":
                 out.append("weight %g; %s" % (h.weight, "; ".join(
                     "%s `%s`" % (label, expr.source) for label, expr in (

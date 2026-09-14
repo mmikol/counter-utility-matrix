@@ -33,13 +33,14 @@ import re
 import sys
 import time
 import unicodedata
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from db import RAW_DIR, AUTHORED_DIR
+from db import AUTHORED_DIR, RAW_DIR
+from db.mcp.server import AUDIT_PATH, RATE_LIMIT  # one definition: the door's own
 from inference import catalog as catalog_module
 
 EVERY = float(os.environ.get("COUNTER_MATRIX_SENTRY_EVERY", "30"))
-from db.mcp.server import AUDIT_PATH, RATE_LIMIT   # one definition: the door's own
+
 REPORT_PATH = os.path.join(RAW_DIR, "sentry.json")
 QUARANTINE = ".quarantined"
 
@@ -48,15 +49,15 @@ TOOLS = r"(db_rebuild|db_init|db_migrate|sync_all|pull_\w+|load_authored|tune|in
         r"add_strategy|derive_strategies|query|export_csv)"
 INJECTION = [re.compile(p, re.I | re.S) for p in (
     r"\b(ignore|disregard|forget|override)\b[^.\n]{0,60}\b(instructions?|rules?|messages?|prompts?|guidelines?)\b",
-    r"\b(instructions?|rules?|prompts?)\b[^.\n]{0,30}\b(above|before|previous|prior|earlier)\b[^.\n]{0,40}\b(ignore|disregard|forget|override|no longer)\b",
+    r"\b(instructions?|rules?|prompts?)\b[^.\n]{0,30}\b(above|before|previous|prior|earlier)\b[^.\n]{0,40}\b(ignore|disregard|forget|override|no longer)\b",  # noqa: E501
     r"\byou are now (a|an|the|my|our)\b", r"\bnew (instructions|persona|identity)\b",
     r"\bsystem prompt\b", r"\bdeveloper message\b", r"\bas an ai\b",
     r"\b(run|execute|call|invoke|use)\b[^.\n]{0,40}\b" + TOOLS + r"\b",
     r"\b(run|execute)\b[^.\n]{0,20}\b(the following|this) (command|script|code)\b",
     r"(^|[\s`])(curl|wget|bash -c|sh -c|rm -rf|sudo|chmod|powershell|nc -e)\b",
     r"\b(pg_read_file|pg_ls_dir|set_config|query_to_xml|lo_export|lo_import|dblink)\b",
-    r"\b(api[_ -]?key|password|secret|token|credential)s?\b[^.\n]{0,60}\b(reveal|print|send|leak|exfiltrat|paste)\b",
-    r"\b(reveal|print|send|leak|exfiltrat|paste)\b[^.\n]{0,60}\b(api[_ -]?key|password|secret|token|credential)s?\b",
+    r"\b(api[_ -]?key|password|secret|token|credential)s?\b[^.\n]{0,60}\b(reveal|print|send|leak|exfiltrat|paste)\b",  # noqa: E501
+    r"\b(reveal|print|send|leak|exfiltrat|paste)\b[^.\n]{0,60}\b(api[_ -]?key|password|secret|token|credential)s?\b",  # noqa: E501
     r"<script\b", r"[A-Za-z0-9+/]{240,}={0,2}",
 )]
 INVISIBLE = re.compile("[\u200b-\u200f\u2060\ufeff\u00ad]")
@@ -135,7 +136,8 @@ def check_inputs(authored_dir=None):
         return flags
     for name in sorted(os.listdir(authored_dir)):
         if name.endswith(".csv"):
-            with open(os.path.join(authored_dir, name), encoding="utf-8", errors="replace") as handle:
+            with open(os.path.join(authored_dir, name), encoding="utf-8",
+                      errors="replace") as handle:
                 why = injected(handle.read())
             if why:
                 flags.append("%s reads like an instruction: %r" % (name, why))
@@ -146,6 +148,7 @@ def check_database(dsn=None):
     """Instruction-like free text in the database -> flags (none when unreachable)."""
     try:
         import psycopg
+
         from db import psql
         with psycopg.connect(dsn or psql.default_dsn()) as cx:
             flags = []
@@ -160,7 +163,8 @@ def check_database(dsn=None):
                     for (value,) in rows:
                         why = injected(value)
                         if why:
-                            flags.append("%s.%s reads like an instruction: %r" % (table, column, why))
+                            flags.append("%s.%s reads like an instruction: %r"
+                                         % (table, column, why))
                             break
             return flags
     except Exception as error:      # the sentry reports, it never dies
@@ -209,7 +213,7 @@ def run_once(directory=None, authored_dir=None, audit_path=None, dsn=None, log=p
         flags.append("%d tool call(s) crashed in the last minute" % crashed)
     if hot:
         flags.append("client(s) past the rate limit: %s" % ", ".join(str(c) for c in hot))
-    report = {"checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    report = {"checked_at": datetime.now(UTC).isoformat(timespec="seconds"),
               "ok": not quarantined and not flags and cat is not None,
               "playbook": None if cat is None else len(cat),
               "quarantined": quarantined, "flags": flags,

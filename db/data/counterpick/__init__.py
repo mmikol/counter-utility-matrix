@@ -8,12 +8,13 @@ server rendered, so no browser is needed, and its filters are query
 parameters; the project's scope pins competitive, console, Americas.
 """
 
+from db import REGION
+
 BASE_URL = "https://counterpickgg.com/"
 
 # The sources row this module's pages become.
 COUNTERPICK = ("counterpick", "counterpick.gg", "https://counterpickgg.com/")
 
-from db import REGION
 
 GAMEMODE = "competitive"
 

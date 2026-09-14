@@ -24,21 +24,21 @@ are kept separately because the site does not treat them as inverses: of 354
 pairings, 114 appear in one direction only.
 """
 
-from db import INPUT_DEVICE, PLATFORM
-from db import psql
+import re
+
+from bs4 import BeautifulSoup
+
+from db import INPUT_DEVICE, PLATFORM, psql
 from db.data import fetch
-from db.psql import current_patch, current_season
-from db.data.fetch import cache_key, cached_get
-from db.data.names import index, name_key
 from db.data.counterpick import (
-    COUNTERPICK,
     BASE_URL,
+    COUNTERPICK,
     GAMEMODE,
     REGIONS,
 )
-import re
-from bs4 import BeautifulSoup
-
+from db.data.fetch import cache_key, cached_get
+from db.data.names import index, name_key
+from db.psql import current_patch, current_season
 
 # --- extract: markup -> Python ---------------------------------------------
 

@@ -21,9 +21,10 @@ import json
 import os
 import re
 import time
-import requests
-from db.data.fetch import is_stale, keep_stale
 
+import requests
+
+from db.data.fetch import is_stale, keep_stale
 
 WIKI_API = "https://overwatch.fandom.com/api.php"
 CARGO_PAGE_SIZE = 500

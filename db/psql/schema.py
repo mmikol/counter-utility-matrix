@@ -117,8 +117,8 @@ def _migration_tables():
     for path, text in read_migrations():
         fn = os.path.basename(path)
         for m in re.finditer(r"((?:^--.*\n)*)^CREATE TABLE (\w+)", text, re.M):
-            prose = " ".join(l.lstrip("-").strip() for l in m.group(1).splitlines()
-                             if l.strip() not in ("--", ""))
+            prose = " ".join(line.lstrip("-").strip() for line in m.group(1).splitlines()
+                             if line.strip() not in ("--", ""))
             out[m.group(2)] = (fn, prose.strip())
     return out
 
@@ -186,10 +186,10 @@ def generate_docs(connection, path=None):
            "Those edges are left off - they would connect `sources` to all %d tables"
            % len(tables), "and obscure everything else.", ""]
     for d in ("HEROES", "MAPS", "META", "PLAYBOOK", "INFERENCE"):
-        erd += ["#### %s" % d, "", "```mermaid", "erDiagram"] + \
-               edges(lambda c, d=d: dom.get(c) == d) + ["```", ""]
-    erd += ["#### The whole database", "", "```mermaid", "erDiagram"] + \
-           edges(lambda c: True) + ["```", ""]
+        erd += ["#### %s" % d, "", "```mermaid", "erDiagram",
+                *edges(lambda c, d=d: dom.get(c) == d), "```", ""]
+    erd += ["#### The whole database", "", "```mermaid", "erDiagram",
+            *edges(lambda c: True), "```", ""]
     path = path or os.path.join(ROOT, "docs", "db.md")
     embed(path, "erd", "\n".join(erd))
 
