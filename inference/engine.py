@@ -36,10 +36,15 @@ def _pct(score, best):
     return max(0, min(100, round(100.0 * score / best)))
 
 
+UNSCORED = ("unscored - the playbook in force holds no heuristic, scored constraint or soft"
+            " limit, so every legal six ties at zero; add one and the board scores")
+
+
 def _finish(result, best):
     result.best = best
+    scoring = catalog_module.scores(result.catalog)
     for alt in result.alternatives:
-        alt["normalized"] = _pct(alt["score"], best)
+        alt["normalized"] = _pct(alt["score"], best) if scoring else None
 
 
 class Result:
@@ -88,11 +93,13 @@ class Result:
             ids = {fid for p in self.picks for fid in p["evidence"]}
             ids |= {c["fact"] for c in self.contributions if c.get("fact")}
             cited = {f.id: f.text for f in self.facts.facts if f.id in ids}
+        scoring = catalog_module.scores(self.catalog)
         return {"kind": self.kind, "seat": self.seat, "map": self.map_name,
                 "red": self.red, "blue": self.blue, "locked": self.locked,
                 "bans": self.bans, "side": self.side, "partial": self.partial,
-                "score": round(self.score, 3),
-                "normalized": _pct(self.score, self.best if self.best is not None else self.score),
+                "score": round(self.score, 3), "scoring": scoring,
+                "normalized": (_pct(self.score, self.best if self.best is not None else self.score)
+                               if scoring else None),
                 "playstyle": self.playstyle, "picks": self.picks,
                 "contributions": self.contributions, "violations": self.violations,
                 "alternatives": self.alternatives, "rank": self.rank,
@@ -114,14 +121,17 @@ class Result:
             " (banned: %s)" % ", ".join(self.bans) if self.bans else "")
         counts = {k: sum(1 for h in self.catalog if h.kind == k)
                   for k in catalog_module.KINDS}
-        lines = [head, "  %s%s - score %.2f (%d/100)%s, %d candidates considered in %.1fs"
+        share = ("(%d/100)" % _pct(self.score, self.best if self.best is not None else self.score)
+                 if catalog_module.scores(self.catalog) else "(unscored)")
+        lines = [head, "  %s%s - score %.2f %s%s, %d candidates considered in %.1fs"
                  " under %d constraints, %d heuristics and %d assumptions"
                  % (", ".join(self.blue), " (%s)" % self.playstyle if self.playstyle else "",
-                    self.score,
-                    _pct(self.score, self.best if self.best is not None else self.score),
+                    self.score, share,
                     " (rank %d among the feasible field)" % self.rank
                     if self.rank else "", self.considered, self.seconds,
                     counts["constraint"], counts["heuristic"], counts["assumption"])]
+        if not catalog_module.scores(self.catalog):
+            lines.append("  UNSCORED: " + UNSCORED.split(" - ", 1)[1])
         if self.partial:
             lines.append("  PARTIAL: %d of %d picked - sums read low until the team is full"
                          % (len(self.blue), TEAM_SIZE))
@@ -364,6 +374,10 @@ def _momentum(cur, red_cur, countered):
     """Who the picks favour, read off the two current comps on their own
     optimals' scales: blue's share of its best counter to red's selection,
     red's share of its best counter to blue's."""
+    catalog = getattr(cur, "catalog", None)                 # the tests' stand-ins carry none
+    if catalog is not None and not catalog_module.scores(catalog):
+        return {"blue": None, "red": None, "countered": None, "partial": False,
+                "verdict": UNSCORED}
     n = _pct(cur.score, cur.best) if cur.blue else None
     m = _pct(red_cur.score, red_cur.best) if red_cur.blue else None
     k = _pct(countered.score, countered.best) if countered is not None and countered.blue else None

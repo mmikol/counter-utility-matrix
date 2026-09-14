@@ -85,6 +85,14 @@ what catches it now. Every run that finds such a thing adds a line here,
 in the same shape, before it reports - a lesson that is not written down
 is a lesson the next run relearns.
 
+- **A number where there was nothing to measure.** With an experiment
+  playbook of one hard limit in force, every legal six tied at zero and
+  the board showed 0 and 100 / 100 for every comp; the user read it as
+  scoring being broken, and it was the display being confident about
+  nothing. Now: a state the board cannot compute reads as what it is
+  ("unscored", from `catalog.scores`), never as a figure that looks like
+  an answer - and a run checks the playbook in force (`.env`, the
+  `strategies` tool's "playbook in force" prefix) before judging a score.
 - **Prose that parses and still says the wrong thing.** "a few polite
   minutes" sat in the README through a spell check and two grammar reads:
   every word real, every sentence well-formed, the adjective on the wrong

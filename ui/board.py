@@ -325,7 +325,8 @@ picks, each six is scored, and a local search swaps slots for same-role heroes w
 Ties break by the six's mean map win rate, then by name, so the same board gives the same six
 every time.</p>
 <p><b>When the playbook holds only limits</b> - no heuristic, no scored constraint - the sum is
-empty: every legal six scores zero, every comp on the board shows 100, and the optimal is the
+empty: every legal six scores zero, the board says <i>unscored</i> where a share of the best
+would go, and the optimal is the
 tie-break alone: the highest win rates on this map that fit the shape, not a judgement about
 them together. A single heuristic is what turns that ordering into an inference.</p>
 <h2>How the pieces fit</h2>

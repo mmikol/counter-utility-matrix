@@ -292,6 +292,16 @@ def load(directory=STRATEGIES_DIR):
     return out
 
 
+def scores(catalog):
+    """Whether the playbook has any term that scores: a heuristic, a scored
+    constraint or a soft limit. A playbook of hard limits and prose alone
+    ties every legal six at zero - the board then says "unscored" rather
+    than 100 / 100."""
+    return any(h.kind == "heuristic" or getattr(h, "form", None) == "scored"
+               or (getattr(h, "form", None) == "limit" and getattr(h, "soft", False))
+               for h in catalog)
+
+
 def playbook_name(directory=None):
     """How the database names a playbook: its folder, relative to the repo."""
     return os.path.relpath(directory or STRATEGIES_DIR, ROOT).replace(os.sep, "/")

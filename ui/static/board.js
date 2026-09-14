@@ -260,8 +260,11 @@ function meaning(d) {
   if (d.kind === 'countered') return n === null ? '' : 'your picks would keep ' + n + '% of the best six if red answered you perfectly';
   return n === null ? '' : 'your picks reach ' + n + '% of the score of the best six for this board';
 }
+var UNSCORED = 'the playbook in force holds no heuristic, scored constraint or soft limit, so every legal six ties at zero - add one and the board scores';
 function scoreHTML(d) {
   var raw = 'score ' + (+d.score).toFixed(2) + (typeof d.best === 'number' && d.kind !== 'infer' ? ' of the best ' + (+d.best).toFixed(2) : '');
+  if (d.scoring === false)
+    return "<span class='score unscored' title='" + esc(UNSCORED) + "'>unscored</span><span class='raw'><span class='meaning'>" + esc(UNSCORED) + '</span></span>';
   if (typeof d.normalized === 'number')
     return "<span class='score' title='" + esc(raw) + "'>" + Math.round(d.normalized) + "<small>/ 100</small></span><span class='raw'>" + esc(raw) +
       "<span class='meaning'>" + esc(meaning(d)) + '</span></span>';
@@ -288,8 +291,10 @@ function renderInf() {
   else renderResult(rc, el('inf-red'), 'red - their comp as revealed' + (rc.kind === 'evaluate' ? ', ranked' : ' (' + rc.blue.length + ' of ' + TEAM + ')'));
   var c = d.current;
   renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
-  el('bluescore').textContent = (c && c.blue && c.blue.length && typeof c.normalized === 'number') ? c.normalized + ' / 100' : '';
-  el('redscore').textContent = (rc && rc.blue && rc.blue.length && typeof rc.normalized === 'number') ? rc.normalized + ' / 100' : '';
+  var badge = function (r) { return !r || !r.blue || !r.blue.length ? '' : r.scoring === false ? 'unscored' : typeof r.normalized === 'number' ? r.normalized + ' / 100' : ''; };
+  el('bluescore').textContent = badge(c);
+  el('redscore').textContent = badge(rc);
+  el('bluescore').title = el('redscore').title = (c && c.scoring === false) ? UNSCORED : '';
   if (d.shapes && d.shapes.length && JSON.stringify(d.shapes) !== JSON.stringify(SHAPES)) { SHAPES = d.shapes; paint(); return; }
   paintSuggestions();
 }

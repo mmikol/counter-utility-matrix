@@ -9,3 +9,5 @@ Every change to a strategy's frontmatter, newest last: when, what, why, and who.
 - 2026-09-14T16:34Z `three-damage` added as constraint/limit: require=team.damage == 3 (the user fixes the shape at two tanks, three damage, one support for the experiment) [claude-code-session]
 - 2026-09-14T16:34Z `one-support` added as constraint/limit: require=team.supports == 1 (the user fixes the shape at two tanks, three damage, one support for the experiment) [claude-code-session]
 - 2026-09-14T16:36Z `three-damage`, `one-support`, `healing-floor`, `optimal-play` removed (back to the two-tank limit alone, on the user's word) [claude-code-session]
+- 2026-09-14T18:08Z `fliers-need-cover` added as heuristic/heuristic: metric=team.hitscan, direction=maximize, weight=1, when=matchup.flyers >= 1 (the second rule of the from-scratch playbook: flying requires coverage) [claude-code-session]
+- 2026-09-14T18:08Z `healing-covers-the-team` added as heuristic/heuristic: metric=team.hps_floor, direction=maximize, weight=1 (the third rule of the from-scratch playbook: healer coverage) [claude-code-session]

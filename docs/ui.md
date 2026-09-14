@@ -137,7 +137,11 @@ The comp is
 full width below. Each result shows its 0-100 figure large (`normalized`:
 100 for an optimal six, the current comp's share of blue's optimal on
 that board) with the raw score small beside it and as the tooltip, and
-falls back to the raw score when the figure is absent; then each pick
+falls back to the raw score when the figure is absent - or reads
+*unscored*, in the team badges, the results and the momentum strip, when
+the playbook in force has no heuristic, scored constraint or soft limit,
+since every legal six then ties at zero (`scoring` on each result says
+which); then each pick
 with its reasons and `[F#]` citations, the score bars per strategy, the
 alternatives (each with its own 0-100 figure when present) and the partial
 notice. *facts*

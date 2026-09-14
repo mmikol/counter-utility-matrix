@@ -222,6 +222,28 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
 
 
 @pytest.mark.invariant
+def test_a_playbook_that_scores_nothing_reads_unscored(world, monkeypatch):
+    """Hard limits and prose alone tie every legal six at zero: the results
+    carry no share of a best, say so, and the verdict is the one line."""
+    from inference import engine
+    shipped = catalog.load()
+    assert catalog.scores(shipped)
+    limit_only = [h for h in shipped if h.form == "limit" and not h.soft]
+    assert limit_only and not catalog.scores(limit_only)
+    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
+    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+                     catalog=limit_only)
+    d = engine.board_dict(b)
+    for key in ("blue", "red", "current", "red_current", "fill", "countered"):
+        assert d[key]["scoring"] is False and d[key]["normalized"] is None
+        assert all(a["normalized"] is None for a in d[key]["alternatives"])
+    assert d["momentum"]["verdict"].startswith("unscored") and d["momentum"]["blue"] is None
+    assert "(unscored)" in b["current"].rendered() and "UNSCORED:" in b["current"].rendered()
+    scored = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
+                                            ["Ana", "Reinhardt"], catalog=shipped))
+    assert scored["current"]["scoring"] is True and 0 < scored["current"]["normalized"] < 100
+
+
 def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
     """The roster enforces what the shape limits allow: the two-tank limit
     means no triple the solver would search seats a third tank, and the

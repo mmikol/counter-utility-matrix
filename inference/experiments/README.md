@@ -19,8 +19,15 @@ experiment into the local cluster's mirror, and the invariant tests then
 expect the shipped playbook there - `python -m db.mcp call load_authored
 '{"only": ["strategies"]}'` without the variable puts it back.
 
-- `from-scratch/` - a playbook rebuilt one rule at a time, starting from
-  the two-tank limit, "maximize healing" and the assumption that players
-  play optimally: the smallest playbook that still produces a six, and a
-  demonstration that one heuristic alone makes a degenerate comp (five
-  supports) until the next rule pulls against it.
+A playbook of hard limits and prose alone scores nothing: every legal six
+ties at zero, the board reads *unscored* wherever a share of the best would
+go, and the "optimal" is the solver's tie-break (mean map win rate, then
+names). One heuristic or scored constraint is what makes it score.
+
+- `from-scratch/` - a playbook rebuilt one rule at a time. It holds three:
+  the two-tank limit (the game's form, enforced on the roster too), a
+  heuristic that rewards hitscan cover while red fields a flier, and a
+  heuristic that rewards sustained healing. Nothing caps how many supports
+  bring that healing, so with no flier revealed the solver leans on
+  supports until a later rule pulls against it - by design: each rule is
+  added when its absence shows.
