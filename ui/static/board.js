@@ -5,7 +5,7 @@ try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
       if (saved && saved.red && saved.blue) st = saved; } catch (e) {}
 if (!st.bans) st.bans = [];
 if (!st.side) st.side = '';
-var TABS = ['comps', 'facts', 'playbook', 'recorded'];   /* the panels; the first is the default */
+var TABS = ['comps', 'facts', 'playbook'];   /* the panels; the first is the default */
 var bansOpen = false;                        /* the ban picker starts collapsed */
 
 /* An announced hero the database does not carry yet. It is drawn on both
@@ -201,7 +201,7 @@ function renderFacts() {
     if (f && (x.id + ' ' + x.key + ' ' + x.subject + ' ' + x.text).toLowerCase().indexOf(f) < 0) return;
     var head = x.scope === 'hero' ? (x.team + ' · ' + x.subject) : x.scope === 'team' ? (x.subject + ' team') : x.scope;
     if (x.scope === 'bans') head = 'bans';
-    if (x.scope === 'playbook') head = 'the playbook’s record · what it holds, decided and saw — not facts';
+    if (x.scope === 'playbook') head = 'the playbook’s record · what it holds — not facts';
     if (head !== last) { out += "<tr class='h'><td colspan='3' class='head'>" + esc(head) + '</td></tr>'; last = head; }
     var cls = (x.team || '') + (/^(WARNING|CAUTION)/.test(x.text) ? ' warn' : '') + (x.source.indexOf('derived:') === 0 ? ' derived' : '');
     out += "<tr class='" + cls + "'><td class='tag'>[" + x.id + "]</td><td class='text'>" + esc(x.text) + "</td><td class='src'>" + esc(x.source) + '</td></tr>';
@@ -245,12 +245,12 @@ function renderInf() {
   el('plan').innerHTML = "<span class='lbl'>game plan</span><div class='text'>" + text.map(esc).join('<br>') + '</div>' + (basis ? "<div class='basis'>" + esc(basis) + '</div>' : '');
   var mo = d.momentum || {};
   el('momentum').innerHTML = "<span class='lbl'>momentum</span> <b>" + esc(mo.verdict || '') + '</b>' +
-    (typeof mo.blue === 'number' && typeof mo.red === 'number' ? "<span class='gauge'><span class='r' style='width:" + mo.red + "%'></span><span class='b' style='width:" + mo.blue + "%'></span></span>" : '');
+    (typeof mo.blue === 'number' && typeof mo.red === 'number' ? "<span class='gauge'><span class='b' style='width:" + mo.blue + "%'></span><span class='r' style='width:" + mo.red + "%'></span></span>" : '');
   var rc = d.red_current;
   if (!rc || !rc.blue || !rc.blue.length) el('inf-red').innerHTML = "<div class='inf-head'><h3>red - their comp as revealed</h3></div>" +
     "<p class='legend'>click red picks as they reveal; their comp is scored against yours, on the scale of their best counter to you.</p>";
-  else renderResult(rc, el('inf-red'), 'red - their comp as revealed' + (rc.kind === 'evaluate' ? ', ranked' : ' (' + rc.blue.length + ' of ' + TEAM + ')'), false);
-  renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''), true);
+  else renderResult(rc, el('inf-red'), 'red - their comp as revealed' + (rc.kind === 'evaluate' ? ', ranked' : ' (' + rc.blue.length + ' of ' + TEAM + ')'));
+  renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''));
   var c = d.current;
   el('bluescore').textContent = (c && c.blue && c.blue.length && typeof c.normalized === 'number') ? c.normalized + ' / 100' : '';
   el('redscore').textContent = (rc && rc.blue && rc.blue.length && typeof rc.normalized === 'number') ? rc.normalized + ' / 100' : '';
@@ -272,13 +272,13 @@ function paintSuggestions() {
   }
 }
 
-function renderResult(d, container, title, recordable) {
+function renderResult(d, container, title) {
   if (!d || d.error) { container.innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
   var out = "<div class='inf-head'><h3>" + esc(title) + '</h3>' + scoreHTML(d) + "<span class='legend'>" +
     (d.rank ? 'rank ' + d.rank + ' among the feasible field · ' : '') + (d.considered ? d.considered + ' candidates · ' : '') + d.seconds + 's · ' +
     d.strategies.constraint + ' constraints, ' + d.strategies.heuristic + ' heuristics' +
     (d.playstyle ? ' · leans ' + d.playstyle : '') + '</span>' +
-    (recordable ? "<button class='primary' id='recbtn'>record this comp</button>" : '') + '</div>';
+    '</div>';
   if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search’s field</div>';
   if (d.violations && d.violations.length) out += "<div class='warnbox'>violates: " + esc(d.violations.join(', ')) + '</div>';
   out += "<div class='comp'>";
@@ -293,21 +293,7 @@ function renderResult(d, container, title, recordable) {
     out += "<div class='alts'><b>" + (d.kind === 'infer' ? 'alternatives' : 'the field’s best') + "</b><ol>" +
       d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + ' ' + altScore(a) + '</li>'; }).join('') + '</ol></div>';
   }
-  if (recordable) out += "<div class='notice' id='recnote'></div>";
   container.innerHTML = out;
-  var btn = recordable ? el('recbtn') : null;
-  if (btn) btn.onclick = function () { recordComp(d); };
-}
-
-function recordComp(d) {
-  var answer = { playstyle: d.playstyle || 'balanced', reasoning: 'solver optimum under the catalog: score ' + (+d.score).toFixed(2) + ' over ' + d.considered + ' candidates',
-    picks: d.picks.map(function (p) { return { hero: p.hero, why: p.why, evidence: p.evidence }; }) };
-  fetch('/api/record', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question: 'board: ' + (st.map || 'any map') + (st.side ? ' (' + st.side + ')' : '') + ' vs ' + st.red.join(', ') + (st.bans.length ? ' (bans: ' + st.bans.join(', ') + ')' : ''), map: st.map || null, side: st.side, red: st.red, blue: st.blue, bans: st.bans, model: 'inference-engine', answer: answer }) })
-    .then(function (r) { return r.json(); }).then(function (r) {
-      var n = el('recnote'); n.style.display = 'block';
-      n.innerHTML = r.error ? 'refused: ' + esc(r.error) : 'recorded as <a href="/rec/' + r.rec_id + '">recommendation #' + r.rec_id + '</a> - ' + esc(r.transcript);
-    });
 }
 
 function renderPlaybook(d) {
@@ -335,39 +321,6 @@ function showTab(name) {
   try { localStorage.setItem('owdb-tab', name); } catch (e) {}
 }
 
-var lastRec = null;
-function pollRecs() {
-  fetch('/api/recs').then(function (r) { return r.json(); }).then(function (d) {
-    if (lastRec !== null && d.latest > lastRec) { var n = el('newrec'); n.style.display = 'block';
-      n.innerHTML = 'the session just recorded <a href="/rec/' + d.latest + '">recommendation #' + d.latest + '</a> - ' + esc(d.summary); loadRecorded(); }
-    lastRec = d.latest;
-  }).catch(function () {});
-}
-
-/* the recorded tab: every recorded comp, newest first, with how it went */
-function loadRecorded() {
-  fetch('/api/recorded').then(function (r) { return r.json(); }).then(function (d) {
-    var t = d.tally || {}, out = "<p class='tally'>" + (t.win || 0) + ' won · ' + (t.loss || 0) + ' lost · ' + (t.draw || 0) + ' drawn' +
-      (d.recs.length ? ' · ' + d.recs.length + ' recorded comp' + (d.recs.length === 1 ? '' : 's') : '') + '</p>';
-    el('recn').textContent = d.recs.length || '';
-    if (!d.recs.length) out += "<p class='legend'>nothing recorded yet - record a comp from the board or the /comp skill, and log how it went with /outcome.</p>";
-    else {
-      out += "<table class='rec-list'><tr><th>id</th><th>date</th><th>map</th><th>comp</th><th>question</th><th>model</th><th>how it went</th></tr>";
-      d.recs.forEach(function (r) {
-        var how = r.outcomes.length ? r.outcomes.map(function (o) { return "<span class='res " + esc(o.result) + "'>" + esc(o.result) + '</span> ' + esc(o.date) + (o.side ? ' on ' + esc(o.side) : '') + (o.note ? " <span class='legend'>" + esc(o.note) + '</span>' : ''); }).join('<br>') : "<span class='legend'>not played yet</span>";
-        out += "<tr><td><a href='/rec/" + r.rec_id + "'>#" + r.rec_id + '</a></td><td>' + esc(r.date) + '</td><td>' + esc(r.map || 'any') + '</td><td>' + esc(r.picks.join(', ')) +
-          (r.playstyle ? " <span class='legend'>" + esc(r.playstyle) + '</span>' : '') + '</td><td>' + esc(r.question.slice(0, 90)) + '</td><td>' + esc(r.model) + '</td><td>' + how + '</td></tr>';
-      });
-      out += '</table>';
-    }
-    if (d.unlinked && d.unlinked.length) {
-      out += "<h3>outcomes without a recorded comp</h3><table class='rec-list'><tr><th>date</th><th>map</th><th>blue's six</th><th>result</th></tr>" +
-        d.unlinked.map(function (o) { return '<tr><td>' + esc(o.date) + '</td><td>' + esc(o.map || 'any') + (o.side ? ' (' + esc(o.side) + ')' : '') + '</td><td>' + esc(o.blue.join(', ')) + "</td><td><span class='res " + esc(o.result) + "'>" + esc(o.result) + '</span>' + (o.note ? " <span class='legend'>" + esc(o.note) + '</span>' : '') + '</td></tr>'; }).join('') + '</table>';
-    }
-    el('recorded').innerHTML = out;
-  }).catch(function () { el('recorded').innerHTML = "<div class='warnbox'>the recorded comps are not answering</div>"; });
-}
-
 fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   ROSTER = d; ROSTER.byName = {};
   d.heroes.forEach(function (h) { ROSTER.byName[h.name] = h; });
@@ -389,5 +342,5 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
     scopeOn[s] = !scopeOn[s]; c.classList.toggle('on', scopeOn[s]); renderFacts(); };
   fetch('/api/strategies').then(function (r) { return r.json(); }).then(renderPlaybook);
   showTab((function () { try { return localStorage.getItem('owdb-tab'); } catch (e) { return null; } })());
-  refresh(); pollRecs(); loadRecorded(); setInterval(pollRecs, 8000);
+  refresh();
 });

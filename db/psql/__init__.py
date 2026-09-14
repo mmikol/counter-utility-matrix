@@ -10,7 +10,7 @@
                        what a capture is stamped with
     export             the CSV mirror under db/raw, and its mark
 
-The schema itself - migrations, the ledger, rebuild, restore, the
+The schema itself - migrations, the ledger, rebuild, the
 generated docs - is db.schema. Nothing here knows a particular source.
 """
 

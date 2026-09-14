@@ -40,8 +40,8 @@ def test_initialize_then_list_tools_over_stdio():
     assert replies[0]["result"]["serverInfo"]["name"] == "counter-utility-matrix"
     names = {t["name"] for t in replies[1]["result"]["tools"]}
     assert {"pull_heroes", "pull_rates", "sync_all", "db_rebuild", "db_migrate", "query",
-            "facts", "infer", "evaluate", "board", "strategies", "record", "load_authored",
-            "record_outcome", "tune", "fit_weights", "tuning_log", "metrics",
+            "facts", "infer", "evaluate", "board", "strategies", "load_authored",
+            "tune", "tuning_log", "metrics",
             "add_strategy", "infer_strategy", "derive_strategies", "db_docs"} <= names
     assert len(names) == len(tools.REGISTRY)      # every registered tool is served
     for t in replies[1]["result"]["tools"]:
@@ -114,7 +114,7 @@ def test_query_is_read_only(ctx):
 @pytest.mark.invariant
 def test_db_status_and_roster(ctx):
     _, status = tools.run_tool(ctx, "db_status")
-    assert status["tables"] >= 38 and status["counts"]["heroes"] > 40
+    assert status["tables"] >= 36 and status["counts"]["heroes"] > 40
     _, roster = tools.run_tool(ctx, "roster")
     assert any(h["name"] == "Ana" and h["portrait"] for h in roster["heroes"])
     assert any(m["name"] == "King's Row" and m["mode"] == "Hybrid" for m in roster["maps"])

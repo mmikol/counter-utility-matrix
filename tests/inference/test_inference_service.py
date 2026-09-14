@@ -23,8 +23,7 @@ def test_service_infers_evaluates_and_lists(db):
     data, code = serve.handle_board(db, {"map": ["King's Row"], "red": ["Zarya"],
                                          "blue": ["Ana"], "side": ["defense"]})
     assert code == 200 and data["red"]["side"] == "attack" and data["current"]["partial"]
-    data, code = serve.handle_record(db, {"answer": {"picks": []}})
-    assert code == 400
+    assert not hasattr(serve, "handle_record")          # recording is gone
     db.rollback()
 
 
@@ -47,8 +46,6 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
     assert calls[-1] == ("/board", {"map": "Ilios", "side": "", "red": ["Zarya"],
                                     "blue": [], "ban": []}, None)
     assert board.api_strategies() == {"forwarded": True}
-    assert board.api_record(None, {"answer": {}}) == ({"forwarded": True}, 200)
-    assert calls[-1][0] == "/record"
 
 
 def test_board_reports_an_unreachable_inference_service(monkeypatch):

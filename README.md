@@ -27,8 +27,8 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 That is the whole run: the stack comes up (one container per layer; the
 first time, the data container pulls every source and builds the database
 - a few polite minutes), the agents run headless on the `/refresh` skill
-(refresh the data, derive draft strategies, re-fit the weights, regenerate
-the docs), and the app is left running:
+(refresh the data, derive draft strategies, regenerate the docs), and the
+app is left running:
 
 | | |
 | --- | --- |
@@ -58,7 +58,7 @@ Without Docker:
 ```
 
 Open the repo in a Claude Code session and the skills are there: `/up`,
-`/comp`, `/outcome`, `/tune`, `/strategy`, `/refresh`, `/maintain`.
+`/comp`, `/tune`, `/strategy`, `/refresh`, `/maintain`.
 
 ## Documentation
 

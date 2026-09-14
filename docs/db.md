@@ -84,7 +84,7 @@ The servers, the transport and the full tool reference are in
 | file | purpose |
 | --- | --- |
 | `server.py` | A dependency-free MCP server: JSON-RPC over stdio, and the same surface over Streamable HTTP (`POST /mcp`, `GET /health`). `initialize`, `tools/list`, `tools/call`, `resources/*`. Dependency-free because the official SDK needs Python 3.10 and the project runs on 3.9. |
-| `tools.py` | The tools. `pull_*` (one source and domain each), `load_authored`, `sync_all`; the database's life (`db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, read-only `query`); and, through the same door, the user and inference layers' tools (`roster`, `facts`, `infer`, `evaluate`, `board`, `strategies`, `metrics`, `add_strategy`, `infer_strategy`, `derive_strategies`, `record`, `record_outcome`, `tune`, `fit_weights`, `tuning_log`). The strategies are also served as `strategy://` resources. |
+| `tools.py` | The tools. `pull_*` (one source and domain each), `load_authored`, `sync_all`; the database's life (`db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, read-only `query`); and, through the same door, the user and inference layers' tools (`roster`, `facts`, `infer`, `evaluate`, `board`, `strategies`, `metrics`, `add_strategy`, `infer_strategy`, `derive_strategies`, `tune`, `tuning_log`). The strategies are also served as `strategy://` resources. |
 | `__main__.py` | `python -m db.mcp` serves over stdio (what `.mcp.json` launches); `--http HOST:PORT` serves over HTTP (the `data` container); `list` and `call NAME [JSON]` are the shell. |
 
 ### `psql/` - the database
@@ -92,8 +92,8 @@ The servers, the transport and the full tool reference are in
 | file | purpose |
 | --- | --- |
 | `__init__.py` | Where the database is (`DATABASE_URL`, or the embedded cluster at `db/cluster`); how a source registers the `sources` row its rows carry; how names look up ids; what a capture is stamped with (now, the current patch and season); the CSV export and its `EXPORT.json` mark naming the database it came from. Knows no particular source or table. |
-| `schema.py` | Applies migrations and records them in the `schema_migrations` ledger; `pending` says which files the database has not seen; `rebuild` drops everything and reapplies; `restore` brings recorded recommendations and outcomes back from the mirror after a rebuild; `generate_docs` writes the ER diagrams and the data dictionary at the end of this document from the live schema. |
-| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` outcomes, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
+| `schema.py` | Applies migrations and records them in the `schema_migrations` ledger; `pending` says which files the database has not seen; `rebuild` drops everything and reapplies; `generate_docs` writes the ER diagrams and the data dictionary at the end of this document from the live schema. |
+| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` outcomes (dropped by `014`), `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
 | `cluster/` | The embedded Postgres cluster `pgserver` creates on first touch (gitignored). The compose stack uses its own `postgres` container instead, reachable from the host through `./docker-db`. |
 
 ### `data/authored/` - what we write
@@ -122,15 +122,11 @@ All follow the same contract: committed, whole-truth on reload, loud errors
 on malformed rows or unknown names. The inference layer's own brain - the
 strategies - lives in [`inference/strategies/`](../inference/strategies/).
 
-`recommendations/` holds one markdown transcript per recorded composition,
-the durable record; the INFERENCE tables hold the same rows queryably,
-mirrored to `db/raw` and restored after every rebuild. Both come from one
-write path, `inference/record.py`, whose gates hold whoever decided the comp.
+Nothing under `authored/` is written by the code: every file is a human's.
 
 
 The inputs that are ours rather than fetched: `synergies.csv`,
-`archetypes.csv`, `map_playstyle.csv`, `seasons.csv`, and `recommendations/`, one
-markdown transcript per recorded composition. The folder's `__init__.py`
+`archetypes.csv`, `map_playstyle.csv`, `seasons.csv`. The folder's `__init__.py`
 is their loader - seasons, synergies, archetypes, map playstyles, each a
 whole-truth reload with loud errors on a malformed row or an unknown
 name - and declares the `sources` row they become, as every source
@@ -141,11 +137,10 @@ they are the inference layer's, in `inference/strategies/`.
 
 ### `raw/` - the mirror
 
-One CSV per table, exported by `export_csv` after every sync and every
-recorded comp, plus `EXPORT.json` naming the database that exported it.
-Gitignored. Two things read it: `restore` after a rebuild (the one thing no
-tool can re-fetch is never discarded), and the parity tests, which skip
-themselves when the mirror came from the other database.
+One CSV per table, exported by `export_csv` after every sync, plus
+`EXPORT.json` naming the database that exported it. Gitignored. The
+parity tests read it, and skip themselves when the mirror came from the
+other database.
 
 ## The order of a build
 
@@ -195,14 +190,7 @@ stateDiagram-v2
     Schema --> Populated: sync_all<br/>7 pull tools + load_authored
     Empty --> Populated: db_rebuild<br/>(the entrypoint's move<br/>on an empty database)
     Populated --> Populated: pull_rates + pull_counters daily,<br/>sync_all weekly (the refresher)<br/>entities upsert in place,<br/>rates APPEND a dated snapshot
-    Populated --> Empty: db_rebuild<br/>drop everything...
-    note right of Populated
-        ...but recorded recommendations
-        are restored from the db/raw
-        mirror after every rebuild -
-        the one thing no tool can
-        re-fetch is never discarded.
-    end note
+    Populated --> Empty: db_rebuild<br/>drop everything
 ```
 
 `python -m db.mcp call <tool>` runs the same tools without a session;
@@ -219,14 +207,13 @@ yesterday's numbers rather than an empty table.
 
 Any data in the database is just data: every row carries its `source_id`,
 and that is the only distinction the schema draws. What differs is how a
-row gets there - and therefore what a rebuild can and cannot recover.
+row gets there - pulled from a source, or authored by hand.
 
 ```mermaid
 flowchart TD
     Q{"Can a pull tool<br/>re-fetch it?"}
     Q -->|"yes"| F["pulled<br/>blizzard · wiki · counterpick<br/>one package per source: page -> table"]
     Q -->|"no - we wrote it"| A["authored<br/>db/data/authored/: synergies, archetypes,<br/>map playstyles, seasons, notes<br/>+ inference/strategies/*.md (the brain)"]
-    Q -->|"no - the inference<br/>layer decided it"| R["recorded<br/>recommendations + transcripts,<br/>mirrored to db/raw, restored<br/>after every rebuild"]
 ```
 
 ## Widening the meta's granularity
@@ -241,7 +228,7 @@ cooldown is a cooldown in every region, on every platform, at every rank.
 and the migrations ledger makes the Docker entrypoint do the same the moment
 the files change. So adding a dimension is never a data migration — there is
 no data to migrate. It is an edit to `psql/migrations/004_meta.sql`, an edit to `pull_rates`,
-and a refetch (recorded comps come back from the `raw/` mirror).
+and a refetch.
 
 That means the schema is *not* the constraint on any of this. The constraint is
 the request count, and it is multiplicative.
@@ -335,19 +322,19 @@ document is written by hand.
 Five domains. Three are the authoritative data the sources are pulled
 for - which hero (HEROES), on which map (MAPS), performing how well
 (META) - and become the FACTS of a board. The other two are the
-playbook's record: the authored inputs and the mirror of the constraints and
-heuristics (PLAYBOOK), and what the inference layer decided and what came of
-it (INFERENCE). The composition is the argmax of the strategies - the
-constraints and heuristics in inference/strategies/ - over the facts.
+playbook's record: the authored inputs (PLAYBOOK) and the mirror of the
+strategies the inference layer solves with (INFERENCE). The composition is
+the argmax of the strategies - the constraints, heuristics and assumptions
+in inference/strategies/ - over the facts.
 
 ```
 FACTS      = HEROES ∪ MAPS ∪ META
-STRATEGIES = CONSTRAINTS ∪ HEURISTICS
+STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS
 COMP       = ARGMAX[ STRATEGIES( FACTS ) ]
 ```
 
 Every table also carries `source_id` → `sources` and a `cao` timestamp.
-Those edges are left off - they would connect `sources` to all 41 tables
+Those edges are left off - they would connect `sources` to all 36 tables
 and obscure everything else.
 
 #### HEROES
@@ -423,15 +410,6 @@ erDiagram
 
 ```mermaid
 erDiagram
-    heroes ||--o{ outcome_picks : "hero_id"
-    heroes ||--o{ recommendation_evidence : "hero_id"
-    heroes ||--o{ recommendation_picks : "hero_id"
-    maps ||--o{ outcomes : "map_id"
-    maps ||--o{ recommendations : "map_id"
-    outcomes ||--o{ outcome_picks : "outcome_id"
-    recommendations ||--o{ outcomes : "rec_id"
-    recommendations ||--o{ recommendation_evidence : "rec_id"
-    recommendations ||--o{ recommendation_picks : "rec_id"
 ```
 
 #### The whole database
@@ -451,11 +429,8 @@ erDiagram
     heroes ||--o{ hero_meta : "hero_id"
     heroes ||--o{ map_meta : "hero_id"
     heroes ||--o{ map_strategy : "hero_id"
-    heroes ||--o{ outcome_picks : "hero_id"
     heroes ||--o{ perks : "hero_id"
     heroes ||--o{ playstyle : "hero_id"
-    heroes ||--o{ recommendation_evidence : "hero_id"
-    heroes ||--o{ recommendation_picks : "hero_id"
     heroes ||--o{ synergies : "hero_id"
     heroes ||--o{ synergies : "other_id"
     heroes ||--o{ weapons : "hero_id"
@@ -465,18 +440,12 @@ erDiagram
     maps ||--o{ map_playstyle : "map_id"
     maps ||--o{ map_stages : "map_id"
     maps ||--o{ map_strategy : "map_id"
-    maps ||--o{ outcomes : "map_id"
-    maps ||--o{ recommendations : "map_id"
     meta_snapshots ||--o{ hero_meta : "snapshot_id"
     meta_snapshots ||--o{ map_meta : "snapshot_id"
-    outcomes ||--o{ outcome_picks : "outcome_id"
     patches ||--o{ meta_snapshots : "patch_id"
     perk_tiers ||--o{ perks : "tier_id"
     perks ||--o{ perk_ability_effects : "perk_id"
     perks ||--o{ perk_stats : "perk_id"
-    recommendations ||--o{ outcomes : "rec_id"
-    recommendations ||--o{ recommendation_evidence : "rec_id"
-    recommendations ||--o{ recommendation_picks : "rec_id"
     regions ||--o{ hero_meta : "region_id"
     regions ||--o{ map_meta : "region_id"
     roles ||--o{ comp_archetypes : "role_id"
@@ -511,7 +480,7 @@ are on all of them: `source_id` (which source the row came from, see
 | **MAPS** | `game_modes` · `map_modes` · `map_stages` · `maps` |
 | **META** | `competitive_tiers` · `hero_meta` · `map_meta` · `meta_snapshots` · `patches` · `regions` · `seasons` |
 | **PLAYBOOK** | `comp_archetypes` · `counters` · `map_playstyle` · `map_strategy` · `playstyle` · `synergies` |
-| **INFERENCE** | `outcome_picks` · `outcomes` · `recommendation_evidence` · `recommendation_picks` · `recommendations` · `strategies` |
+| **INFERENCE** | `strategies` |
 
 
 #### `abilities`
@@ -747,33 +716,6 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 | `patch_id` | integer | yes | `patches.patch_id` |
 | `season_id` | integer | yes | `seasons.season_id` |
 
-#### `outcome_picks`
-
-*INFERENCE · `009_outcomes.sql`*
-
-team is 'blue', 'red' or 'ban'; position orders the picks within a team.
-
-| column | type | null | references |
-| --- | --- | --- | --- |
-| `outcome_id` | integer | no | `outcomes.outcome_id` |
-| `team` | text | no |  |
-| `position` | smallint | no |  |
-| `hero_id` | integer | no | `heroes.hero_id` |
-
-#### `outcomes`
-
-*INFERENCE · `009_outcomes.sql`*
-
-| column | type | null | references |
-| --- | --- | --- | --- |
-| `outcome_id` | integer | no |  |
-| `played_at` | timestamp with time zone | no |  |
-| `rec_id` | integer | yes | `recommendations.rec_id` |
-| `map_id` | integer | yes | `maps.map_id` |
-| `side` | text | yes |  |
-| `result` | text | no |  |
-| `note` | text | yes |  |
-
 #### `patches`
 
 *META · `004_meta.sql`*
@@ -846,47 +788,6 @@ Which playstyle a hero belongs to, straight from the wiki's team composition pag
 | --- | --- | --- | --- |
 | `hero_id` | integer | no | `heroes.hero_id` |
 | `style` | text | no |  |
-
-#### `recommendation_evidence`
-
-*INFERENCE · `006_inference.sql`*
-
-The board's fact lines the decider cited, by tag (F1, F2, ...). hero_id links a citation to the specific pick it justified; NULL means it supported the comp as a whole.
-
-| column | type | null | references |
-| --- | --- | --- | --- |
-| `rec_id` | integer | no | `recommendations.rec_id` |
-| `tag` | text | no |  |
-| `source_table` | text | no |  |
-| `description` | text | no |  |
-| `hero_id` | integer | no | `heroes.hero_id` |
-
-#### `recommendation_picks`
-
-*INFERENCE · `006_inference.sql`*
-
-| column | type | null | references |
-| --- | --- | --- | --- |
-| `rec_id` | integer | no | `recommendations.rec_id` |
-| `position` | smallint | no |  |
-| `hero_id` | integer | no | `heroes.hero_id` |
-| `why` | text | no |  |
-
-#### `recommendations`
-
-*INFERENCE · `006_inference.sql`*
-
-| column | type | null | references |
-| --- | --- | --- | --- |
-| `rec_id` | integer | no |  |
-| `created_at` | timestamp with time zone | no |  |
-| `request` | text | no |  |
-| `map_id` | integer | yes | `maps.map_id` |
-| `model` | text | no |  |
-| `playstyle` | text | yes |  |
-| `reasoning` | text | no |  |
-| `prompt` | text | no |  |
-| `response` | text | no |  |
 
 #### `regions`
 

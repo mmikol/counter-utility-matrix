@@ -2,8 +2,7 @@
 #
 #   db          PostgreSQL (the database)
 #   data        DATA LAYER: builds the database when it is empty or stale
-#               (from the bind-mounted page caches; recorded comps come back
-#               from the db/raw mirror), then serves the MCP server over HTTP
+#               (from the bind-mounted page caches), then serves the MCP server over HTTP
 #               at http://localhost:8020/mcp - the door a Claude Code session
 #               opens (.mcp.json, server "counter-utility-matrix-docker")
 #   inference   INFERENCE ENGINE: http://localhost:8019, reading the strategy

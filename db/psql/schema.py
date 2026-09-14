@@ -1,9 +1,8 @@
 """The schema and the database's life: migrations, drop, rebuild, the CSV
-mirror's restore path, and the generated documentation.
+and the generated documentation.
 
     init      apply the migrations to an empty database
     rebuild   drop everything and reapply them
-    restore   bring recorded recommendations back from the db/raw mirror
     docs      regenerate the schema sections of docs/db.md (ERD, dictionary)
 """
 
@@ -13,7 +12,7 @@ import re
 
 import psycopg
 
-from db import RAW_DIR, ROOT
+from db import ROOT
 
 MIGRATIONS_DIR = os.path.join(ROOT, "db", "psql", "migrations")
 
@@ -25,7 +24,7 @@ DOC_DOMAIN = {"001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES"
               "009_outcomes.sql": "INFERENCE",
               "010_constraints_and_heuristics.sql": "INFERENCE",
               "011_reader_role.sql": "foundation", "012_reader_login.sql": "foundation",
-              "013_assumptions.sql": "INFERENCE"}
+              "013_assumptions.sql": "INFERENCE", "014_no_recorded.sql": "INFERENCE"}
 
 
 class SchemaError(Exception):
@@ -110,63 +109,6 @@ def rebuild(connection, quiet=False):
     return dropped
 
 
-# --- restoring what no source can re-fetch ---------------------------------
-
-RECORD_TABLES = ("recommendations", "recommendation_picks",
-                 "recommendation_evidence", "outcomes", "outcome_picks")
-SEQUENCED = (("recommendations", "rec_id"), ("outcomes", "outcome_id"))
-
-
-def restore_recommendations(connection, raw_dir=RAW_DIR):
-    """Re-import recorded recommendations and outcomes from the db/raw
-    mirror.
-
-    They are the inference layer's own output and the matches that followed
-    - the one thing no pull tool can re-scrape - and the mirror CSVs are
-    their backup. Never merges: a database that already holds
-    recommendations keeps them. A mirror that predates the outcomes tables
-    restores what it has.
-    """
-    cursor = connection.cursor()
-    if cursor.execute("SELECT count(*) FROM recommendations").fetchone()[0]:
-        return 0
-    paths = [(t, os.path.join(raw_dir, t + ".csv")) for t in RECORD_TABLES]
-    paths = [(t, p) for t, p in paths if os.path.exists(p)]
-    if not any(t == "recommendations" for t, _ in paths):
-        return 0
-    restored = 0
-    try:
-        # provenance ids are assigned per database; every restored row is the
-        # authored source's, whatever id it carried where it was exported
-        from db.data.authored import AUTHORED
-        from db.psql import register_source, now
-        source_id = register_source(cursor, AUTHORED, now())
-        for table, path in paths:
-            cursor.execute("CREATE TEMP TABLE staging (LIKE %s INCLUDING DEFAULTS)" % table)
-            with open(path, encoding="utf-8") as handle:
-                with cursor.copy("COPY staging FROM STDIN WITH (FORMAT csv,"
-                                 " HEADER true)") as copy:
-                    copy.write(handle.read())
-            cursor.execute("UPDATE staging SET source_id = %s", (source_id,))
-            cursor.execute("INSERT INTO %s OVERRIDING SYSTEM VALUE SELECT * FROM staging" % table)
-            cursor.execute("DROP TABLE staging")
-            restored += cursor.execute(
-                "SELECT count(*) FROM " + table).fetchone()[0]
-        for table, column in SEQUENCED:
-            cursor.execute(
-                "SELECT setval(pg_get_serial_sequence('%s', '%s'),"
-                " greatest((SELECT coalesce(max(%s), 0) FROM %s), 1))"
-                % (table, column, column, table))
-        connection.commit()
-    except psycopg.Error as error:
-        connection.rollback()
-        print("WARNING: could not restore recorded recommendations from"
-              " db/raw (%s); the transcripts in"
-              " db/data/authored/recommendations/ still hold them" % error)
-        return 0
-    return restored
-
-
 # --- generated documentation -------------------------------------------
 
 def _migration_tables():
@@ -232,12 +174,12 @@ def generate_docs(connection, path=None):
     erd = ["Five domains. Three are the authoritative data the sources are pulled",
            "for - which hero (HEROES), on which map (MAPS), performing how well",
            "(META) - and become the FACTS of a board. The other two are the",
-           "playbook's record: the authored inputs and the mirror of the constraints and",
-           "heuristics (PLAYBOOK), and what the inference layer decided and what came of",
-           "it (INFERENCE). The composition is the argmax of the strategies - the",
-           "constraints and heuristics in inference/strategies/ - over the facts.", "",
+           "playbook's record: the authored inputs (PLAYBOOK) and the mirror of the",
+           "strategies the inference layer solves with (INFERENCE). The composition is",
+           "the argmax of the strategies - the constraints, heuristics and assumptions",
+           "in inference/strategies/ - over the facts.", "",
            "```", "FACTS      = HEROES ∪ MAPS ∪ META",
-           "STRATEGIES = CONSTRAINTS ∪ HEURISTICS",
+           "STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS",
            "COMP       = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
            "Every table also carries `source_id` → `sources` and a `cao` timestamp.",
            "Those edges are left off - they would connect `sources` to all %d tables"

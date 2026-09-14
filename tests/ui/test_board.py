@@ -14,8 +14,9 @@ pytestmark = pytest.mark.invariant
 def test_board_page_has_two_rosters_and_the_three_panels():
     body = board.view_board()
     assert "team red" in body and "team blue" in body
-    assert "tab-comps" in body and "tab-facts" in body and "tab-playbook" in body and "tab-recorded" in body
-    assert "FACTS = HEROES" not in body and "href='/recs'" not in body   # the equation moved to /math
+    assert "tab-comps" in body and "tab-facts" in body and "tab-playbook" in body
+    assert "recorded" not in body and "record this comp" not in board.static_file("board.js")[0].decode()
+    assert "FACTS = HEROES" not in body                              # the equation moved to /math
     assert "href='/math'" in body and "id='captured'" in body
     foot = body[body.index("<footer class='foot'>"):body.index("</footer>")]   # the status and the vintage sit in a footer
     assert "id='status'" in foot and "id='captured'" in foot and body.index("</footer>") > body.index("id='tab-playbook'")
@@ -30,7 +31,7 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     script = board.static_file("board.js")[0].decode()
     assert "/api/roster" in script and "/api/facts" in script and "/api/infer" in script
     assert "localStorage" in script
-    assert "var TABS = ['comps', 'facts', 'playbook', 'recorded']" in script
+    assert "var TABS = ['comps', 'facts', 'playbook']" in script
     assert "normalized" in script and "/ 100" in script    # the 0-100 figure, raw score beside it
     # the playbook holds three kinds; the badge appends the form only when it differs
     assert "STRATEGIES = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS" in board.view_math()   # the equation lives on /math now
@@ -103,17 +104,11 @@ def test_infer_endpoint_serves_both_seats_and_the_current_comp(db):
     db.rollback()
 
 
-def test_strategies_and_recs_endpoints(db):
+def test_strategies_endpoint():
     data = board.api_strategies()
     assert len(data["strategies"]) >= 30
-    recorded = board.api_recorded(db)
-    assert set(recorded) == {"tally", "recs", "unlinked"} and set(recorded["tally"]) >= {"win", "loss", "draw"}
-    for r in recorded["recs"]:
-        assert set(r) >= {"rec_id", "date", "map", "question", "playstyle", "model", "picks", "outcomes"}
-    data = board.api_recs(db)
-    assert isinstance(data["latest"], int)
     assert json.dumps(data)
-    db.rollback()
+    assert not hasattr(board, "api_recs") and not hasattr(board, "api_record")   # recording is gone
 
 
 def test_bans_ride_the_query_string(db):
@@ -135,9 +130,10 @@ def test_the_page_is_a_shell_over_static_files():
     assert "id='momentum'" in body and "id='plan'" in body
     assert "id='bluescore'" in body and "id='redscore'" in body and "id='cur'" not in body  # scores live in the boxes
     assert "data-clear='red'" in body and "data-clear='blue'" in body
-    assert body.index("id='momentum'") < body.index("id='redslots'")   # the momentum strip sits above both boxes
+    assert body.index("id='momentum'") < body.index("id='blueslots'")  # the momentum strip sits above both boxes
     assert "id='momentum'" not in body[body.index("id='tab-comps'"):]
-    assert body.index("id='inf-red'") < body.index("id='inf-blue'")  # red first, then blue, like the boxes
+    assert body.index("id='inf-blue'") < body.index("id='inf-red'")  # blue on the left, red on the right, like the boxes
+    assert body.index("id='blueslots'") < body.index("id='redslots'")
     script = board.static_file("board.js")[0].decode()
     assert "their comp as revealed" in script and "red_current" in script and "d.momentum" in script
     assert "game plan" in script and "d.plan" in script
@@ -162,5 +158,3 @@ def test_the_math_page_states_the_equation_and_the_layers():
         assert line in page
     assert "The data layer" in page and "The inference layer" in page and "The board" in page
     assert "never calls a language model" in page
-    script = board.static_file("board.js")[0].decode()
-    assert "'recorded'" in script and "/api/recorded" in script and "loadRecorded" in script

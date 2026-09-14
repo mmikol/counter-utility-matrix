@@ -90,7 +90,6 @@ class Hero:
         self.map_rates = {}
         self.best_maps = []
         self.perk_effects = []       # (perk, the ability it alters)
-        self.outcomes = {"win": 0, "loss": 0, "draw": 0}   # played on blue
 
     # --- derived scalars, computed once the kit and rates are loaded ------
 
@@ -212,13 +211,10 @@ class World:
         self.archetypes = defaultdict(dict)     # style -> {role: (slots, note)}
         self.snapshots = []
         self.newer_patches = []
-        self.history = []
         self.subrole_passives = {}
         self.role_icons = {}
         self.heal_bench = 0.0
         self.catalog_counts = {}     # the strategies mirror: kind -> count
-        self.outcomes = []           # every recorded match, newest first
-        self.outcomes_by_map = {}    # map_id -> {"win": n, "loss": n, "draw": n}
 
     # --- lookups -------------------------------------------------------
 
@@ -448,38 +444,8 @@ def load(cx):
             where p.released > (select coalesce(max(pp.released), '1900-01-01')
                 from meta_snapshots ms join patches pp using(patch_id))
             order by p.released desc""")]
-    if cx.execute("select to_regclass('recommendations')").fetchone()[0]:
-        w.history = _rows(cx, """
-            select r.rec_id, r.playstyle, r.reasoning, r.map_id,
-                   string_agg(h.name, ', ' order by p.position),
-                   (select count(*) from recommendation_evidence e
-                    where e.rec_id = r.rec_id)
-            from recommendations r
-            join recommendation_picks p using(rec_id)
-            join heroes h using(hero_id)
-            group by r.rec_id order by r.rec_id desc limit 6""")
     if cx.execute("select to_regclass('strategies')").fetchone()[0]:
         w.catalog_counts = dict(_rows(cx, "select kind, count(*) from strategies group by kind"))
-    if cx.execute("select to_regclass('outcomes')").fetchone()[0]:
-        picks = {}
-        for oid, team, hid in _rows(cx, """select outcome_id, team, hero_id
-                from outcome_picks order by outcome_id, team, position"""):
-            picks.setdefault(oid, {"blue": [], "red": [], "ban": []})[team].append(hid)
-        for oid, played, rec_id, map_id, side, result, note in _rows(cx, """
-                select outcome_id, played_at::date, rec_id, map_id, side, result, note
-                from outcomes order by outcome_id desc"""):
-            p = picks.get(oid, {"blue": [], "red": [], "ban": []})
-            w.outcomes.append({"id": oid, "played": str(played), "rec_id": rec_id,
-                               "map_id": map_id, "side": side, "result": result,
-                               "note": note, "blue": p["blue"], "red": p["red"],
-                               "bans": p["ban"]})
-            if map_id is not None:
-                w.outcomes_by_map.setdefault(map_id, {"win": 0, "loss": 0, "draw": 0})
-                w.outcomes_by_map[map_id][result] += 1
-            for hid in p["blue"]:
-                if hid in w.heroes:
-                    w.heroes[hid].outcomes[result] += 1
-
     for hero in w.heroes.values():
         hero.finish()
     supports = [h.peak_heal for h in w.heroes.values()

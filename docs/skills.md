@@ -7,8 +7,8 @@ calls in which order and the ground rules it keeps. They live in
 `.claude/skills/<name>/SKILL.md` and are yours the moment the repo is open
 in a session - type `/name`, or just say what you want and the description
 matches. Six of them, and together they are the whole loop: bring the app
-up, get a comp, record how it went, learn from it, grow the playbook,
-refresh everything.
+up, get a comp, tune the engine, grow the playbook, refresh everything,
+keep the repo clean.
 
 No API key, no per-token bill: a skill runs inside your session on your
 subscription. The `/refresh` skill also runs headless, driven by
@@ -52,31 +52,13 @@ why, holding the comp to the prose constraints, inside the limits (six
 picks, at most two tanks, no banned hero). It answers tersely: the
 playstyle, six picks each with one line of why and its `[F#]` tags, a
 short overall argument, the vintage warning if the facts opened with one.
-Then it records the answer through `record`, so it enters the database's
-own history with a transcript, and a follow-up ("what if they swap to
-Pharah?") re-runs the inference.
+A follow-up ("what if they swap to Pharah?") re-runs the inference.
 
 **Ground rules:** every pick cites facts that genuinely justify it; rates
 are a stated proxy (Competitive Role Queue on console), leaned on for
 direction, not decimals; never a comp that dies with a likely ban.
 
-## `/outcome` - record how a match went
-
-**Say:** "we won on King's Row with ...", "lost that one", "log the game".
-
-**Takes:** the result (win, loss, draw), the map, blue's side, blue's six
-(required - it is what the fit scores), red's picks as seen, the bans, the
-recommendation played if any (its `rec_id`), one line of note if you said
-what decided it.
-
-**Does:** `record_outcome`. The gates refuse an unknown hero, a banned
-pick or fewer than six blue picks, and the skill asks for the missing pick
-rather than guess. It reports the running tally, and once ten decided
-matches exist it offers `/tune` to fit the weights. Outcomes become facts
-on the board (per hero, per map) and are mirrored and restored with the
-recorded comps.
-
-## `/tune` - change the engine, or let it learn
+## `/tune` - change the engine
 
 **Say:** "it keeps ignoring anti-heal", "reweight coverage", "learn from
 our games".
@@ -90,15 +72,8 @@ re-mirrors the table, and logs the change with your reason. Then it
 re-runs `board` for the board you are looking at and says what moved. One
 change per request; never a strategy you did not name.
 
-**A fit from outcomes:** `fit_weights` dry-run - for every decided outcome
-with both sixes, how each heuristic's metric ran in wins versus losses,
-and the bounded nudge it implies. Below ten decided matches it says "not
-yet" and how many more are needed. It shows the proposal and asks before
-applying with `apply: true`, each nudge logged with the sample size.
-`tuning_log` is the audit trail.
-
 **Ground rules:** players are assumed to play optimally, so a lobby's
-habits are outcomes to record, not strategies to add; a weight of 0
+habits are not strategies to add; a weight of 0
 silences a heuristic, deleting a file is a human decision; the
 `open-queue-tanks` limit is the game's own rule.
 
@@ -141,8 +116,7 @@ and `python orchestrator.py` runs it after bringing the stack up.
 things stand; the data refreshed - `sync_all` with `refresh: true` when
 the newest capture is older than a day or a patch shipped since, else the
 daily set (`pull_rates`, `pull_counters`, `load_authored`); every draft
-completed with `infer_strategy`, exactly as `/strategy` would; the weights
-re-fit with `fit_weights` and applied when ready; a restrained re-read of
+completed with `infer_strategy`, exactly as `/strategy` would; a restrained re-read of
 the catalog against the fresh data (a heuristic whose metric no longer
 varies may be silenced, with a logged reason; nothing is added here);
 `db_docs`, `export_csv`, and `load_authored` for the strategies if
@@ -152,9 +126,9 @@ now, what was refetched, drafts completed, weights moved, anything
 skipped and why, and that the board is ready.
 
 **Ground rules:** deterministic at game time - never a draft half-written
-or a file the catalog refuses; weights move through the fit and drafts
-through inference, nothing else without a reason grounded in the data and
-written in the log; the report is honest about failures.
+or a file the catalog refuses; drafts move through inference and weights
+through `tune` with a reason grounded in the data and written in the log,
+nothing else; the report is honest about failures.
 
 ## `/maintain` - keep the repo clean
 
@@ -178,9 +152,8 @@ unasked.
 
 ```
 /up          the stack up and current                   before a game
-/comp        a cited six from a question, recorded       during
-/outcome     how it went, against the comp played        after
-/tune        a weight moved, or the weights fit           between games
+/comp        a cited six from a question                 during
+/tune        a weight moved, with a reason                between games
 /strategy    a new file from a name, a kind and prose     when you learn something
 /refresh     all of the above the engine can do alone    every night, headless
 /maintain    the repo itself: checks, docs, stale, dead   after changes

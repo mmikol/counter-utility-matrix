@@ -353,11 +353,11 @@ def _momentum(cur, red_cur, countered):
     else:
         gap = n - m
         if abs(gap) < 5:
-            out["verdict"] = "even - red %d, blue %d" % (m, n)
+            out["verdict"] = "even - blue %d, red %d" % (n, m)
         elif gap > 0:
-            out["verdict"] = "blue ahead by %d - red %d, blue %d" % (gap, m, n)
+            out["verdict"] = "blue ahead by %d - blue %d, red %d" % (gap, n, m)
         else:
-            out["verdict"] = "red ahead by %d - red %d, blue %d" % (-gap, m, n)
+            out["verdict"] = "red ahead by %d - blue %d, red %d" % (-gap, n, m)
         if out["partial"]:
             out["verdict"] += " (partial picks)"
     if k is not None:

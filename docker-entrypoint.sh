@@ -56,7 +56,6 @@ case "$role" in
                 python -m db.mcp call db_rebuild ;;
             stale*)
                 echo "data: schema behind the migrations ($state) - rebuilding from the caches;"
-                echo "data: recorded comps come back from the db/raw mirror"
                 python -m db.mcp call db_rebuild ;;
             *)
                 echo "data: database current" ;;

@@ -22,7 +22,7 @@ never during one.
 | `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet | [ui.md](ui.md) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints and heuristics in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
 | `tests/` | one folder per layer: `tests/db`, `tests/ui`, `tests/inference`; `pytest -q` runs them, skipping what needs a built database when there is none | |
-| `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/outcome`, `/tune`, `/strategy`, `/refresh`, `/maintain` | [skills.md](skills.md) |
+| `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/refresh`, `/maintain` | [skills.md](skills.md) |
 | `.github/workflows/` | `ci.yml`: lint, and the tests that need no built database | |
 | `.cache-blizzard/` `.cache-wiki/` `.cache-counterpick/` | the page caches (gitignored): every build after the first costs almost no requests | |
 
@@ -43,12 +43,12 @@ flowchart LR
         DBT["db_* · query · export_csv"]
     end
 
-    subgraph PG["PostgreSQL - 41 tables"]
+    subgraph PG["PostgreSQL - 36 tables"]
         HEROES["HEROES<br/>roster, kits, stats,<br/>keywords, portraits"]
         MAPS["MAPS"]
         META["META<br/>dated snapshots"]
-        PLAYBOOK["PLAYBOOK<br/>counters, synergies,<br/>styles, strategies mirror"]
-        INF["INFERENCE<br/>recorded comps,<br/>outcomes"]
+        PLAYBOOK["PLAYBOOK<br/>counters, synergies,<br/>styles"]
+        INF["INFERENCE<br/>the strategies mirror"]
     end
 
     subgraph USER["UI LAYER - ui/facts/ + ui/board.py"]
@@ -58,21 +58,20 @@ flowchart LR
     end
 
     subgraph INFER["INFERENCE LAYER - inference/"]
-        HEUR["strategies/*.md<br/>STRATEGIES = CONSTRAINTS ∪ HEURISTICS<br/>constraint: limit · scored · prose"]
+        HEUR["strategies/*.md<br/>STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS<br/>constraint: limit · scored · prose"]
         SOLVER["solver<br/>enumerate · prune ·<br/>normalise · refine"]
-        REC["record<br/>gates + transcript"]
     end
 
     BLZ & WIKI & CPK --> PULL
     CSV --> PLAY
     HEUR --> PLAY
+    PLAY --> INF
     PULL & PLAY --> PG
     PG --> WORLD --> FACTS --> BOARD
     WORLD --> SOLVER
     HEUR --> SOLVER
     SOLVER --> BOARD
-    SOLVER --> REC --> INF
-    CHAT["Claude Code session<br/>/comp skill"] <-->|"MCP tools:<br/>pull_*, facts, infer, record"| DATA
+    CHAT["Claude Code session<br/>/comp skill"] <-->|"MCP tools:<br/>pull_*, facts, infer, board"| DATA
 ```
 
 The data layer owns the writes to Postgres. The UI layer only reads,
@@ -94,14 +93,15 @@ FACTS are the authoritative data: the heroes, maps and meta domains as the
 sources report them, restricted to one board. The union, not the
 intersection - a hero is not a map; the joins between the domains (a hero
 on a map, a hero against a hero) are the pairwise facts. STRATEGIES are the
-playbook, `inference/strategies/`, of exactly two kinds of file: a *constraint*
+playbook, `inference/strategies/`, of exactly three kinds of file: a *constraint*
 is a limit (`require`, hard unless soft), a scored adjustment
 (`bonus`/`penalty` while `when` holds) or prose the agent holds a comp to;
-a *heuristic* weighs a metric, maximised or minimised. History (recorded
-outcomes, the tuning log) is not a term: it tunes the weights. The user
-layer numbers the facts F1.. and carries the playbook's record (archetypes,
-past decisions, outcomes) below them as S1.. so both are citable and
-neither is mistaken for the other, or for the constraints and heuristics themselves.
+a *heuristic* weighs a metric, maximised or minimised; an *assumption* is
+prose taken as given, shown and never scored. The tuning log is not a
+term: it is the history of the weights. The user layer numbers the facts
+F1.. and carries the playbook's record (the archetypes, the catalog's
+shape) below them as S1.. so both are citable and neither is mistaken for
+the other, or for the strategies themselves.
 `STRATEGIES( FACTS )` is the score the solver maximises; the
 inference agent (a Claude Code session on the `/comp` skill) reads the same
 facts and the same strategies and reconciles them where arithmetic cannot -
@@ -132,7 +132,7 @@ flowchart LR
     end
     subgraph DOCKER["docker compose (one image, five containers)"]
         DATA["data - DATA LAYER<br/>builds when empty or stale,<br/>then MCP over HTTP :8020/mcp"]
-        INF["inference - INFERENCE ENGINE<br/>:8019 infer · evaluate ·<br/>strategies · record"]
+        INF["inference - INFERENCE ENGINE<br/>:8019 infer · evaluate ·<br/>board · strategies"]
         UI["ui - UI LAYER<br/>:8017 the board<br/>facts in-process,<br/>comps via INFERENCE_URL"]
         DBC["db - postgres:16<br/>volume pgdata"]
         REF["refresher - the clock<br/>rates + counters daily,<br/>every source weekly,<br/>and on start when stale"]
@@ -174,11 +174,10 @@ the servers and every tool.
 | skill | does |
 | --- | --- |
 | `/up` | brings the stack up and current, and proves it: URLs, health, the rates' capture date |
-| `/comp` | "comp for King's Row, they have Zarya and Pharah, I'm on Ana": calls `infer` and `facts`, argues against the solver's optimum under the prose constraints, answers with `[F#]` citations, records the result |
-| `/outcome` | records how a match went, so the fit can learn from it |
-| `/tune` | changes a weight, a dial or an expression through `tune`, or fits the weights to recorded outcomes through `fit_weights` |
+| `/comp` | "comp for King's Row, they have Zarya and Pharah, I'm on Ana": calls `infer` and `facts`, argues against the solver's optimum under the prose constraints, answers with `[F#]` citations |
+| `/tune` | changes a weight, a dial or an expression through `tune` |
 | `/strategy` | asks for a name, a kind and prose, infers the frontmatter and stores the strategy through `add_strategy` |
-| `/refresh` | the agents' run, the one `orchestrator.py agents` executes headless: refresh, derive drafts, re-fit, re-infer with restraint, regenerate, report |
+| `/refresh` | the agents' run, the one `orchestrator.py agents` executes headless: refresh, derive drafts, re-infer with restraint, regenerate, report |
 | `/maintain` | the repo's maintainer: lint and tests three ways, docs current, stale names, dead code, layout, security posture, a report |
 
 No API key, no per-token bill: the skills run on your subscription.

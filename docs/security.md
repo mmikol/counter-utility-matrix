@@ -9,7 +9,7 @@ the playbook and database the board trusts at game time.
 
 | threat | how it would arrive |
 | --- | --- |
-| **prompt injection** | text from a source page (an ability description, a wiki note, a counterpick tooltip), a recorded transcript, an outcome note or a strategy file that reads like an instruction, shown to a session by a tool - or to the headless agents' run, which has tools and no person watching |
+| **prompt injection** | text from a source page (an ability description, a wiki note, a counterpick tooltip) or a strategy file that reads like an instruction, shown to a session by a tool - or to the headless agents' run, which has tools and no person watching |
 | **the door** | the MCP server over HTTP: any process on this machine can call every tool, including the ones that write, refresh or rebuild; a browser page could try the same through DNS rebinding |
 | **SQL** | the `query` tool: the project's database users are superusers, and a superuser's `SELECT` can read files off the disk it runs on |
 | **files** | tools that write into the playbook and the authored inputs: a path that escapes the folder, a file the catalog would refuse, an oversized body |
@@ -31,10 +31,10 @@ bounded) and treats prose as prose.
 **The headless runs are fenced.** `orchestrator.py agents` gives Claude
 Code in print mode an explicit allowlist of tools on the two servers -
 status, the catalog, the log, the vocabulary, facts, inference, read-only
-`query`, the refresh and load tools, `infer_strategy`, `fit_weights`,
-`tune`, `db_docs`, `export_csv` - and no built-in tool at all
+`query`, the refresh and load tools, `infer_strategy`, `tune`,
+`db_docs`, `export_csv` - and no built-in tool at all
 (`--tools ""`): no shell, no file edits, no web, no `add_strategy`, no
-rebuild or migration, no recording, no session kept afterwards, at most
+rebuild or migration, no session kept afterwards, at most
 eighty turns, and a tool-call timeout long enough for a polite scrape
 (`MCP_TOOL_TIMEOUT`), since a pull that outlives its client's patience
 is a pull that ran unwatched. The deriver runs `claude -p` from a

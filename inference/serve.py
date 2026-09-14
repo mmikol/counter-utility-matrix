@@ -7,7 +7,6 @@
     GET  /infer?map=&side=&red=&blue=&ban=[&top=&pool=]   blue's optimal six
     GET  /evaluate?map=&side=&red=&blue=&ban=   a full six scored against the field
     GET  /strategies                   the catalog
-    POST /record  {question, map, red, blue, model, answer}   the gates + tables
 
 The same functions ui/board.py calls in-process when no INFERENCE_URL is set;
 standard library only.
@@ -22,13 +21,11 @@ from urllib.parse import parse_qs, urlparse
 
 import psycopg
 
-from db import ROOT
 from db import psql
 from ui.facts import model
 from ui.facts.compute import TEAM_SIZE
 from inference import catalog as catalog_module
 from inference import engine
-from inference import record as record_module
 
 PORT = int(os.environ.get("COUNTER_MATRIX_INFERENCE_PORT", "8019"))
 
@@ -85,18 +82,6 @@ def handle_heuristics():
     return {"strategies": [h.to_dict() for h in catalog_module.load()]}, 200
 
 
-def handle_record(cx, payload):
-    try:
-        rec_id, path = record_module.record(
-            cx, payload.get("question") or "recorded through the inference service",
-            payload["answer"], payload.get("map"), payload.get("red", []),
-            payload.get("blue", []), payload.get("model", "inference-service"),
-            payload.get("bans", []), payload.get("side", ""))
-    except (ValueError, KeyError) as error:
-        return {"error": str(error)}, 400
-    return {"rec_id": rec_id, "transcript": os.path.relpath(path, ROOT)}, 200
-
-
 def handle_health():
     cat = catalog_module.load()
     out = {"status": "ok", "strategies": len(cat), "pending": sum(1 for h in cat if h.pending)}
@@ -138,19 +123,6 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "nothing here"}, 404)
         except Exception:
             self._json({"error": traceback.format_exc()}, 500)
-
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-            payload = json.loads(self.rfile.read(length) or b"{}")
-            if parsed.path == "/record":
-                with psycopg.connect(psql.default_dsn()) as cx:
-                    return self._json(*handle_record(cx, payload))
-            self._json({"error": "nothing here"}, 404)
-        except Exception as error:
-            self._json({"error": str(error)}, 500)
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

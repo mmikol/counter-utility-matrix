@@ -6,7 +6,7 @@
                                       ingests it when the database is empty or stale
     python orchestrator.py agents     Claude Code, headless, on the /refresh skill:
                                       refresh the data, derive draft strategies,
-                                      re-fit the weights, regenerate the docs - and
+                                      regenerate the docs - and
                                       leave a deterministic playbook for the board
     python orchestrator.py status     what is running, how fresh the data is, the URLs
     python orchestrator.py refresh    refetch every source now (no agents)
@@ -85,9 +85,9 @@ def verdict(h):
         if not data.get("heroes"):
             ok = False
             lines.append("data layer: the database holds no heroes yet")
-        lines.append("data layer: %d tables, %d heroes, %d outcomes, rates captured %s"
+        lines.append("data layer: %d tables, %d heroes, rates captured %s"
                      % (data.get("tables", 0), data.get("heroes", 0),
-                        data.get("outcomes", 0), data.get("newest_capture") or "never"))
+                        data.get("newest_capture") or "never"))
     inf = h.get("inference")
     if not inf or inf.get("status") != "ok":
         ok = False
@@ -211,7 +211,7 @@ def status():
 # what makes a headless run safe to schedule.
 AGENT_TOOL_NAMES = ("db_status", "strategies", "tuning_log", "metrics", "facts", "infer",
                     "board", "query", "sync_all", "pull_rates", "pull_counters",
-                    "load_authored", "infer_strategy", "fit_weights", "tune", "db_docs",
+                    "load_authored", "infer_strategy", "tune", "db_docs",
                     "export_csv")
 # A refresh pull fetches dozens of pages at a polite pace: minutes, not the
 # seconds a tool call is given by default. The run's client waits this long.
@@ -235,8 +235,8 @@ def agents_command(claude=None):
 
 
 def agents():
-    """The agents' run: refresh the database, derive drafts, re-fit the weights,
-    regenerate the docs - and leave a deterministic playbook for the board.
+    """The agents' run: refresh the database, derive drafts, regenerate the
+    docs - and leave a deterministic playbook for the board.
     Runs on the host, on the subscription; schedule it with cron or launchd."""
     print("agents: Claude Code, headless, on the /refresh skill (minutes)...")
     try:

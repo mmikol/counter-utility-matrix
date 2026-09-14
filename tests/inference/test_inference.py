@@ -1,5 +1,5 @@
 """The inference layer: the expression language and catalog are pure; the
-solver, evaluation and recording run against the built database."""
+solver and evaluation run against the built database."""
 
 import pytest
 
@@ -144,29 +144,6 @@ def test_the_tank_limit_is_the_only_shape_constraint(world, tmp_path):
     r = engine.infer(world, "King's Row", ["Zarya"], ["Ana"], pool_size=4, catalog=cat)
     roles = sorted(world.hero(n).role for n in r.blue)
     assert roles == ["damage", "damage", "support", "support", "tank", "tank"]
-
-
-# --- recording -------------------------------------------------------------------
-
-@pytest.mark.invariant
-def test_record_gates_then_rolls_back(db, world):
-    from ui.facts import engine as facts_engine
-    from inference import record
-    picks = ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]
-    fs = facts_engine.generate(world, "King's Row", ["Zarya"], picks)
-    answer = {"playstyle": "brawl", "reasoning": "test",
-              "picks": [{"hero": h, "why": "w", "evidence": [fs.find("hero.identity", h)[0].id]}
-                        for h in picks]}
-    rec_id = record.persist(db, "q", answer, fs, world.map("King's Row").id, "P", "m", "{}")
-    assert db.execute("select count(*) from recommendation_picks where rec_id=%s",
-                      (rec_id,)).fetchone()[0] == 6
-    db.rollback()
-    bad = dict(answer, picks=[dict(p, evidence=["F99999"]) for p in answer["picks"]])
-    with pytest.raises(ValueError, match="never showed"):
-        record.persist(db, "q", bad, fs, None, "P", "m", "{}")
-    db.rollback()
-    with pytest.raises(ValueError, match="exactly 6 picks"):
-        record.validate_answer(dict(answer, picks=answer["picks"][:4]))
 
 
 @pytest.mark.invariant

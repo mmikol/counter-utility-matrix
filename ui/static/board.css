@@ -24,9 +24,6 @@ header.top .mathlink:hover { color:var(--gold); border-color:var(--gold); }
 .math h2 { font-family:"Bebas Neue",Impact,sans-serif; letter-spacing:.06em; font-size:26px; margin:26px 0 8px; color:var(--gold); }
 .math .eq { background:#0b0e14; border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; font-size:13px; }
 .math code { background:#0b0e14; padding:1px 5px; border-radius:4px; }
-.tally { font-family:"Bebas Neue",Impact,sans-serif; letter-spacing:.06em; font-size:22px; margin:0 0 10px; }
-.rec-list .res { font-weight:700; text-transform:uppercase; font-size:11px; letter-spacing:.1em; }
-.rec-list .res.win { color:#5fd38d; } .rec-list .res.loss { color:var(--red); } .rec-list .res.draw { color:var(--gold); }
 .mapsel { margin-left:auto; display:flex; align-items:center; gap:10px; }
 .mapsel select { background:#0b0e14; color:var(--text); border:1px solid var(--line);
   border-radius:6px; padding:9px 12px; font-family:"Bebas Neue",Impact,sans-serif;
@@ -232,8 +229,6 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .bar .val { text-align:right; font-family:ui-monospace,monospace; color:var(--muted); }
 .alts { margin-top:12px; color:#c9d0db; font-size:13px; }
 .alts li { margin:3px 0; }
-.notice { background:#12301f; border:1px solid #2e6b45; border-radius:8px; padding:8px 12px;
-  margin:10px 0; display:none; }
 .warnbox { background:#3a2026; border:1px solid #6b2f3a; border-radius:8px; padding:8px 12px;
   margin:10px 0; }
 .hcards { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:10px; }
@@ -246,4 +241,3 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .hcard .meta { font-family:ui-monospace,monospace; font-size:11.5px; color:var(--muted); margin:4px 0; }
 .hcard p { margin:6px 0 0; color:#c9d0db; font-size:12.5px; }
 .legend { color:var(--muted); font-size:12px; margin:6px 0 0; }
-.rec-list td { padding:4px 10px 4px 0; border-bottom:1px solid #202733; }

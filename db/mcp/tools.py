@@ -241,16 +241,8 @@ def sync_all(ctx, refresh=False):
         results[name] = run_tool(ctx, name, refresh=refresh)[1]
     ctx.log("=== load_authored ===")
     results["load_authored"] = run_tool(ctx, "load_authored")[1]
-    # Recorded comps come back from the mirror BEFORE the mirror is
-    # rewritten - a no-op on a database that already holds them.
-    from db.psql import schema
-    with ctx.connect() as cx:
-        results["restored"] = schema.restore_recommendations(cx)
     results["export_csv"] = run_tool(ctx, "export_csv")[1]
-    text = "sync_all: %d pulls + playbook + export done%s" % (
-        len(PULLS), ", %d recorded rows restored" % results["restored"]
-        if results["restored"] else "")
-    return text, results
+    return "sync_all: %d pulls + playbook + export done" % len(PULLS), results
 
 
 # --- the database's life ----------------------------------------------------
@@ -265,8 +257,7 @@ def db_status(ctx):
         counts, snaps = {}, []
         if tables:
             for t in ("heroes", "abilities", "maps", "hero_meta", "map_meta",
-                      "counters", "synergies", "strategies", "recommendations",
-                      "outcomes"):
+                      "counters", "synergies", "strategies"):
                 if cx.execute("select to_regclass(%s)", (t,)).fetchone()[0]:
                     counts[t] = cx.execute("select count(*) from " + t).fetchone()[0]
             if cx.execute("select to_regclass('meta_snapshots')").fetchone()[0]:
@@ -315,22 +306,19 @@ def db_migrate(ctx):
             % (len(names), ": " + ", ".join(names) if names else ""), {"applied": names})
 
 
-@tool("db_rebuild", "Drop everything, reapply the migrations, run sync_all,"
-      " and restore recorded recommendations from the db/raw mirror."
+@tool("db_rebuild", "Drop everything, reapply the migrations and run sync_all."
       " The ground truth for structural change.", REFRESH)
 def db_rebuild(ctx, refresh=False):
     from db.psql import schema
     with ctx.connect() as cx:
         dropped = schema.rebuild(cx, quiet=True)
     results = run_tool(ctx, "sync_all", refresh=refresh)[1]
-    text = "db_rebuild: dropped %d tables, rebuilt, restored %d recorded rows" % (
-        len(dropped), results["restored"])
-    return text, {"dropped": len(dropped), "restored": results["restored"],
-                  "sync": results}
+    return ("db_rebuild: dropped %d tables, rebuilt" % len(dropped),
+            {"dropped": len(dropped), "sync": results})
 
 
 @tool("export_csv", "Refresh db/raw/*.csv - one CSV per table, the"
-      " database's mirror and the recorded recommendations' backup.")
+      " database's mirror.")
 def export_csv(ctx):
     with ctx.connect() as cx:
         counts = psql.export(cx)
@@ -579,56 +567,6 @@ def strategies_tool(ctx):
     return text, {"strategies": [h.to_dict() for h in cat], "pending": pending}
 
 
-@tool("record", "Persist a decided composition into the INFERENCE tables"
-      " and a markdown transcript, under the storage gates: exactly six"
-      " real heroes, each citing fact ids (F#) the board actually showed.",
-      dict(BOARD, question={"type": "string"},
-           model={"type": "string", "description": "who decided (default"
-                                                   " claude-code-session)"},
-           answer={"type": "object", "description":
-                   "{playstyle, reasoning, picks: [{hero, why, evidence: [F#]}]}"}),
-      ["question", "answer"])
-def record_tool(ctx, question, answer, map=None, red=(), blue=(), bans=(), side="",
-                model="claude-code-session"):
-    from inference import record
-    try:
-        with ctx.connect() as cx:
-            rec_id, path = record.record(cx, question, answer, map, list(red),
-                                         list(blue), model, list(bans), side)
-    except ValueError as error:
-        raise ToolError(str(error))
-    return ("recorded as recommendation %d; transcript %s"
-            % (rec_id, os.path.relpath(path, ROOT)),
-            {"rec_id": rec_id, "transcript": path})
-
-
-# --- the feedback loop: outcomes in, weights out ---------------------------
-
-@tool("record_outcome", "Record what happened after a match: the result, the map"
-      " and blue's side, both sixes and the bans, and the recommendation it"
-      " followed (rec_id) if any. Outcomes are what fit_weights learns from"
-      " and are restored after every rebuild.",
-      dict(BOARD, result={"type": "string", "enum": ["win", "loss", "draw"]},
-           rec_id={"type": "integer", "description": "the recommendation that was"
-                                                     " played, if any"},
-           note={"type": "string", "description": "what decided it, in a line"}),
-      ["result", "blue"])
-def record_outcome_tool(ctx, result, blue, map=None, red=(), bans=(), side="",
-                        rec_id=None, note=None):
-    from inference import outcomes
-    try:
-        with ctx.connect() as cx:
-            oid = outcomes.record_outcome(cx, result, map, side, list(blue), list(red),
-                                          list(bans), rec_id, note)
-            outcomes.commit_and_mirror(cx)
-            counts = outcomes.summary(cx)
-    except ValueError as error:
-        raise ToolError(str(error))
-    return ("recorded outcome %d (%s); %d recorded so far: %d-%d-%d"
-            % (oid, result, counts["total"], counts["win"], counts["loss"],
-               counts["draw"]), {"outcome_id": oid, "counts": counts})
-
-
 @tool("tune", "Change one strategy's frontmatter - its weight, a params dial, or"
       " a when/require/bonus/penalty expression - validated through the"
       " catalog before it is written, mirrored into the database, and logged"
@@ -744,35 +682,8 @@ def derive_strategies(ctx, ids=None):
     return derive.rendered(result), result
 
 
-@tool("fit_weights", "Fit the heuristic weights to the recorded outcomes: for every"
-      " decided match, how each heuristic's metric ran in wins versus losses, and"
-      " a bounded nudge per weight. A dry run unless apply is true; refuses"
-      " to apply below the minimum sample.",
-      {"apply": {"type": "boolean", "description": "write the nudges through tune"
-                                                   " (default false: propose only)"},
-       "min_outcomes": {"type": "integer", "description": "decided matches required"
-                                                          " before weights move"
-                                                          " (default 10)"}})
-def fit_weights_tool(ctx, apply=False, min_outcomes=None):
-    from inference import catalog, fit
-    kwargs = {"min_outcomes": max(int(min_outcomes), fit.MIN_OUTCOMES)} if min_outcomes else {}
-    with ctx.connect() as cx:
-        proposal = fit.propose(cx, **kwargs)
-        text = fit.rendered(proposal)
-        if apply:
-            try:
-                applied = fit.apply(cx, proposal)
-            except ValueError as error:
-                raise ToolError(str(error))
-            catalog.mirror(cx, catalog.load())
-            text += "\napplied %d nudge(s):\n" % len(applied) + "\n".join(
-                a["line"] for a in applied)
-            proposal["applied"] = applied
-    return text, proposal
-
-
 @tool("tuning_log", "The audit trail of every change to the strategies'"
-      " frontmatter - manual tunes and fitted nudges - newest last.",
+      " frontmatter, newest last.",
       {"lines": {"type": "integer", "description": "how many (default 20)"}})
 def tuning_log_tool(ctx, lines=20):
     from inference import tune

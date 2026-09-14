@@ -24,8 +24,8 @@ Two things do the inferring, and it matters which is which:
 Drop a markdown file into `strategies/` and it is live: the solver reads
 the directory on every call, the board's playbook panel shows it, the
 `strategies` tool and the `strategy://` resources serve it, and
-`load_authored` mirrors it into the `strategies` table so a recorded
-comp can cite it. The frontmatter is the whole contract:
+`load_authored` mirrors it into the `strategies` table so the database
+knows the catalog's shape. The frontmatter is the whole contract:
 
 ```markdown
 ---
@@ -90,26 +90,21 @@ expression reads as `params.NAME`.
 The catalog itself - every file, and the full vocabulary a strategy may
 reference - is generated into the end of this document.
 
-## How the weights move: the feedback loop
+## How the weights move
 
 ```mermaid
 flowchart LR
-    GAME["a match is played"] -->|"/outcome -> record_outcome"| OUT["outcomes +<br/>outcome_picks<br/>(mirrored, restored)"]
-    OUT -->|"facts: per hero, per map,<br/>the last games"| BOARD["the board and<br/>the /comp skill"]
-    OUT -->|"fit_weights: each heuristic's<br/>metric in wins vs losses"| FIT["a bounded nudge<br/>per heuristic weight"]
-    FIT -->|"apply -> tune"| HEUR["inference/strategies/*.md"]
-    USER["'it keeps ignoring anti-heal'<br/>/tune -> tune"] --> HEUR
+    USER["'it keeps ignoring anti-heal'<br/>/tune -> tune"] --> HEUR["inference/strategies/*.md"]
+    AGENTS["the agents' run<br/>/refresh -> tune, with a reason"] --> HEUR
     HEUR -->|"validated on load,<br/>mirrored, logged"| LOG["strategies/tuning-log.md"]
     HEUR --> SOLVER["the solver, next click"]
 ```
 
-Every change to the brain is a line in the log with its reason. The fit
-refuses to move a weight before ten decided matches exist, and moves it by
-at most half the evidence, clamped - one bad week cannot flip the engine.
+Every change to the brain is a line in the log with its reason.
 
 
-Weights do not learn on their own. Two paths change a file, both logged
-in `strategies/tuning-log.md` with a reason and who asked:
+Weights do not learn on their own. One path changes a file, logged in
+`strategies/tuning-log.md` with a reason and who asked:
 
 - **`tune`** - one validated frontmatter edit: `weight` (0..10),
   `direction`, `soft`, `when`, `require`, `bonus`, `penalty`, `metric`, or a
@@ -117,14 +112,7 @@ in `strategies/tuning-log.md` with a reason and who asked:
   it is written, so an invalid change never lands. The `/tune` skill is
   the conversational front: "it keeps ignoring anti-heal" becomes a
   `tune` call and a re-run of the board to show the effect.
-- **`fit_weights`** - evidence from your own games. `record_outcome` (the
-  `/outcome` skill) stores how a match went; from ten decided matches the
-  fit scores each recorded six on the solver's own scale and asks which
-  heuristics ran higher in wins than in losses; from fifty it fits a ridge
-  logistic regression, demeaned within each map. The proposal is a
-  bounded nudge per weight (up to half the evidence, clamped to 0.25..6),
-  shown as a dry run and applied through `tune` on request. Below the
-  minimum the answer is "not yet".
+
 
 ## Layout
 
@@ -137,11 +125,8 @@ inference/
   expr.py          the expression language the frontmatter uses
   solver.py        enumerate, prune, normalise, score, refine
   engine.py        infer(), evaluate(), board(): the solver plus citations
-  record.py        the gates and the transcript for a decided comp
-  outcomes.py      how a match went, stored beside the comp it played
   tune.py          one validated, logged edit to a strategy file; add and complete
   derive.py        the engine asking the model for a draft's frontmatter
-  fit.py           weight proposals from recorded outcomes
   serve.py         the HTTP service the compose stack's ui container calls
 ```
 
@@ -151,12 +136,9 @@ inference/
 | `expr.py` | A safe subset of Python expressions: the AST is checked once, compiled, and evaluated over a scope whose missing keys read as zero, so a metric that does not apply to a board never crashes a score. |
 | `solver.py` | For a board: every role shape the hard limits allow around the locked picks; per-role pools ranked by a cheap prior; every candidate prepared (namespace, limit check, raw metric values) and scored with the frozen bounds; local search from the best few. The bounds come from a seeded reference sample of legal sixes for that map, side, enemy and bans, so `infer`, `evaluate` and the current comp share one scale and a score means the same thing across calls. |
 | `engine.py` | `infer` (the optimal six around the locked picks), `evaluate` (a full six ranked against the field), `current` (the picks as they stand, partial or full), and `board` (at any stage of a draft: blue's optimal as the counter to red's selection, red's optimal as their counter to blue's, both current comps scored on those scales, blue's picks against red's best counter, blue's locked picks with the empty slots filled, a momentum verdict, and the game plan in prose - the ground, what to play, what red's picks mean, the family to stay in - from the same facts). Each result carries the picks with reasons and `[F#]` citations into the board's FactSet, the score breakdown per strategy, alternatives, and the prose constraints as "ground rules to reconcile against". |
-| `record.py` | Storing a decided comp: the gates (six real heroes, every cited fact one the board showed), the tables (`recommendations`, picks, evidence), and a markdown transcript under `db/data/authored/recommendations/`. |
-| `outcomes.py` | Storing a match result - win, loss or draw, the map and side, both sixes, the bans, the recommendation played - and the summary the fit reads. |
 | `tune.py` | `tune(id, field, value, reason)`: one frontmatter edit; `add(id, name, kind, prose, fields, reason)`: a new file from what the user gave and what `/strategy` inferred; `complete(id, fields, reason)`: a draft's frontmatter in one step. Each is validated by loading the catalog with the new text, then written, re-mirrored and logged. |
 | `derive.py` | `derive()`: for every draft, the prompt (the three inputs, the vocabulary, four catalog files for style), `claude -p` on the subscription, the JSON answer through `tune.complete`, one retry carrying the catalog's objection. `available()` says whether the CLI is here. |
-| `fit.py` | `propose` and `apply`: the two evidence tiers above, and the bounded nudge. |
-| `serve.py` | `/board`, `/infer`, `/evaluate`, `/strategies`, `/health`, `POST /record` - the same functions, over HTTP, for a board that runs in another container. |
+| `serve.py` | `/board`, `/infer`, `/evaluate`, `/strategies`, `/health` - the same functions, over HTTP, for a board that runs in another container. |
 
 ## The skills
 
@@ -165,15 +147,14 @@ Documented in [skills.md](skills.md); the tools in [mcp.md](mcp.md).
 | skill | does |
 | --- | --- |
 | `/strategy` | asks for a name, a kind and prose, infers the frontmatter from the prose and the vocabulary, stores the file through `add_strategy` (or completes a draft through `infer_strategy`), and shows the effect on a board |
-| `/comp` | the agent: pulls map, side, bans, red and locked blue picks out of what you say, calls `infer` (or `board`), reads `facts`, adopts or improves on the solver's optimum against the prose constraints, answers with `[F#]` citations, and records the result through `record` |
-| `/tune` | a manual tune, or a fit from outcomes, through the `tune` and `fit_weights` tools; shows the effect on the board |
-| `/outcome` | records how a match went through `record_outcome` |
+| `/comp` | the agent: pulls map, side, bans, red and locked blue picks out of what you say, calls `infer` (or `board`), reads `facts`, adopts or improves on the solver's optimum against the prose constraints, answers with `[F#]` citations |
+| `/tune` | a manual tune through the `tune` tool; shows the effect on the board |
 | `/up` | brings the stack up and current before a game |
 
 All of it runs on the MCP tools the data layer serves (`infer`,
 `evaluate`, `board`, `facts`, `strategies`, `metrics`, `add_strategy`,
-`infer_strategy`, `derive_strategies`, `record`, `record_outcome`, `tune`,
-`fit_weights`, `tuning_log`), which is what makes a session and the board
+`infer_strategy`, `derive_strategies`, `tune`, `tuning_log`), which is
+what makes a session and the board
 see the same numbers.
 
 ## The catalog

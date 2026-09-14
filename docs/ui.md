@@ -27,7 +27,7 @@ computes facts in-process and asks the service for comps.
 ```
 ui/
   __init__.py      the package's map
-  board.py         the page, its JSON endpoints, the recorded-comp pages
+  board.py         the page, its JSON endpoints, the math page
   static/
     board.css      the look: the game's hero select, dark, red and blue
     board.js       the behaviour: state, fetches, the ban picker, the three panels
@@ -51,10 +51,7 @@ the script has no constant to keep in step with the Python.
 | `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
 | `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, the momentum verdict and the game plan - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
 | `/api/strategies` | the strategies catalog: every constraint and heuristic with its kind, form, frontmatter and body |
-| `/api/record` (POST) | record a comp shown on the board through the inference layer's `record`: the gates hold (six real heroes, citations the board showed) and a transcript is written |
-| `/api/recorded` | every recorded composition with the outcomes played on it, the outcomes recorded without one, and the win-loss-draw tally - what the *recorded* tab shows |
 | `/math` | the equation and how the layers fit, in prose - linked from the board's header |
-| `/recs`, `/rec/<id>` | the recorded compositions, and one transcript rendered |
 
 Every request opens its own connection and loads a fresh World, so a
 `pull_rates` or a tune shows on the next click without a restart.
@@ -94,18 +91,19 @@ answer them, the family of heroes to stay in when you stray from the six,
 and what the six is built for - from the same facts and strategies the
 solver scored, so picks can be tailored toward the optimal without
 matching it; a last line says what it rests on. Then, in the order of
-the boxes above, red's comp as revealed (left, scored against yours) and
-blue's optimal six (right: the counter to red's selection as revealed,
-whatever you have locked, so it never collapses into your own six).
+the boxes above, blue's optimal six (left: the counter to red's
+selection as revealed, whatever you have locked, so it never collapses
+into your own six) and red's comp as revealed (right, scored against
+yours).
 
 The scores live with the selections. Above the two boxes sits the
 momentum strip: the verdict from the two current comps, each on its own
-optimal's scale - red's picks as a share of their best counter to yours,
-yours as a share of blue's best counter to red's selection - and, when
+optimal's scale - your picks as a share of blue's best counter to red's
+selection, red's as a share of their best counter to yours - and, when
 you have picks, how you hold if red answers you perfectly. Each box
 carries its own share as a badge by its name, and a *clear* button that
 empties that team's picks alone (*new game* in the header clears both,
-the map, the side and the bans). Red's box only records and
+the map, the side and the bans). Red's box only holds and
 scores what they reveal; the blue box also fills its empty slots with the
 solver's suggestions - the optimal six before any pick, then the best six
 that keeps what you have locked - each a click away from locking. The comp is
@@ -114,14 +112,11 @@ full width below. Each result shows its 0-100 figure large (`normalized`:
 that board) with the raw score small beside it and as the tooltip, and
 falls back to the raw score when the figure is absent; then each pick
 with its reasons and `[F#]` citations, the score bars per strategy, the
-alternatives (each with its own 0-100 figure when present), the partial
-notice, and on blue's optimal a "record this comp" button. *facts*
+alternatives (each with its own 0-100 figure when present) and the partial
+notice. *facts*
 filters by text and by scope (meta, bans, map, hero, team, matchup,
 playbook). *playbook* renders the catalog with each constraint's form.
-*recorded* lists every recorded composition, newest first, with how each
-went - the outcomes logged against it (win, loss or draw, the date, the
-side, the note), or "not played yet" - and the running tally; outcomes
-recorded without a comp are listed under it. The header carries a link to
+The header carries a link to
 *the math*, a page stating the equation and how the layers fit. A
 footer at the very bottom carries the status - the facts on the board,
 the playbook notes, the time of the last read - and the rates' capture
@@ -140,8 +135,8 @@ firing configs, abilities, perks, every stat as a measurement with unit
 and condition - keywords, the latest and previous rates, the per-map and
 per-tier rates, counters both ways, best maps, playstyles), the maps
 (mode, stages, playstyle fit), the meta snapshots and the patches newer
-than the capture, synergies and partners, archetypes, the recorded
-recommendations and outcomes, the catalog's shape. `Hero.finish()`
+than the capture, synergies and partners, archetypes, the catalog's
+shape. `Hero.finish()`
 derives what the kit implies - peak damage and healing per second,
 burst, mobility and crowd-control tools, hitscan, flight, anti-heal,
 cleanse, barrier, effective HP - so the metrics read fields, not SQL.
@@ -189,18 +184,17 @@ sentences so a person - or the `/comp` session - reads them as evidence:
 [F40] Zarya (red): peak 190 dps, 200 barrier, ...                  hero
 [F210] blue team: 2 tanks, 2 damage, 2 supports ...                team
 [F230] sustain war: red supports peak 165 heal vs 1 blue anti-heal matchup
--- the playbook's record: what it holds, decided and saw - not facts --
+-- the playbook's record: what it holds - not facts --
 [S1]  a brawl comp wants 2 tank: ...                               playbook
 ```
 
 Independent facts per hero and for the map come first; joint facts per
 team appear once a team has picks; matchup facts once both teams do.
 Ids are dense and stable within a board, which is what makes a citation
-mean something: `record` checks every `[F#]` a comp cites against the
-board it was decided on. Below the facts, numbered S1.., rides the
-playbook's record - archetypes, previous recommendations here, recorded
-outcomes, how many constraints and heuristics the catalog holds - citable
-but never mistaken for data, and not the strategies themselves.
+mean something. Below the facts, numbered S1.., rides the playbook's
+record - the archetypes, how many constraints, heuristics and assumptions
+the catalog holds - citable but never mistaken for data, and not the
+strategies themselves.
 
 ## One click on the board
 
@@ -218,12 +212,10 @@ sequenceDiagram
     Facts-->>Board: F1..Fn - every fact about those heroes,<br/>the map, each team, the matchup
     Board->>Solver: /api/infer (map, side, red, blue, bans)
     Solver->>Solver: blue's seat: shapes the limits allow · per-role pools ·<br/>every candidate scored · local search
-    Solver->>Solver: red's seat, the other side: the same around their revealed picks
-    Solver->>Solver: the current comp: six locked -> ranked against the field;<br/>fewer -> scored with the optimal search's bounds
+    Solver->>Solver: red's seat, the other side: their best counter to your picks
+    Solver->>Solver: both current comps: six locked -> ranked against the field;<br/>fewer -> scored with the optimal search's bounds
     Solver->>Facts: the FactSet for each (map, side, red, the six)
-    Solver-->>Board: two displays: both optimal sixes with reasons and [F#]<br/>citations, score per strategy, alternatives; the current comp's score
-    You->>Board: "record this comp"
-    Board->>Solver: record: gates (six real heroes,<br/>citations the board showed), tables, transcript
+    Solver-->>Board: the game plan, the momentum, blue's optimal with reasons and [F#]<br/>citations, red's comp as revealed, the suggestions for the empty slots
 ```
 
 Sides exist on Escort and Hybrid maps only; the rates do not split by
@@ -233,7 +225,6 @@ defense) and the facts say so.
 
 ## What reads this package
 
-The inference layer's solver (`compute`), engine and record path
-(`engine`, `model`), the fit and outcome tools (`model`), the inference
-service, and the MCP tools `roster`, `facts`, `infer`, `evaluate`,
-`board` and `record` - all through the same functions the board calls.
+The inference layer's solver (`compute`) and engine (`engine`, `model`),
+the inference service, and the MCP tools `roster`, `facts`, `infer`,
+`evaluate` and `board` - all through the same functions the board calls.

@@ -12,9 +12,8 @@ twelve heroes (and the bans), the one map, the rates and counters for them
 here. Independent facts per hero and for the map come first; joint facts
 per team appear once a team has picks; matchup facts once both teams do.
 Below them, numbered S1.., rides the PLAYBOOK's record: the archetypes it
-names, how many constraints and heuristics it holds, what it recommended
-here before and how recorded matches went - citable, never mistaken for
-data, and not the strategies themselves (those are the constraints and
+names, how many constraints, heuristics and assumptions it holds -
+citable, never mistaken for data, and not the strategies themselves (those are the constraints and
 heuristics the solver reads). Both sides are structured (scope, subject,
 key, value) so the
 inference layer can read them by key, and rendered as sentences so a
@@ -411,13 +410,6 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
     if answers:
         fs.add("hero", name, "hero.answers", "%s answers: %s" % (name, ", ".join(answers)),
                value=answers, source="counters", team=team)
-    played = sum(h.outcomes.values())
-    if played:
-        fs.add("hero", name, "hero.outcomes", "%s on blue in recorded matches: %d-%d%s"
-               " (%d played)" % (name, h.outcomes["win"], h.outcomes["loss"],
-                                 "-%d" % h.outcomes["draw"] if h.outcomes["draw"] else "",
-                                 played),
-               value=h.outcomes, source="outcomes+outcome_picks", team=team)
     for other, (score, note) in sorted(world.partners.get(h.id, {}).items(),
                                        key=lambda kv: -(kv[1][0] or 0)):
         fs.add("hero", name, "hero.partner", "%s + %s (%s/3): %s"
@@ -685,9 +677,8 @@ def _matchup_facts(fs, world, blue_t, red_t):
 
 
 def _playbook_record(fs, world, m):
-    """S1..: the playbook's record - what it holds, what it decided here
-    before and how it went - never what the sources say, and not the
-    constraints and heuristics themselves."""
+    """S1..: the playbook's record - what it holds - never what the sources
+    say, and not the constraints and heuristics themselves."""
     S = PLAYBOOK_SCOPE
     for style in sorted(world.archetypes):
         for role, (slots, note) in world.archetypes[style].items():
@@ -695,30 +686,6 @@ def _playbook_record(fs, world, m):
                    % (style, slots, role, note or ""), value={"style": style, "role": role,
                                                              "slots": slots},
                    source="comp_archetypes")
-    for rec_id, playstyle, reasoning, map_id, picks, cited in world.history:
-        if m is None or map_id == m.id:
-            fs.add(S, "history", "playbook.recommendation",
-                   "previously recommended (#%d, %s, %d facts cited): %s - %s"
-                   % (rec_id, playstyle, cited, picks, _trim(reasoning, 90)),
-                   value=rec_id, source="recommendations+recommendation_evidence")
-    if m is not None and m.id in world.outcomes_by_map:
-        o = world.outcomes_by_map[m.id]
-        fs.add(S, "outcomes", "playbook.outcomes",
-               "recorded matches on %s: %d-%d%s from blue's seat" % (
-                   m.name, o["win"], o["loss"], "-%d" % o["draw"] if o["draw"] else ""),
-               value=o, source="outcomes")
-    for o in world.outcomes[:3]:
-        if m is None or o["map_id"] == m.id:
-            fs.add(S, "outcomes", "playbook.outcome",
-                   "played %s on %s%s: %s with %s vs %s%s" % (
-                       o["played"], world.maps[o["map_id"]].name if o["map_id"] in world.maps
-                       else "an unknown map", " (%s)" % o["side"] if o["side"] else "",
-                       o["result"].upper(),
-                       ", ".join(world.heroes[x].name for x in o["blue"] if x in world.heroes),
-                       ", ".join(world.heroes[x].name for x in o["red"] if x in world.heroes)
-                       or "an unrecorded enemy",
-                       " - %s" % _trim(o["note"], 60) if o["note"] else ""),
-                   value=o["id"], source="outcomes+outcome_picks")
     if world.catalog_counts:
         c = world.catalog_counts
         fs.add(S, "catalog", "playbook.catalog",

@@ -8,13 +8,13 @@ import orchestrator
 
 def test_verdict_reads_the_three_health_replies():
     ok, lines = orchestrator.verdict({
-        "data": {"status": "ok", "tables": 42, "heroes": 53, "outcomes": 2,
+        "data": {"status": "ok", "tables": 42, "heroes": 53,
                  "pending_migrations": [], "newest_capture": "2026-09-13"},
         "inference": {"status": "ok", "strategies": 38, "heroes": 53},
         "ui": {"heroes": [{}] * 53, "maps": [{}] * 30}})
     assert ok and any("rates captured 2026-09-13" in l for l in lines)
     ok, lines = orchestrator.verdict({"data": {"status": "ok", "tables": 42, "heroes": 53,
-                                        "pending_migrations": ["009_outcomes.sql"]},
+                                        "pending_migrations": ["099_future.sql"]},
                                "inference": {"status": "ok", "strategies": 0},
                                "ui": None})
     assert not ok
@@ -37,7 +37,7 @@ def test_the_agents_run_is_headless_claude_on_the_refresh_skill(monkeypatch):
     assert "mcp__counter-utility-matrix-docker__sync_all" in allowed
     assert "mcp__counter-utility-matrix__infer_strategy" in allowed
     assert "mcp__counter-utility-matrix-docker__query" in allowed      # read-only, its own login
-    for never in ("add_strategy", "db_rebuild", "db_init", "db_migrate", "record", "record_outcome"):
+    for never in ("add_strategy", "db_rebuild", "db_init", "db_migrate"):
         assert not any(t.endswith("__" + never) for t in allowed), never
     from inference import derive
     monkeypatch.setattr(derive, "cli", lambda: None)

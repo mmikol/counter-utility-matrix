@@ -24,14 +24,12 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import psycopg
 
-from db import ROOT
 from db import psql
 from ui.facts import engine as facts_engine
 from ui.facts import model
 from ui.facts.compute import SIDED_MODES, TEAM_SIZE
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
-from inference import record as record_module
 
 PORT = int(os.environ.get("COUNTER_MATRIX_UI_PORT", "8017"))
 
@@ -123,63 +121,6 @@ def api_strategies():
     return {"strategies": [h.to_dict() for h in catalog]}
 
 
-def api_recs(cx):
-    row = cx.execute("""select r.rec_id, r.playstyle,
-            (select string_agg(h.name, ', ' order by p.position)
-             from recommendation_picks p join heroes h using(hero_id)
-             where p.rec_id = r.rec_id)
-            from recommendations r order by rec_id desc limit 1""").fetchone()
-    if not row:
-        return {"latest": 0, "summary": ""}
-    rec_id, playstyle, picks = row
-    return {"latest": rec_id, "summary": "%s (%s)" % (picks or "", playstyle)}
-
-
-def api_recorded(cx):
-    """Every recorded composition with the outcomes played on it, newest
-    first, plus the outcomes recorded without one and the running tally."""
-    recs = [{"rec_id": r, "date": str(d), "map": m or "", "question": q, "playstyle": p,
-             "model": mo, "picks": (picks or "").split(", ") if picks else [], "outcomes": []}
-            for r, d, q, m, p, mo, picks in cx.execute("""
-                select r.rec_id, r.created_at::date, r.request, m.name, r.playstyle, r.model,
-                       (select string_agg(h.name, ', ' order by p.position)
-                        from recommendation_picks p join heroes h using(hero_id)
-                        where p.rec_id = r.rec_id)
-                from recommendations r left join maps m using(map_id)
-                order by r.rec_id desc limit 200""").fetchall()]
-    by_rec = {r["rec_id"]: r for r in recs}
-    tally = {"win": 0, "loss": 0, "draw": 0}
-    unlinked = []
-    for oid, played, rec_id, m, side, result, note, blue in cx.execute("""
-            select o.outcome_id, o.played_at::date, o.rec_id, m.name, o.side, o.result, o.note,
-                   (select string_agg(h.name, ', ' order by p.position)
-                    from outcome_picks p join heroes h using(hero_id)
-                    where p.outcome_id = o.outcome_id and p.team = 'blue')
-            from outcomes o left join maps m using(map_id) order by o.outcome_id desc""").fetchall():
-        tally[result] = tally.get(result, 0) + 1
-        row = {"outcome_id": oid, "date": str(played), "map": m or "", "side": side or "",
-               "result": result, "note": note or "", "blue": blue.split(", ") if blue else []}
-        if rec_id in by_rec:
-            by_rec[rec_id]["outcomes"].append(row)
-        else:
-            unlinked.append(row)
-    return {"tally": tally, "recs": recs, "unlinked": unlinked}
-
-
-def api_record(cx, payload):
-    if INFERENCE_URL:
-        return remote("/record", payload=payload)
-    try:
-        rec_id, path = record_module.record(
-            cx, payload.get("question") or "recorded from the board",
-            payload["answer"], payload.get("map"), payload.get("red", []),
-            payload.get("blue", []), payload.get("model", "board"),
-            payload.get("bans", []), payload.get("side", ""))
-    except (ValueError, KeyError) as error:
-        return {"error": str(error)}, 400
-    return {"rec_id": rec_id, "transcript": os.path.relpath(path, ROOT)}, 200
-
-
 # --- the board page ---------------------------------------------------------
 #
 # The page is a shell: the stylesheet and the script are static files under
@@ -228,40 +169,37 @@ def view_board():
             "<div class='banbody' id='banbody'><div class='slots' id='banslots'></div>"
             "<div class='roles' id='banroster'></div></div></div>"
             "<div class='warnbox' id='vintage' style='display:none'></div>"
-            "<div class='notice' id='newrec'></div>"
             "<div class='momentum' id='momentum'></div>"
             "<div class='teams'>"
-            "<section class='team red'><h2>red team <span class='tscore' id='redscore' title=\"their picks so far, as a share of their best counter to yours\"></span>"
-            "<small>the enemy - click their heroes as they reveal</small>"
-            "<small style='margin-left:auto' id='redcount'></small>"
-            "<button class='clearteam' data-clear='red' title='clear every red pick'>clear</button></h2>"
-            "<div class='slots' id='redslots'></div><div class='roles' id='redroster'></div></section>"
             "<section class='team blue'><h2>blue team <span class='tscore' id='bluescore' title=\"your picks so far, as a share of blue's optimal\"></span>"
             "<small>your locked picks - the inference layer fills the rest</small>"
             "<small style='margin-left:auto' id='bluecount'></small>"
             "<button class='clearteam' data-clear='blue' title='clear every blue pick'>clear</button></h2>"
             "<div class='slots' id='blueslots'></div><div class='roles' id='blueroster'></div></section>"
+            "<section class='team red'><h2>red team <span class='tscore' id='redscore' title=\"their picks so far, as a share of their best counter to yours\"></span>"
+            "<small>the enemy - click their heroes as they reveal</small>"
+            "<small style='margin-left:auto' id='redcount'></small>"
+            "<button class='clearteam' data-clear='red' title='clear every red pick'>clear</button></h2>"
+            "<div class='slots' id='redslots'></div><div class='roles' id='redroster'></div></section>"
             "</div>"
             "<nav class='tabs'><button data-tab='comps'>comps</button>"
             "<button data-tab='facts'>facts <span id='factsn'></span></button>"
-            "<button data-tab='playbook'>playbook</button>"
-            "<button data-tab='recorded'>recorded <span id='recn'></span></button></nav>"
+            "<button data-tab='playbook'>playbook</button></nav>"
             "<section class='panel' id='tab-comps'><div class='plan' id='plan'></div><div class='seats'>"
-            "<div class='seat red' id='inf-red'></div><div class='seat blue' id='inf-blue'></div></div></section>"
+            "<div class='seat blue' id='inf-blue'></div><div class='seat red' id='inf-red'></div></div></section>"
             "<section class='panel' id='tab-facts'><div class='tools'>"
             "<input type='text' id='filter' placeholder='filter facts - try a hero, CAUTION, derived:, team.'>"
             "<span id='chips'></span></div>"
             "<table class='facts'><tbody id='factbody'></tbody></table>"
             "<p class='legend'>every line is a row or a formula over the database, numbered for citation;"
             " the /comp skill and the inference layer read exactly these.</p></section>"
-            "<section class='panel' id='tab-recorded'><div id='recorded'></div></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
             "<footer class='foot'><span id='status'></span><span id='captured'></span></footer>"
             "</main><script>var TEAM = %d, BANS = 5;</script>"
             "<script src='/static/board.js'></script>" % TEAM_SIZE)
 
 
-# --- recorded recommendations -------------------------------------------------
+# --- the math page -------------------------------------------------------------
 
 def _page(title, body):
     return (HEAD + "<title>%s</title>"
@@ -290,8 +228,7 @@ metric to push in a direction with a weight: effective HP up, exposure down, coh
 An <b>assumption</b> is prose by definition - what the model takes as given (players play
 optimally; rates are role queue on console) - shown with every result and never scored. A
 strategy is written as a name, a kind and a paragraph; the formula, the metric and the weight
-are inferred from that and stored in the same file. What history shows moves the weights: every
-recorded match is fitted back onto the heuristics.</p>
+are inferred from that and stored in the same file.</p>
 <p><b>COMP</b> is the argmax: of every legal six under the constraints, the one the weighted
 heuristics score highest on the facts of this board. Each heuristic reads a metric off the six
 (its pool, its range, its answers to red's picks), normalises it against a fixed reference sample
@@ -310,8 +247,7 @@ those tools or the same functions behind them. A sentry container watches the st
 the audit log while the stack runs.</p>
 <p><b>The inference layer</b> (<code>inference/</code>) holds the playbook and the solver. It
 compiles each strategy's expression once, whitelists what an expression may do, and runs the
-search deterministically - no model in the loop, no network. It also records recommendations and
-outcomes, and fits the weights from them.</p>
+search deterministically - no model in the loop, no network.</p>
 <p><b>The board</b> (<code>ui/</code>) is this page: it turns the database into the facts of one
 board and asks the inference layer for the answer at every stage of a draft - no map, a map, a
 side, bans, red's picks as they reveal. Clicking around never calls a language model.</p>
@@ -327,46 +263,6 @@ files. The <code>/comp</code> skill is the conversational front of the same solv
 
 def view_math():
     return _page("the math", MATH)
-
-
-def view_recs(cx):
-    rows = cx.execute("""select rec_id, created_at::date, request, playstyle, model
-                         from recommendations order by rec_id desc limit 50""").fetchall()
-    body = "".join("<tr><td><a href='/rec/%d'>#%d</a></td><td>%s</td><td>%s</td><td>%s</td>"
-                   "<td>%s</td></tr>" % (r, r, d, esc(q[:80]), esc(p), esc(m))
-                   for r, d, q, p, m in rows) or "<tr><td>none yet</td></tr>"
-    return _page("recorded compositions", "<table class='rec-list'><tr><th>id</th><th>date</th>"
-                 "<th>question</th><th>comp</th><th>model</th></tr>%s</table>" % body)
-
-
-def view_rec(cx, rec_id):
-    rec = cx.execute("""select request, coalesce(m.name,'-'), model, playstyle,
-                   reasoning, created_at::date from recommendations r
-                   left join maps m using(map_id) where rec_id=%s""", (rec_id,)).fetchone()
-    if not rec:
-        return _page("not found", "<p>No recommendation #%d.</p>" % rec_id)
-    request, map_name, model_name, playstyle, reasoning, day = rec
-    picks = cx.execute("""select h.name, p.why,
-        coalesce((select string_agg(e.tag, ', ' order by length(e.tag), e.tag)
-            from recommendation_evidence e
-            where e.rec_id=p.rec_id and e.hero_id=p.hero_id), '')
-        from recommendation_picks p join heroes h using(hero_id)
-        where p.rec_id=%s order by p.position""", (rec_id,)).fetchall()
-    cited = cx.execute("""select distinct tag, source_table, description
-                     from recommendation_evidence where rec_id=%s
-                     order by length(tag), tag""", (rec_id,)).fetchall()
-    picks_html = "".join(
-        "<div class='hcard'><b>%s</b> <span class='ev'>%s</span><p>%s</p></div>"
-        % (esc(h), esc(tags), esc(why)) for h, why, tags in picks)
-    ev = "".join("<tr><td class='tag'>[%s]</td><td class='text'>%s</td><td class='src'>%s</td></tr>"
-                 % (esc(t), esc(d), esc(tb)) for t, tb, d in cited)
-    return _page("recommendation #%d" % rec_id, """
-        <h2>Recommendation #%d - %s</h2>
-        <p class='legend'>%s &nbsp;·&nbsp; map: %s &nbsp;·&nbsp; %s</p>
-        <p>%s</p><h3>Comp - %s</h3><div class='hcards'>%s</div>
-        <h3>Facts cited</h3><table class='facts'>%s</table>""" % (
-        rec_id, day, esc(model_name), esc(map_name), esc(request),
-        esc(reasoning), esc(playstyle), picks_html, ev))
 
 
 # --- server -----------------------------------------------------------------
@@ -416,31 +312,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(*api_facts(cx, query))
                 if path == "/api/infer":
                     return self._json(*api_infer(cx, query))
-                if path == "/api/recs":
-                    return self._json(api_recs(cx))
-                if path == "/api/recorded":
-                    return self._json(api_recorded(cx))
-                if path == "/recs":
-                    return self._send(view_recs(cx))
-                if path.startswith("/rec/"):
-                    return self._send(view_rec(cx, int(path[5:])))
             self._send(_page("not found", "<p>Nothing here.</p>"), 404)
         except Exception:
             self._send(_page("error", "<pre class='warnbox'>%s</pre>"
                              % esc(traceback.format_exc())), 500)
-
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-            payload = json.loads(self.rfile.read(length) or b"{}")
-            if parsed.path == "/api/record":
-                with psycopg.connect(dsn()) as cx:
-                    return self._json(*api_record(cx, payload))
-            self._json({"error": "nothing here"}, 404)
-        except Exception as error:
-            self._json({"error": str(error)}, 500)
-
 
 def main():
     import argparse

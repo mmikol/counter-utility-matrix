@@ -81,11 +81,10 @@ def test_mcp_json_registers_the_two_servers():
 
 MUST_NAME = {   # a skill is a playbook over these tools; if a tool is renamed, so is the skill
     "up": {"sync_all"},
-    "comp": {"infer", "facts", "record", "board"},
-    "outcome": {"record_outcome"},
-    "tune": {"tune", "fit_weights", "tuning_log", "strategies"},
+    "comp": {"infer", "facts", "board"},
+    "tune": {"tune", "tuning_log", "strategies"},
     "strategy": {"metrics", "strategies", "add_strategy", "infer_strategy"},
-    "refresh": {"db_status", "sync_all", "infer_strategy", "fit_weights", "db_docs",
+    "refresh": {"db_status", "sync_all", "infer_strategy", "db_docs",
                 "export_csv", "load_authored"},
     "maintain": {"db_docs", "db_status", "strategies"},
 }

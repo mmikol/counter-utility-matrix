@@ -46,7 +46,7 @@ QUARANTINE = ".quarantined"
 
 # What a strategy, a note or a description never legitimately says.
 TOOLS = r"(db_rebuild|db_init|db_migrate|sync_all|pull_\w+|load_authored|tune|infer_strategy|" \
-        r"add_strategy|derive_strategies|fit_weights|record_outcome|record|query|export_csv)"
+        r"add_strategy|derive_strategies|query|export_csv)"
 INJECTION = [re.compile(p, re.I | re.S) for p in (
     r"\b(ignore|disregard|forget|override)\b[^.\n]{0,60}\b(instructions?|rules?|messages?|prompts?|guidelines?)\b",
     r"\b(instructions?|rules?|prompts?)\b[^.\n]{0,30}\b(above|before|previous|prior|earlier)\b[^.\n]{0,40}\b(ignore|disregard|forget|override|no longer)\b",
@@ -71,8 +71,6 @@ def normalised(text):
 TEXT_COLUMNS = (("abilities", ("description",)), ("perks", ("description",)),
                 ("heroes", ("passive_description",)), ("synergies", ("note",)),
                 ("comp_archetypes", ("note",)), ("map_playstyle", ("note",)),
-                ("recommendations", ("request", "reasoning")),
-                ("recommendation_picks", ("why",)), ("outcomes", ("note",)),
                 ("strategies", ("body",)))
 
 
