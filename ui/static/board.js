@@ -294,7 +294,8 @@ function renderInf() {
     return "<span class='mbar " + side + "'><span class='side'>" + side + "</span><span class='trk'><span class='fill' style='width:" +
       (typeof value === 'number' ? value : 0) + "%'></span></span><span class='val'>" + word + '</span></span>';
   };
-  el('momentum').innerHTML = "<span class='lbl'>momentum</span>" + bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current);
+  el('momentum').innerHTML = "<span class='lbl' title='each side\'s comp as a share of the best six it could field here - the higher bar holds the fight'>fight odds</span>" +
+    "<span class='mbars'>" + bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current) + '</span>';
   var rc = d.red_current;
   if (!rc || !rc.blue || !rc.blue.length) el('inf-red').innerHTML = "<div class='inf-head'><h3>red - their comp as revealed</h3></div>";
   else renderResult(rc, el('inf-red'), 'red - their comp as revealed' + (rc.kind === 'evaluate' ? ', ranked' : ' (' + rc.blue.length + ' of ' + TEAM + ')'));
