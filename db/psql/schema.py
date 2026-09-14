@@ -183,7 +183,7 @@ def embed(path, name, text):
         handle.write(head + "\n" + text.strip("\n") + "\n" + tail)
 
 
-def generate_docs(connection):
+def generate_docs(connection, path=None):
     mig = _migration_tables()
     tables = [r[0] for r in connection.execute(
         "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY 1")]
@@ -232,7 +232,8 @@ def generate_docs(connection):
                edges(lambda c, d=d: dom.get(c) == d) + ["```", ""]
     erd += ["#### The whole database", "", "```mermaid", "erDiagram"] + \
            edges(lambda c: True) + ["```", ""]
-    embed(os.path.join(ROOT, "docs", "db.md"), "erd", "\n".join(erd))
+    path = path or os.path.join(ROOT, "docs", "db.md")
+    embed(path, "erd", "\n".join(erd))
 
     dd = ["Generated from the live schema (`python -m db.mcp call db_docs`).", "",
           "Every table carries two columns omitted from the lists below, because they",
@@ -256,5 +257,5 @@ def generate_docs(connection):
             dd.append("| `%s` | %s | %s | %s |" % (
                 name, typ, "yes" if nullable == "YES" else "no",
                 "`%s.%s`" % r if r else ""))
-    embed(os.path.join(ROOT, "docs", "db.md"), "dictionary", "\n".join(dd))
+    embed(path, "dictionary", "\n".join(dd))
     return "regenerated the schema sections of docs/db.md: %d tables" % len(tables)

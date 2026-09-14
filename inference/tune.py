@@ -155,6 +155,13 @@ def _where(directory, log_path):
     return directory, log_path or os.path.join(directory, "tuning-log.md")
 
 
+def _document(directory, loaded):
+    """The catalog document follows the files - for the real playbook only,
+    never for a test's copy."""
+    if os.path.abspath(directory) == os.path.abspath(catalog_module.STRATEGIES_DIR):
+        catalog_module.write_docs(loaded)
+
+
 def tune(hid, field, value, reason, directory=None, by="claude-code-session",
          log_path=None):
     """Apply one change -> {"id", "field", "old", "new", "line"}."""
@@ -168,9 +175,10 @@ def tune(hid, field, value, reason, directory=None, by="claude-code-session",
     with open(path, encoding="utf-8") as handle:
         text = handle.read()
     new_text, old = edit_frontmatter(text, field, value)
-    validate(directory, hid, new_text)
+    loaded = validate(directory, hid, new_text)
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(new_text)
+    _document(directory, loaded)
     line = "- %s `%s` %s: %s -> %s (%s) [%s]" % (
         _stamp(), hid, field, old if old is not None else "unset", _format(value),
         " ".join(reason.split()), by)
@@ -197,6 +205,7 @@ def complete(hid, fields, reason, directory=None, by="claude-code-session", log_
     loaded = validate(directory, hid, text)
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(text)
+    _document(directory, loaded)
     form = next(h.form for h in loaded if h.id == hid)
     line = "- %s `%s` inferred -> %s: %s (%s) [%s]" % (
         _stamp(), hid, form, ", ".join("%s=%s" % (f, _format(v)) for f, v in pairs),
@@ -231,6 +240,7 @@ def add(hid, name, kind, body, fields=None, reason="", directory=None,
     loaded = validate(directory, hid, text)
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(text)
+    _document(directory, loaded)
     form = next(h.form for h in loaded if h.id == hid)
     line = "- %s `%s` added as %s/%s%s (%s) [%s]" % (
         _stamp(), hid, kind, form,

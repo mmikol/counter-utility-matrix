@@ -39,9 +39,11 @@ def test_initialize_then_list_tools_over_stdio():
     assert replies[0]["result"]["protocolVersion"] == "2025-06-18"
     assert replies[0]["result"]["serverInfo"]["name"] == "overwatch-db"
     names = {t["name"] for t in replies[1]["result"]["tools"]}
-    assert {"pull_heroes", "pull_rates", "sync_all", "db_rebuild", "query",
-            "facts", "infer", "evaluate", "board", "record", "load_authored",
-            "record_outcome", "tune", "fit_weights", "tuning_log"} <= names
+    assert {"pull_heroes", "pull_rates", "sync_all", "db_rebuild", "db_migrate", "query",
+            "facts", "infer", "evaluate", "board", "strategies", "record", "load_authored",
+            "record_outcome", "tune", "fit_weights", "tuning_log", "metrics",
+            "add_strategy", "infer_strategy", "derive_strategies", "db_docs"} <= names
+    assert len(names) == len(tools.REGISTRY)      # every registered tool is served
     for t in replies[1]["result"]["tools"]:
         assert t["inputSchema"]["type"] == "object" and t["description"]
     assert replies[2] == {"jsonrpc": "2.0", "id": 3, "result": {}}

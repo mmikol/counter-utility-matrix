@@ -1,4 +1,7 @@
-"""orchestrator.py: the verdict logic is pure; the docker verbs are not exercised."""
+"""orchestrator.py: the verdict, the dispatch, the agents' command and the
+draft hand-off are pure; the docker verbs are not exercised."""
+
+import pytest
 
 import orchestrator
 
@@ -31,6 +34,26 @@ def test_the_agents_run_is_headless_claude_on_the_refresh_skill(monkeypatch):
     assert "--no-session-persistence" in command and "--output-format" in command
     from inference import derive
     monkeypatch.setattr(derive, "cli", lambda: None)
-    import pytest
     with pytest.raises(RuntimeError, match="no claude CLI"):
         orchestrator.agents_command()
+
+
+def test_no_verb_means_the_whole_run_and_a_bad_verb_prints_the_usage(monkeypatch):
+    seen = []
+    monkeypatch.setattr(orchestrator, "run", lambda: seen.append("run") or 0)
+    monkeypatch.setattr(orchestrator, "status", lambda: seen.append("status") or 0)
+    assert orchestrator.main([]) == 0 and orchestrator.main(["status"]) == 0
+    assert seen == ["run", "status"]
+    with pytest.raises(SystemExit):
+        orchestrator.main(["dance"])
+
+
+def test_drafts_are_derived_on_the_host_then_the_stack_remirrors(monkeypatch):
+    calls = []
+    monkeypatch.setattr(orchestrator, "sh", lambda *a, **k: calls.append(("sh", a[-1])))
+    monkeypatch.setattr(orchestrator, "mcp", lambda name, args=None, **k: calls.append(("mcp", name)))
+    orchestrator.derive_pending({"inference": {"strategies": 38, "pending": 0}})
+    orchestrator.derive_pending({"inference": None})
+    assert calls == []
+    orchestrator.derive_pending({"inference": {"strategies": 39, "pending": 1}})
+    assert calls == [("sh", "derive_strategies"), ("mcp", "load_authored")]

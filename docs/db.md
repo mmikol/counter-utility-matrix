@@ -118,7 +118,7 @@ read by the `/comp` session, and tuned and logged with the rest.
 
 All follow the same contract: committed, whole-truth on reload, loud errors
 on malformed rows or unknown names. The inference layer's own brain - the
-strategies - lives in [`inference/strategies/`](../../inference/strategies/).
+strategies - lives in [`inference/strategies/`](../inference/strategies/).
 
 `recommendations/` holds one markdown transcript per recorded composition,
 the durable record; the INFERENCE tables hold the same rows queryably,
