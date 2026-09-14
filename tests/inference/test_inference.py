@@ -383,3 +383,32 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
     once = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
     twice = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
     assert once.blue == twice.blue and abs(once.score - twice.score) < 1e-12
+
+
+@pytest.mark.invariant
+def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(world, monkeypatch):
+    """Blue's optimal and red's counter run in two workers, the fill in the
+    parent; the answer is byte-for-byte the sequential one."""
+    from inference import engine
+    if not engine.parallel_available():
+        pytest.skip("one core, or COUNTER_MATRIX_PARALLEL=0")
+    assert engine.warm() == engine.WORKERS
+    split = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+                         side="attack")
+    assert split["blue"].catalog and not hasattr(split["blue"], "solver")   # crossed the boundary
+    monkeypatch.setattr(engine, "PARALLEL", False)
+    assert not engine.parallel_available()
+    straight = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+                            side="attack")
+    assert hasattr(straight["blue"], "solver")
+
+    def timeless(b):
+        d = engine.board_dict(b)
+        for key in ("blue", "red", "current", "red_current", "fill", "countered"):
+            if d.get(key):
+                d[key].pop("seconds", None)
+        return d
+    assert timeless(split) == timeless(straight)
+    first_line = lambda b: engine.board_rendered(b).split("\n")[0]   # noqa: E731
+    assert first_line(split) == first_line(straight)
+    assert engine.parallel_available(catalog=[]) is False   # a caller's catalog stays in-process

@@ -70,6 +70,14 @@ or the user points at, and leave a report.
    the sentry's patterns, the compose hardening). `python -m db.sentry
    --once` must exit 0 on a clean tree.
 
+7. **The backlog is current.** `pm/backlog.md` is the list of what is
+   worth doing next, ordered by payoff over blast radius. A run moves an
+   item that landed to *Done* with its commit, adds what a check or a
+   lesson below suggests (a smell named in check 5, a cap that bit, a
+   measurement that changed), rewrites an item whose cost or risk the
+   code now shows differently, and drops what no longer applies. Never
+   pad it: an item is a problem with a payoff, not a wish.
+
 ## Lessons learned
 
 What a run caught that the checks above did not, why they missed it, and
@@ -117,9 +125,9 @@ is a lesson the next run relearns.
 ## The report
 
 Under fifteen lines: each check and its result, what you changed and
-why, the lesson you logged if a check was blind to something, what you
-found and left for the user (with the file and line), and the commit you
-propose (a branch, a fast-forward merge to `main`, a push -
+why, the lesson you logged if a check was blind to something, what moved
+on the backlog, what you found and left for the user (with the file and
+line), and the commit you propose (a branch, a fast-forward merge to `main`, a push -
 the project's habit). Never commit or push without being asked; never
 run `docker compose down -v`.
 

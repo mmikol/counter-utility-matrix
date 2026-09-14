@@ -193,6 +193,10 @@ dead code and duplicated definitions; the layout and the one-door rule
 held; the security posture checked against `docs/security.md` and one
 sentry pass. Then a report of under fifteen lines and a proposed commit.
 
+**The backlog:** the skill keeps `pm/backlog.md` current - an item that
+landed moves to done with its commit, what a check suggests is added, what
+no longer applies is dropped.
+
 **Lessons learned:** the skill keeps a log of what a run caught that its
 checks did not - what slipped, why the checks missed it, what catches it
 now - and every run that finds such a thing adds a line before it reports.

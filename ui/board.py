@@ -354,7 +354,9 @@ def main():
     parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    print("Counter Utility Matrix: http://%s:%d" % (args.host, args.port))
+    workers = 0 if INFERENCE_URL else inference_engine.warm()   # in-process boards split too
+    print("Counter Utility Matrix: http://%s:%d%s" % (
+        args.host, args.port, " (%d solver workers)" % workers if workers else ""))
     server.serve_forever()
 
 

@@ -132,7 +132,9 @@ def main():
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
-    print("counter-utility-matrix inference: http://%s:%d" % (args.host, args.port))
+    workers = engine.warm()                    # the board's solves split across these
+    print("counter-utility-matrix inference: http://%s:%d%s" % (
+        args.host, args.port, " (%d solver workers)" % workers if workers else ""))
     server.serve_forever()
 
 

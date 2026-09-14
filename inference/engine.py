@@ -10,7 +10,12 @@ its revealed ones, on opposite sides of a sided map - and scores the
 current blue picks as they stand.
 """
 
+import concurrent.futures
+import multiprocessing
+import os
+import threading
 import time
+import types
 
 from inference import catalog as catalog_module
 from inference.solver import Candidate, Solver, evaluate_comp
@@ -62,6 +67,18 @@ class Result:
                                for h in catalog if h.kind == "assumption"]
         # drafts: name, kind and prose only - shown, not scored, until /strategy
         self.pending = [h.id for h in catalog if h.pending]
+
+    def __getstate__(self):
+        """What crosses a process boundary: everything but the solver (its
+        reference sample and bounds stay with the worker that used them) and
+        the catalog's compiled expressions - a strategy's id, name and kind is
+        all a result needs of it afterwards."""
+        state = dict(self.__dict__)
+        state.pop("solver", None)
+        state["catalog"] = [types.SimpleNamespace(id=h.id, name=h.name, kind=h.kind,
+                                                  pending=getattr(h, "pending", False))
+                            for h in self.catalog]
+        return state
 
     def to_dict(self, include_facts=False):
         counts = {k: sum(1 for h in self.catalog if h.kind == k)
@@ -524,6 +541,68 @@ def _plan(world, m, side, bans, red_h, blue_r):
     return "\n".join(lines)
 
 
+# --- the board's independent solves, in parallel ---------------------------
+#
+# CPython holds the GIL for this pure-Python work, so parallelism means
+# processes: a small pool of workers, started once per process and kept, each
+# handed the world (0.6 MB, a few ms to pickle) and the names on a board. Blue's
+# optimal and red's counter do not depend on each other; each worker also
+# scores that seat's current comp, which needs the solver's scale and so stays
+# where the solver is. The parent solves the fill meanwhile and the pessimistic
+# case after. Off with COUNTER_MATRIX_PARALLEL=0, on one core, or with a
+# catalog the caller supplied (a worker loads the playbook from its files).
+
+PARALLEL = os.environ.get("COUNTER_MATRIX_PARALLEL", "1").lower() not in ("0", "no", "false")
+WORKERS = 2
+_pool = None
+_pool_lock = threading.Lock()
+
+
+def _workers():
+    """The pool, created on first use. Spawned, not forked: the servers that
+    call this are threaded, and forking a threaded process is unsafe."""
+    global _pool
+    with _pool_lock:
+        if _pool is None:
+            _pool = concurrent.futures.ProcessPoolExecutor(
+                max_workers=WORKERS, mp_context=multiprocessing.get_context("spawn"))
+        return _pool
+
+
+def _drop_workers():
+    global _pool
+    with _pool_lock:
+        pool, _pool = _pool, None
+    if pool is not None:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
+def parallel_available(catalog=None):
+    """Whether board() splits its solves across workers here."""
+    return PARALLEL and catalog is None and (os.cpu_count() or 1) > 1
+
+
+def warm():
+    """Start the workers now, so the first board does not pay for it. Returns
+    the number started, 0 when the board runs sequentially here."""
+    if not parallel_available():
+        return 0
+    pool = _workers()
+    futures = [pool.submit(os.getpid) for _ in range(WORKERS)]
+    concurrent.futures.wait(futures)
+    return WORKERS
+
+
+def _seat(world, map_name, enemy, own, top, pool_size, bans, side, seat):
+    """One seat, in a worker: its optimal six against the enemy's revealed picks,
+    and its own picks scored on that optimal's scale."""
+    catalog = catalog_module.load()
+    optimal = infer(world, map_name, enemy, [], top, pool_size, catalog, bans, side, seat)
+    cur = current(world, optimal, map_name, enemy, own, catalog, bans, side, pool_size, seat)
+    _finish(cur, optimal.score)
+    return optimal, cur
+
+
 def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
           catalog=None, top=5):
     """The whole board in one pass, at whatever stage the draft is - no map
@@ -548,16 +627,34 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
         momentum     the verdict from the two current comps
         plan         the game plan in prose, from the same facts
     """
+    parallel = parallel_available(catalog)
     catalog = catalog or catalog_module.load()
     m, red_h, _, _ = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
-    blue_r = infer(world, map_name, red, [], top, pool_size, catalog, bans, side, "blue")
-    red_r = infer(world, map_name, blue, [], top, pool_size, catalog, bans, opposite(side), "red")
-    cur = current(world, blue_r, map_name, red, blue, catalog, bans, side, pool_size)
-    _finish(cur, blue_r.score)                     # 100 is blue's optimal, whatever you hold
-    red_cur = current(world, red_r, map_name, blue, red, catalog, bans, opposite(side),
-                      pool_size, "red")
-    _finish(red_cur, red_r.score)
+    fill = None
+    if parallel:
+        try:
+            pool = _workers()
+            seats = [pool.submit(_seat, world, map_name, list(red), list(blue), top, pool_size,
+                                 list(bans), side, "blue"),
+                     pool.submit(_seat, world, map_name, list(blue), list(red), top, pool_size,
+                                 list(bans), opposite(side), "red")]
+            if 0 < len(blue) < TEAM_SIZE:              # the fill, here, meanwhile
+                fill = infer(world, map_name, red, blue, top, pool_size, catalog, bans, side,
+                             "blue")
+            (blue_r, cur), (red_r, red_cur) = seats[0].result(), seats[1].result()
+        except concurrent.futures.process.BrokenProcessPool:
+            _drop_workers()                          # a worker died: this board, sequentially
+            parallel = False
+    if not parallel:
+        blue_r = infer(world, map_name, red, [], top, pool_size, catalog, bans, side, "blue")
+        red_r = infer(world, map_name, blue, [], top, pool_size, catalog, bans, opposite(side),
+                      "red")
+        cur = current(world, blue_r, map_name, red, blue, catalog, bans, side, pool_size)
+        _finish(cur, blue_r.score)                 # 100 is blue's optimal, whatever you hold
+        red_cur = current(world, red_r, map_name, blue, red, catalog, bans, opposite(side),
+                          pool_size, "red")
+        _finish(red_cur, red_r.score)
     countered = None
     if blue and red_r.blue:
         hypothetical = min(pool_size, 4)           # a what-if: a smaller field is enough
@@ -567,9 +664,9 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
                             hypothetical)
         countered.kind = "countered"
         _finish(countered, against.score)
-    fill = None
-    if 0 < len(blue) < TEAM_SIZE:
+    if fill is None and 0 < len(blue) < TEAM_SIZE:
         fill = infer(world, map_name, red, blue, top, pool_size, catalog, bans, side, "blue")
+    if fill is not None:
         fill.kind = "fill"
         _finish(fill, blue_r.score)                # how close the best completion comes
     return {"map": m.name if m else None, "side": side, "bans": list(bans),

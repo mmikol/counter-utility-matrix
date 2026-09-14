@@ -90,6 +90,11 @@ services:
 
   data:
     <<: *app
+    deploy:                          # the suite runs here: pytest plus the board's two
+      resources:                     # solver workers, side by side, need the headroom
+        limits:
+          memory: 2g
+          pids: 256
     build: .
     command: ["data"]
     networks: [stack]
