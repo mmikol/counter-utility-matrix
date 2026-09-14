@@ -21,9 +21,13 @@ connected; they expose the same tools.
    question at most, only if the request is truly empty.
 2. Call the `infer` tool: `{"map": "King's Row", "side": "attack",
    "red": ["Zarya", "Pharah"], "blue": ["Ana"], "bans": ["Widowmaker"]}`.
-   (`board` with the same arguments also returns red's optimal six on the
-   other side and the current blue picks scored - use it when the user asks
-   what the enemy should be playing or how their own six rates.)
+   (`board` with the same arguments also returns the game plan in prose,
+   red's best counter to the user's picks, both current comps scored, the
+   user's picks against that counter, their locked picks with the empty
+   slots filled, and a momentum verdict - use it when
+   the user asks how the game is going, how their six rates, what the
+   enemy should be playing, or for the plan in a few lines. It answers at
+   any stage: no map yet, a map, a side, bans, red's picks as they show.)
    It returns the optimal six under the markdown
    strategies in inference/strategies/ (players assumed to play optimally),
    each pick with its reasons and the fact ids (F#) that justify it, the

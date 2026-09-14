@@ -21,7 +21,7 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     assert "tab-inf" not in body and "tab-cur" not in body
     assert "data-tab='inf'" not in body and "data-tab='cur'" not in body
     comps = body[body.index("id='tab-comps'"):body.index("id='tab-facts'")]
-    assert "id='inf-blue'" in comps and "id='inf-red'" in comps and "id='cur'" in comps
+    assert "id='inf-blue'" in comps and "id='inf-red'" in comps
     script = board.static_file("board.js")[0].decode()
     assert "/api/roster" in script and "/api/facts" in script and "/api/infer" in script
     assert "localStorage" in script
@@ -123,6 +123,14 @@ def test_bans_ride_the_query_string(db):
 def test_the_page_is_a_shell_over_static_files():
     body = board.view_board()
     assert "/static/board.css" in body and "/static/board.js" in body
+    assert "id='momentum'" in body and "id='plan'" in body
+    assert "id='bluescore'" in body and "id='cur'" not in body      # the score lives in the blue box
+    assert body.index("id='inf-red'") < body.index("id='inf-blue'")  # red first, then blue, like the boxes
+    script = board.static_file("board.js")[0].decode()
+    assert "their comp as revealed" in script and "red_current" in script and "d.momentum" in script
+    assert "game plan" in script and "d.plan" in script
+    assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
+    assert "renderFill" not in script and "el('cur')" not in script
     assert "var TEAM = 6, BANS = 5;" in body
     data, ctype = board.static_file("board.js")
     assert ctype.startswith("application/javascript") and b"function renderResult" in data

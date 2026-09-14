@@ -544,11 +544,12 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
     return result.rendered(), result.to_dict()
 
 
-@tool("board", "Both seats at once, on opposite sides of a sided map: blue's"
-      " absolute optimal six for the map, side, bans and red's picks (blue's own"
-      " picks never constrain it), red's optimal six around the revealed picks,"
-      " and blue's current picks scored as they stand on the optimal's scale"
-      " (ranked when six are locked, flagged partial otherwise).",
+@tool("board", "The whole board at any stage of the draft (no map, a map, a side,"
+      " bans, red's picks as they reveal): blue's optimal six as the best counter"
+      " to red's selection (blue's own picks never constrain it), red's best"
+      " counter to yours, both current comps scored on those scales, your picks"
+      " against red's best counter, your locked picks with the empty slots filled,"
+      " a momentum verdict, and the game plan in prose.",
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
                                                           " search keeps (default 6)"}))
 def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6):

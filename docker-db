@@ -1,12 +1,11 @@
 #!/bin/sh
 # Run any command against the Docker database instead of the local cluster:
 #
-#     ./docker-db .venv/bin/python -m data.mcp call infer '{"map": "Ilios"}'
-#     ./docker-db .venv/bin/python -m data.orchestrator update
+#     ./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'
 #     ./docker-db .venv/bin/python -m pytest -q
 #
 # Every entry point honors DATABASE_URL, so this one export is the whole
-# bridge. The port pairs with compose.yaml's db service mapping. The database
+# bridge. The port pairs with compose.yaml's db service mapping (compose.yaml at the root). The database
 # itself is inflated by the container on `docker compose up` (the entrypoint
 # builds it when empty or stale); this script is how host-side tools - the
 # MCP server a Claude Code session drives, the board, the tests - read what

@@ -49,7 +49,7 @@ the script has no constant to keep in step with the Python.
 | `/static/<file>` | `board.css` and `board.js` |
 | `/api/roster` | every hero (role, subrole, portrait, icon) and every map (mode, sided or not), the rosters are built from |
 | `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
-| `/api/infer?map=&side=&red=&blue=&ban=` | both seats solved (blue's absolute optimal, red's around its revealed picks) and the current picks scored on blue's optimal's scale - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
+| `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, the momentum verdict and the game plan - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
 | `/api/strategies` | the strategies catalog: every constraint and heuristic with its kind, form, frontmatter and body |
 | `/api/record` (POST) | record a comp shown on the board through the inference layer's `record`: the gates hold (six real heroes, citations the board showed) and a transcript is written |
 | `/recs`, `/rec/<id>` | the recorded compositions, and one transcript rendered |
@@ -83,12 +83,26 @@ the same portrait grid the rosters use. A click on a tile bans that hero,
 which leaves both rosters and the search; a click on a banned tile or on
 its slot un-bans it; at five, the rest dim.
 
-**The panels.** *comps* is the default: blue's optimal six (left) and
-red's optimal six (right) side by side, the current comp - your picks -
-below. Blue's optimal is absolute: the best six for the map, side, bans
-and red's picks, whatever you have locked, so it does not collapse into
-your selection when you hold six; your picks are scored against it, and
-a line above the current comp says how far behind they are. The comp is
+**The panels.** *comps* is the default, and it answers at every stage
+of a draft: no map (the meta's best six), a map, a map and a side, bans,
+red's picks as they reveal. On top, the game plan in prose: the ground
+(the mode's geometry and the authored note on what the map rewards), the
+side, what to play and how, what red's picks mean and which of the six
+answer them, the family of heroes to stay in when you stray from the six,
+and what the six is built for - from the same facts and strategies the
+solver scored, so picks can be tailored toward the optimal without
+matching it; a last line says what it rests on. Then a momentum strip:
+the verdict from the two current comps, each on its own optimal's scale -
+red's picks as a share of their best counter to yours, yours as a share
+of blue's best counter to red's selection - and, when you have picks, how
+you hold if red answers you perfectly. Then, in the order of the boxes
+above, red's comp as revealed (left, scored against yours) and blue's
+optimal six (right: the counter to red's selection as revealed, whatever
+you have locked, so it never collapses into your own six). Your own
+picks are scored in the blue box itself: the badge by its name is your
+picks so far as a share of blue's optimal, and the empty slots carry the
+solver's suggestions - the optimal six before any pick, then the best
+six that keeps what you have locked - each a click away from locking. The comp is
 full width below. Each result shows its 0-100 figure large (`normalized`:
 100 for an optimal six, the current comp's share of blue's optimal on
 that board) with the raw score small beside it and as the tooltip, and

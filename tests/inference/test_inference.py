@@ -190,13 +190,35 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     absolute = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], side="attack")
     assert blue.blue == absolute.blue                     # blue's optimal ignores your picks
     assert red.seat == "red" and red.side == "defense" and len(red.blue) == 6
-    assert {"Zarya", "Pharah"} <= set(red.blue)          # red keeps its revealed picks
-    assert red.red == ["Ana"]                             # and drafts against blue's
+    assert red.locked == [] and red.red == ["Ana"]        # red's optimal: their best counter to ours
+    assert red.blue == engine.infer(world, "King's Row", ["Ana"], [], side="defense", seat="red").blue
     assert cur.kind == "current" and cur.partial and cur.blue == ["Ana"]
     assert cur.contributions and cur.score is not None
+    rc = b["red_current"]                                  # their comp as revealed, scored vs ours
+    assert rc.seat == "red" and set(rc.blue) == {"Zarya", "Pharah"} and rc.red == ["Ana"] and rc.partial
+    assert 0 <= rc.to_dict()["normalized"] <= 100
+    assert b["countered"] is not None and b["countered"].kind == "countered"
+    fill = b["fill"]                                       # the empty slots, filled around Ana
+    assert fill.kind == "fill" and fill.locked == ["Ana"] and len(fill.blue) == 6 and "Ana" in fill.blue
+    assert [p["locked"] for p in fill.picks].count(True) == 1 and 0 < fill.to_dict()["normalized"] <= 100
+    assert fill.blue == engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack").blue
+    mo = b["momentum"]
+    assert set(mo) >= {"blue", "red", "countered", "verdict", "partial"} and mo["partial"]
+    assert mo["blue"] == cur.to_dict()["normalized"] and mo["red"] == rc.to_dict()["normalized"]
+    assert ("ahead by" in mo["verdict"] or mo["verdict"].startswith("even")) and "best counter" in mo["verdict"]
+    plan = b["plan"]                                       # prose: the ground, what to play, them, the family
+    assert plan.startswith("King's Row is a Hybrid map: a capture point and then the payload path")
+    assert "The archetypal brawl map; streets phase is one long corridor." in plan
+    assert "You are attacking: you have to break their hold" in plan and "The map rewards brawl" in plan
+    assert "Their 2 picks so far (Zarya, Pharah)" in plan and "answer" in plan
+    assert "If you stray from the six, stay in its family. Tanks: " in plan and "Above all: " in plan
+    assert plan.endswith("Based on: the rates and counters, the map, the side, red's 2 revealed picks.")
+    assert "Held to" not in plan and "D - " not in plan
     d = engine.board_dict(b)
     assert d["side"] == "attack" and d["red"]["seat"] == "red" and d["current"]["partial"]
-    assert "current comp" in engine.board_rendered(b)
+    assert d["red_current"]["seat"] == "red" and d["momentum"]["verdict"] == mo["verdict"] and d["plan"] == plan
+    assert d["fill"]["kind"] == "fill" and "the rest filled" in engine.board_rendered(b)
+    assert "current comp" in engine.board_rendered(b) and "momentum:" in engine.board_rendered(b)
     # the side constraints fire on the right seat
     ids = {c["id"] for c in blue.contributions if c.get("applies")}
     assert "attack-breaks-the-hold" in ids and "defense-holds-the-ground" not in ids
@@ -216,6 +238,16 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     assert 0 <= b["current"].to_dict()["normalized"] <= 100      # against the absolute optimal
     b = engine.board(world, None, [], [])
     assert not b["current"].blue and b["current"].partial
+    assert b["countered"] is None and b["fill"] is None       # nothing locked: the optimal is the fill
+    assert b["momentum"]["verdict"] == "no picks yet on either side"
+    assert b["momentum"]["blue"] is None and b["momentum"]["red"] is None
+    assert b["plan"].startswith("No map yet, so this is the meta's best six")
+    assert b["plan"].endswith("Based on: the rates and counters.")
+    assert len(b["blue"].blue) == 6                      # the meta's best six, before any map
+    b = engine.board(world, "Ilios", [], [], bans=["Widowmaker"])
+    assert b["plan"].endswith("the map, 1 ban.") and b["plan"].count("\n") >= 2
+    assert b["plan"].startswith("Ilios is a Control map: one point in three arenas")
+    assert "Ledges and open points reward mobility; well punishes immobile comps." in b["plan"]
 
 
 @pytest.mark.invariant
@@ -273,3 +305,29 @@ def test_the_sandbox_refuses_what_would_hang_or_exhaust_it():
             Expr(bomb)
     assert Expr("team.tanks ** 2").eval({"team": {"tanks": 3}}) == 9
     assert Expr("team.style_lean == 'dive'").eval({"team": {"style_lean": "dive"}}) is True
+
+
+def test_the_momentum_verdict_reads_the_two_current_comps():
+    from inference import engine
+    class R:
+        def __init__(self, blue, score, best, partial=False):
+            self.blue, self.score, self.best, self.partial = blue, score, best, partial
+    even = engine._momentum(R(["a"], 8, 10), R(["b"], 7.8, 10), None)
+    assert even["verdict"].startswith("even") and even["blue"] == 80 and even["red"] == 78
+    blue = engine._momentum(R(["a"] * 6, 9, 10), R(["b"] * 6, 5, 10), R(["a"] * 6, 3, 10))
+    assert blue["verdict"].startswith("blue ahead by 40") and blue["countered"] == 30
+    assert "your picks hold 30 / 100" in blue["verdict"] and not blue["partial"]
+    red = engine._momentum(R(["a"], 2, 10, partial=True), R(["b"] * 6, 9, 10), None)
+    assert red["verdict"].startswith("red ahead by 70") and "(partial picks)" in red["verdict"]
+    assert engine._momentum(R([], 0, 10), R(["b"], 5, 10), None)["verdict"].startswith("red has revealed")
+
+
+def test_the_plan_reads_every_authored_map_note(world):
+    from inference import engine
+    for m in world.maps.values():                         # each note is a sentence of the plan
+        note = m.styles.get(m.style_top, (None, None))[1] if m.style_top else None
+        if note:
+            plan = engine.board(world, m.name, [], [])["plan"]
+            assert engine._sentence(note) in plan, m.name
+    assert engine._and(["A"]) == "A" and engine._and(["A", "B", "C"]) == "A, B and C"
+    assert engine._hero_names(world, "winston d.va wrecking ball nobody") == ["Winston", "D.Va", "Wrecking Ball"]

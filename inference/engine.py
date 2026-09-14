@@ -12,6 +12,7 @@ current blue picks as they stand.
 
 import time
 
+from ui.facts import compute
 from ui.facts import engine as facts_engine
 from ui.facts.compute import TEAM_SIZE, is_sided, opposite
 from inference import catalog as catalog_module
@@ -86,7 +87,8 @@ class Result:
     def rendered(self):
         head = "%s for %s%s%s vs %s%s%s" % (
             {"infer": "optimal comp", "evaluate": "evaluation",
-             "current": "current comp"}[self.kind],
+             "current": "current comp", "countered": "if countered optimally",
+             "fill": "your picks, the rest filled"}[self.kind],
             "red" if self.seat == "red" else "blue",
             " on %s" % self.side if self.side else "",
             " on %s" % self.map_name if self.map_name else "",
@@ -285,18 +287,19 @@ def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
 
 
 def current(world, blue_result, map_name=None, red=(), blue=(), catalog=None, bans=(),
-            side="", pool_size=6):
-    """The current blue picks as they stand: a full six is evaluated against
+            side="", pool_size=6, seat="blue"):
+    """`seat`'s current picks (`blue`, from that seat's perspective) as they
+    stand against the other seat's (`red`): a full six is evaluated against
     the field; a partial team is scored with the bounds of the optimal
     search it came from, and says so."""
     if len(blue) == TEAM_SIZE:
-        return evaluate(world, map_name, red, blue, pool_size, catalog, bans, side)
+        return evaluate(world, map_name, red, blue, pool_size, catalog, bans, side, seat)
     started = time.time()
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
     result = Result("current", m.name if m else None, [h.name for h in red_h],
                     [h.name for h in blue_h], [h.name for h in blue_h], catalog,
-                    [h.name for h in bans_h], side)
+                    [h.name for h in bans_h], side, seat)
     result.partial = True
     if not blue_h:
         result.seconds = time.time() - started
@@ -314,35 +317,254 @@ def current(world, blue_result, map_name=None, red=(), blue=(), catalog=None, ba
 
 def board_dict(b):
     """The board() result as JSON-ready data."""
-    return {"map": b["map"], "side": b["side"], "bans": b["bans"],
+    return {"map": b["map"], "side": b["side"], "bans": b["bans"], "plan": b["plan"],
             "blue": b["blue"].to_dict(), "red": b["red"].to_dict(),
-            "current": b["current"].to_dict()}
+            "current": b["current"].to_dict(), "red_current": b["red_current"].to_dict(),
+            "countered": b["countered"].to_dict() if b["countered"] else None,
+            "fill": b["fill"].to_dict() if b["fill"] else None, "momentum": b["momentum"]}
 
 
 def board_rendered(b):
-    return "\n\n".join(r.rendered() for r in (b["blue"], b["red"], b["current"])
-                       if r.blue or r.kind != "current")
+    parts = ["game plan:\n" + b["plan"]]
+    parts += [r.rendered() for r in (b["blue"], b["red"], b["current"], b["red_current"])
+              if r.blue or r.kind != "current"]
+    if b["fill"]:
+        parts.append(b["fill"].rendered())
+    if b["countered"]:
+        parts.append(b["countered"].rendered())
+    return "\n\n".join(parts + ["momentum: " + b["momentum"]["verdict"]])
+
+
+def _momentum(cur, red_cur, countered):
+    """Who the picks favour, read off the two current comps on their own
+    optimals' scales: blue's share of its best counter to red's selection,
+    red's share of its best counter to blue's."""
+    n = _pct(cur.score, cur.best) if cur.blue else None
+    m = _pct(red_cur.score, red_cur.best) if red_cur.blue else None
+    k = _pct(countered.score, countered.best) if countered is not None and countered.blue else None
+    out = {"blue": n, "red": m, "countered": k,
+           "partial": bool((cur.blue and cur.partial) or (red_cur.blue and red_cur.partial))}
+    if n is None and m is None:
+        out["verdict"] = "no picks yet on either side"
+    elif n is None:
+        out["verdict"] = "red has revealed picks and blue has none: red %d / 100 of its best counter" % m
+    elif m is None:
+        out["verdict"] = "no red picks revealed yet: blue %d / 100 of its optimal" % n
+    else:
+        gap = n - m
+        if abs(gap) < 5:
+            out["verdict"] = "even - red %d, blue %d" % (m, n)
+        elif gap > 0:
+            out["verdict"] = "blue ahead by %d - red %d, blue %d" % (gap, m, n)
+        else:
+            out["verdict"] = "red ahead by %d - red %d, blue %d" % (-gap, m, n)
+        if out["partial"]:
+            out["verdict"] += " (partial picks)"
+    if k is not None:
+        out["verdict"] += "; if red plays its best counter, your picks hold %d / 100" % k
+    return out
+
+
+MODE_GROUND = {
+    "Control": "one point in three arenas - whoever holds the point's ground holds the round",
+    "Escort": "a payload path with a choke between phases - the fight moves with the cart",
+    "Hybrid": "a capture point and then the payload path - the first fight is at the point,"
+              " the rest along the route",
+    "Push": "one long lane with the robot - fights follow the barricade and regrouping costs distance",
+    "Flashpoint": "five points across a wide map - long rotations between fast fights, so"
+                  " arriving first and together matters",
+}
+STYLE_PLAY = {
+    "dive": "pick a target, commit together with mobile tanks and flankers, and get out with"
+            " supports who can follow",
+    "brawl": "hold ground as a group, sustain the front line with area healing, and win the"
+             " close-range trade",
+    "poke": "take the long sightlines, chip from range with healers who reach, and make them"
+            " walk into damage",
+}
+THEIR_LEAN = {
+    "dive": "expect them to commit on one of your backline - stay together, peel, and punish"
+            " the divers as they land",
+    "brawl": "they want to hold ground as a group - do not walk into their front line; split"
+             " them or out-range them",
+    "poke": "they want to chip from range - close the distance behind cover or take the"
+            " sightlines first",
+}
+SIDE_PLAY = {
+    "attack": "attacking: you have to break their hold, so take the high ground before you"
+              " commit and go in together",
+    "defense": "defending: the ground is yours - set up on the high ground and make them"
+               " walk into you",
+}
+
+
+def _and(items):
+    items = list(items)
+    return ", ".join(items[:-1]) + " and " + items[-1] if len(items) > 1 else "".join(items)
+
+
+def _sentence(text):
+    text = text.strip().rstrip(".")
+    return text[:1].upper() + text[1:] + "."
+
+
+def _hero_names(world, text):
+    """The hero names in an archetype note ("winston d.va wrecking ball"),
+    resolved through the roster - two-word names first."""
+    tokens, out, i = text.split(), [], 0
+    while i < len(tokens):
+        two = world.hero(" ".join(tokens[i:i + 2])) if i + 1 < len(tokens) else None
+        if two is not None:
+            out.append(two.name)
+            i += 2
+            continue
+        one = world.hero(tokens[i])
+        if one is not None:
+            out.append(one.name)
+        i += 1
+    return out
+
+
+def _plan(world, m, side, bans, red_h, blue_r):
+    """The game plan in prose - the ground, what to play on it, what red's
+    picks mean, the family of heroes to stay in when you stray from the
+    six, and what the six is built for - from the same facts and
+    strategies the solver scored, so that picks can be tailored toward
+    the optimal without matching it. Ends with what it rests on."""
+    lines = []
+    # the ground
+    if m is None:
+        read = ["No map yet, so this is the meta's best six: what is winning right now, built"
+                " to fit together."]
+    else:
+        ground = MODE_GROUND.get(m.mode, "the fight follows the objective")
+        read = ["%s is a %s map: %s." % (m.name, m.mode, ground)]
+        note = m.styles.get(m.style_top, (None, None))[1] if m.style_top else None
+        if note:
+            read.append(_sentence(note))
+        if side in SIDE_PLAY:
+            read.append("You are " + SIDE_PLAY[side] + ".")
+    # what to play
+    map_style = m.style_top if m is not None else ""
+    lean = blue_r.playstyle
+    if map_style and lean == map_style:
+        read.append("The map rewards %s and the six leans into it: %s." % (lean, STYLE_PLAY[lean]))
+    elif map_style and lean:
+        read.append("The map rewards %s, but against this red the six leans %s: %s."
+                    % (map_style, lean, STYLE_PLAY.get(lean, "play to its picks")))
+    elif lean:
+        read.append("The six leans %s: %s." % (lean, STYLE_PLAY.get(lean, "play to its picks")))
+    elif map_style:
+        read.append("The map rewards %s: %s." % (map_style, STYLE_PLAY[map_style]))
+    lines.append(" ".join(read))
+    # them
+    if red_h:
+        n = len(red_h)
+        theirs = compute.team_metrics(world, red_h, m, [])
+        red_lean = theirs["style_lean"] or theirs["style_top"] or ""
+        them = "Their %d pick%s%s (%s)" % (n, "" if n == 1 else "s", " so far" if n < TEAM_SIZE else "",
+                                            ", ".join(h.name for h in red_h))
+        them += (" lean %s: %s." % (red_lean, THEIR_LEAN[red_lean])) if red_lean in THEIR_LEAN \
+            else " show no lean yet."
+        answered = {}
+        for p in blue_r.picks:
+            for part in p["why"].split("; "):
+                if part.startswith("answers "):
+                    for name in part[len("answers "):].split(", "):
+                        answered.setdefault(name, []).append(p["hero"])
+        names = [h.name for h in red_h]
+        pairs = sorted(((k, v) for k, v in answered.items() if k in names), key=lambda kv: -len(kv[1]))
+        if pairs:
+            them += " " + _sentence("; ".join("%s answer%s %s" % (_and(v), "" if len(v) > 1 else "s", k)
+                                              for k, v in pairs[:4]))
+        missing = [k for k in names if k not in answered]
+        if missing:
+            them += " Nobody in the six answers %s - respect %s." % (
+                _and(missing), "them" if len(missing) > 1 else "that pick")
+        lines.append(them)
+    # the family to stay in
+    family = world.archetypes.get(lean) if lean else None
+    if family:
+        parts = []
+        for role, plural in (("tank", "tanks"), ("damage", "damage"), ("support", "supports")):
+            slots, note = family.get(role, (None, None))
+            if not note:
+                continue
+            desc, _, roster = note.partition(":")
+            names = _hero_names(world, roster) if roster else []
+            parts.append("%s: %s%s." % (plural.capitalize(), desc.strip(),
+                                          " (%s)" % ", ".join(names) if names else ""))
+        if parts:
+            lines.append("If you stray from the six, stay in its family. " + " ".join(parts))
+    # what it is built for
+    names = {h.id: h.name for h in blue_r.catalog}
+    top = sorted((c for c in blue_r.contributions if c.get("applies") and c.get("weighted", 0) > 0.05),
+                 key=lambda c: -c["weighted"])[:4]
+    if top:
+        lines.append("Above all: " + "; ".join(names.get(c["id"], c["id"]).lower() for c in top) + ".")
+    # what it rests on
+    basis = ["the rates and counters"]
+    if m is not None:
+        basis.append("the map")
+    if side:
+        basis.append("the side")
+    if bans:
+        basis.append("%d ban%s" % (len(bans), "" if len(bans) == 1 else "s"))
+    if red_h:
+        basis.append("red's %d revealed pick%s" % (len(red_h), "" if len(red_h) == 1 else "s"))
+    lines.append("Based on: %s." % ", ".join(basis))
+    return "\n".join(lines)
 
 
 def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
           catalog=None, top=5):
-    """Both seats and the current comp in one pass:
+    """The whole board in one pass, at whatever stage the draft is - no map
+    (the meta's best six), a map, a map and a side, bans, red's picks as
+    they reveal:
 
-        blue     the absolute optimal six for this map, side, bans and red's
-                 picks - blue's own picks do not constrain it, so it is the
-                 same answer whether you have locked none or six
-        red      the optimal six around red's revealed picks, on the other side
-        current  blue's picks as they stand (full: ranked; partial: scored),
-                 on the optimal's scale: its `normalized` is the share of
-                 blue's optimal your picks reach
+        blue         blue's optimal six: the best counter to red's selection
+                     as revealed, on this map, side and bans - blue's own
+                     picks never constrain it
+        red          red's optimal six: their best counter to blue's
+                     selection, on the other side - the scale red's current
+                     comp is measured on
+        current      blue's picks as they stand, scored against red's
+                     selection on blue's optimal's scale
+        red_current  red's picks as they stand, scored against blue's
+                     selection on red's optimal's scale
+        countered    blue's picks against red's optimal six - how you hold
+                     if they answer you perfectly (None without blue picks)
+        fill         blue's locked picks with the empty slots filled by the
+                     solver - the best six that keeps what you hold, on
+                     blue's optimal's scale (None unless one to five are locked)
+        momentum     the verdict from the two current comps
+        plan         the game plan in prose, from the same facts
     """
     catalog = catalog or catalog_module.load()
-    m, _, _, _ = world.resolve(map_name, red, blue, bans)
+    m, red_h, _, _ = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
     blue_r = infer(world, map_name, red, [], top, pool_size, catalog, bans, side, "blue")
-    red_r = infer(world, map_name, blue, red, top, pool_size, catalog, bans,
-                  opposite(side), "red")
+    red_r = infer(world, map_name, blue, [], top, pool_size, catalog, bans, opposite(side), "red")
     cur = current(world, blue_r, map_name, red, blue, catalog, bans, side, pool_size)
     _finish(cur, blue_r.score)                     # 100 is blue's optimal, whatever you hold
+    red_cur = current(world, red_r, map_name, blue, red, catalog, bans, opposite(side),
+                      pool_size, "red")
+    _finish(red_cur, red_r.score)
+    countered = None
+    if blue and red_r.blue:
+        hypothetical = min(pool_size, 4)           # a what-if: a smaller field is enough
+        against = infer(world, map_name, red_r.blue, [], top, hypothetical, catalog, bans,
+                        side, "blue")
+        countered = current(world, against, map_name, red_r.blue, blue, catalog, bans, side,
+                            hypothetical)
+        countered.kind = "countered"
+        _finish(countered, against.score)
+    fill = None
+    if 0 < len(blue) < TEAM_SIZE:
+        fill = infer(world, map_name, red, blue, top, pool_size, catalog, bans, side, "blue")
+        fill.kind = "fill"
+        _finish(fill, blue_r.score)                # how close the best completion comes
     return {"map": m.name if m else None, "side": side, "bans": list(bans),
-            "blue": blue_r, "red": red_r, "current": cur}
+            "blue": blue_r, "red": red_r, "current": cur, "red_current": red_cur, "fill": fill,
+            "countered": countered, "momentum": _momentum(cur, red_cur, countered),
+            "plan": _plan(world, m, side, list(bans), red_h, blue_r)}

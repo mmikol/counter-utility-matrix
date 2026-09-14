@@ -124,6 +124,7 @@ function paint() {
     }
     el(team + 'count').textContent = st[team].length + '/' + TEAM;
   });
+  paintSuggestions();
   el('mapsel').value = st.map;
   var m = currentMap();
   var sided = !!(m && m.sided);
@@ -179,7 +180,6 @@ function refresh() {
       el('status').textContent = d.count + ' facts + ' + (d.playbook_count || 0) + ' playbook notes · ' + new Date().toLocaleTimeString();
     }).catch(function () { flash('the database is not answering'); });
     el('inf-blue').innerHTML = "<p class='legend'>searching both seats…</p>"; el('inf-red').innerHTML = '';
-    el('cur').innerHTML = "<p class='legend'>scoring the current comp…</p>";
     fetch('/api/infer?' + q).then(function (r) { return r.json(); }).then(function (d) {
       if (mine !== seq) return;
       INF = d; renderInf();
@@ -236,17 +236,34 @@ function altScore(a) {
 /* the comps panel: blue's optimal six and red's side by side, the current comp below */
 function renderInf() {
   var d = INF;
-  if (!d || d.error) { el('inf-blue').innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; el('inf-red').innerHTML = ''; el('cur').innerHTML = ''; return; }
-  renderResult(d.blue, el('inf-blue'), 'blue - optimal six' + (d.side ? ' on ' + d.side : ''), true);
-  renderResult(d.red, el('inf-red'), 'red - their optimal six' + (d.side ? ' on ' + (d.side === 'attack' ? 'defense' : 'attack') : ''), false);
+  if (!d || d.error) { el('inf-blue').innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; el('inf-red').innerHTML = ''; el('momentum').innerHTML = ''; el('plan').innerHTML = ''; el('bluescore').textContent = ''; return; }
+  var text = (d.plan || '').split('\n'), basis = text.length && text[text.length - 1].indexOf('Based on:') === 0 ? text.pop() : '';
+  el('plan').innerHTML = "<span class='lbl'>game plan</span><div class='text'>" + text.map(esc).join('<br>') + '</div>' + (basis ? "<div class='basis'>" + esc(basis) + '</div>' : '');
+  var mo = d.momentum || {};
+  el('momentum').innerHTML = "<span class='lbl'>momentum</span> <b>" + esc(mo.verdict || '') + '</b>' +
+    (typeof mo.blue === 'number' && typeof mo.red === 'number' ? "<span class='gauge'><span class='r' style='width:" + mo.red + "%'></span><span class='b' style='width:" + mo.blue + "%'></span></span>" : '');
+  var rc = d.red_current;
+  if (!rc || !rc.blue || !rc.blue.length) el('inf-red').innerHTML = "<div class='inf-head'><h3>red - their comp as revealed</h3></div>" +
+    "<p class='legend'>click red picks as they reveal; their comp is scored against yours, on the scale of their best counter to you.</p>";
+  else renderResult(rc, el('inf-red'), 'red - their comp as revealed' + (rc.kind === 'evaluate' ? ', ranked' : ' (' + rc.blue.length + ' of ' + TEAM + ')'), false);
+  renderResult(d.blue, el('inf-blue'), 'blue - optimal six: the counter to their selection' + (d.side ? ', on ' + d.side : ''), true);
   var c = d.current;
-  if (!c.blue || !c.blue.length) el('cur').innerHTML = "<div class='inf-head'><h3>current comp - your picks</h3></div>" +
-    "<p class='legend'>lock a blue pick to score the current comp; six picks are ranked against the whole field.</p>";
-  else {
-    renderResult(c, el('cur'), 'current comp - your picks against blue\'s optimal' + (c.kind === 'evaluate' ? ', ranked' : ' (' + c.blue.length + ' of ' + TEAM + ')'), false);
-    var gap = (typeof d.blue.score === 'number' && typeof c.score === 'number') ? (d.blue.score - c.score) : null;
-    el('cur').insertAdjacentHTML('afterbegin', "<p class='legend compare'>blue\'s optimal scores " + (+d.blue.score).toFixed(2) + " \u00b7 your picks " + (+c.score).toFixed(2) +
-      (gap !== null ? " \u00b7 " + (gap <= 0.005 ? 'you are on the optimal' : (gap.toFixed(2) + ' behind - ' + (typeof c.normalized === 'number' ? c.normalized : Math.round(100 * c.score / d.blue.score)) + ' / 100')) : '') + '</p>');
+  el('bluescore').textContent = (c && c.blue && c.blue.length && typeof c.normalized === 'number') ? c.normalized + ' / 100' : '';
+  paintSuggestions();
+}
+
+/* the empty blue slots carry the solver's suggestions: the optimal six before
+   any pick, then the best six that keeps the locked ones - a click locks one */
+function paintSuggestions() {
+  var slots = el('blueslots').children, d = INF;
+  var src = !d || d.error ? null : (st.blue.length ? d.fill : d.blue);
+  var open = src && src.picks ? src.picks.filter(function (p) { return !p.locked && st.blue.indexOf(p.hero) < 0; }) : [];
+  for (var i = st.blue.length, k = 0; i < TEAM; i++) {
+    var s = slots[i], p = open[k++];
+    if (!p) continue;
+    var h = hero(p.hero) || { name: p.hero, portrait: p.portrait };
+    s.className = 'slot suggested'; s.setAttribute('data-h', p.hero); s.title = p.why;
+    s.innerHTML = portrait(h) + "<span class='idx'>" + (i + 1) + "</span><span class='sug'>suggested</span><span class='nm'>" + esc(p.hero) + '</span>';
   }
 }
 
