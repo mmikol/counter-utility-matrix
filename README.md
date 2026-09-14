@@ -60,6 +60,16 @@ Without Docker:
 Open the repo in a Claude Code session and the skills are there: `/up`,
 `/comp`, `/tune`, `/strategy`, `/refresh`, `/maintain`.
 
+## License
+
+Copyright (c) 2026 Miliano Mikol. Licensed under the
+[PolyForm Strict License 1.0.0](LICENSE): you may use it for noncommercial
+purposes, and that is all - no redistribution, no changes or new works
+based on it, no commercial use of any kind. Any commercial use, and any
+use outside those terms, needs a separate written license from the author.
+The data the app pulls - Blizzard's hero pages, the wiki, the counterpick
+lists - and the hero portraits remain their owners'.
+
 ## Documentation
 
 - [docs/architecture.md](docs/architecture.md) - how the three layers fit: the folders, the root files, the diagrams, the skills, the scope

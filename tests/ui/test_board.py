@@ -138,7 +138,9 @@ def test_the_page_is_a_shell_over_static_files():
     assert "their comp as revealed" in script and "red_current" in script and "d.momentum" in script
     assert "game plan" in script and "d.plan" in script
     assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
-    assert "el('swapbtn').disabled = !sided" in script        # swap sides is off on maps without sides
+    assert "swapbtn" not in script and "swapbtn" not in board.view_board()   # swap sides is gone
+    header = board.view_board().split("</header>")[0]
+    assert header.rstrip().endswith("GitHub</a>") and board.REPO_URL in header   # the repo link, last in the header
     assert "near('[data-clear]')" in script                    # a team's clear button empties that team only
     assert "redscore" in script and "el('redslots')" not in script[script.index("function paintSuggestions"):script.index("function renderResult")]
     assert "renderFill" not in script and "el('cur')" not in script

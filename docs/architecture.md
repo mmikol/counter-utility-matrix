@@ -119,6 +119,7 @@ a stated problem, a lobby's habits, a patch the rates predate.
 | `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pyflakes, and pgserver (the embedded PostgreSQL a local build uses) |
 | `pytest.ini` | the `invariant` marker for tests that need a built database |
 | `SECURITY.md` | how to report a vulnerability; the measures themselves are in [security.md](security.md) |
+| `LICENSE` | PolyForm Strict 1.0.0: noncommercial use only, no redistribution, no changes or new works; anything else needs a separate license from the author | |
 | `.gitignore` `.dockerignore` | the caches, the cluster, the mirror, the venv, `.env` |
 
 ## Deployment

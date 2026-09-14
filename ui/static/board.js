@@ -132,8 +132,6 @@ function paint() {
   el('mode').textContent = m ? m.mode + (m.style ? ' · rewards ' + m.style : '') +
     (sided ? (st.side ? ' · blue ' + (st.side === 'attack' ? 'attacks' : 'defends') : ' · pick a side') : ' · no sides') : 'map unknown';
   el('sideseg').className = 'sideseg' + (sided ? ' show' : '');
-  el('swapbtn').disabled = !sided;                     /* nothing to swap sides of on a map without them */
-  el('swapbtn').title = sided ? 'swap red and blue, and the side' : (m ? 'this map has no sides' : 'pick a sided map first');
   var sb = el('sideseg').querySelectorAll('button');
   for (var s = 0; s < sb.length; s++) sb[s].className = sb[s].getAttribute('data-side') === st.side ? 'on' : '';
 }
@@ -336,7 +334,6 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   el('mapsel').onchange = function () { st.map = this.value; save(); paint(); refresh(); };
   el('filter').oninput = renderFacts;
   el('clearbtn').onclick = function () { st = { map: '', red: [], blue: [], bans: [], side: '' }; save(); paint(); refresh(); };
-  el('swapbtn').onclick = function () { var r = st.red; st.red = st.blue; st.blue = r; st.side = st.side === 'attack' ? 'defense' : st.side === 'defense' ? 'attack' : ''; save(); paint(); refresh(); };
   var chips = el('chips'); chips.innerHTML = SCOPES.map(function (s) { return "<button class='chip on' data-scope='" + s + "'>" + s + '</button>'; }).join('');
   chips.onclick = function (e) { var c = e.target.closest('.chip'); if (!c) return; var s = c.getAttribute('data-scope');
     scopeOn[s] = !scopeOn[s]; c.classList.toggle('on', scopeOn[s]); renderFacts(); };

@@ -117,7 +117,9 @@ notice. *facts*
 filters by text and by scope (meta, bans, map, hero, team, matchup,
 playbook). *playbook* renders the catalog with each constraint's form.
 The header carries a link to
-*the math*, a page stating the equation and how the layers fit. A
+*the math*, a page stating the equation and how the layers fit, and, at
+its far right, a link to the repository on GitHub (`COUNTER_MATRIX_REPO_URL`
+overrides the address when the repo moves). A
 footer at the very bottom carries the status - the facts on the board,
 the playbook notes, the time of the last read - and the rates' capture
 date and patch; the header keeps only the short-lived flashes (a banned
