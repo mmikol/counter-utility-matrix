@@ -303,7 +303,19 @@ def _page(title, body):
 
 MATH = """
 <article class='math'>
-<h2>The equation</h2>
+<nav class='toc'>
+<a href='#equation'>the equation</a>
+<a href='#function'>the function</a>
+<a class='sub' href='#what-100-means'>what 100 means</a>
+<a class='sub' href='#fight-odds'>fight odds</a>
+<a class='sub' href='#argmax'>the argmax</a>
+<a href='#board'>the board</a>
+<a class='sub' href='#likely-comp'>red's likely starting comp</a>
+<a class='sub' href='#counter'>blue's optimal counter</a>
+<a class='sub' href='#weights'>the weights</a>
+<a href='#pieces'>how the pieces fit</a>
+</nav>
+<h2 id='equation'>The equation</h2>
 <pre class='eq'>DATA           = HEROES &cup; MAPS &cup; META              the tables, as set
 for each domain D in { HEROES, MAPS, META }:
   INDEPENDENT(D) = &#8899; facts(s)      over each selection s in D    s alone: its own row
@@ -349,7 +361,7 @@ are inferred from that and stored in the same file.</p>
 <p><b>COMP</b> is the argmax: of every legal six under the constraints, the one the function
 below scores highest on the facts of this board. Nothing in this is sampled or guessed: the same
 board gives the same six every time, in a second or two.</p>
-<h2>The function: STRATEGIES( FACTS )</h2>
+<h2 id='function'>The function: STRATEGIES( FACTS )</h2>
 <p>A scoring function. It takes one candidate six for blue on one board and returns one number;
 ARGMAX searches the candidate sixes for the highest. What it reads is not the numbered sentences
 but the same dependent variables in structured form, the <b>namespace</b>: <code>team</code> (the
@@ -376,28 +388,55 @@ score(x) = &Sigma; heuristics h     w_h &middot; norm_h( metric_h(x) )
 
 norm_h(v) = clamp( (v &minus; min_ref) / (max_ref &minus; min_ref), 0, 1 )
             and 1 &minus; that when h minimises</pre>
-<p><b>What 100 means.</b> The raw score is not the number on the tile. The best six the solver
-found is 100, and every other comp - yours as you pick, theirs as they reveal - is its raw score
-as a share of that best. 100 means as good as the best six under this playbook on this board,
-not a win probability.</p>
-<p><b>Fight odds.</b> Blue's comp scores as a share of blue's optimal, red's as a share of
-red's - each against the best six its own seat could field here. The strip pits the two
+<p id='what-100-means'><b>What 100 means.</b> The raw sum is never shown. The best six a seat
+could field on this board is its optimal, 100 by definition, and it shows no score of its own;
+the only scores on the board are the picks': the badge above each picker is that seat's comp as
+a share of its own optimal - blue's picks against blue's optimal, red's against red's. 100 means
+as good as the best six under this playbook on this board, not a win probability. A seat that
+cannot be a share of anything reads <i>unscored</i>, one word, the reason on hover.</p>
+<p id='fight-odds'><b>Fight odds.</b> Blue's comp scores as a share of blue's optimal, red's as
+a share of red's - each against the best six its own seat could field here. The strip pits the two
 shares against each other: blue's odds are its share over the two shares' sum, red's the
 rest, so the pair splits 100 and the higher bar holds the fight. With one seat unscored the
 bars show the shares alone. It is a comparison of two shares under the playbook, not a fitted
 probability of winning.</p>
-<p><b>The argmax.</b> Each role's pool is first cut to the top six by a fixed prior - map win
-rate, plus answers to red's picks, minus exposure to them, plus synergies with the locked picks
-and style fit. Every shape the limits allow is then filled from the pools around the locked
+<p id='argmax'><b>The argmax.</b> Each role's pool is first cut to the top six by a fixed prior -
+map win rate, plus answers to red's picks, minus exposure to them, plus synergies with the locked
+picks and style fit. Every shape the limits allow is then filled from the pools around the locked
 picks, each six is scored, and a local search swaps slots for same-role heroes while it improves.
 Ties break by the six's mean map win rate, then by name, so the same board gives the same six
 every time.</p>
-<p><b>When the playbook holds only limits</b> - no heuristic, no scored constraint - the sum is
-empty: every legal six scores zero, the board says <i>unscored</i> where a share of the best
-would go, and the optimal is the
-tie-break alone: the highest win rates on this map that fit the shape, not a judgement about
-them together. A single heuristic is what turns that ordering into an inference.</p>
-<h2>How the pieces fit</h2>
+<p><b>When nothing scores</b> - the playbook holds no heuristic or scored constraint, or the
+ones it holds wait on a condition the board does not meet (hitscan cover waits for a flier on
+the other side) - the sum is empty: every legal six scores zero, the board says <i>unscored</i>
+where a share of the best would go, and the optimal is the tie-break alone: the highest win
+rates on this map that fit the shape, not a judgement about them together. A term that
+applies is what turns that ordering into an inference.</p>
+<h2 id='board'>The board</h2>
+<p id='likely-comp'><b>Red's most likely starting comp</b> is what the data says they field
+before they reveal a pick - no strategy read. It is a two-two-two, filled slot by slot with the
+hero the map's pick rates and the authored synergies make likeliest, past the bans:</p>
+<pre class='eq'>likelihood(h) = pick(h, map) + 2 &times; partners(h, the six so far)
+
+pick(h, map)   the hero's pick rate on this map (its overall pick rate with no map set)
+partners(h, S) how many heroes already on the six the synergy table pairs h with
+the six        two tanks, two damage, two supports - the likeliest hero for an open slot,
+               again and again, until the shape is full</pre>
+<p>Each card says what it rests on ("picked in 9.8% of matches on King's Row; pairs with D.Va").
+The six is static for the board: red revealing a pick does not change it, it changes what blue
+counters.</p>
+<p id='counter'><b>Blue's optimal counter to current picks</b> is solved against red's revealed
+picks, or against their likely starting comp until they reveal one, on this map, side and bans,
+under the playbook - and never against blue's own picks, so it never collapses into what you
+hold. The suggestion tiles in the empty blue slots are a second solve, the fill: the best six
+that keeps what you have locked. Red's optimal, their best counter to your picks, is solved as
+the scale red's picks score on and is not shown.</p>
+<p id='weights'><b>The weights.</b> A heuristic's weight is the slider under its card. A setting
+is kept in your browser and rides with every board request, so every solve in that session - any
+map, any picks - uses it until you reset it; the file's weight is the inferred default. Store
+writes the setting into the heuristic's file through the tune tool, logged with its reason, and
+from then on it is the default for everyone. Only heuristics have a weight to set.</p>
+<h2 id='pieces'>How the pieces fit</h2>
 <pre class='eq'>sources → db/data (fetch) → db/psql (the database) → ui/facts (FACTS of a board)
                                                                     &darr;
                    inference/strategies (STRATEGIES) → inference/solver (ARGMAX) → the board</pre>

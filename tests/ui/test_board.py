@@ -172,7 +172,16 @@ def test_the_page_is_a_shell_over_static_files():
     assert "bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current)" in script
     assert ">fight odds</span>" in script and "class='mbars'" in script   # stacked, one track width
     assert "mo.odds ? mo.odds[side] : null" in script      # the bars are the odds when both score
-    assert "<p><b>Fight odds.</b>" in board.view_math()
+    page = board.view_math()
+    assert "<p id='fight-odds'><b>Fight odds.</b>" in page
+    # a table of contents: every link resolves to an id on the page
+    import re
+    toc = page[page.index("<nav class='toc'>"):page.index("</nav>")]
+    targets = re.findall(r"href='#([^']+)'", toc)
+    assert targets and all(("id='%s'" % t) in page for t in targets), targets
+    for name in ("likely-comp", "counter", "weights", "what-100-means", "argmax"):
+        assert name in targets
+    assert "likelihood(h) = pick(h, map) + 2 &times; partners(h, the six so far)" in page
     assert "mo.verdict" not in script                          # no verdict sentence on the board
     assert "click red picks as they reveal" not in script       # the red seat carries no hint
     assert "game plan" in script and "d.plan" in script
@@ -247,7 +256,7 @@ def test_the_math_page_states_the_equation_and_the_layers():
     assert "The function: STRATEGIES( FACTS )" in page
     assert "score(x) = &Sigma; heuristics h" in page and "norm_h(v) = clamp(" in page
     assert "What 100 means" in page and "not a win probability" in page
-    assert "When the playbook holds only limits" in page
+    assert "When nothing scores" in page
     assert "The data layer" in page and "The inference layer" in page and "The board" in page
     assert "never calls a language model" in page
 

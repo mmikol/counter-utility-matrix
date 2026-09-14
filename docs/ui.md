@@ -68,7 +68,7 @@ the script has no constant to keep in step with the Python.
 | `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
 | `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, the momentum verdict and the game plan - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
 | `/api/strategies` | the strategies catalog: every constraint and heuristic with its kind, form, frontmatter and body |
-| `/math` | the equation and how the layers fit, in prose - linked from the board's header |
+| `/math` | the equation, the scoring function (what 100 means, fight odds, the argmax), the board (red's likely starting comp and its formula, blue's optimal counter, the weights) and how the layers fit - a table of contents at the top; linked from the board's header |
 
 Every request opens its own connection and loads a fresh World, so a
 `pull_rates` or a tune shows on the next click without a restart.

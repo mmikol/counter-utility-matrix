@@ -25,7 +25,13 @@ header.top .gh { display:inline-flex; align-items:center; gap:6px; color:var(--m
   text-transform:uppercase; text-decoration:none; border:1px solid var(--line); border-radius:999px; padding:5px 11px; }
 header.top .gh:hover { color:var(--text); border-color:var(--muted); }
 .math { max-width:860px; line-height:1.6; font-size:14px; }
-.math h2 { font-family:"Bebas Neue",Impact,sans-serif; letter-spacing:.06em; font-size:26px; margin:26px 0 8px; color:var(--gold); }
+.math h2 { font-family:"Bebas Neue",Impact,sans-serif; letter-spacing:.06em; font-size:26px; margin:26px 0 8px; color:var(--gold); scroll-margin-top:12px; }
+.math p[id] { scroll-margin-top:12px; }
+.math .toc { display:flex; flex-wrap:wrap; gap:6px 8px; margin:4px 0 10px; }
+.math .toc a { font-family:"Bebas Neue",Impact,sans-serif; font-size:15px; letter-spacing:.08em; text-decoration:none;
+  color:var(--text); border:1px solid var(--line); border-radius:999px; padding:4px 12px; }
+.math .toc a.sub { font-size:13px; color:var(--muted); padding:3px 10px; }
+.math .toc a:hover { border-color:var(--gold); color:var(--gold); }
 .math .eq { background:#0b0e14; border:1px solid var(--line); border-radius:8px; padding:12px 14px; overflow-x:auto; font-size:13px; }
 .math code { background:#0b0e14; padding:1px 5px; border-radius:4px; }
 .mapsel { margin-left:auto; display:flex; align-items:center; gap:10px; }
