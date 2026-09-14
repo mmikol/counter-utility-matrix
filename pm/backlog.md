@@ -7,19 +7,17 @@ ordered by payoff over blast radius; the first is the one to pick up.
 
 ## In progress
 
-- **The fact engine's dependent variables** - `fact-engine` branch. The
-  equation now says what the engine does: for each domain (heroes, maps,
-  meta), FACTS(D) = INDEPENDENT(D) ∪ DEPENDENT(D) - a selection's own row,
-  then its joins (hero ⋈ map, hero ⋈ enemy, hero ⋈ ally, the team, the
-  matchup, the bans), a join belonging to every domain it touches. The
-  math page also states the function STRATEGIES( FACTS ) - the namespace
-  it reads, its three kinds of term, the formula, what 100 means, and
-  the tie-break that decides when the playbook holds only limits. Next
-  is the list under "Fact engine" below, best first. Done when the
-  pairwise numbers are facts and the branch is merged.
+Nothing - main holds everything and every feature branch is deleted; the
+next feature opens its own branch.
 
 ## Next
 
+- **The fact engine's dependent variables.** The equation is stated per
+  domain (a selection's own row, then its joins) and the math page says
+  so; the joins the data can still yield are listed under "Fact engine"
+  below, best first - the pairwise numbers, blue pick against red pick,
+  are the one to start with.
+- **A heuristic's weight stored from the board** - `f131f80`, merged.
 - **Weights that learn on their own.** The user wants them to, with the
   sliders as the manual override. Learning needs a signal, and the one
   it had - recorded comps with a win or loss - was removed on the user's
@@ -104,7 +102,7 @@ counters table is a list).
 
 ## Done
 
-- **A heuristic's weight is a slider under its card** - `weights` branch.
+- **A heuristic's weight is a slider under its card** - `2156473`.
   Only heuristics have one; 1 to 10 to the hundredth with a number box for
   the exact figure; the file's weight is the inferred default and a reset;
   a setting rides with the board request (`weight=id:value`, `weights` on
