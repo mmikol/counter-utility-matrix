@@ -66,3 +66,5 @@ Open the repo in a Claude Code session and the skills are there: `/up`,
 - [docs/db.md](docs/db.md) - the DATA LAYER: the sources, the MCP tools, the schema with its ER diagrams and data dictionary, the refresh, the mirror
 - [docs/ui.md](docs/ui.md) - the UI LAYER: the board, its endpoints, the facts behind it
 - [docs/inference.md](docs/inference.md) - the INFERENCE LAYER: the strategy files, the solver, the tuning loop, the deriver, the catalog
+- [docs/skills.md](docs/skills.md) - the six skills a Claude Code session runs here: what each takes, does, and refuses
+- [docs/mcp.md](docs/mcp.md) - the two MCP servers and every tool they expose

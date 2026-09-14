@@ -160,6 +160,8 @@ inference/
 
 ## The skills
 
+Documented in [skills.md](skills.md); the tools in [mcp.md](mcp.md).
+
 | skill | does |
 | --- | --- |
 | `/strategy` | asks for a name, a kind and prose, infers the frontmatter from the prose and the vocabulary, stores the file through `add_strategy` (or completes a draft through `infer_strategy`), and shows the effect on a board |

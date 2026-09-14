@@ -22,7 +22,7 @@ never during one.
 | `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet | [ui.md](ui.md) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints and heuristics in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
 | `tests/` | one folder per layer: `tests/db`, `tests/ui`, `tests/inference`; `pytest -q` runs them, skipping what needs a built database when there is none | |
-| `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/outcome`, `/tune`, `/strategy`, `/refresh` (below) | |
+| `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/outcome`, `/tune`, `/strategy`, `/refresh` | [skills.md](skills.md) |
 | `.github/workflows/` | `ci.yml`: lint, and the tests that need no built database | |
 | `.cache-blizzard/` `.cache-wiki/` `.cache-counterpick/` | the page caches (gitignored): every build after the first costs almost no requests | |
 
@@ -115,7 +115,7 @@ a stated problem, a lobby's habits, a patch the rates predate.
 | `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock). Every published port binds to 127.0.0.1. Bind mounts keep the caches, `db/raw`, `db/data/authored` and `inference/strategies` on the host, so tuning or authoring needs no rebuild |
 | `Dockerfile` | the one image; `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty or its schema is behind the migrations |
 | `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'` |
-| `.mcp.json` | registers the two MCP servers a Claude Code session sees: `overwatch-db` (stdio, the local cluster) and `overwatch-db-docker` (HTTP, the stack's database) |
+| `.mcp.json` | registers the two MCP servers a Claude Code session sees: `overwatch-db` (stdio, the local cluster) and `overwatch-db-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
 | `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pyflakes, and pgserver (the embedded PostgreSQL a local build uses) |
 | `pytest.ini` | the `invariant` marker for tests that need a built database |
 | `.gitignore` `.dockerignore` | the caches, the cluster, the mirror, the venv |
@@ -161,8 +161,9 @@ same facts, same strategies.
 ## The skills
 
 Open the repo in a [Claude Code](https://claude.com/claude-code) session
-and the `.claude/skills/` are yours; each is a playbook over the MCP tools
-in [db.md](db.md#mcp---the-door).
+and the `.claude/skills/` are yours; each is a playbook over the MCP tools.
+One line each here; [skills.md](skills.md) documents them, [mcp.md](mcp.md)
+the servers and every tool.
 
 | skill | does |
 | --- | --- |

@@ -76,6 +76,9 @@ them.
 
 ### `mcp/` - the door
 
+The servers, the transport and the full tool reference are in
+[mcp.md](mcp.md).
+
 | file | purpose |
 | --- | --- |
 | `server.py` | A dependency-free MCP server: JSON-RPC over stdio, and the same surface over Streamable HTTP (`POST /mcp`, `GET /health`). `initialize`, `tools/list`, `tools/call`, `resources/*`. Dependency-free because the official SDK needs Python 3.10 and the project runs on 3.9. |
