@@ -154,7 +154,9 @@ def test_the_page_is_a_shell_over_static_files():
     assert "function leadReason" in script and "'answers '" in script   # the tile wears its reason
     # swap sides and new game are gone
     assert "swapbtn" not in script and "clearbtn" not in script
+    assert "el('clearall').onclick" in script                # clear all takes new game's place
     assert "swapbtn" not in board.view_board() and "clearbtn" not in board.view_board()
+    assert "id='clearall'" in board.view_board()
     header = board.view_board().split("</header>")[0]
     # the two pills, pinned top-right
     links = header[header.index("<span class='links'>"):]

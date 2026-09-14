@@ -106,8 +106,8 @@ optimal's scale - your picks as a share of blue's best counter to red's
 selection, red's as a share of their best counter to yours - and, when
 you have picks, how you hold if red answers you perfectly. Each box
 carries its own share as a badge by its name, and a *clear* button that
-empties that team's picks (the map, the side and the bans are undone
-where they were set). Red's box only holds and
+empties that team's picks; *clear all* in the header empties everything -
+the map, the side, the bans and both teams. Red's box only holds and
 scores what they reveal; the blue box also fills its empty slots with the
 solver's suggestions - the optimal six before any pick, then the best six
 that keeps what you have locked - each a click away from locking and each

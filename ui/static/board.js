@@ -356,5 +356,8 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
     scopeOn[s] = !scopeOn[s]; c.classList.toggle('on', scopeOn[s]); renderFacts(); };
   fetch('/api/strategies').then(function (r) { return r.json(); }).then(renderPlaybook);
   showTab((function () { try { return localStorage.getItem('owdb-tab'); } catch (e) { return null; } })());
+  el('clearall').onclick = function () {   /* back to nothing: map, side, bans, both teams */
+    st = { map: '', red: [], blue: [], bans: [], side: '' }; save(); paint(); refresh();
+  };
   refresh();
 });

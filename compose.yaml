@@ -57,6 +57,7 @@ x-app: &app
     - ./db/raw:/app/db/raw
     - ./db/data/authored:/app/db/data/authored
     - ./inference/strategies:/app/inference/strategies
+    - ./inference/experiments:/app/inference/experiments
     - ./docs:/app/docs
 
 networks:
@@ -129,6 +130,7 @@ services:
       - ./db/raw:/app/db/raw
       - ./db/data/authored:/app/db/data/authored
       - ./inference/strategies:/app/inference/strategies:ro
+      - ./inference/experiments:/app/inference/experiments:ro
       - ./docs:/app/docs:ro
     ports:
       - "127.0.0.1:8019:8019"
@@ -185,6 +187,7 @@ services:
       - ./db/raw:/app/db/raw
       - ./db/data/authored:/app/db/data/authored:ro
       - ./inference/strategies:/app/inference/strategies
+      - ./inference/experiments:/app/inference/experiments
       - ./docs:/app/docs:ro
     environment:
       <<: *env

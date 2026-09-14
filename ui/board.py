@@ -169,6 +169,8 @@ def view_board():
             " attacks or defends; red gets the other side'>"
             "<button data-side='attack'>attack</button><button data-side='defense'>defense</button>"
             "</span>"
+            "<button id='clearall' title='the map, the side, the bans and both teams'>"
+            "clear all</button>"
             "<span class='flash' id='flash'></span></div>"
             "<span class='links'><a class='mathlink' href='/math' title='the"
             " equation and how the pieces fit'>the math</a>"

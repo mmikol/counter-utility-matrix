@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 direction: maximize
 metric: team.hps_floor
-weight: 1
+weight: 10
 ---
 # Bring sustained healing
 
