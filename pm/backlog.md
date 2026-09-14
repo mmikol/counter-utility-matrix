@@ -47,6 +47,42 @@ ordered by payoff over blast radius; the first is the one to pick up.
   container. Either lower the cap to what the container can hold or size
   the container for it. Cost: an hour.
 
+## Fact engine: more dependent variables
+
+The facts today: 127 kinds on a full board - about 60 independent (one
+hero, one map, the meta, the bans), the rest intersections (hero x map,
+hero x enemy, hero x ally, the team, the matchup). What the data can still
+yield, best first:
+
+- **Pairwise numbers, blue pick against red pick.** One-shot: whose
+  biggest hit meets whose pool. Time to kill: pool over damage floor, each
+  way. Out-range: whose longest reach exceeds whose. All from numbers the
+  hero facts already carry; today they exist only summed per team. Cost:
+  a day; the matrix is 36 pairs at most.
+- **Tool against tool, per pair.** Anti-heal against a healer, a piercer
+  against a barrier holder, hitscan against a flyer, crowd control against
+  an engage tool, an invulnerability against a damage ultimate, a cleanse
+  against a debuff. The team-level "wars" exist; the per-pair version
+  names who answers whom and with what, from the kit keywords plus a small
+  authored table of which tool beats which. Cost: two days, half of it the
+  table.
+- **The map's expected opposition.** The most-picked heroes on this map
+  (the leaders fact ranks by win rate), and the picks red is likely to add
+  given what it has. Cost: half a day.
+- **History across captures.** Seven snapshots exist; only the last step
+  is a fact. A hero's win-rate series, who is rising and falling this
+  season, and the patch each change followed. Cost: a day.
+- **Gaps named, not counted.** Coverage says "answers 2/3 red picks";
+  name the unanswered pick, the pick nobody protects, the enemy nobody
+  out-ranges. Cost: an hour each.
+- **Side-specific team facts.** On attack, the engage tools and anti-heal
+  the team brings; on defense, its deployables and barriers. The side
+  constraints read these; a fact should state them. Cost: an hour.
+
+What the sources do not publish, so no fact can: per-map rates by rank,
+per-side rates, per-stage rates, and a strength for a counter (the
+counters table is a list).
+
 ## Done
 
 - **A deterministic solver** - `bf91ef8`. Style ties broke by set order,
