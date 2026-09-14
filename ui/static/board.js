@@ -260,6 +260,19 @@ function renderInf() {
   paintSuggestions();
 }
 
+/* the one reason worth the tile's width: what the pick answers on red, else who
+   it partners, else that it is a suggestion */
+function leadReason(why) {
+  var parts = (why || '').split('; ');
+  for (var i = 0; i < parts.length; i++) {
+    if (parts[i].indexOf('answers ') === 0) return parts[i].replace(/^answers /, 'answers ').replace(/, .*$/, ' +');
+  }
+  for (var j = 0; j < parts.length; j++) {
+    if (parts[j].indexOf('partner of ') === 0) return parts[j].replace(/^partner of /, 'with ').replace(/, .*$/, ' +');
+  }
+  return 'suggested';
+}
+
 /* the empty blue slots carry the solver's suggestions: the optimal six before
    any pick, then the best six that keeps the locked ones - a click locks one */
 function paintSuggestions() {
@@ -271,7 +284,7 @@ function paintSuggestions() {
     if (!p) continue;
     var h = hero(p.hero) || { name: p.hero, portrait: p.portrait };
     s.className = 'slot suggested'; s.setAttribute('data-h', p.hero); s.title = p.why;
-    s.innerHTML = portrait(h) + "<span class='idx'>" + (i + 1) + "</span><span class='sug'>suggested</span><span class='nm'>" + esc(p.hero) + '</span>';
+    s.innerHTML = portrait(h) + "<span class='idx'>" + (i + 1) + "</span><span class='sug'>" + esc(leadReason(p.why)) + "</span><span class='nm'>" + esc(p.hero) + '</span>';
   }
 }
 

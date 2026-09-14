@@ -412,3 +412,17 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     first_line = lambda b: engine.board_rendered(b).split("\n")[0]   # noqa: E731
     assert first_line(split) == first_line(straight)
     assert engine.parallel_available(catalog=[]) is False   # a caller's catalog stays in-process
+
+
+@pytest.mark.invariant
+def test_a_mirror_pick_cites_its_own_facts_not_the_enemy_copy(world):
+    """Tracer on both teams: our Tracer's reasons come from our side of the
+    board - never "answers Ana" (our Ana, whom red's Tracer answers) and
+    never "partner of Winston" (red's Winston)."""
+    from inference import engine
+    r = engine.evaluate(world, "King's Row", ["Winston", "Genji", "Tracer"],
+                        ["D.Va", "Reinhardt", "Tracer", "Brigitte", "Lúcio", "Ana"])
+    ours = next(p for p in r.picks if p["hero"] == "Tracer")
+    assert "answers Ana" not in ours["why"] and "Winston" not in ours["why"]
+    clues = ("answers Genji", "answers Tracer", "partner of D.Va")
+    assert any(clue in ours["why"] for clue in clues)

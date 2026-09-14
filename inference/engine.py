@@ -144,23 +144,29 @@ class Result:
 
 
 def _reasons(fs, hero_name, locked):
-    """The facts that justify one pick, from the board's own FactSet."""
+    """The facts that justify one pick, from the board's own FactSet - the
+    facts about OUR copy of the hero: a mirror pick has facts on both sides
+    (red's Tracer answers our Ana; ours partners our D.Va), and only the
+    facts the FactSet filed under the seat's own side (its "blue") count."""
     why, evidence = [], []
 
+    def own(key):
+        return [f for f in fs.find(key, hero_name) if f.team in (None, "blue")]
+
     def cite(key, template):
-        for f in fs.find(key, hero_name):
+        for f in own(key):
             why.append(template(f))
             evidence.append(f.id)
             return True
         return False
 
     cite("hero.vs_answers", lambda f: "answers %s" % ", ".join(f.value))
-    partners = fs.find("hero.with_ally", hero_name)
+    partners = own("hero.with_ally")
     if partners:
         why.append("partner of %s" % ", ".join(f.value for f in partners[:3]))
         evidence.extend(f.id for f in partners[:3])
     cite("hero.map_win", lambda f: "wins %.1f%% here" % f.value)
-    for f in fs.find("hero.map_delta", hero_name):
+    for f in own("hero.map_delta"):
         if f.value >= 2.5:
             why.append("map specialist (%+.1f)" % f.value)
             evidence.append(f.id)
