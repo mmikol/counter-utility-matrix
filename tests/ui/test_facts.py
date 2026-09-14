@@ -46,10 +46,10 @@ def test_facts_are_densely_numbered_and_keyed(world):
     assert {"map", "hero", "team", "matchup", "playbook"} <= {f.scope for f in fs.facts}
 
 
-def test_every_named_hero_gets_a_hundred_independent_facts(world):
+def test_every_named_hero_gets_a_deep_stack_of_independent_facts(world):
     fs = engine.generate(world, "King's Row", ["Tracer"], ["Ana"])
     for hero in ("Tracer", "Ana"):
-        assert sum(1 for f in fs.facts if f.subject == hero) >= 100, hero
+        assert sum(1 for f in fs.facts if f.subject == hero) >= 80, hero
     # unnamed heroes get no itemised dump - depth is opt-in by selection
     assert sum(1 for f in fs.facts if f.subject == "Zarya") == 0
 
@@ -162,3 +162,26 @@ def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_ap
     assert text.index("[S1]") > divider > text.index("[F%d]" % len(facts))
     catalog_note = next(f.text for f in side if f.key == "playbook.catalog")
     assert "STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS" in catalog_note
+
+
+def test_map_rates_are_the_intersection_with_the_board(world):
+    """With a map, a hero's rate facts are about that map alone; without
+    one, a single line of where the hero does best - never a line per map."""
+    with_map = engine.generate(world, "King's Row", ["Sombra"], ["Ana"])
+    assert not with_map.find("hero.rate_map") and not with_map.find("hero.rate_maps")
+    assert len(with_map.find("hero.map_win", "Sombra")) == 1
+    assert any("King's Row (this map)" in f.text for f in with_map.find("hero.map_win", "Sombra"))
+    no_map = engine.generate(world, None, ["Sombra"], ["Ana"])
+    best = no_map.find("hero.rate_maps", "Sombra")
+    assert len(best) == 1 and len(best[0].value) <= 3
+    assert best[0].text.startswith("Sombra's best maps: ")
+    assert len(no_map.find("hero.best_map", "Sombra")) <= 1 and not with_map.find("hero.best_map")
+    assert not no_map.find("hero.map_win")
+
+
+def test_the_provenance_is_one_line_per_source(world):
+    fs = engine.generate(world, "Ilios", [], ["Ana"])
+    lines = fs.find("meta.snapshot")
+    seen = [(f.value["source"], f.value["queue"]) for f in lines]
+    assert len(seen) == len(set(seen)), seen                  # no source and queue twice
+    assert any(f.value["source"] == "blizzard" for f in lines)   # the main rates' line is there

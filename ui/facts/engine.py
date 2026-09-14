@@ -166,12 +166,13 @@ def generate(world, map_name=None, red=(), blue=(), bans=(), side=""):
 
 
 def _meta_facts(fs, world):
-    for s in world.snapshots:
+    for s in world.snapshots:                 # one per source: its newest capture
         fs.add("meta", "snapshot", "meta.snapshot",
-               "%s rates captured %s under %s (%s), %s - %s, %s, %s"
+               "%s rates: captured %s, %s (%s), %s - %s, %s, %s"
                % (s["source"], s["captured"], s["patch"] or "an unknown patch",
                   s["released"] or "-", s["season"] or "unknown season",
-                  s["queue"], s["platform"], s["region"] or "region unstated"),
+                  s["queue"].replace("competitive_", "").replace("_", " "), s["platform"],
+                  s["region"] or "region unstated"),
                value=s, source="meta_snapshots")
     if world.newer_patches:
         name, released = world.newer_patches[0]
@@ -412,15 +413,20 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
         fs.add("hero", name, "hero.ban_pressure", "%s is banned in %.0f%% of lobbies -"
                " %s" % (name, h.ban, "a near-certain ban" if h.ban > 25 else "a likely ban"),
                value=h.ban, source="hero_meta", team=team)
-    for mid, (win, pick) in sorted(h.map_rates.items(), key=lambda kv: -kv[1][0]):
-        fs.add("hero", name, "hero.rate_map", "%s on %s: wins %.1f%%, picked %.1f%%"
-               % (name, world.maps[mid].name, win, pick or 0),
-               value={"map": world.maps[mid].name, "win": win}, source="map_meta",
-               team=team)
-    for position, mid in enumerate(h.best_maps, start=1):
-        fs.add("hero", name, "hero.best_map", "counterpick rates %s a top-%d pick on %s"
-               % (name, position, world.maps[mid].name), value=world.maps[mid].name,
-               source="map_strategy", team=team)
+    if m is None and h.map_rates:
+        # no map on the board: one line of where the hero does best, not a
+        # line per map - with a map, the intersection below is the fact
+        best = sorted(h.map_rates.items(), key=lambda kv: -kv[1][0])[:3]
+        fs.add("hero", name, "hero.rate_maps", "%s's best maps: %s" % (name, ", ".join(
+            "%s (%.1f%%)" % (world.maps[mid].name, win) for mid, (win, _) in best)),
+            value=[world.maps[mid].name for mid, _ in best], source="map_meta", team=team)
+    if m is None and h.best_maps:
+        # the same intersection rule as the rates: with a map on the board the
+        # "top pick on this map" fact below is the whole story
+        fs.add("hero", name, "hero.best_map", "counterpick rates %s a top pick on: %s" % (
+            name, ", ".join(world.maps[mid].name for mid in h.best_maps)),
+            value=[world.maps[mid].name for mid in h.best_maps], source="map_strategy",
+            team=team)
     answered_by = sorted(world.heroes[x].name for x in world.answered_by.get(h.id, ()))
     if answered_by:
         fs.add("hero", name, "hero.answered_by", "%s is countered by: %s"

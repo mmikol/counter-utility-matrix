@@ -460,7 +460,10 @@ def load(cx):
             from meta_snapshots ms join sources src using(source_id)
             left join patches p using(patch_id)
             left join seasons se using(season_id)
-            order by ms.captured_at desc limit 4""")]
+            where ms.snapshot_id in (
+                select distinct on (source_id, queue) snapshot_id from meta_snapshots
+                order by source_id, queue, captured_at desc)
+            order by ms.captured_at desc""")]
     w.newer_patches = [(n, str(r)) for n, r in _rows(cx, """
             select p.name, p.released from patches p
             where p.released > (select coalesce(max(pp.released), '1900-01-01')
