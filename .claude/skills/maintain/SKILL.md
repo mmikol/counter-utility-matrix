@@ -23,8 +23,15 @@ or the user points at, and leave a report.
 
    The bar is 75% of the code under test where the database exists (the
    local run and the image); CI, which builds none, reports only. The
-   third run is what CI sees. A failure is the first thing to fix or
-   report; never mark a failing test skipped to get green.
+   third run is what CI sees - but not exactly: GitHub runs from a fresh
+   clone with no `.env`, no caches and no cluster, so after every push
+   read the run itself (`gh run list --limit 3`, or without gh:
+   `curl -s https://api.github.com/repos/mmikol/counter-utility-matrix/actions/runs?per_page=3`)
+   and, when it disagrees with the local run, reproduce it in a fresh
+   clone with a fresh venv before touching anything. A failure is the
+   first thing to fix or report; never mark a failing test skipped to get
+   green, and never weaken an assertion to pass - a test that cannot fail
+   (`or True`, a comparison that always skips) is deleted, not kept.
 
 2. **The documentation is current.** `tests/test_docs.py` fails when the
    generated sections of `docs/` are behind the code; the fix is the
@@ -85,6 +92,19 @@ what catches it now. Every run that finds such a thing adds a line here,
 in the same shape, before it reports - a lesson that is not written down
 is a lesson the next run relearns.
 
+- **Green here, red on GitHub.** Four pushes failed CI while the local
+  CI-mode run passed: on a fresh clone, a served endpoint's
+  `default_dsn()` let pgserver initdb an empty cluster, the `dsn` fixture
+  then found a directory and handed out its URI, and two tests ran
+  against a database with no tables. Now: check 1 reads GitHub's run
+  after every push and reproduces a disagreement in a fresh clone; the
+  `dsn` fixture rides on `db`, which skips unless the database is built.
+- **A test that cannot fail tests nothing.** An `assert ... or True` and
+  a validation that skipped on every run (its source stopped publishing)
+  sat in the suite as if they counted. Now: a run greps the tests for
+  `or True`, `assert True` and `pytest.skip` inside test bodies, reads
+  each `-rs` skip reason, and deletes what can never fail rather than
+  keeping it for the count.
 - **A number where there was nothing to measure.** With an experiment
   playbook of one hard limit in force, every legal six tied at zero and
   the board showed 0 and 100 / 100 for every comp; the user read it as
