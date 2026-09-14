@@ -353,6 +353,7 @@ function weightRow(h) {
   return "<div class='wrow' data-id='" + esc(h.id) + "' data-inferred='" + h.weight + "'>" +
     "<span class='wlbl'>weight</span><input type='range' min='1' max='10' step='0.01' value='" + v + "' aria-label='weight of " + esc(h.name) + "'>" +
     "<input type='number' class='wval' min='1' max='10' step='0.01' value='" + v + "' aria-label='exact weight of " + esc(h.name) + "'>" +
+    "<span class='wbreak'></span>" +
     "<span class='winf'>inferred " + h.weight + "</span>" +
     "<button class='wreset' " + (set ? '' : 'disabled') + ">reset</button>" +
     "<button class='wstore' " + (set ? '' : 'disabled') + " title='write this weight into the heuristic&#39;s file, through the tune tool'>store</button></div>";

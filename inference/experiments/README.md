@@ -26,8 +26,7 @@ names). One heuristic or scored constraint is what makes it score.
 
 - `from-scratch/` - a playbook rebuilt one rule at a time. It holds three:
   the two-tank limit (the game's form, enforced on the roster too), a
-  heuristic that rewards hitscan cover while red fields a flier, and a
-  heuristic that rewards sustained healing. Nothing caps how many supports
-  bring that healing, so with no flier revealed the solver leans on
-  supports until a later rule pulls against it - by design: each rule is
+  heuristic that rewards hitscan cover while red fields a flier, and the
+  assumption that all players play optimally. With no flier revealed
+  nothing scores and the board reads unscored - by design: each rule is
   added when its absence shows.

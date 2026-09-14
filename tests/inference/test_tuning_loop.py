@@ -257,7 +257,7 @@ def test_an_experiment_playbook_is_chosen_by_the_environment(monkeypatch, tmp_pa
     assert chosen.endswith(os.path.join("inference", "experiments", "from-scratch"))
     two = catalog.load(chosen)
     ids = {h.id for h in two}                      # a living playbook: at least its founding rule
-    assert {"open-queue-tanks", "fliers-need-cover", "healing-covers-the-team"} <= set(ids)
+    assert {"open-queue-tanks", "fliers-need-cover", "optimal-play"} <= set(ids)
     assert len(ids) < 30
     monkeypatch.setattr(catalog, "STRATEGIES_DIR", chosen)
     assert catalog.write_docs(two, path=str(tmp_path / "never.md")) is None

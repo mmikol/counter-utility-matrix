@@ -237,20 +237,24 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .warnbox { background:#3a2026; border:1px solid #6b2f3a; border-radius:8px; padding:8px 12px;
   margin:10px 0; }
 .hcards { display:grid; grid-template-columns:repeat(auto-fill,minmax(330px,1fr)); gap:10px; }
-.hcard { background:#10141c; border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+.hcard { background:#10141c; border:1px solid var(--line); border-radius:8px; padding:10px 12px; min-width:0; overflow:hidden; }
 .hcard .kind { display:inline-block; font-size:10px; letter-spacing:.14em; text-transform:uppercase;
   padding:2px 7px; border-radius:3px; margin-right:6px; }
 .kind.heuristic { background:#1d3a2a; color:var(--green); } .kind.constraint { background:#1d2a3a; color:var(--blue); }
 .kind.assumption { background:#33301f; color:#d9b36a; }
-.hcard .wrow { display:flex; align-items:center; gap:8px; margin:8px 0 4px; font-size:12px; }
-.hcard .wrow .wlbl { color:var(--muted, #8892a6); letter-spacing:.12em; text-transform:uppercase; font-size:10px; }
-.hcard .wrow input[type=range] { flex:1; accent-color:var(--gold); min-width:80px; }
-.hcard .wrow .wval { width:64px; font:inherit; font-size:13px; text-align:right; color:var(--gold); background:#0b0e14; border:1px solid var(--line); border-radius:4px; padding:2px 4px; }
-.hcard .wrow .winf { color:var(--muted, #8892a6); font-size:11px; }
-.hcard .wrow .wreset, .hcard .wrow .wstore { font:inherit; font-size:11px; background:none; border:1px solid var(--line); color:inherit; border-radius:4px; padding:2px 6px; cursor:pointer; }
+/* the weight row wraps: the slider takes a line of its own, the figure, the
+   inferred default and the two buttons share the next, nothing runs off */
+.hcard .wrow { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin:10px 0 6px; font-size:12px; }
+.hcard .wrow .wlbl { color:var(--muted); letter-spacing:.12em; text-transform:uppercase; font-size:10px; }
+.hcard .wrow input[type=range] { flex:1 1 120px; min-width:0; accent-color:var(--gold); margin:0; }
+.hcard .wrow .wval { flex:0 0 64px; width:64px; font:inherit; font-size:13px; text-align:right; color:var(--gold); background:#0b0e14; border:1px solid var(--line); border-radius:4px; padding:2px 4px; }
+.hcard .wrow .wbreak { flex-basis:100%; height:0; }
+.hcard .wrow .winf { color:var(--muted); font-size:11px; white-space:nowrap; margin-left:auto; }
+.hcard .wrow .wreset, .hcard .wrow .wstore { font:inherit; font-size:11px; background:none; border:1px solid var(--line); color:inherit; border-radius:4px; padding:2px 8px; cursor:pointer; white-space:nowrap; }
 .hcard .wrow .wstore { border-color:var(--gold); color:var(--gold); }
 .hcard .wrow .wreset:disabled, .hcard .wrow .wstore:disabled { opacity:.35; cursor:default; }
 .hcard b { font-family:"Bebas Neue",Impact,sans-serif; font-size:18px; letter-spacing:.05em; }
-.hcard .meta { font-family:ui-monospace,monospace; font-size:11.5px; color:var(--muted); margin:4px 0; }
+.hcard .meta { font-family:ui-monospace,monospace; font-size:11.5px; color:var(--muted); margin:4px 0; overflow-wrap:anywhere; }
+.hcard .legend { overflow-wrap:anywhere; }
 .hcard p { margin:6px 0 0; color:#c9d0db; font-size:12.5px; }
 .legend { color:var(--muted); font-size:12px; margin:6px 0 0; }
