@@ -26,9 +26,9 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 That is the whole run: the stack comes up (one container per layer; the
 first time, the data container pulls every source and builds the database
-- a few minutes, at a pace the sources can bear), the agents run headless on the `/refresh` skill
-(refresh the data, derive draft strategies, regenerate the docs), and the
-app is left running:
+- a few minutes, at a pace the sources can bear), the agents run headless
+on the `/refresh` skill (refresh the data, derive draft strategies,
+regenerate the docs), and the app is left running:
 
 | | |
 | --- | --- |
