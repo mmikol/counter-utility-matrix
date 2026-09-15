@@ -49,7 +49,7 @@ below as `S1..`. Then it decides: you are the agent in
 `COMP = ARGMAX[ STRATEGIES( FACTS ) ]` - the solver's optimum is the straw
 man, and the session adopts it and says why or improves on it and says
 why, holding the comp to the assumptions, inside the limits (six
-picks, at most two tanks, no banned hero). It answers tersely: the
+picks, at most two tanks, at most four supports, no banned hero). It answers tersely: the
 playstyle, six picks each with one line of why and its `[F#]` tags, a
 short overall argument, the vintage warning if the facts opened with one.
 A follow-up ("what if they swap to Pharah?") re-runs the inference.
