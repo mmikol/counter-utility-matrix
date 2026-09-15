@@ -341,10 +341,7 @@ function paintSuggestions() {
 function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
 function renderResult(d, container, title) {
   if (!d || d.error) { container.innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
-  var out = "<div class='inf-head'><h3>" + esc(title) + '</h3>' + scoreHTML(d) + "<span class='legend'>" +
-    (d.rank ? 'rank ' + commas(d.rank) + ' among the feasible field · ' : '') + (d.considered ? commas(d.considered) + ' candidates · ' : '') + (typeof d.seconds === 'number' ? d.seconds + 's' : '') +
-    (d.playstyle ? ' · leans ' + d.playstyle : '') + '</span>' +
-    '</div>';
+  var out = "<div class='inf-head'><h3>" + esc(title) + '</h3>' + scoreHTML(d) + '</div>';
   if (d.partial) out += "<div class='partial'>partial: " + d.blue.length + ' of ' + TEAM + ' picked - sums (damage, healing, HP) read low until the team is full; the breakdown uses the optimal search\'s field</div>';
   if (d.violations && d.violations.length) out += "<div class='warnbox'>violates: " + esc(d.violations.join(', ')) + '</div>';
   out += "<div class='comp'>";
@@ -354,7 +351,12 @@ function renderResult(d, container, title) {
       "</div><div class='body'><b>" + esc(p.hero) + "</b><div class='why'>" + esc(p.why) + '</div>' +
       p.evidence.map(function (id) { return "<span class='ev' title=\"" + esc(d.cited[id] || id) + "\">" + id + '</span>'; }).join('') + '</div></div>';
   });
-  out += '</div>' + (d.contributions && d.contributions.length ? bars(d.contributions) : '');
+  out += '</div>';
+  /* the search's numbers - candidates, seconds, the lean - under the cards, above the strategies met */
+  var meta = (d.rank ? 'rank ' + commas(d.rank) + ' among the feasible field · ' : '') + (d.considered ? commas(d.considered) + ' candidates · ' : '') + (typeof d.seconds === 'number' ? d.seconds + 's' : '') +
+    (d.playstyle ? ' · leans ' + d.playstyle : '');
+  if (meta) out += "<div class='legend meta'>" + meta + '</div>';
+  out += d.contributions && d.contributions.length ? bars(d.contributions) : '';
   if (d.alternatives && d.alternatives.length) {
     out += "<div class='alts'><b>" + (d.kind === 'infer' ? 'alternatives' : 'the field\'s best') + "</b><ol>" +
       d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + ' ' + altScore(a, d) + '</li>'; }).join('') + '</ol></div>';

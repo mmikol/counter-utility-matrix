@@ -209,6 +209,12 @@ def test_the_page_is_a_shell_over_static_files():
     assert "function commas(n)" in script and "commas(d.considered)" in script
     assert "set by you" not in script and "' constraints, '" not in script   # no counts
     assert "strategies satisfied" in script and "' off'" in script  # the list keeps its grey-out
+    # the search's numbers sit under the cards and above the strategies met, not in the head
+    fn = script[script.index("function renderResult"):script.index("function weightRow")]
+    cards, meta, met = (fn.index("<div class='comp'>"), fn.index("class='legend meta'"),
+                        fn.index("bars(d.contributions)"))
+    assert cards < meta < met
+    assert "scoreHTML(d) + '</div>';" in fn
     assert "var badge = function (cur, optimal, who)" in script    # a figure even with no picks
     # a playbook that scores nothing reads unscored, never 100 / 100
     assert "d.scoring === false" in script and "'unscored'" in script and "var UNSCORED" in script

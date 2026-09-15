@@ -192,6 +192,7 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .seats .bars { grid-template-columns:1fr; }
 .partial { color:var(--gold); font-size:12px; margin:6px 0; }
 .inf-head { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+.seat .meta { margin:10px 0 0; }
 .inf-head h3 { margin:0; font-size:24px; color:var(--gold); }
 .inf-head .score { font-family:"Bebas Neue",Impact,sans-serif; font-size:36px; line-height:1;
   color:#fff; cursor:help; }
