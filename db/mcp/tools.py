@@ -551,7 +551,8 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
       " (blue's own picks never constrain it), red's best"
       " counter to yours, both current comps scored on those scales, your picks"
       " against red's best counter, your locked picks with the empty slots filled,"
-      " a momentum verdict, the game plan in prose, the shapes the playbook's"
+      " the fight odds (each seat's share of its own optimal, and the two pitted"
+      " against each other), the game plan in prose, the shapes the playbook's"
       " limits allow - what the roster enforces as you pick - and red's likely six"
       " from the data alone (a two-two-two from the map's pick rates and the"
       " authored synergies, past the bans; static for the board, no strategy read).",

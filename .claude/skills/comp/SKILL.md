@@ -24,7 +24,7 @@ connected; they expose the same tools.
    (`board` with the same arguments also returns the game plan in prose,
    red's best counter to the user's picks, both current comps scored, the
    user's picks against that counter, their locked picks with the empty
-   slots filled, and a momentum verdict - use it when
+   slots filled, red's likely starting comp and the fight odds - use it when
    the user asks how the game is going, how their six rates, what the
    enemy should be playing, or for the plan in a few lines. It answers at
    any stage: no map yet, a map, a side, bans, red's picks as they show.)
@@ -46,17 +46,16 @@ connected; they expose the same tools.
    catalog's shape. The game is 6v6 Open Queue: six picks, at most two
    tanks. The playbook itself - STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪
    ASSUMPTIONS - is three kinds of markdown file (read them with the
-   `strategies` tool or as MCP resources): constraints (a limit, a scored
-   adjustment, or prose), heuristics (a weighted metric) and assumptions
-   (prose, taken as given). The prose constraints are the ground
-   rules.
+   `strategies` tool or as MCP resources): constraints (a limit or a
+   scored adjustment), heuristics (a weighted metric) and assumptions
+   (prose, taken as given - the ground rules).
 4. Decide - you are the agent in COMP = ARGMAX[ STRATEGIES( FACTS ) ],
    where STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS:
    the solver's optimum is the straw man, and your job is to reconcile the
    facts with the strategies where arithmetic cannot. Adopt the optimum
    and say why, or improve on it and say why - a user's stated problem
    ("we lose the first fight") can outweigh a heuristic the solver weighted;
-   the result's "ground rules to reconcile against" are the prose constraints
+   the result's "ground rules to reconcile against" are the assumptions
    to hold it to. Stay inside the limits (at most two tanks), keep the
    locked picks, and respect CAUTION facts.
 5. Answer in chat, tersely: the playstyle, six picks each with one line of

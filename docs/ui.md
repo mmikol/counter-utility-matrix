@@ -68,7 +68,7 @@ the script has no constant to keep in step with the Python.
 | `/static/<file>` | `board.css`, `comps.js`, `playbook.js`, `board.js` (and `math.html`, the math page's article) |
 | `/api/roster` | every hero (role, subrole, portrait, icon) and every map (mode, sided or not) - what the rosters are built from |
 | `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
-| `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, the momentum verdict and the game plan - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
+| `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, red's likely starting comp, the fight odds and the game plan - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
 | `/api/strategies` | the strategies catalog: every constraint and heuristic with its kind, form, frontmatter and body |
 | `/math` | the equation, the scoring function (what 100 means, fight odds, the argmax), the board (red's likely starting comp and its formula, blue's optimal counter, the weights) and how the layers fit - a table of contents at the top; linked from the board's header |
 
@@ -107,107 +107,74 @@ the same portrait grid the rosters use. A click on a tile bans that hero,
 which leaves both rosters and the search; a click on a banned tile or on
 its slot un-bans it; at five, the rest dim.
 
-**The panels.** *comps* is the default, and it answers at every stage
-of a draft: no map (the meta's best six), a map, a map and a side, bans,
-red's picks as they reveal. On top, the game plan in prose: the ground
-(the mode's geometry and the authored note on what the map rewards), the
-side, what to play and how, what red's picks mean and which of the six
-answer them, the family of heroes to stay in when you stray from the six,
-and what the six is built for - from the same facts and strategies the
-solver scored, so picks can be tailored toward the optimal without
-matching it; a last line says what it rests on. Then, in the order of
-the boxes above, blue's optimal six (left: the counter to red's
-selection as revealed, whatever you have locked, so it never collapses
-into your own six; until red reveals a pick it counters their likely
-six) and, on the right, red's likely picks: what the data says they
-field - a two-two-two filled slot by slot with the hero the map's pick
-rates (the overall meta with no map set) and the authored synergies make
-likeliest (a hero's likelihood is its pick rate plus two points per
-partner already on the six), past the bans, each saying the rate and the
-partners it rests on; static for the board, no strategy read for it, and
-as red reveals picks it stays while blue's optimal and the scores move. The optimal carries no score -
-it is its seat's reference, the 100 the picks are measured against -
-and neither does the likely six, so the only scores on the board are
-the picks': the badges above the pickers, each comp's share of its own
-optimal (red's optimal, their best counter to your selection, is solved
-for that scale and not shown). The strip above the boxes, labelled *fight odds*, is two bars
-stacked on one track, blue's over red's. With both seats scored each bar
-is its side's odds - its share over the two shares' sum, so the pair
-splits 100 and the higher bar holds the fight (the share stays in the
-tooltip); with one seat scored its bar is its share alone; empty until
-a seat has a figure. It is a comparison of two shares under the
-playbook, not a fitted probability - an
-unscored seat reads the word alone there and in the comps, its reason
-kept in the badge's tooltip; the scale is the math page's to explain.
+**The panels.** *comps* answers at every stage of a draft. On top, the
+game plan in prose: the ground, the side, what to play, what red's picks
+mean and which of the six answer them, the family to stay in, and what
+it rests on. Below, two seats. Blue's optimal counter to current picks
+(left) is solved against red's revealed picks - or their likely starting
+comp until they reveal one - and never against blue's own picks, so it
+never collapses into what you hold. Red's most likely starting comp
+(right) is a two-two-two filled slot by slot with the hero the map's
+pick rates and the authored synergies make likeliest, past the bans;
+static for the board, no strategy read. Neither seat carries a score:
+each is its side's reference. Under a seat's cards sit the search's
+numbers (candidates, seconds, the lean), the strategies satisfied - one
+bar per strategy, headed by the count met, greyed where one did not
+apply - and the alternatives.
 
-The scores live with the selections. Above the two boxes sits the
-*fight odds* strip: two bars stacked on one track, blue's over red's,
-one per current comp, each filled to its share on its own optimal's
-scale - your picks as a share of blue's best counter to red's
-selection, red's as a share of their best counter to yours - and, when
-you have picks, how you hold if red answers you perfectly. Each box
-carries its own share as a badge by its name - the current comp's while
-the seat holds picks, the suggested six's (its optimal, 100 by
-definition) before any pick, or *unscored* with the reason - and a
-*clear* button that
-empties that team's picks; *clear all* in the header empties everything -
-the map, the side, the bans and both teams. Red's box only holds and
-scores what they reveal; the blue box also fills its empty slots with the
-solver's suggestions - the optimal six before any pick, then the best six
-that keeps what you have locked - each a click away from locking. The
-tile shows the hero alone; its reasons are the tooltip and the comps tab.
-The comp is
-full width below. Each result shows one figure, its 0-100 share
-(`normalized`: 100 for an optimal six, the current comp's share of blue's
-optimal on that board) with its meaning beside it; the raw sum is never
-shown. The optimal six is the reference and reads 100 always; any other
-comp reads *unscored* instead - in the team badges, the results and
-the momentum strip - when nothing can be a share of anything: the
-playbook in force has no heuristic, scored constraint or soft limit, or
-none of them applies to this board yet (a heuristic waiting on its
-`when`), and the engine's reason (`unscored` on each result, naming the
-strategy that waits and what for) sits where the meaning would; then
-each pick
-with its reasons and `[F#]` citations, the strategies satisfied (one bar
-per strategy, headed by the count met, greyed where a strategy did not
-apply to this comp), the
-alternatives (each with its own 0-100 figure when present) and the partial
-notice. *facts*
-filters by text and by scope (meta, bans, map, hero, team, matchup,
-playbook), and says how many it holds beside the filter - "464 facts",
-or "12 of 464 facts" while a filter narrows it; the tab itself carries
-no number. *playbook* renders the catalog in three groups in the
-equation's order - constraints, heuristics, assumptions - with a row of
-anchors at the top, one per group with its count, that scroll to it;
-each group is headed with its count, an empty group saying so, every
-card edged in its kind's colour; a
-card's badge is its kind alone, its meta line says the form,
-and under each heuristic a slider for its weight - 1 to 10 to the
-hundredth (1.02, 9.99), with a number box beside it for the exact figure,
-starting at the weight the file infers, with the inferred figure shown
-and a reset. A setting is the viewer's alone: it is kept in the
-browser, rides with every board request as `weight=<id>:<value>`, is
-applied by the solver for that board only (each result reports the
-`weights` it was scored under), and never touches the file - until
-*store*, which writes it
-into the heuristic's file through the data layer's `tune` tool (validated
-against the catalog, logged in the tuning log with its reason, mirrored),
-after which the file's weight is the inferred default and the browser's
-setting is dropped. `POST /api/weight` `{id, weight}` is that one write;
-it reaches the tool over HTTP at `COUNTER_MATRIX_MCP_URL` with the bearer
-token in the compose stack, and in-process through the same registry on
-the local cluster. Only heuristics have a weight to set. *clear all*
-leaves the weights in place.
-Pinned to the header's top-right
-corner are two pills: *the math*, a page stating the equation and how
-the layers fit, and the repository on GitHub (`COUNTER_MATRIX_REPO_URL`
-overrides the address when the repo moves). There is no
-footer: the header keeps only the short-lived flashes (a banned pick, a
-full team), the facts panel says how many facts the board holds, and the
-rates' capture date is a fact on the facts tab; a patch newer than the
-rates still raises the warning box under the header.
-`board.css` is the project's own look, not the game's: ink surfaces on a faint dot grid, a lime accent for what matters, Space Grotesk for headings and labels, violet and sand for heuristics and assumptions, and a cool blue and a coral for the two sides - every colour a token in `:root`. The rosters are laid out like a hero select: role columns, portrait tiles, red
-and blue seats, the dark palette.
+**The scores** are the picks'. The badge above each picker is that
+seat's comp as a share of its own optimal - blue's picks against blue's
+optimal, red's against red's best counter to your picks (solved for
+that scale, not shown); before any pick the badge shows the suggested
+six's 100. The *fight odds* strip above the boxes is two bars stacked
+on one track, blue's over red's: with both seats scored each bar is its
+side's share over the two shares' sum, a split of 100, the share in the
+tooltip; with one seat scored, its share alone; empty until a seat has
+a figure. Not a fitted probability. When nothing can be a share of
+anything - the playbook holds no heuristic, scored constraint or soft
+limit, or none applies to this board yet - a seat reads *unscored*, one
+word, the engine's reason in the badge's tooltip. Each box has a
+*clear*; *clear all* in the header empties the map, the side, the bans
+and both teams, and leaves the weights.
+
+**The suggestions.** Blue's empty slots carry the fill - the best six
+that keeps what you have locked, the optimal six before any pick - each
+a click from locking; a tile shows the hero alone, its reasons in the
+tooltip and on the comps tab.
+
+*facts* filters by text and by scope and says how many it holds beside
+the filter - "464 facts", or "12 of 464 facts" under a filter; the tab
+carries no number.
+
+*playbook* renders the catalog in three groups in the equation's order,
+a row of anchors at the top, each group headed by its count (an empty
+one says so), every card edged in its kind's colour, the badge its kind
+alone, the meta line its form. Under each heuristic a slider for its
+weight - 1 to 10 to the hundredth, a number box for the exact figure,
+the file's weight as the inferred default, a reset. A setting is kept in
+the browser, rides with every board request as `weight=<id>:<value>`,
+is applied by the solver for that board only (each result names the
+`weights` it was scored under) and never touches the file until *store*:
+`POST /api/weight` `{id, weight}`, the board's one write, becomes a
+`tune` call - over HTTP at `COUNTER_MATRIX_MCP_URL` with the bearer
+token in the compose stack, in-process on the local cluster - validated,
+logged with its reason and mirrored; the file's weight is then the
+default and the browser's setting is dropped. Only heuristics have a
+weight to set.
+
+**The header** pins two pills top-right: *the math* and the repository
+on GitHub (`COUNTER_MATRIX_REPO_URL` overrides the address). It keeps
+only the short-lived flashes - a banned pick, a full team, a refused
+pick. There is no footer: the facts panel says how many facts the board
+holds, the rates' capture date is a fact, and a patch newer than the
+rates raises the warning box under the header.
+
+`board.css` is the project's own look, not the game's: ink surfaces on
+a faint dot grid, a lime accent for what matters, Space Grotesk for
+headings and labels, a cool blue and a coral for the two sides, violet
+and sand for heuristics and assumptions - every colour a token in
+`:root`. The rosters are laid out like a hero select: role columns and
+portrait tiles.
 
 ## `facts/` - everything the database knows about a board
 
@@ -299,7 +266,7 @@ sequenceDiagram
     Solver->>Solver: red's seat, the other side: their best counter to your picks
     Solver->>Solver: both current comps: six locked -> ranked against the field;<br/>fewer -> scored with the optimal search's bounds
     Solver->>Facts: the FactSet for each (map, side, red, the six)
-    Solver-->>Board: the game plan, the momentum, blue's optimal with reasons and [F#]<br/>citations, red's comp as revealed, the suggestions for the empty slots
+    Solver-->>Board: the game plan, the fight odds, blue's optimal with reasons and [F#]<br/>citations, red's likely starting comp, the suggestions for the empty slots
 ```
 
 Sides exist on Escort and Hybrid maps only; the rates do not split by

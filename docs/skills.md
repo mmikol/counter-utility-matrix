@@ -48,7 +48,7 @@ numbers - every fact numbered `F1..` and citable, the playbook's record
 below as `S1..`. Then it decides: you are the agent in
 `COMP = ARGMAX[ STRATEGIES( FACTS ) ]` - the solver's optimum is the straw
 man, and the session adopts it and says why or improves on it and says
-why, holding the comp to the prose constraints, inside the limits (six
+why, holding the comp to the assumptions, inside the limits (six
 picks, at most two tanks, no banned hero). It answers tersely: the
 playstyle, six picks each with one line of why and its `[F#]` tags, a
 short overall argument, the vintage warning if the facts opened with one.
@@ -60,8 +60,7 @@ direction, not decimals; never a comp that dies with a likely ban.
 
 ## `/tune` - change the engine
 
-**Say:** "it keeps ignoring anti-heal", "reweight coverage", "learn from
-our games".
+**Say:** "it keeps ignoring anti-heal", "reweight coverage".
 
 **A manual tune:** reads the catalog (`strategies`), finds the strategy
 you mean, decides the smallest change that does what you asked - a weight
@@ -93,9 +92,8 @@ fit the prose, saying why.
 
 **Does:** first it standardizes the three inputs into the playbook's form
 - a two-to-six-word name in sentence case, a kebab id, a category, and
-the prose rewritten into the house grammar (the claim, why it is true in
-the game's terms, when it applies, what is measured) with the meaning
-untouched - and shows the before and after with one line of what changed;
+the prose rewritten into three sentences at most (the claim; why and
+when; what is measured) with the meaning untouched - and shows the before and after with one line of what changed;
 a nod stores it. Then it reads the vocabulary (`metrics`) and the catalog
 (`strategies`), names the nearest existing strategy, and derives the
 mathematics with its working shown: a heuristic's one numeric metric,

@@ -55,7 +55,7 @@ more): the claim, why and when, what is measured.
 **The solver does not infer a formula or a weight from prose; a model
 does - the `/strategy` skill on command, or the engine on its own through
 `derive.py`.** The skill: you give it three things - a name,
-a kind, and two to six sentences of what the strategy means - and the
+a kind, and up to three sentences of what the strategy means - and the
 session reads the vocabulary (`metrics`), reads the catalog for the house
 style, decides the frontmatter (a heuristic's metric, direction and
 weight; a constraint's `require`, or its `when`, `bonus`, `penalty` and

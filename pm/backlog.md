@@ -27,6 +27,19 @@ next feature opens its own branch.
   the flash the board already has, and a badge shows the microphone is
   live; off by default, a button in the header turns it on. Cost: a
   day, half of it the name matching; nothing leaves the browser.
+- **Simulation and mathematical proving.** Two ways to check what the
+  score claims. (a) A fight simulation from the kits' own numbers -
+  damage and healing per second, pools, ranges, cooldowns - that plays
+  a six against a six for a few seconds of engagement and says who is
+  standing, so a comp's score can be set against a modelled fight
+  rather than trusted; deterministic, seeded where it must draw. (b)
+  Proofs of the solver's properties, as tests where they can be and as
+  derivations on the math page where they cannot: the same board gives
+  the same six; scaling every weight by one factor leaves the argmax
+  unchanged; a normalised term stays within 0..1 and the reference
+  sample bounds it; fight odds split 100 exactly; the local search never
+  lowers the score. Cost: (a) three to four days, the kit model most of
+  it; (b) a day for the tests, a day for the page.
 - **Weights that learn on their own.** The user wants them to, with the
   sliders as the manual override. Learning needs a signal, and the one
   it had - recorded comps with a win or loss - was removed on the user's
@@ -61,7 +74,7 @@ next feature opens its own branch.
   kits). Only the first build and the weekly full refresh get faster.
   Cost: a day; risk: the politeness must stay per host, not per thread.
 - **Run the test suite in parallel.** A worker plugin would take the
-  local run from four and a half minutes to under two. The database-bound
+  local run from a little over two minutes to under one. The database-bound
   tests share one cluster and mostly read; the cache-driven pulls roll
   back. Cost: an hour; risk: a test that assumed it ran alone.
 - **Reconsider the pool cap.** The tools allow a pool of 12; a pool of 8

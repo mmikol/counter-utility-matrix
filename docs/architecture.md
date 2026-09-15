@@ -16,8 +16,8 @@ COMP           = ARGMAX[ STRATEGIES( FACTS ) ]            the solver searches, t
 
 Everything is free to run - no accounts, no keys, no API billing. The
 board is a local page and the solver is deterministic; the model work
-(comps in chat, strategies inferred from prose, the refresh that re-fits
-the weights) runs in Claude Code on your subscription, before a game,
+(comps in chat, strategies inferred from prose, the refresh that tunes
+with a reason) runs in Claude Code on your subscription, before a game,
 never during one.
 
 ## The folders
@@ -65,7 +65,7 @@ flowchart LR
     end
 
     subgraph INFER["INFERENCE LAYER - inference/"]
-        HEUR["strategies/*.md<br/>STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS<br/>constraint: limit · scored · prose"]
+        HEUR["strategies/*.md<br/>STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS<br/>constraint: limit · scored"]
         SOLVER["solver<br/>enumerate · prune ·<br/>normalise · refine"]
     end
 
@@ -89,61 +89,32 @@ turns every table into facts, and computes every metric in one place
 solver scores are the same function. The inference layer reads the facts,
 never the tables.
 
-The equation the whole repo serves - the name is the definition, and the
-math page heads it "The Counter Utility Matrix":
-
-```
-DATA           = HEROES ∪ MAPS ∪ META              the tables, as pulled and set
-for each domain D in { HEROES, MAPS, META }:
-  INDEPENDENT(D) = ⋃ facts(s)      over each selection s in D    s alone: its own row
-  DEPENDENT(D)   = ⋃ facts(s ⋈ t)  over the other selections t   s joined with t, in D or beyond
-  FACTS(D)       = INDEPENDENT(D) ∪ DEPENDENT(D)
-FACTS          = FACTS(HEROES) ∪ FACTS(MAPS) ∪ FACTS(META)
-FACTS(D) ∩ FACTS(E) = the joins of D with E: what only their intersection can say
-STRATEGIES     = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS   the playbook: markdown files
-COMP           = ARGMAX[ STRATEGIES( FACTS ) ]            the solver searches, the agent argues
-```
-
-The data layer owns DATA; the UI layer's fact engine owns FACTS - the
-independent variables read one table each, the dependent ones are joins
-across the selections; the inference layer owns STRATEGIES and the argmax.
-
-DATA is the authoritative data: the heroes, maps and meta domains as the
-sources report them. FACTS is what the fact engine derives from it for one
-board, and every domain yields two kinds. An independent fact belongs to
-one selection and no other changes it: a hero's kit, rates and style, the
-map's mode and what it rewards, the meta's vintage - its own row. A
-dependent fact is the selection joined with others (⋈: the rows of two
-tables that meet on a key; the tables themselves share no rows, so DATA
-is their union and every intersection is a join), and a join belongs to
-every domain it touches, so the dependent facts are where the domains'
-fact sets intersect: the hero on this map (`heroes ⋈ map_meta ⋈ maps`,
-HEROES ∩ MAPS ∩ META), the hero against each enemy and beside each ally
-(`heroes ⋈ counters ⋈ heroes`, `heroes ⋈ synergies ⋈ heroes`), the map's
-leaders and how the picks fit its style, the team as one thing (the six
-joined and aggregated), the matchup (the twelve compared), the bans (a
-banned hero joined with both teams' counters). Every selection added
-opens new joins, and the engine derives every fact they support; the
-numbers the strategies read are the dependent ones. STRATEGIES are the
-playbook, `inference/strategies/`, of exactly three kinds of file: a *constraint*
-is a limit (`require`, hard unless soft), a scored adjustment
-(`bonus`/`penalty` while `when` holds) or prose the agent holds a comp to;
-a *heuristic* weighs a metric, maximised or minimised; an *assumption* is
-prose taken as given, shown and never scored. The tuning log is not a
-term: it is the history of the weights. The UI layer numbers the facts
-F1.. and carries the playbook's record (the archetypes, the catalog's
-shape) below them as S1.. so both are citable and neither is mistaken for
-the other, or for the strategies themselves.
-`STRATEGIES( FACTS )` is the score the solver maximises; the
-inference agent (a Claude Code session on the `/comp` skill) reads the same
-facts and the same strategies and reconciles them where arithmetic cannot -
-a stated problem, a lobby's habits, a patch the rates predate.
+The equation at the top is the whole repo's term sheet - the name is the
+definition, and the math page heads it "The Counter Utility Matrix". The
+data layer owns DATA, the tables as pulled and set. The UI layer's fact
+engine owns FACTS: for one board, every domain yields independent facts
+(a selection's own row - a hero's kit, rates and style; the map's mode
+and note; the meta's vintage) and dependent ones (the selection joined
+with others: the hero on this map, the hero against each enemy and
+beside each ally, the six aggregated, the twelve compared, a banned hero
+against both teams' counters) - a join belongs to every domain it
+touches, so the dependent facts are where the domains' fact sets
+intersect, and every selection added opens new joins. The inference
+layer owns STRATEGIES - the playbook of exactly three kinds of file: a
+*constraint* (a limit, hard unless soft, or a scored adjustment while a
+condition holds), a *heuristic* (a metric weighed, maximised or
+minimised) and an *assumption* (prose taken as given, shown, never
+scored) - and the argmax: `STRATEGIES( FACTS )` is the score the solver
+maximises, and the agent (a Claude Code session on `/comp`) reads the
+same facts and strategies and reconciles them where arithmetic cannot.
+The UI numbers the facts F1.. and carries the playbook's record below
+them as S1.., so both are citable and neither is mistaken for the other.
 
 ## The files
 
 | file | purpose |
 | --- | --- |
-| `orchestrator.py` | the end-to-end run. `python orchestrator.py` brings the stack up (the data container pulls and ingests when the database is empty or stale), runs the agents headless on the `/refresh` skill (refresh, derive draft strategies, re-fit the weights, regenerate the docs), and leaves the app running. Verbs: `run` (default) · `up` · `agents` · `status` · `refresh` · `test` · `down` |
+| `orchestrator.py` | the end-to-end run. `python orchestrator.py` brings the stack up (the data container pulls and ingests when the database is empty or stale), runs the agents headless on the `/refresh` skill (refresh, derive draft strategies, tune with a reason, regenerate the docs), and leaves the app running. Verbs: `run` (default) · `up` · `agents` · `status` · `refresh` · `test` · `down` |
 | `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock), `sentry` (the guard). Every container is unprivileged on a read-only root with no capabilities; every published port binds to 127.0.0.1. Bind mounts keep the caches, `db/raw`, `db/data/authored`, `inference/strategies` and `docs` on the host, so tuning, authoring and regenerating need no rebuild |
 | `Dockerfile` | the one image, run as an unprivileged user (uid 1000, or `COUNTER_MATRIX_UID`/`GID` from `.env` on a Linux host whose checkout is owned by someone else); `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty or its schema is behind the migrations |
 | `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'` |
@@ -208,7 +179,7 @@ the servers and every tool.
 | skill | does |
 | --- | --- |
 | `/up` | brings the stack up and current, and proves it: URLs, health, the rates' capture date |
-| `/comp` | "comp for King's Row, they have Zarya and Pharah, I'm on Ana": calls `infer` and `facts`, argues against the solver's optimum under the prose constraints, answers with `[F#]` citations |
+| `/comp` | "comp for King's Row, they have Zarya and Pharah, I'm on Ana": calls `infer` and `facts`, argues against the solver's optimum under the assumptions, answers with `[F#]` citations |
 | `/tune` | changes a weight, a dial or an expression through `tune` |
 | `/strategy` | asks for a name, a kind and prose, infers the frontmatter and stores the strategy through `add_strategy` |
 | `/patches` | pulls the patch list, and when a patch shipped since the capture refetches what it changes: rates, kits, Blizzard's text |
