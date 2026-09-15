@@ -11,6 +11,12 @@ from ui import board
 pytestmark = pytest.mark.invariant
 
 
+def scripts():
+    """The page's three scripts as one text, in the order the page loads them."""
+    return "".join(board.static_file(name)[0].decode()
+                   for name in ("comps.js", "playbook.js", "board.js"))
+
+
 def test_board_page_has_two_rosters_and_the_three_panels():
     body = board.view_board()
     assert "team red" in body and "team blue" in body
@@ -25,12 +31,12 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     # a team header is its name, its figure and its clear button: no subtitle, no counter
     for gone in ("your locked picks", "the enemy - click", "id='bluecount'", "id='redcount'"):
         assert gone not in body, gone
-    assert "record this comp" not in board.static_file("board.js")[0].decode()
+    assert "record this comp" not in scripts()
     assert "FACTS = HEROES" not in body                              # the equation moved to /math
     assert "href='/math'" in body
     # no footer: the status line and the capture date are gone from the page
     assert "<footer" not in body and "id='status'" not in body and "id='captured'" not in body
-    assert "el('status')" not in board.static_file("board.js")[0].decode()
+    assert "el('status')" not in scripts()
     assert "id='flash'" in body[:body.index("</header>")]
     assert "data-tab='comps'" in body
     # the two old panels were merged into comps: both seats side by side, the
@@ -39,13 +45,13 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     assert "data-tab='inf'" not in body and "data-tab='cur'" not in body
     comps = body[body.index("id='tab-comps'"):body.index("id='tab-facts'")]
     assert "id='inf-blue'" in comps and "id='inf-red'" in comps
-    script = board.static_file("board.js")[0].decode()
+    script = scripts()
     assert "/api/roster" in script and "/api/facts" in script and "/api/infer" in script
     assert "localStorage" in script
     assert "var TABS = ['comps', 'facts', 'playbook']" in script
     assert "normalized" in script and "/ 100" in script    # the 0-100 figure, and only it
     assert "' of the best '" not in script and "(score " not in script   # no raw sum anywhere
-    assert "d.unscored || UNSCORED" in script                # the engine's reason
+    assert "d.unscored || ''" in script and "UNSCORED" not in script   # the engine's reason alone
     # the playbook holds three kinds; a card's badge is its kind alone - the form
     # (limit, scored, draft) is the meta line's to say
     # the equation lives on /math now
@@ -63,7 +69,7 @@ def test_the_ban_picker_is_a_roster_and_the_dropdown_is_gone():
     assert "bansel" not in body and "<select id='bansel'" not in body
     assert "id='banhead'" in body and "id='banslots'" in body and "id='banroster'" in body
     assert "id='banmini'" in body and "id='bancount'" in body
-    script = board.static_file("board.js")[0].decode()
+    script = scripts()
     assert "function buildBanPicker" in script and "rosterHTML('ban')" in script
     assert "bansOpen = false" in script                     # collapsed by default
     css = board.static_file("board.css")[0].decode()
@@ -72,7 +78,7 @@ def test_the_ban_picker_is_a_roster_and_the_dropdown_is_gone():
 
 
 def test_an_announced_hero_is_a_coming_soon_tile_in_its_role_column():
-    script = board.static_file("board.js")[0].decode()
+    script = scripts()
     # no constant: the roster carries the status
     assert "DOCTRINE" not in script and "announcedTile" not in script
     assert "if (h.status === 'announced') return soonTile(h);" in script
@@ -146,6 +152,8 @@ def test_bans_ride_the_query_string(db):
 def test_the_page_is_a_shell_over_static_files():
     body = board.view_board()
     assert "/static/board.css" in body and "/static/board.js" in body
+    order = [body.index("/static/%s.js" % n) for n in ("comps", "playbook", "board")]
+    assert order == sorted(order)      # board.js loads last: it calls the others
     assert "id='momentum'" in body and "id='plan'" in body
     # scores live in the boxes
     assert "id='bluescore'" in body
@@ -158,7 +166,7 @@ def test_the_page_is_a_shell_over_static_files():
     # blue on the left, red on the right, like the boxes
     assert body.index("id='inf-blue'") < body.index("id='inf-red'")
     assert body.index("id='blueslots'") < body.index("id='redslots'")
-    script = board.static_file("board.js")[0].decode()
+    script = scripts()
     assert "'red - most likely starting comp'" in script
     assert "'blue - optimal counter to current picks'" in script
     assert "renderResult(d.expected, el('inf-red')" in script and "d.momentum" in script
@@ -217,7 +225,7 @@ def test_the_page_is_a_shell_over_static_files():
     assert "scoreHTML(d) + '</div>';" in fn
     assert "var badge = function (cur, optimal, who)" in script    # a figure even with no picks
     # a playbook that scores nothing reads unscored, never 100 / 100
-    assert "d.scoring === false" in script and "'unscored'" in script and "var UNSCORED" in script
+    assert "d.scoring === false" in script and "'unscored'" in script
     assert ".tile.capped" in board.static_file("board.css")[0].decode()
     # swap sides and new game are gone
     assert "swapbtn" not in script and "clearbtn" not in script
@@ -238,7 +246,12 @@ def test_the_page_is_a_shell_over_static_files():
     assert "renderFill" not in script and "el('cur')" not in script
     assert "var TEAM = 6, BANS = 5;" in body
     data, ctype = board.static_file("board.js")
+    assert ctype.startswith("application/javascript") and b"function paint" in data
+    data, ctype = board.static_file("comps.js")
     assert ctype.startswith("application/javascript") and b"function renderResult" in data
+    data, ctype = board.static_file("playbook.js")
+    assert ctype.startswith("application/javascript") and b"function renderPlaybook" in data
+    assert board.static_file("math.html") is None          # the article is not served on its own
     data, ctype = board.static_file("board.css")
     assert ctype.startswith("text/css") and b".tile.banned" in data
     assert board.static_file("../board.py") is None and board.static_file("nope.js") is None

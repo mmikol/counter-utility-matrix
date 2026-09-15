@@ -154,6 +154,18 @@ def _draft(directory, hid="heal-line", kind="constraint"):
                      " dealer. One is rewarded; two overlap.\n" % kind)
 
 
+def test_the_derive_prompt_anchors_its_style_on_files_the_playbook_holds():
+    """STYLE names reference files; a playbook without them - the user's own
+    rules - still gets one anchor per form, so the prompt never goes bare."""
+    from inference import derive
+    reference = catalog.load(FIXTURE_PLAYBOOK)
+    assert {h.id for h in derive.style_anchors(reference)} >= {"anti-heal-answer", "coverage"}
+    own = [h for h in reference if h.id not in derive.STYLE]
+    anchors = derive.style_anchors(own)
+    assert anchors and {h.form for h in anchors} == {h.form for h in own if h.form != "draft"}
+    assert not {h.id for h in anchors} & set(derive.STYLE)
+
+
 def test_derive_completes_a_draft_from_the_models_answer(catalog_copy):
     from inference import derive
     _draft(catalog_copy)

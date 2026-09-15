@@ -27,13 +27,6 @@ next feature opens its own branch.
   the flash the board already has, and a badge shows the microphone is
   live; off by default, a button in the header turns it on. Cost: a
   day, half of it the name matching; nothing leaves the browser.
-- **Faster tests.** The suite takes three minutes locally and four in
-  the image because many tests each solve a full board under the
-  reference playbook; a few session-scoped board fixtures shared across
-  them would roughly halve it. Cost: half a day.
-- **One shape for a seat's result.** Red's likely comp is a hand-built
-  dict where every other seat is a `Result`, so the renderer guards two
-  shapes; one shape removes the guards. Cost: an hour.
 - **Weights that learn on their own.** The user wants them to, with the
   sliders as the manual override. Learning needs a signal, and the one
   it had - recorded comps with a win or loss - was removed on the user's
@@ -115,6 +108,15 @@ counters table is a list).
 
 ## Done
 
+- **Six debts cleared** - `debt` branch. The suite reads the map notes
+  off one solved board and shares the most-read board (three minutes to
+  two locally, four to three in the image); red's likely comp is a
+  `Result` like every seat; the fixture playbook is the nineteen rules
+  the tests use; the script trusts the engine's unscored reason; the
+  math page is `ui/static/math.html`; the board script is three files
+  (comps, playbook, board). Found on the way: the derive prompt anchored
+  its style on rule ids the playbook no longer holds - it now falls back
+  to one file per form.
 - **The playbook is the user's own rules** - `team-headers` branch.
   `inference/strategies/` holds the four rules built one at a time (the
   two-tank limit, hitscan cover against fliers, the counters with a

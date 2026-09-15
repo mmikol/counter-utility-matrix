@@ -26,6 +26,7 @@ names). One heuristic or scored constraint is what makes it score.
 
 No experiment ships. `inference/strategies/` is the playbook, built one
 rule at a time on the user's word; the 38-rule playbook it replaced lives
-on as the tests' reference at `tests/fixtures/playbook/` - every kind and
-every form, to prove the solver against - and is a ready starting point
+on, nineteen of its rules, as the tests' reference at
+`tests/fixtures/playbook/` - every kind and every form, to prove the solver
+against - and is a ready starting point
 for an experiment: copy the files you want into a folder here and name it.

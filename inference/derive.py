@@ -41,6 +41,22 @@ FIELDS = {"metric", "direction", "weight", "when", "require", "soft", "bonus", "
 STYLE = ("anti-heal-answer", "coverage", "squish-limit", "open-queue-tanks")
 
 
+def style_anchors(catalog):
+    """The finished files the prompt shows as its style: the ones STYLE names
+    when the playbook holds them, and otherwise one file of each form the
+    playbook has, so a playbook of the user's own rules anchors the style as
+    well as the reference one did."""
+    named = [h for h in catalog if h.id in STYLE]
+    if len(named) >= 2:
+        return named
+    out, forms = list(named), {h.form for h in named}
+    for h in sorted(catalog, key=lambda h: h.id):
+        if h.form not in forms and h.form != "draft":
+            out.append(h)
+            forms.add(h.form)
+    return out
+
+
 class CliUnavailableError(RuntimeError):
     """No usable CLI: absent, or not signed in. Drafts stay pending."""
 
@@ -73,7 +89,7 @@ def vocabulary():
 
 def prompt(draft, catalog, objection=None):
     """What the model is asked. Three inputs from the person; the rest inferred."""
-    anchors = "\n\n".join(h.raw.split("\n---")[0] + "\n---" for h in catalog if h.id in STYLE)
+    anchors = "\n\n".join(h.raw.split("\n---")[0] + "\n---" for h in style_anchors(catalog))
     fields = ('{"metric": "<numeric key>", "direction": "maximize|minimize", "weight": <1-4>}'
               if draft.kind == "heuristic" else
               '{"require": "<expr>"} or {"require": "<expr>", "soft": true, "penalty": <number>}'

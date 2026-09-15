@@ -156,7 +156,8 @@ class Result:
         head = "%s for %s%s%s vs %s%s%s" % (
             {"infer": "optimal comp", "evaluate": "evaluation",
              "current": "current comp", "countered": "if countered optimally",
-             "fill": "your picks, the rest filled"}[self.kind],
+             "fill": "your picks, the rest filled",
+             "expected": "their likely starting comp"}[self.kind],
             "red" if self.seat == "red" else "blue",
             " on %s" % self.side if self.side else "",
             " on %s" % self.map_name if self.map_name else "",
@@ -168,6 +169,8 @@ class Result:
         unscored = _unscored(self)
         share = ("(%d/100)" % _pct(self.score, self.best if self.best is not None else self.score)
                  if unscored is None else "(unscored)")
+        if self.kind == "expected":                # a likelihood, not a score
+            share = "(from the map's pick rates and the synergies, no strategy read)"
         lines = [head, "  %s%s - score %.2f %s%s, %d candidates considered in %.1fs"
                  " under %d constraints, %d heuristics and %d assumptions"
                  % (", ".join(self.blue), " (%s)" % self.playstyle if self.playstyle else "",
@@ -402,9 +405,7 @@ def board_dict(b):
             "countered": b["countered"].to_dict() if b["countered"] else None,
             "fill": b["fill"].to_dict() if b["fill"] else None, "momentum": b["momentum"],
             "shapes": b["shapes"],
-            "expected": {"kind": "expected", "seat": "red",
-                         "blue": [p["hero"] for p in b["expected"]],
-                         "picks": [dict(p, evidence=[]) for p in b["expected"]], "cited": {}}}
+            "expected": b["expected"].to_dict()}
 
 
 def board_rendered(b):
@@ -415,6 +416,7 @@ def board_rendered(b):
         parts.append(b["fill"].rendered())
     if b["countered"]:
         parts.append(b["countered"].rendered())
+    parts.append(b["expected"].rendered())
     return "\n\n".join([*parts, "momentum: " + b["momentum"]["verdict"]])
 
 
@@ -732,9 +734,13 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
     m, red_h, _, bans_h = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
     # red's likely six - the map and the meta alone, past the bans - is static
-    # for the board; until red reveals a pick it is what blue's seat counters
-    expected = compute.expected_picks(world, m, [], bans_h)
-    enemy = list(red) if red else [p["hero"] for p in expected]
+    # for the board; until red reveals a pick it is what blue's seat counters.
+    # A Result like every other seat: its picks carry the reason each rests on
+    likely = compute.expected_picks(world, m, [], bans_h)
+    expected = Result("expected", m.name if m else None, [], [p["hero"] for p in likely], [],
+                      catalog, bans, side, seat="red")
+    expected.picks = [dict(p, evidence=[]) for p in likely]
+    enemy = list(red) if red else expected.blue
     fill = None
     if parallel:
         try:

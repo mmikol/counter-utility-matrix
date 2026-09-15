@@ -201,10 +201,13 @@ def api_strategies():
 
 # --- the board page ---------------------------------------------------------
 #
-# The page is a shell: the stylesheet and the script are static files under
-# ui/static/ (editable and lintable on their own), served by this same
-# handler; TEAM and BANS come from the page so the script has no constant
-# to keep in step.
+# The page is a shell: the stylesheet and the scripts are static files under
+# ui/static/ (editable on their own), served by this same handler - comps.js
+# (a seat's result and the two seats), playbook.js (the groups, the cards,
+# the weight sliders) and board.js (state, the rosters, the picks, the bans,
+# the fetches, boot), loaded in that order since board.js calls the others;
+# TEAM and BANS come from the page so the scripts have no constant to keep
+# in step.
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 STATIC_TYPES = {".css": "text/css; charset=utf-8",
@@ -290,6 +293,8 @@ def view_board():
             " the /comp skill and the inference layer read exactly these.</p></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
             "</main><script>var TEAM = %d, BANS = 5;</script>"
+            "<script src='/static/comps.js'></script>"
+            "<script src='/static/playbook.js'></script>"
             "<script src='/static/board.js'></script>" % (REPO_URL, GITHUB_MARK, TEAM_SIZE))
 
 
@@ -301,170 +306,10 @@ def _page(title, body):
             "<span class='sub'>%s</span></header>%s</main>" % (esc(title), esc(title), body))
 
 
-MATH = """
-<article class='math'>
-<nav class='toc'>
-<a href='#equation'>the counter utility matrix</a>
-<a href='#function'>the function</a>
-<a class='sub' href='#what-100-means'>what 100 means</a>
-<a class='sub' href='#fight-odds'>fight odds</a>
-<a class='sub' href='#argmax'>the argmax</a>
-<a href='#board'>the board</a>
-<a class='sub' href='#likely-comp'>red's likely starting comp</a>
-<a class='sub' href='#counter'>blue's optimal counter</a>
-<a class='sub' href='#weights'>the weights</a>
-<a href='#pieces'>how the pieces fit</a>
-</nav>
-<h2 id='equation'>The Counter Utility Matrix</h2>
-<p>The equation is the Counter Utility Matrix - the name is the definition, and everything on
-the board is one of its terms:</p>
-<pre class='eq'>DATA           = HEROES &cup; MAPS &cup; META              the tables, as set
-for each domain D in { HEROES, MAPS, META }:
-  INDEPENDENT(D) = &#8899; facts(s)      over each selection s in D    s alone: its own row
-  DEPENDENT(D)   = &#8899; facts(s &#8904; t)  over the other selections t   s joined with t
-  FACTS(D)       = INDEPENDENT(D) &cup; DEPENDENT(D)
-FACTS          = FACTS(HEROES) &cup; FACTS(MAPS) &cup; FACTS(META)
-FACTS(D) &cap; FACTS(E) = the joins of D with E: what only their intersection can say
-STRATEGIES     = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS   the playbook: markdown files
-COMP           = ARGMAX[ STRATEGIES( FACTS ) ]            the solver searches, the agent argues
-</pre>
-<p><b>DATA</b> is the authoritative data, and only that: what is pulled from the sources and set
-in the database. <b>HEROES</b> are the kits - roles, subroles, health pools, every ability with its
-published numbers, who counters whom, which pairs work together. <b>MAPS</b> are the pool - the
-mode, the stages, whether a map has sides, and the authored note on what kind of fight it
-rewards. <b>META</b> is the record - win, pick and ban rates per hero, per map, per rank, captured
-as dated snapshots, plus the patches that shipped since.</p>
-<p><b>FACTS</b> is what the fact engine derives from that data for one board - a map, a side,
-red's picks, yours, the bans - and every domain yields two kinds. The <b>independent</b> facts of
-a domain are each selection alone, read from its own row, and no other selection changes them: a
-hero's role, pool, range, every ability's numbers, its overall rates and its style; the map's
-mode, stages, sides and the note on what it rewards; the meta's vintage, source and queue. The
-<b>dependent</b> facts are the selection joined with others - &#8904;, the rows of two tables that
-meet on a key, which is what intersecting two selections means in a database - and a join belongs
-to every domain it touches, so the dependent facts are where the domains' fact sets intersect: a
-hero's rate on this map and its delta against its baseline (HEROES &cap; MAPS &cap; META: heroes
-&#8904; map_meta &#8904; maps), who among red's picks it answers and who answers it (HEROES &cap;
-HEROES: heroes &#8904; counters &#8904; heroes), who among your picks it pairs with (&#8904;
-synergies), the map's leaders and strugglers and how your picks fit its style (MAPS &cap; HEROES
-&cap; META), the team as one thing (the six joined and aggregated), the matchup (the twelve,
-compared), and the bans (a banned hero joined with both teams' counters). The tables themselves
-share no rows - DATA is their union - and every intersection is a join. Every selection you add
-opens new joins, and the engine derives every fact they support: a board with nothing on it has
-only the meta's facts, a full board about a thousand. The facts are numbered F1, F2, ... and every
-claim the board makes cites them; the numbers a strategy reads are the dependent facts.</p>
-<p><b>STRATEGIES</b> is the playbook: markdown files, one per strategy, in three kinds.
-A <b>constraint</b> is a limit the comp may not cross (at most two tanks), a scored adjustment
-(a bonus or a penalty when a condition holds), or a ground rule in prose. A <b>heuristic</b> is a
-metric to push in a direction with a weight: effective HP up, exposure down, cohesion up.
-An <b>assumption</b> is prose by definition - what the model takes as given (players play
-optimally; rates are Role Queue on console) - shown with every result and never scored. A
-strategy is written as a name, a kind and a paragraph; the formula, the metric and the weight
-are inferred from that and stored in the same file.</p>
-<p><b>COMP</b> is the argmax: of every legal six under the constraints, the one the function
-below scores highest on the facts of this board. Nothing in this is sampled or guessed: the same
-board gives the same six every time, in a second or two.</p>
-<h2 id='function'>The function: STRATEGIES( FACTS )</h2>
-<p>A scoring function. It takes one candidate six for blue on one board and returns one number;
-ARGMAX searches the candidate sixes for the highest. What it reads is not the numbered sentences
-but the same dependent variables in structured form, the <b>namespace</b>: <code>team</code> (the
-aggregates over the candidate six, computed against red), <code>enemy</code> (red's aggregates,
-fixed for the board), <code>matchup</code> (the two compared), <code>map</code> and
-<code>world</code>. They come from the same functions the fact engine uses, so a strategy's
-<code>team.antiheal</code> is the number the facts tab prints. For every candidate the solver
-rebuilds <code>team</code> and <code>matchup</code>; the other three never change during a
-search.</p>
-<p>Each kind of strategy contributes one kind of term. A <b>limit</b> (a constraint with
-<code>require</code>) is a boolean over the namespace: a hard limit that fails removes the six
-from the search; a soft one that fails subtracts its penalty. A <b>heuristic</b> reads its metric,
-normalises it to 0..1 against a reference sample - 1200 random legal sixes for this board, seeded
-from the map, side, enemies and bans, so every call on one board shares one scale - flips it when
-the direction is minimise, and multiplies by its weight. A <b>scored constraint</b> evaluates its
-bonus and penalty while its <code>when</code> holds, and its weight multiplies the difference. An
-<b>assumption</b> and a prose constraint contribute nothing: they are shown, and they are the
-agent's to argue with.</p>
-<pre class='eq'>for one six x, with every hard limit holding:
-
-score(x) = &Sigma; heuristics h     w_h &middot; norm_h( metric_h(x) )
-         + &Sigma; scored r         w_r &middot; ( bonus_r(x) &minus; penalty_r(x) )
-         &minus; &Sigma; soft limits l    penalty_l(x)
-
-norm_h(v) = clamp( (v &minus; min_ref) / (max_ref &minus; min_ref), 0, 1 )
-            and 1 &minus; that when h minimises</pre>
-<p id='what-100-means'><b>What 100 means.</b> The raw sum is never shown. The best six a seat
-could field on this board is its optimal, 100 by definition, and it shows no score of its own;
-the only scores on the board are the picks': the badge above each picker is that seat's comp as
-a share of its own optimal - blue's picks against blue's optimal, red's against red's. 100 means
-as good as the best six under this playbook on this board, not a win probability. A seat that
-cannot be a share of anything reads <i>unscored</i>, one word, the reason on hover.</p>
-<p id='fight-odds'><b>Fight odds.</b> Blue's comp scores as a share of blue's optimal, red's as
-a share of red's - each against the best six its own seat could field here. The strip pits the two
-shares against each other: blue's odds are its share over the two shares' sum, red's the
-rest, so the pair splits 100 and the higher bar holds the fight. With one seat unscored the
-bars show the shares alone. It is a comparison of two shares under the playbook, not a fitted
-probability of winning.</p>
-<p id='argmax'><b>The argmax.</b> Each role's pool is first cut to the top six by a fixed prior -
-map win rate, plus answers to red's picks, minus exposure to them, plus synergies with the locked
-picks and style fit. Every shape the limits allow is then filled from the pools around the locked
-picks, each six is scored, and a local search swaps slots for same-role heroes while it improves.
-Ties break by the six's mean map win rate, then by name, so the same board gives the same six
-every time.</p>
-<p><b>When nothing scores</b> - the playbook holds no heuristic or scored constraint, or the
-ones it holds wait on a condition the board does not meet (hitscan cover waits for a flier on
-the other side) - the sum is empty: every legal six scores zero, the board says <i>unscored</i>
-where a share of the best would go, and the optimal is the tie-break alone: the highest win
-rates on this map that fit the shape, not a judgement about them together. A term that
-applies is what turns that ordering into an inference.</p>
-<h2 id='board'>The board</h2>
-<p id='likely-comp'><b>Red's most likely starting comp</b> is what the data says they field
-before they reveal a pick - no strategy read. It is a two-two-two, filled slot by slot with the
-hero the map's pick rates and the authored synergies make likeliest, past the bans:</p>
-<pre class='eq'>likelihood(h) = pick(h, map) + 2 &times; partners(h, the six so far)
-
-pick(h, map)   the hero's pick rate on this map (its overall pick rate with no map set)
-partners(h, S) how many heroes already on the six the synergy table pairs h with
-the six        two tanks, two damage, two supports - the likeliest hero for an open slot,
-               again and again, until the shape is full</pre>
-<p>Each card says what it rests on ("picked in 9.8% of matches on King's Row; pairs with D.Va").
-The six is static for the board: red revealing a pick does not change it, it changes what blue
-counters.</p>
-<p id='counter'><b>Blue's optimal counter to current picks</b> is solved against red's revealed
-picks, or against their likely starting comp until they reveal one, on this map, side and bans,
-under the playbook - and never against blue's own picks, so it never collapses into what you
-hold. The suggestion tiles in the empty blue slots are a second solve, the fill: the best six
-that keeps what you have locked. Red's optimal, their best counter to your picks, is solved as
-the scale red's picks score on and is not shown.</p>
-<p id='weights'><b>The weights.</b> A heuristic's weight is the slider under its card. A setting
-is kept in your browser and rides with every board request, so every solve in that session - any
-map, any picks - uses it until you reset it; the file's weight is the inferred default. Store
-writes the setting into the heuristic's file through the tune tool, logged with its reason, and
-from then on it is the default for everyone. Only heuristics have a weight to set.</p>
-<h2 id='pieces'>How the pieces fit</h2>
-<pre class='eq'>sources → db/data (fetch) → db/psql (the database) → ui/facts (FACTS of a board)
-                                                                    &darr;
-                   inference/strategies (STRATEGIES) → inference/solver (ARGMAX) → the board</pre>
-<p><b>The data layer</b> (<code>db/</code>) pulls the sources - Blizzard's hero pages, the wiki, the
-counter lists, the authored files - into one Postgres schema, and exposes it through one door:
-thirty-odd MCP tools over stdio and HTTP. Everything else, including this page, reads through
-those tools or the same functions behind them. A sentry container watches the strategy files and
-the audit log while the stack runs.</p>
-<p><b>The inference layer</b> (<code>inference/</code>) holds the playbook and the solver. It
-compiles each strategy's expression once, whitelists what an expression may do, and runs the
-search deterministically - no model in the loop, no network.</p>
-<p><b>The board</b> (<code>ui/</code>) is this page: it turns the database into the facts of one
-board and asks the inference layer for the answer at every stage of a draft - no map, a map, a
-side, bans, red's picks as they reveal. Clicking around never calls a language model.</p>
-<p><b>Claude's part</b> is offline and on your word: the skills and the headless agents refresh
-the sources, re-derive the inferred half of a strategy from its prose, and tune the weights - then
-they are done, and the deterministic pieces above serve what they left in the database and the
-files. The <code>/comp</code> skill is the conversational front of the same solver.</p>
-<p class='legend'>The longer version, with the folder map and the deployment, is in
-<code>docs/architecture.md</code>; the schema in <code>docs/db.md</code>; the playbook's catalog in
-<code>docs/inference.md</code>.</p>
-</article>"""
-
-
 def view_math():
-    return _page("the math", MATH)
+    """The math page: ui/static/math.html, the article alone, in the page shell."""
+    with open(os.path.join(STATIC_DIR, "math.html"), encoding="utf-8") as handle:
+        return _page("the math", handle.read())
 
 
 # --- server -----------------------------------------------------------------

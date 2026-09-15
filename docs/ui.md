@@ -47,7 +47,9 @@ ui/
   board.py         the page, its JSON endpoints, the math page
   static/
     board.css      the look: the game's hero select, dark, red and blue
-    board.js       the behaviour: state, fetches, the ban picker, the three panels
+    board.js       state, the rosters, the picks, the bans, the fetches, boot
+    comps.js       the comps tab: a seat's result and the two seats
+    playbook.js    the playbook tab: the groups, the cards, the weight sliders
   facts/           everything the database knows about a board
     model.py       the World: the database in memory, per request
     compute.py     the metrics registry: every number, one function each
@@ -63,7 +65,7 @@ the script has no constant to keep in step with the Python.
 | route | serves |
 | --- | --- |
 | `/` | the board: map selector, attack/defense switch (Escort and Hybrid maps), the bans bar (a collapsible picker of the same portrait tiles - no hint text, just the count and the banned faces - up to five, all optional), the red and blue rosters grouped by role with the announced hero at the end, and three panels - **comps**, **facts**, **playbook** |
-| `/static/<file>` | `board.css` and `board.js` |
+| `/static/<file>` | `board.css`, `comps.js`, `playbook.js`, `board.js` (and `math.html`, the math page's article) |
 | `/api/roster` | every hero (role, subrole, portrait, icon) and every map (mode, sided or not) - what the rosters are built from |
 | `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
 | `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, the momentum verdict and the game plan - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set |
@@ -75,7 +77,7 @@ Every request opens its own connection and loads a fresh World, so a
 
 ## `static/` - the board's look and behaviour
 
-`board.js` keeps one piece of state - the map, the side, the bans, the
+`board.js`, loaded last because it calls the other two, keeps one piece of state - the map, the side, the bans, the
 red picks, the blue picks - in `localStorage`, so a reload mid-game keeps
 the board. A click on a portrait toggles that hero on that team (a banned
 hero cannot be picked; a hero on one team cannot be on the other); a

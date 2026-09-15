@@ -88,6 +88,19 @@ def test_catalog_rejects_a_goal_on_an_unknown_metric(tmp_path):
 # --- the solver against the built database ------------------------------------
 
 @pytest.fixture(scope="module")
+def kings_row_board(world):
+    """The board the tests read most - King's Row, Zarya and Pharah revealed, Ana and
+    Reinhardt locked, the live playbook, one process - solved once per module."""
+    from inference import engine
+    parallel = engine.PARALLEL
+    engine.PARALLEL = False
+    try:
+        return engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"])
+    finally:
+        engine.PARALLEL = parallel
+
+
+@pytest.fixture(scope="module")
 def world(db):
     from ui.facts import model
     w = model.load(db)
@@ -257,13 +270,13 @@ def test_weights_override_a_heuristic_for_one_board_and_never_the_file():
     assert catalog.weighted(cat, {}) is cat and len(over) == len(cat)
 
 
-def test_the_board_scores_under_the_weights_it_is_given(world, monkeypatch):
+def test_the_board_scores_under_the_weights_it_is_given(world, kings_row_board, monkeypatch):
     """A weight set on the board changes the score, every result says the
     weights it was scored under, and the two workers apply the same override
     as the sequential path."""
     from inference import engine
     monkeypatch.setattr(engine, "PARALLEL", False)
-    plain = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"])
+    plain = kings_row_board
     # a heuristic that actually moves this comp's score (one at the reference floor would not)
     moving = next(c["id"] for c in plain["current"].contributions
                   if c["kind"] == "heuristic" and c.get("weighted"))
@@ -284,14 +297,12 @@ def test_the_board_scores_under_the_weights_it_is_given(world, monkeypatch):
             assert round(split[key].score, 6) == round(tilted[key].score, 6)
 
 
-def test_fight_odds_pit_the_two_shares_against_each_other(world, monkeypatch):
+def test_fight_odds_pit_the_two_shares_against_each_other(world, kings_row_board):
     """Both seats scored: each side's odds are its share over the two shares'
     sum, the pair splits 100, and the verdict says so; one seat unscored or
     empty: no odds."""
     from inference import engine
-    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
-    b = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
-                                       ["Ana", "Reinhardt"]))
+    b = engine.board_dict(kings_row_board)
     mo = b["momentum"]
     n, m = mo["blue"], mo["red"]
     assert isinstance(n, int) and isinstance(m, int) and n + m > 0
@@ -406,10 +417,12 @@ def test_blue_counters_the_likely_six_until_red_reveals_a_pick(world, monkeypatc
     likely = [p["hero"] for p in compute.expected_picks(world, m, [], [])]
     b = engine.board(world, "King's Row", [], ["Ana"])
     assert b["blue"].red == likely and b["current"].red == likely and b["fill"].red == likely
-    assert [p["hero"] for p in b["expected"]] == likely
+    assert b["expected"].blue == likely and b["expected"].kind == "expected"
+    assert [p["hero"] for p in b["expected"].picks] == likely
+    assert "their likely starting comp" in engine.board_rendered(b)
     revealed = engine.board(world, "King's Row", ["Zarya"], ["Ana"])
     assert revealed["blue"].red == ["Zarya"] and revealed["current"].red == ["Zarya"]
-    assert [p["hero"] for p in revealed["expected"]] == likely     # static
+    assert revealed["expected"].blue == likely                      # static
 
 
 def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
@@ -515,12 +528,17 @@ def test_the_momentum_verdict_reads_the_two_current_comps():
     assert only_red["verdict"].startswith("red has revealed")
 
 
-def test_the_plan_reads_every_authored_map_note(world):
+def test_the_plan_reads_every_authored_map_note(world, kings_row_board):
+    """Every map's authored note is a sentence of its plan. One board is solved
+    through the public path; the other maps' plans are composed from that
+    board's optimal, since the note is the map's and the solve is not."""
     from inference import engine
+    blue_r = kings_row_board["blue"]
     for m in world.maps.values():                         # each note is a sentence of the plan
         note = m.styles.get(m.style_top, (None, None))[1] if m.style_top else None
         if note:
-            plan = engine.board(world, m.name, [], [])["plan"]
+            plan = (kings_row_board["plan"] if m.name == "King's Row"
+                    else engine._plan(world, m, "", [], [], blue_r))
             assert engine._sentence(note) in plan, m.name
     assert engine._and(["A"]) == "A" and engine._and(["A", "B", "C"]) == "A, B and C"
     names = engine._hero_names(world, "winston d.va wrecking ball nobody")
