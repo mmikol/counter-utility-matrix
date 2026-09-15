@@ -115,7 +115,7 @@ folder's own `__init__.py`.
   snapshots; loading recomputes `season_id` on every snapshot.
 
 There are no free-form notes here. A note that should shape a comp is a
-prose constraint in `inference/strategies/` - the playbook holds three kinds of
+an assumption in `inference/strategies/` - the playbook holds three kinds of
 file, constraints, heuristics and assumptions, and nothing else - where it is shown on the board,
 read by the `/comp` session, and tuned and logged with the rest.
 
