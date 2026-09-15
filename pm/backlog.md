@@ -17,6 +17,23 @@ next feature opens its own branch.
   so; the joins the data can still yield are listed under "Fact engine"
   below, best first - the pairwise numbers, blue pick against red pick,
   are the one to start with.
+- **Voice control for the picks.** Say "blue Ana", "red Pharah", "swap
+  Ana for Kiriko", "clear red" and the board sets the picks, no clicking
+  - for a draft called out at the table. The browser's speech
+  recognition (`SpeechRecognition`, Chrome and Safari; no key, no
+  service) hears a phrase, a small grammar maps it to the board's own
+  toggle calls with hero names matched the way the roster spells them
+  (Lúcio, Soldier: 76, D.Va, Wrecking Ball), a mis-hear is refused with
+  the flash the board already has, and a badge shows the microphone is
+  live; off by default, a button in the header turns it on. Cost: a
+  day, half of it the name matching; nothing leaves the browser.
+- **Faster tests.** The suite takes three minutes locally and four in
+  the image because many tests each solve a full board under the
+  reference playbook; a few session-scoped board fixtures shared across
+  them would roughly halve it. Cost: half a day.
+- **One shape for a seat's result.** Red's likely comp is a hand-built
+  dict where every other seat is a `Result`, so the renderer guards two
+  shapes; one shape removes the guards. Cost: an hour.
 - **Weights that learn on their own.** The user wants them to, with the
   sliders as the manual override. Learning needs a signal, and the one
   it had - recorded comps with a win or loss - was removed on the user's
