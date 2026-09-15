@@ -256,7 +256,7 @@ function showTab(name) {
 fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   ROSTER = d; ROSTER.byName = {};
   d.heroes.forEach(function (h) { ROSTER.byName[h.name] = h; });
-  el('mapsel').innerHTML = "<option value=''>MAP UNKNOWN / ANY</option>" + d.maps.map(function (m) { return "<option value=\"" + esc(m.name) + "\">" + esc(m.name) + '</option>'; }).join('');
+  el('mapsel').innerHTML = "<option value=''>Map unknown / any</option>" + d.maps.map(function (m) { return "<option value=\"" + esc(m.name) + "\">" + esc(m.name) + '</option>'; }).join('');
   var known = function (h) { return !!ROSTER.byName[h]; };   /* the roster is the only source of a name in state */
   st.red = st.red.filter(known); st.blue = st.blue.filter(known); st.bans = st.bans.filter(known);
   if (!d.maps.some(function (m) { return m.name === st.map; })) st.map = '';

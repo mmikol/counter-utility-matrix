@@ -46,7 +46,7 @@ ui/
   __init__.py      the package's map
   board.py         the page, its JSON endpoints, the math page
   static/
-    board.css      the look: the game's hero select, dark, red and blue
+    board.css      the look: the project's own - ink surfaces on a dot grid, a lime accent, Space Grotesk, a cool blue and a coral for the two sides
     board.js       state, the rosters, the picks, the bans, the fetches, boot
     comps.js       the comps tab: a seat's result and the two seats
     playbook.js    the playbook tab: the groups, the cards, the weight sliders
@@ -206,7 +206,7 @@ footer: the header keeps only the short-lived flashes (a banned pick, a
 full team), the facts panel says how many facts the board holds, and the
 rates' capture date is a fact on the facts tab; a patch newer than the
 rates still raises the warning box under the header.
-`board.css` is the game's hero select: role columns, portrait tiles, red
+`board.css` is the project's own look, not the game's: ink surfaces on a faint dot grid, a lime accent for what matters, Space Grotesk for headings and labels, violet and sand for heuristics and assumptions, and a cool blue and a coral for the two sides - every colour a token in `:root`. The rosters are laid out like a hero select: role columns, portrait tiles, red
 and blue seats, the dark palette.
 
 ## `facts/` - everything the database knows about a board
