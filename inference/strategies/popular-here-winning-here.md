@@ -6,7 +6,7 @@ when: map.known == 1 and team.map_win_mean >= params.GOOD_WIN
 bonus: min(team.map_pick_mass / params.POPULAR_MASS, 1) * 0.5
 params:
   GOOD_WIN: 50
-  POPULAR_MASS: 45
+  POPULAR_MASS: 90
 ---
 # Popular here and winning here
 

@@ -6,7 +6,7 @@ when: team.win_mean >= params.EVEN
 bonus: min(team.pick_mass / params.MASS_UNIT, 2) * 0.5
 params:
   EVEN: 50
-  MASS_UNIT: 10
+  MASS_UNIT: 50
 ---
 # Popular winners are the meta
 

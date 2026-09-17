@@ -12,6 +12,21 @@ next feature opens its own branch.
 
 ## Next
 
+- **Tunings by map.** The user's request: each map carries its own tuning
+  set - a weight per heuristic (and a params dial where a rule has one)
+  that applies when that map is on the board, so a rule can matter on
+  King's Row and whisper on Ilios. Stored in the database, not the files:
+  a `map_tunings` table (map, strategy, weight, params, reason, stamped)
+  the `tune` tool writes when the call names a map, mirrored in the
+  strategies export; the catalog applies the map's set over the file's
+  defaults when the solver is built for that map (`catalog.weighted`
+  already layers a session's slider values the same way, so the map's
+  set is one more layer under the sliders); the playbook tab shows the
+  map's values when a map is chosen and the file's when none is, and the
+  board result names which set it was scored under. Cost: two days - a
+  migration, the tool's `map` argument, the layering, the tab, the
+  facts line that names the set - and a test that the same six scores
+  differently under two maps' sets.
 - **The fact engine's dependent variables.** The equation is stated per
   domain (a selection's own row, then its joins) and the math page says
   so; the joins the data can still yield are listed under "Fact engine"
@@ -54,9 +69,9 @@ next feature opens its own branch.
   including the record and its tool; (b) a day.
 - **Memoize the per-hero parts of the metrics.** Thousands of candidate
   sixes share the same heroes; `compute.team_metrics` rebuilds each
-  hero's pool, kit sums and keyword sets for every candidate. 70% of a
-  solve is preparing about 15,500 candidates. Cheaper than any
-  parallelism and compounds with it. Cost: a day; risk: none to the
+  hero's pool, kit sums and keyword sets for every candidate, and that
+  preparation is most of a solve now that scoring is slim. Cheaper than
+  any parallelism and compounds with it. Cost: a day; risk: none to the
   answer if the memo is keyed on the hero and the map.
 - **Split candidate scoring across the workers inside one solve.** After
   the memo. The world and the catalog have to reach the workers (the
@@ -89,6 +104,26 @@ hero, one map, the meta, the bans), the rest intersections (hero x map,
 hero x enemy, hero x ally, the team, the matchup). What the data can
 still yield, best first:
 
+- **Mend the tags the playbook review found.** Five reviewers reading
+  244 rules against the kit data found the vocabulary misleading in
+  places, and every rule on those keys inherits it: `team.range_max`
+  takes the largest range on any ability or ultimate, so Cassidy reads
+  200 m, Orisa 180 and Widowmaker 20 - the weapon's range is the number a
+  sniper rule means; `team.flyers` tags D.Va, Sigma, Mercy, Juno and
+  Illari, so a flier guard is always on; `team.deployables` counts
+  Reinhardt's, Sigma's and Ramattra's barriers and Mei's wall but not
+  Torbjörn's turret or Illari's pylon; `team.invuln` is mostly escape
+  tools while Immortality Field and Sound Barrier are untagged;
+  `team.barrier_hp` includes ultimates (Symmetra 4,000); `team.hitscan`
+  counts support and tank guns. And several keys are one measure under
+  two names - every `matchup.*_diff` normalises exactly like its blue
+  half because red is constant across a board's sample, `safe_count` is
+  6 minus `exposed_count`, `exposure_share` is `exposed_count` over 6,
+  `heal_ratio` is `heal_peak_supports` over a constant - so the catalog
+  should refuse a second heuristic on an alias of a metric already in
+  use. Cost: a day for the tags (a weapon-range key, a turret and pylon
+  tag, a true invulnerability tag, a flier tag from flight only), half a
+  day for the alias table and the catalog check.
 - **Tag every fact independent or dependent.** Each fact kind names the
   tables it joins (none for an independent one); the facts tab shows the
   tag and the board's counts by kind, so the equation's two terms are
@@ -134,15 +169,18 @@ counters table is a list).
 
 ## Done
 
-- **Three hundred community rules are the playbook** - `community-playbook`
-  branch. Mined from reddit (r/OverwatchUniversity, r/Competitiveoverwatch,
-  r/Overwatch: 172 threads and 11,800 comments through the feeds and the
-  archive's search) by twelve analysts over two passes, standardized,
-  deduplicated by mathematics, stored through the validated add,
-  checked on six boards and their reference samples (every rule acts), a
-  source per rule in `inference/strategies/README.md`. The user's five
-  hand-built rules were removed on their word; the queue's two-tank cap
-  returned as a quoted rule. Under 300 rules a board peaked at 1.8 GB and
+- **The community's rules are the playbook** - `community-playbook`
+  branch. Three hundred mined from reddit (r/OverwatchUniversity,
+  r/Competitiveoverwatch, r/Overwatch: 172 threads and 11,800 comments
+  through the feeds and the archive's search) by twelve analysts over two
+  passes, standardized, stored through the validated add, checked on six
+  boards and their reference samples; then five reviewers read them
+  against each other and 62 went as duplicates behind aliased metrics or
+  cancelling pairs, ten guards and dials were retuned and five bodies
+  rewritten: 238 rules and the user's five assumptions, a citation for
+  every one in `inference/README.md`. The user's five hand-built rules
+  were removed on their word; the queue's two-tank cap returned as a
+  quoted rule. Under 300 rules a board peaked at 1.8 GB and
   died in its 1 GiB container: the solver now scores every candidate
   slim (score and tie-break only) and hydrates the winners' breakdowns,
   so a board peaks at 150 MB and solves in about 5 seconds instead of

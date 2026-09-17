@@ -5,7 +5,7 @@ category: matchup
 metric: team.antiheal
 direction: maximize
 weight: 1
-when: enemy.lifelines >= 4
+when: enemy.lifelines >= 5
 ---
 # Anti-heal turns off self-sustain
 

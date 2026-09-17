@@ -48,8 +48,7 @@ x-app: &app
   networks: [stack]
   environment: &env
     DATABASE_URL: postgresql://overwatch:${POSTGRES_PASSWORD:-overwatch}@db/overwatch
-    # another playbook for an experiment: a path under the repo, e.g.
-    # inference/experiments/<name> (see inference/experiments/README.md)
+    # another playbook: a folder under the repo (empty: inference/strategies)
     COUNTER_MATRIX_STRATEGIES: ${COUNTER_MATRIX_STRATEGIES:-}
 
 networks:
@@ -103,7 +102,6 @@ services:
       - ./db/raw:/app/db/raw
       - ./db/data/authored:/app/db/data/authored
       - ./inference/strategies:/app/inference/strategies
-      - ./inference/experiments:/app/inference/experiments
       - ./docs:/app/docs
     ports:
       - "127.0.0.1:8020:8020"        # MCP over HTTP: /mcp, /health
@@ -124,7 +122,6 @@ services:
     command: ["inference"]
     volumes: &reader_mounts       # the playbook, read-only; everything else comes from the database
       - ./inference/strategies:/app/inference/strategies:ro
-      - ./inference/experiments:/app/inference/experiments:ro
     ports:
       - "127.0.0.1:8019:8019"
     depends_on:
@@ -166,7 +163,6 @@ services:
       - ./db/raw:/app/db/raw
       - ./db/data/authored:/app/db/data/authored:ro
       - ./inference/strategies:/app/inference/strategies:ro
-      - ./inference/experiments:/app/inference/experiments:ro
     environment:
       <<: *env
       COUNTER_MATRIX_REFRESH_AT: ${COUNTER_MATRIX_REFRESH_AT:-05:00}
@@ -184,7 +180,6 @@ services:
       - ./db/raw:/app/db/raw
       - ./db/data/authored:/app/db/data/authored:ro
       - ./inference/strategies:/app/inference/strategies
-      - ./inference/experiments:/app/inference/experiments
     environment:
       <<: *env
       COUNTER_MATRIX_SENTRY_EVERY: ${COUNTER_MATRIX_SENTRY_EVERY:-30}

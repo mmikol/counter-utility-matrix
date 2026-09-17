@@ -5,7 +5,7 @@ category: matchup
 metric: team.cleanse
 direction: maximize
 weight: 0.75
-when: team.exposure_edges >= 3
+when: team.exposure_edges >= 8
 ---
 # Cleanse the counter's tool
 

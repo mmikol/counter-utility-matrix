@@ -5,7 +5,7 @@ category: synergy
 metric: team.synergy_density
 direction: maximize
 weight: 0.75
-when: team.exposed_count >= 2
+when: team.exposed_count >= 3
 ---
 # Countered picks need partners
 

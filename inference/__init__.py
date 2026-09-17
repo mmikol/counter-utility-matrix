@@ -6,7 +6,6 @@
                   while a condition holds); a heuristic maximises or
                   minimises a metric; an assumption is prose the agent holds
                   a comp to
-    experiments/  other playbooks, chosen with COUNTER_MATRIX_STRATEGIES
     catalog       reads, validates and mirrors the strategies
     expr          the safe expression language the frontmatter uses
     solver        searches compositions under the constraints and heuristics;

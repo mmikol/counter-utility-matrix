@@ -5,7 +5,7 @@ category: sustain
 metric: team.lifelines
 direction: maximize
 weight: 1
-when: team.hps_floor < world.heal_bench
+when: team.heal_ratio < 1
 ---
 # Self-heal covers thin support
 

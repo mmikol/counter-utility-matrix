@@ -5,6 +5,7 @@ category: damage
 metric: team.range_max
 direction: maximize
 weight: 0.5
+when: team.style_lean != 'brawl'
 ---
 # One long gun
 

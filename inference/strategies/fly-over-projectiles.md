@@ -5,7 +5,7 @@ category: matchup
 metric: team.flyers
 direction: maximize
 weight: 1
-when: enemy.hitscan <= 2
+when: enemy.hitscan <= 1
 ---
 # Fly over a projectile team
 

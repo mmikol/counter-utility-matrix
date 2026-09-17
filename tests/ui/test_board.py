@@ -215,7 +215,8 @@ def test_the_page_is_a_shell_over_static_files():
     assert "function setWeight" in script
     assert "h.form === 'heuristic' ? weightRow(h)" in script     # only heuristics have weights
     assert "function storeWeight" in script and "fetch('/api/weight', { method: 'POST'" in script
-    assert "d.playbook || 'inference/strategies'" in script       # the card names its folder
+    # the card is its kind, its name, its metric line and, for a heuristic, the weight row
+    assert "(h.form === 'heuristic' ? weightRow(h) : '') + '</div>'" in script
     # the playbook is grouped by kind, in the equation's order, each group headed by its count alone
     kinds = script[script.index("var KINDS = ["):script.index("function renderPlaybook")]
     assert kinds.index("'constraint'") < kinds.index("'heuristic'") < kinds.index("'assumption'")

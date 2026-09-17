@@ -256,7 +256,6 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .hcard .wrow input[type=range] { flex:1 1 120px; min-width:0; accent-color:var(--gold); margin:0; }
 .hcard .wrow .wval { flex:0 0 64px; width:64px; font:inherit; font-size:13px; text-align:right; color:var(--gold); background:#0b0e14; border:1px solid var(--line); border-radius:4px; padding:2px 4px; }
 .hcard .wrow .wbreak { flex-basis:100%; height:0; }
-.hcard .wrow .winf { color:var(--muted); font-size:11px; white-space:nowrap; margin-left:auto; }
 .hcard .wrow .wreset, .hcard .wrow .wstore { font:inherit; font-size:11px; background:none; border:1px solid var(--line); color:inherit; border-radius:4px; padding:2px 8px; cursor:pointer; white-space:nowrap; }
 .hcard .wrow .wstore { border-color:var(--gold); color:var(--gold); }
 .hcard .wrow .wreset:disabled, .hcard .wrow .wstore:disabled { opacity:.35; cursor:default; }

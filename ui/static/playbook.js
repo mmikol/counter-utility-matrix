@@ -11,7 +11,6 @@ function weightRow(h) {
     "<span class='wlbl'>weight</span><input type='range' min='1' max='10' step='0.01' value='" + v + "' aria-label='weight of " + esc(h.name) + "'>" +
     "<input type='number' class='wval' min='1' max='10' step='0.01' value='" + v + "' aria-label='exact weight of " + esc(h.name) + "'>" +
     "<span class='wbreak'></span>" +
-    "<span class='winf'>inferred " + h.weight + "</span>" +
     "<button class='wreset' " + (set ? '' : 'disabled') + ">reset</button>" +
     "<button class='wstore' " + (set ? '' : 'disabled') + " title='write this weight into the heuristic&#39;s file, through the tune tool'>store</button></div>";
 }
@@ -81,7 +80,6 @@ function renderPlaybook(d) {
     var params = Object.keys(h.params || {}).map(function (k) { return k + '=' + h.params[k]; }).join(', ');
     var body = h.body.replace(/^#[^\n]*\n/, '').split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.replace(/\s+/g, ' ')) + '</p>'; }).join('');
     return "<div class='hcard " + h.kind + "'><span class='kind " + h.kind + "'>" + h.kind + '</span><b>' + esc(h.name) + "</b><div class='meta'>" + esc(meta) + (params ? ' · params ' + esc(params) : '') + '</div>' + body +
-      (h.form === 'heuristic' ? weightRow(h) : '') +
-      "<div class='legend'>" + esc((d.playbook || 'inference/strategies') + '/' + h.id + '.md') + ' · ' + esc(h.category) + '</div></div>';
+      (h.form === 'heuristic' ? weightRow(h) : '') + '</div>';
   }
 }

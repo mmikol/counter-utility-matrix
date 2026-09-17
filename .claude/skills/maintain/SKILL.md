@@ -177,6 +177,17 @@ is a lesson the next run relearns.
   winners (150 MB), `orchestrator.py up` solves one board through the
   service before it says READY, and a change that scales with the
   playbook's size is tried in the stack, not only on the host.
+- **A metric under two names is scored twice.** The mechanical
+  consistency pass compared rules on the same key and missed that
+  every `matchup.*_diff` normalises exactly like its blue half (red is
+  constant across a board's sample), that `safe_count`, `exposed_count`
+  and `exposure_share` are one count, and that `heal_ratio` is
+  `heal_peak_supports` over a constant - so 61 of 300 community rules
+  were duplicates or cancelling pairs that five reviewers had to find by
+  reading. Now: a check of the playbook groups rules by what a metric
+  reduces to, not by its name (the alias table is a backlog item under
+  the fact engine), and a review reads the guards' hold counts on the
+  reference samples before it calls two rules distinct.
 - **A fact worded by set order.** The style profile fact listed tied
   styles in whatever order the tag set iterated, which differs by
   process hash seed, so the parallel board and the sequential one

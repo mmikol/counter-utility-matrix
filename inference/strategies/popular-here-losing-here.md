@@ -6,7 +6,7 @@ when: map.known == 1 and team.map_win_mean < params.TRAP_WIN
 penalty: min(team.map_pick_mass / params.TRAP_MASS, 1) * 1
 params:
   TRAP_WIN: 50
-  TRAP_MASS: 45
+  TRAP_MASS: 90
 ---
 # Popular here and losing here
 
