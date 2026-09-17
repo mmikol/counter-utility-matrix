@@ -5,9 +5,8 @@
                                       the data container pulls every source and
                                       ingests it when the database is empty or stale
     python orchestrator.py agents     Claude Code, headless, on the /refresh skill:
-                                      refresh the data, derive draft strategies,
-                                      regenerate the docs - and
-                                      leave a deterministic playbook for the board
+                                      refresh the data, complete the drafts,
+                                      re-infer with restraint, regenerate the docs
     python orchestrator.py status     what is running, how fresh the data is, the URLs
     python orchestrator.py refresh    refetch every source now (no agents)
     python orchestrator.py test       the test suite inside the image, with the coverage bar
@@ -17,7 +16,8 @@ Everything the board uses at game time is deterministic - the database
 and the strategy files. The agents run beforehand, on the host, on the
 subscription (the claude CLI, signed in once), never at game time; when
 the CLI is absent the run still brings the stack up and says what it
-skipped. Standard library only. Exit code 0 means everything answered.
+skipped. Nothing beyond the standard library and inference.derive. Exit code 0
+means everything answered.
 """
 
 import json
@@ -209,13 +209,12 @@ def status():
     return report(ok, lines)
 
 
-# The agents' run may call exactly these tools, on either server, and no
-# built-in tool at all: no shell, no file edits, no web. Least privilege is
-# what makes a headless run safe to schedule.
+# The agents' run may call exactly these tools - the ones the /refresh skill
+# names - on either server, and no built-in tool at all: no shell, no file
+# edits, no web. Least privilege is what makes a headless run safe to schedule.
 AGENT_TOOL_NAMES = ("db_status", "strategies", "tuning_log", "metrics", "facts", "infer",
-                    "board", "query", "sync_all", "pull_rates", "pull_counters",
-                    "load_authored", "infer_strategy", "tune", "db_docs",
-                    "export_csv")
+                    "query", "sync_all", "pull_rates", "pull_counters", "load_authored",
+                    "infer_strategy", "tune", "db_docs", "export_csv")
 # A refresh pull fetches dozens of pages at a polite pace: minutes, not the
 # seconds a tool call is given by default. The run's client waits this long.
 AGENT_TOOL_TIMEOUT_MS = str(45 * 60 * 1000)
@@ -238,9 +237,9 @@ def agents_command(claude=None):
 
 
 def agents():
-    """The agents' run: refresh the database, derive drafts, regenerate the
-    docs - and leave a deterministic playbook for the board.
-    Runs on the host, on the subscription; schedule it with cron or launchd."""
+    """The agents' run: refresh the database, complete the drafts, re-infer with
+    restraint, regenerate the docs. Runs on the host, on the subscription;
+    schedule it with cron or launchd."""
     print("agents: Claude Code, headless, on the /refresh skill (minutes)...")
     try:
         command = agents_command()
@@ -297,8 +296,8 @@ def refresh():
 
 
 def test():
-    # the container's filesystem is read-only; coverage writes its data to the tmpfs
-    # the suite runs on the shipped playbook whatever experiment .env names
+    """The suite inside the image: coverage writes to the tmpfs (the root is
+    read-only), and the shipped playbook is used whatever experiment .env names."""
     sh("docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage",
        "-e", "COUNTER_MATRIX_STRATEGIES=", "data",
        "python", "-m", "pytest", "-q",

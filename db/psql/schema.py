@@ -1,9 +1,12 @@
-"""The schema and the database's life: migrations, drop, rebuild, the CSV
+"""The schema and the database's life: the migrations, the ledger, rebuild
 and the generated documentation.
 
-    init      apply the migrations to an empty database
-    rebuild   drop everything and reapply them
-    docs      regenerate the schema sections of docs/db.md (ERD, dictionary)
+    read_migrations, apply   the files in order, and applying them
+    applied, pending         the ledger against the files on disk
+    drop_all, rebuild        drop every table and reapply every migration
+    generate_docs, embed     the ERD and data dictionary of docs/db.md from
+                             the live schema; embed rewrites one generated
+                             section of a markdown file
 """
 
 import glob

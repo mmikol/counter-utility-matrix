@@ -14,7 +14,7 @@ from inference import catalog
 
 def _playbook(tmp_path):
     for name in os.listdir(catalog.STRATEGIES_DIR):
-        if name.endswith(".md") and name not in catalog.NOT_HEURISTICS:
+        if name.endswith(".md") and name not in catalog.NOT_STRATEGIES:
             shutil.copy(os.path.join(catalog.STRATEGIES_DIR, name), tmp_path / name)
     return str(tmp_path)
 

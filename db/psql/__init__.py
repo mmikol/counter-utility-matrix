@@ -1,7 +1,7 @@
 """The database: where it is, and the small things every writer needs.
 
-    default_dsn        an explicit DSN, $DATABASE_URL, or the embedded
-                       cluster at db/psql/cluster (pgserver, first touch)
+    default_dsn        $DATABASE_URL, or the embedded cluster at
+                       db/psql/cluster (pgserver, first touch)
     register_source    the `sources` row a page or a file becomes, upserted;
                        every table's rows carry its source_id
     lookup_ids         {name: id} for matching what a source says against
@@ -11,10 +11,9 @@
     export             the CSV mirror under db/raw, and its mark
 
 The schema itself - migrations, the ledger, rebuild, the
-generated docs - is db.schema. Nothing here knows a particular source.
+generated docs - is db.psql.schema. Nothing here knows a particular source.
 """
 
-import argparse
 import json
 import os
 from datetime import UTC, datetime
@@ -22,35 +21,15 @@ from datetime import UTC, datetime
 from db import DEFAULT_DB_DIR, RAW_DIR
 
 
-def build_parser(description):
-    """A parser carrying the two options a process accepts: where the database is."""
-    parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--dsn", help="Postgres DSN (default: $DATABASE_URL)")
-    parser.add_argument(
-        "--local-server",
-        nargs="?",
-        const="pgdata",
-        help="run against an embedded Postgres in this directory (needs pgserver)",
-    )
-    return parser
-
-
-def default_dsn(local_server=None, dsn=None):
-    """Where to read and write: an explicit DSN, $DATABASE_URL, or the
-    embedded cluster at db/psql/cluster (pgserver runs initdb on first touch)."""
-    explicit = dsn or os.environ.get("DATABASE_URL")
-    if not local_server and explicit:
+def default_dsn():
+    """Where to read and write: $DATABASE_URL, or the embedded cluster at
+    db/psql/cluster (pgserver runs initdb on first touch)."""
+    explicit = os.environ.get("DATABASE_URL")
+    if explicit:
         return explicit
     import pgserver
 
-    return pgserver.get_server(
-        os.path.abspath(local_server or DEFAULT_DB_DIR)).get_uri()
-
-
-def resolve_dsn(args):
-    return default_dsn(getattr(args, "local_server", None),
-                       getattr(args, "dsn", None))
-
+    return pgserver.get_server(DEFAULT_DB_DIR).get_uri()
 
 
 def lookup_ids(cursor, table, name_column, id_column):

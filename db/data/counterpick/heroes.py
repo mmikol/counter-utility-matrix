@@ -5,9 +5,7 @@ publishes go into hero_meta under their own snapshot, because they are a
 different population from Blizzard's. Scope is fixed to competitive on
 console, Americas. Runs after wiki.maps and blizzard.meta.
 
-Reading counterpick.gg's hero ranking table.
-
-One row per hero, with eight cells:
+The ranking table has one row per hero, with eight cells:
 
     0 hero      3 countered by    6 countered by (repeat)
     1 win %     4 counters        7 best maps
@@ -98,7 +96,6 @@ def parse_table(html):
 # The site never says which queue its competitive games were, and this
 # model must not mistake an unlabelled snapshot for open queue.
 QUEUE = "competitive_unspecified_queue"
-PLATFORM_NAME = PLATFORM
 
 
 def run(connection, cache_dir=None, session=None, log=print):
@@ -120,7 +117,7 @@ def run(connection, cache_dir=None, session=None, log=print):
     cursor.execute("INSERT INTO meta_snapshots (captured_at, queue, platform, input,"
                    " patch_id, season_id, source_id)"
                    " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING snapshot_id",
-                   (cao, QUEUE, PLATFORM_NAME, INPUT_DEVICE,
+                   (cao, QUEUE, PLATFORM, INPUT_DEVICE,
                     current_patch(cursor), current_season(cursor), source_id))
     snapshot_id = cursor.fetchone()[0]
 

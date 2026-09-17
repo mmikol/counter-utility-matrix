@@ -83,7 +83,7 @@ CREATE TABLE meta_snapshots (
     -- separates them.
     input       text,
     -- The most recent patch released on or before the capture. NULL only if
-    -- the patches pipeline has not run - the orchestrator orders it first.
+    -- pull_patches has not run - sync_all orders it before the rates pulls.
     patch_id    integer REFERENCES patches(patch_id),
     -- The season live at capture. Backfilled by the seasons loader (it runs
     -- after the snapshot writers), then stamped directly on later captures.
@@ -109,13 +109,13 @@ CREATE TABLE hero_meta (
     UNIQUE (snapshot_id, hero_id, region_id, tier_id)
 );
 
--- Rates per map, and per tier within a map. The source's filters compose, so
--- a hero's rates on King's Row in Bronze are a different figure from the same
--- hero's rates on King's Row overall - and both are published.
---
--- tier_id 'all' is the unfiltered figure for that map, which keeps the
--- dimension key non-nullable. Region is not broken out here: map x tier is
--- already 240 requests, and map x tier x region would be 720.
+-- Rates per map. The source's filters compose, so a hero's rates on King's
+-- Row in Bronze are a different figure from its rates on King's Row overall,
+-- and both are published; only the whole-map figure is pulled, under tier_id
+-- 'all', which keeps the dimension key non-nullable. Region is carried but
+-- not swept: every row is the Americas. Widening either is a loop, not a
+-- migration - map x tier alone is about 270 requests against a source that
+-- refuses long sweeps.
 CREATE TABLE map_meta (
     map_meta_id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     snapshot_id integer NOT NULL REFERENCES meta_snapshots(snapshot_id) ON DELETE CASCADE,

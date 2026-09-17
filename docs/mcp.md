@@ -1,11 +1,11 @@
 # The MCP servers
 
-Everything in counter-utility-matrix happens through one set of tools, served over
-the [Model Context Protocol](https://modelcontextprotocol.io) by the data
-layer (`db/mcp/`). A Claude Code session calls them as MCP tools; the
-board, the refresher, Docker's entrypoint and the shell call the same
-functions in-process. There is no other door, which is what makes a
-session and the board see the same numbers.
+Everything in counter-utility-matrix happens through one set of tools,
+served over the [Model Context Protocol](https://modelcontextprotocol.io)
+by the data layer (`db/mcp/`). A Claude Code session calls them as MCP
+tools; the board, the refresher, Docker's entrypoint and the shell call
+the same functions in-process. There is no other door, which is what
+makes a session and the board see the same numbers.
 
 ## The two servers
 
@@ -17,31 +17,30 @@ the repo:
 | `counter-utility-matrix` | stdio: `.venv/bin/python -m db.mcp` | the local embedded cluster at `db/psql/cluster` (or whatever `DATABASE_URL` names) | the session, on demand |
 | `counter-utility-matrix-docker` | Streamable HTTP: `http://localhost:8020/mcp` | the compose stack's PostgreSQL - the database the board at :8017 shows | the `data` container, after it has built the database |
 
-They expose the same tools. The skills prefer `counter-utility-matrix-docker` when
-the stack is up, so what a session changes is what the board shows; the
-headless agents' run (`orchestrator.py agents`) is allowed an explicit list
-of tools on these two servers and no built-in tool at all.
+They expose the same tools. The skills prefer `counter-utility-matrix-docker`
+when the stack is up, so what a session changes is what the board shows;
+the headless agents' run (`orchestrator.py agents`) is allowed an explicit
+list of tools on these two servers and no built-in tool at all.
 
 The HTTP door checks who is knocking: it binds to 127.0.0.1, refuses
 non-local browser origins, caps a request at one megabyte and a batch at
 twenty messages, allows 120 tool calls per client address per minute, and
-requires `Authorization: Bearer <token>`
-when `COUNTER_MATRIX_MCP_TOKEN` is set (in `.env`; `.mcp.json` sends it from
-the same variable). Every tool call over either transport is a line in
-the audit log, `db/raw/audit.jsonl`, that the sentry reads. The `query`
-tool connects as `matrix_reader`, a login that can only `SELECT`, runs one
-read-only statement with a timeout, and refuses SQL that reaches for files
-or servers. The whole
-threat model is in [security.md](security.md).
+requires `Authorization: Bearer <token>` when `COUNTER_MATRIX_MCP_TOKEN`
+is set (in `.env`; `.mcp.json` sends it from the same variable). Every
+tool call over either transport is a line in the audit log,
+`db/raw/audit.jsonl`, that the sentry reads. The `query` tool connects as
+`matrix_reader`, a login that can only `SELECT`, runs one read-only
+statement with a timeout, and refuses SQL that reaches for files or
+servers. The whole threat model is in [security.md](security.md).
 
-The server is dependency-free (`db/mcp/server.py`): JSON-RPC 2.0, one
+The server is dependency-free (`db/mcp/server.py`, a few hundred lines
+instead of the SDK, so the door has nothing to audit): JSON-RPC 2.0, one
 message per line over stdio, and the same surface over HTTP with a
 `Mcp-Session-Id` per client, an origin guard, `GET /health` for the
-containers' healthchecks, and `405` on a bare `GET /mcp`. It speaks what a
-tool host needs - `initialize`, `ping`, `tools/list`, `tools/call`,
+containers' healthchecks, and `405` on a bare `GET /mcp`. It speaks what
+a tool host needs - `initialize`, `ping`, `tools/list`, `tools/call`,
 `resources/list`, `resources/read`, an empty `prompts/list` - and logs to
-stderr, since stdout is the wire. It is hand-written so the door has no
-dependency to audit: a few hundred lines of JSON-RPC instead of the SDK.
+stderr, since stdout is the wire.
 
 ## From a shell
 
@@ -59,9 +58,9 @@ Every tool returns text for a person and a JSON payload for a program;
 ## Resources
 
 The strategy files are also served as MCP resources, so a session can
-read the playbook without a tool call: `strategy://<id>` is one file
-(its frontmatter and prose, `text/markdown`), and `strategy://tuning-log`
-is the audit trail of every change to them.
+read the playbook without a tool call: `strategy://<id>` is one file (its
+frontmatter and prose, `text/markdown`), and `strategy://tuning-log` is
+the audit trail of every change to them.
 
 ## The tools
 
@@ -78,7 +77,7 @@ is the audit trail of every change to them.
 | `pull_rates` | Blizzard's win/pick/ban rates as a NEW dated snapshot, by rank tier and by map (Competitive Role Queue, console, Americas). Slow when uncached: ~40 pages at a polite pace. | `refresh` (boolean): fetch every page again instead of reading the cache; a page that fails to fetch keeps its cached copy |
 | `pull_playstyles` | The wiki's team-composition page: which playstyle (dive, brawl, poke) each hero belongs to. | `refresh` (boolean): fetch every page again instead of reading the cache; a page that fails to fetch keeps its cached copy |
 | `pull_counters` | counterpick.gg: who answers whom, each hero's best maps, and its own rates under a separate snapshot. | `refresh` (boolean): fetch every page again instead of reading the cache; a page that fails to fetch keeps its cached copy |
-| `load_authored` | Store the inputs we write instead of fetch: seasons, synergies, comp archetypes, map playstyles, and the mirror of the markdown constraints and heuristics (the strategies catalog). Whole-truth reloads. | `only` (array): a subset to reload (default: all) |
+| `load_authored` | Store the inputs we write instead of fetch: seasons, synergies, comp archetypes, map playstyles, and the mirror of the strategies catalog (the playbook's constraints, heuristics and assumptions). Whole-truth reloads. | `only` (array): a subset to reload (default: all) |
 | `sync_all` | Every pull_* tool in dependency order, then the authored inputs, then the CSV mirror: the whole database from its sources. On a populated database this is an update (entities refresh in place, rates append a snapshot). | `refresh` (boolean): fetch every page again instead of reading the cache; a page that fails to fetch keeps its cached copy |
 | `db_status` | Which database the tools are pointed at, its table and row counts, and the rates snapshots it holds. | none |
 | `db_init` | Apply the migrations to an EMPTY database (schema only; sync_all fills it). Refuses a database that already has tables. | none |

@@ -25,6 +25,7 @@ import re
 ALT_SUFFIX_RE = re.compile(r"\s*(?:alt(?:ernate)?\s*fire|\(ads\))\s*$", re.I)
 WORD_RE = re.compile(r"[A-Za-z']+")
 
+# The wiki's firing modes -> weapon_config_slots.slot_id (seeded in 002_heroes.sql).
 SLOT_IDS = {
     "": 1,
     "primary fire": 2,
@@ -32,7 +33,8 @@ SLOT_IDS = {
     "hip fire": 4,
     "ads": 5,
 }
-DEFAULT_SLOT = 1
+DEFAULT_SLOT = SLOT_IDS[""]
+ADS_SLOT = SLOT_IDS["ads"]
 
 MERGEABLE_SEQUENCES = {("hip fire", "ads"), ("primary fire", "secondary fire")}
 
@@ -44,9 +46,6 @@ def base_name(name):
 def head_noun(name):
     words = WORD_RE.findall(base_name(name))
     return words[-1].lower() if words else ""
-
-
-ADS_SLOT = 5
 
 
 def slot_id(mode):

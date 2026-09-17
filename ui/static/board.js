@@ -40,7 +40,7 @@ function soonTile(h) {
 }
 function rosterHTML(team) {
   var cols = '';
-  ['tank', 'damage', 'support'].forEach(function (role) {
+  ROLES.forEach(function (role) {
     var icon = ROSTER.role_icons[role] ? "<img src='" + esc(ROSTER.role_icons[role]) + "' alt=''>" : '';
     cols += "<div class='rolecol'><h4>" + icon + role + "</h4><div class='grid'>";
     ROSTER.heroes.filter(function (h) { return h.role === role; }).forEach(function (h) { cols += tile(h, team); });
@@ -247,7 +247,7 @@ function paintSuggestions() {
 }
 
 function showTab(name) {
-  if (TABS.indexOf(name) < 0) name = TABS[0];   /* an unknown or stale tab (the old 'inf' / 'cur') lands on comps */
+  if (TABS.indexOf(name) < 0) name = TABS[0];   /* an unknown or stale saved tab lands on comps */
   document.querySelectorAll('nav.tabs button').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
   document.querySelectorAll('.panel').forEach(function (p) { p.classList.toggle('active', p.id === 'tab-' + name); });
   try { localStorage.setItem('owdb-tab', name); } catch (e) {}

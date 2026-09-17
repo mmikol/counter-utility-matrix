@@ -13,7 +13,7 @@ mirrored, and logged with its reason.
                          "weight": 2}, "inferred from the prose")
 
 Fields: weight, direction, soft, when, require, bonus, penalty, metric,
-prose, category, params.NAME. The edited (or new) file is loaded through
+kind, category, params.NAME. The edited (or new) file is loaded through
 the catalog before it is written, so a metric that does not exist or an
 expression that does not parse is refused and nothing changes. Every
 accepted change is one line in inference/strategies/tuning-log.md - the
@@ -100,7 +100,7 @@ def validate(directory, hid, new_text):
     tmp = tempfile.mkdtemp(prefix="tune-")
     try:
         for name in os.listdir(directory):
-            if name.endswith(".md") and name not in catalog_module.NOT_HEURISTICS:
+            if name.endswith(".md") and name not in catalog_module.NOT_STRATEGIES:
                 shutil.copy(os.path.join(directory, name), os.path.join(tmp, name))
         with open(os.path.join(tmp, hid + ".md"), "w", encoding="utf-8") as handle:
             handle.write(new_text)

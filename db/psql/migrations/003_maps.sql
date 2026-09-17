@@ -1,7 +1,5 @@
 -- MAPS: the maps, the game modes, and every playable combination.
 --
--- Competitive.
---
 -- Scope: Standard Play only. The wiki also documents Former Standard Play
 -- (Assault, Clash), Stadium, Arcade, Custom Games, Training and seasonal
 -- modes. None of those are Open Queue Competitive, so none are stored.
@@ -43,12 +41,11 @@ CREATE TABLE map_modes (
 
 CREATE INDEX ix_map_modes_mode ON map_modes (mode_id);
 
--- Stages within a map: King's Row's first point, Ilios' Well.
---
--- Defined and deliberately empty. No source publishes per-stage rates -
--- Blizzard's map filter lists thirty whole maps and stops - so there is
--- nothing to load here yet. It exists so map_meta can carry a stage_id
--- now rather than needing the column bolted on later.
+-- Stages within a map: Ilios' Well, Lighthouse and Ruins. Loaded from each
+-- map's own article for the Control and Flashpoint maps, which play their
+-- rounds on submaps; the other modes have none. No source publishes
+-- per-stage rates, so map_meta.stage_id stays NULL - the vocabulary is
+-- here for when one does.
 CREATE TABLE map_stages (
     stage_id  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     map_id    integer NOT NULL REFERENCES maps(map_id) ON DELETE CASCADE,

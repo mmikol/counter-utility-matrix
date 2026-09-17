@@ -37,10 +37,8 @@ def test_names_resolve_across_spellings(world):
         world.resolve("Atlantis", [], [])
 
 
-def test_facts_are_densely_numbered_and_keyed(world):
+def test_every_fact_is_keyed_and_the_meta_comes_first(world):
     fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
-    facts = [f for f in fs.facts if f.scope != engine.PLAYBOOK_SCOPE]
-    assert [f.id for f in facts] == ["F%d" % i for i in range(1, len(facts) + 1)]
     assert all(f.key and f.scope and f.text for f in fs.facts)
     assert fs.facts[0].scope == "meta"
     assert {"map", "hero", "team", "matchup", "playbook"} <= {f.scope for f in fs.facts}
@@ -142,7 +140,6 @@ def test_sides_exist_only_on_escort_and_hybrid(world):
         engine.generate(world, "King's Row", [], [], side="left")
 
 
-@pytest.mark.invariant
 def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_apart(world):
     # FACTS = INDEPENDENT ∪ DEPENDENT (F1..); the playbook's record rides below as S1..
     fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])

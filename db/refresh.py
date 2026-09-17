@@ -19,12 +19,13 @@ to yesterday's numbers rather than an empty table. The `refresher`
 container runs this loop.
 """
 
+import argparse
 import os
 import sys
 import time
 from datetime import datetime, timedelta
 
-from db import CACHE_DIRS, psql
+from db import CACHE_DIRS
 from db.mcp import tools
 
 DEFAULT_AT = os.environ.get("COUNTER_MATRIX_REFRESH_AT", "05:00")
@@ -124,7 +125,7 @@ def run_forever(ctx, at=DEFAULT_AT, max_age_hours=DEFAULT_MAX_AGE_HOURS, log=pri
 
 
 def main():
-    parser = psql.build_parser(__doc__)
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--now", action="store_true", help="refresh once and exit")
     parser.add_argument("--at", default=DEFAULT_AT, help="daily time, HH:MM (default %s)"
                         % DEFAULT_AT)
@@ -133,7 +134,7 @@ def main():
     parser.add_argument("--full", action="store_true",
                         help="with --now: every source, not just the daily set")
     args = parser.parse_args()
-    ctx = tools.Context(dsn=psql.resolve_dsn(args), log=print)
+    ctx = tools.Context(log=print)      # DATABASE_URL, or the embedded cluster
     if args.now:
         ok, _ = refresh_once(ctx, full=True if args.full else None)
         sys.exit(0 if ok else 1)

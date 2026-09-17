@@ -9,10 +9,11 @@ strategy file's frontmatter states. A colleague brings the *what* - a
 name, a kind, and some prose about the game, as rough as they like - and
 you deliver the *how*: the same three things in the playbook's standard
 form, plus the frontmatter that makes the solver act on them. Everything
-goes through the `counter-utility-matrix` (or `counter-utility-matrix-docker`)
-MCP server, which validates the file against the catalog before it exists,
-mirrors it into the `strategies` table, and logs it in
-`inference/strategies/tuning-log.md`. Nothing is written by hand.
+goes through the `counter-utility-matrix` (or
+`counter-utility-matrix-docker`) MCP server, which validates the file
+against the catalog before it exists, mirrors it into the `strategies`
+table, and logs it in `inference/strategies/tuning-log.md`. Nothing is
+written by hand.
 
 ## What to ask for
 
@@ -23,8 +24,8 @@ inferring those is your job.
 
 1. **The name** - what the strategy is called.
 2. **The kind**: a **constraint** (something a comp must or should do: a
-   limit, a reward, a penalty), a **heuristic** (something to have more or
-   less of, measured), or an **assumption** (what to take as given: a
+   limit, a reward, a penalty), a **heuristic** (something to have more
+   or less of, measured), or an **assumption** (what to take as given: a
    ground rule the session holds a comp to, never scored). If the kind
    they named does not fit the prose - a "heuristic" that is really a
    rule, a "constraint" nothing can measure - pick the one that does and
@@ -66,17 +67,17 @@ question is allowed.
 ## Derive the insight and the mathematics
 
 1. **Read the vocabulary.** The `metrics` tool lists every key a strategy
-   may reference with its meaning: `team.*` for our side, `enemy.*` for the
-   same numbers on the red side, `matchup.*` for the two compared, `map.*`,
-   `world.*` - and which are text (usable in a `when`, never as a
-   heuristic's metric).
+   may reference with its meaning: `team.*` for our side, `enemy.*` for
+   the same numbers on the red side, `matchup.*` for the two compared,
+   `map.*`, `world.*` - and which are text (usable in a `when`, never as
+   a heuristic's metric).
 2. **Read the catalog.** `strategies` shows every existing file with its
    form and expressions. Name the nearest existing strategy and say how
    the new one differs; if one already says it, say so and offer `/tune`
    instead of a duplicate. Match the house style: weights 1 to 4 for
    heuristics, bonuses and penalties of 0.5 to 2 per unit for scored
-   constraints, `min(x, n)` to cap a reward, `params:` for any threshold a
-   person might want to turn.
+   constraints, `min(x, n)` to cap a reward, `params:` for any threshold
+   a person might want to turn.
 3. **Decide, from the prose, and show your working** - the insight in one
    line, then the mathematics in one line of words and one of expression:
    - **heuristic**: one numeric `metric`, its `direction`, a `weight` on
@@ -113,10 +114,11 @@ question is allowed.
    shows it as a *draft*), use `infer_strategy` with the same fields
    instead, and pass the standardized `prose` with it.
 2. **Show the effect:** run `board` (or `infer`) for the board the user is
-   on, or a representative one (King's Row against a heal-heavy red, say),
-   and point at the new line in the breakdown: its weighted contribution,
-   what it moved in the six, what it would take to flip a pick. If the
-   strategy never applies on that board, say so and pick one where it does.
+   on, or a representative one (King's Row against a heal-heavy red,
+   say), and point at the new line in the breakdown: its weighted
+   contribution, what it moved in the six, what it would take to flip a
+   pick. If the strategy never applies on that board, say so and pick one
+   where it does.
 3. **Regenerate the catalog docs:** `db_docs`, so `docs/inference.md`
    carries the new strategy the way the file states it.
 4. **Report in four lines:** the standardized strategy (name, kind,
@@ -145,8 +147,8 @@ derives its frontmatter without you: `load_authored`, `orchestrator.py up`
 and the `derive_strategies` tool ask `claude -p` the same question this
 skill answers and store the result through the same validated path. This
 skill is the interactive version - use it when the colleague wants to see
-and discuss the inference, or when `strategies` shows a draft that the
-engine could not complete (its log line says why).
+and discuss the inference, or when `strategies` shows a draft the engine
+could not complete (its log line says why).
 
 ## Ground rules
 
@@ -156,8 +158,8 @@ engine could not complete (its log line says why).
   to the prose is shown before it is stored.
 - One file per strategy; never overwrite - `tune` and `infer_strategy`
   change an existing one, deleting is a human decision.
-- Players are assumed to play optimally: a strategy encodes the game,
-  not a lobby's habits.
+- Players are assumed to play optimally: a strategy encodes the game, not
+  a lobby's habits.
 
 ## What is data
 

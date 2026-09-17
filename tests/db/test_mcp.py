@@ -4,16 +4,14 @@ server as a subprocess and need no database (tools/list and list_sources
 read nothing); the tool tests need the built database."""
 
 import json
-import os
 import subprocess
 import sys
 
 import pytest
 
+from db import ROOT
 from db.mcp import tools
 from db.mcp.server import Server, Tool, ToolError
-
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _talk(messages):
@@ -203,20 +201,23 @@ def test_http_transport_guards_get_origin_and_health(http_server):
     assert health["status"] in ("ok", "degraded")
 
 
+@pytest.mark.invariant
 def test_db_migrate_is_idle_when_the_ledger_is_current(ctx):
     text, data = tools.run_tool(ctx, "db_migrate")
     assert data["applied"] == [] and text.startswith("db_migrate: applied 0")
 
 
-def test_metrics_tool_serves_the_vocabulary(ctx):
-    text, data = tools.run_tool(ctx, "metrics")
+# Neither of these touches the database, so they run without one (as CI does).
+
+def test_metrics_tool_serves_the_vocabulary():
+    text, data = tools.run_tool(tools.Context(dsn="postgresql://nowhere"), "metrics")
     assert "team.coverage_share" in data["metrics"] and "team.coverage_share" in data["numeric"]
     assert "map.side" in data["text"] and "map.side" not in data["numeric"]
     assert text.splitlines()[0].startswith("team.")
 
 
-def test_derive_strategies_is_idle_with_nothing_pending(ctx):
-    text, data = tools.run_tool(ctx, "derive_strategies")
+def test_derive_strategies_is_idle_with_nothing_pending():
+    text, data = tools.run_tool(tools.Context(dsn="postgresql://nowhere"), "derive_strategies")
     assert data["skipped"] == "nothing pending" and "nothing pending" in text
 
 

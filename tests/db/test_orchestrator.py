@@ -1,11 +1,15 @@
-"""orchestrator.py: the verdict, the dispatch, the agents' command and the
-draft hand-off are pure; the docker verbs are not exercised."""
+"""orchestrator.py with docker, the network and the claude CLI stubbed out: the
+verdict, the dispatch, the agents' fences, the draft hand-off, each verb's calls."""
 
 import json
+import os
+import re
 
 import pytest
 
 import orchestrator
+
+REFRESH_SKILL = os.path.join(orchestrator.ROOT, ".claude", "skills", "refresh", "SKILL.md")
 
 
 def test_verdict_reads_the_three_health_replies():
@@ -53,6 +57,15 @@ def test_the_agents_run_is_headless_claude_on_the_refresh_skill(monkeypatch):
         orchestrator.agents_command()
 
 
+@pytest.mark.skipif(not os.path.exists(REFRESH_SKILL), reason="the skills are not in the image")
+def test_the_allowlist_is_exactly_the_tools_the_refresh_skill_names():
+    from db.mcp import tools
+    with open(REFRESH_SKILL, encoding="utf-8") as handle:
+        named = set(re.findall(r"`([a-z_]+)`", handle.read()))
+    registered = {name for name, *_ in tools.REGISTRY}
+    assert set(orchestrator.AGENT_TOOL_NAMES) == named & registered
+
+
 def test_no_verb_means_the_whole_run_and_a_bad_verb_prints_the_usage(monkeypatch):
     seen = []
     monkeypatch.setattr(orchestrator, "run", lambda: seen.append("run") or 0)
@@ -73,18 +86,6 @@ def test_drafts_are_derived_on_the_host_then_the_stack_remirrors(monkeypatch):
     assert calls == []
     orchestrator.derive_pending({"inference": {"strategies": 39, "pending": 1}})
     assert calls == [("sh", "derive_strategies"), ("mcp", "load_authored")]
-
-
-def test_a_signed_out_cli_skips_the_agents_run_instead_of_failing(monkeypatch, capsys):
-    import subprocess
-    monkeypatch.setattr(orchestrator, "agents_command", lambda: ["/x/claude", "-p", "/refresh"])
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
-        a[0], 1, stdout="Not logged in · Please run /login\n", stderr=""))
-    assert orchestrator.agents() == 0
-    assert "not signed in" in capsys.readouterr().out
-    monkeypatch.setattr(subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(
-        a[0], 2, stdout="", stderr="boom"))
-    assert orchestrator.agents() != 0
 
 
 # --- the verbs, with docker and the network stubbed out --------------------------------
@@ -119,7 +120,7 @@ def test_up_recreates_the_containers_when_a_bind_mount_went_stale(stubbed, capsy
     calls, healthy = stubbed
     healthy["inference"]["strategies"] = 0
     healthy["inference"]["status"] = "degraded"
-    orchestrator.up()
+    assert orchestrator.up() == 1
     assert ("sh", "docker", "compose", "up", "-d", "--force-recreate") in calls
     assert "NOT READY" in capsys.readouterr().out
 
@@ -136,11 +137,11 @@ def test_status_derives_pending_drafts_on_the_host(stubbed, capsys):
 def test_refresh_test_down_and_main_dispatch(stubbed, capsys):
     calls, _ = stubbed
     assert orchestrator.refresh() == 0 and ("mcp", "sync_all") in calls
-    assert orchestrator.test() == 0 and any("pytest" in c for c in calls)
+    assert orchestrator.test() == 0
+    suite = next(c for c in calls if "pytest" in c)     # in the image, on the shipped playbook
+    assert "COVERAGE_FILE=/tmp/.coverage" in suite and "COUNTER_MATRIX_STRATEGIES=" in suite
     assert orchestrator.down() == 0 and ("sh", "docker", "compose", "down") in calls
     assert orchestrator.main(["status"]) == 0
-    with pytest.raises(SystemExit):
-        orchestrator.main(["bogus"])
     with pytest.raises(SystemExit):
         orchestrator.main(["up", "status"])
 

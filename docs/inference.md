@@ -1,14 +1,14 @@
 # The INFERENCE LAYER - `inference/`
 
 Facts in, the optimal composition out. The layer owns the right-hand
-side of the equation:
+side of the equation in [architecture.md](architecture.md):
 
 ```
 STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS   the playbook: markdown files in strategies/
 COMP       = ARGMAX[ STRATEGIES( FACTS ) ]  the solver searches; the agent argues
 ```
 
-Two things do the inferring, and it matters which is which:
+Two things infer, and it matters which is which:
 
 - **The solver** is deterministic arithmetic. It reads the strategy files'
   frontmatter, scores every candidate six with the facts layer's metrics,
@@ -17,9 +17,9 @@ Two things do the inferring, and it matters which is which:
 - **The agent** is a Claude Code session on the `/comp` skill. It reads
   the same facts and the prose of the same strategies and reconciles them
   where arithmetic cannot. It runs when you ask it to, never on its own,
-  and it costs nothing beyond your subscription.
+  and costs nothing beyond your subscription.
 
-## How a strategy file works, and what it does not do
+## How a strategy file works
 
 Drop a markdown file into `strategies/` and it is live: the solver reads
 the directory on every call, the board's playbook panel shows it, the
@@ -46,51 +46,50 @@ The share of revealed enemies at least one of our picks answers...
 | heuristic | | `metric`, `direction`, `weight` | normalises the metric to [0, 1] against a seeded sample of legal sixes for the board (flipped for minimize) and adds `weight x norm` |
 | constraint | limit | `require: <expr>`, optionally `soft: true` + `penalty: <number>` | discards a candidate that fails (a soft one subtracts the penalty) |
 | constraint | scored | `bonus: <expr>` and/or `penalty: <expr>`, optionally `when` | adds `weight x (bonus - penalty)` while `when` holds |
-| assumption | | nothing - prose by definition | nothing - what the solver takes as given and the agent holds a comp to; shown on the board and read by the session |
-| constraint or heuristic | draft | name, kind and prose only | nothing yet - shown and served, ignored by the solver, until `/strategy` infers the rest or turns it into an assumption |
+| assumption | | nothing - prose by definition | nothing: what the solver takes as given and the agent holds a comp to; shown on the board and read by the session |
+| constraint or heuristic | draft | name, kind and prose only | nothing yet: shown and served, ignored by the solver, until `/strategy` infers the rest or turns it into an assumption |
 
 A strategy's prose is three sentences at most (`add_strategy` refuses
 more): the claim, why and when, what is measured.
 
-**The solver does not infer a formula or a weight from prose; a model
-does - the `/strategy` skill on command, or the engine on its own through
-`derive.py`.** The skill: you give it three things - a name,
-a kind, and up to three sentences of what the strategy means - and the
-session reads the vocabulary (`metrics`), reads the catalog for the house
-style, decides the frontmatter (a heuristic's metric, direction and
-weight; a constraint's `require`, or its `when`, `bonus`, `penalty` and
-`params`; or `kind: assumption` when nothing is measurable), and stores the
-file through `add_strategy`, which validates it against the catalog
-before it exists, mirrors it into the `strategies` table, and logs it
-with a reason that quotes the prose. A file you drop in yourself with
-only a name, a kind and prose loads as a *draft*: the board and the
-`strategies` tool show it, `infer` results list it as not yet scored,
-and `/strategy` completes it through `infer_strategy`.
+**The solver never infers a formula or a weight from prose; a model does**
+- the `/strategy` skill on command, or the engine on its own through
+`derive.py`. The skill takes three things - a name, a kind, and up to
+three sentences of what the strategy means - reads the vocabulary
+(`metrics`) and the catalog for the house style, decides the frontmatter
+(a heuristic's metric, direction and weight; a constraint's `require`, or
+its `when`, `bonus`, `penalty` and `params`; or `kind: assumption` when
+nothing is measurable), and stores the file through `add_strategy`, which
+validates it against the catalog before it exists, mirrors it into the
+`strategies` table, and logs it with a reason that quotes the prose. A
+file you drop in yourself with only a name, a kind and prose loads as a
+*draft*: the board and the `strategies` tool show it, `infer` results list
+it as not yet scored, and `/strategy` completes it through
+`infer_strategy`.
 
 **The engine derives drafts on its own, on the subscription.** `derive.py`
 asks Claude Code in print mode (`claude -p`, from a neutral directory, no
 project settings, no tools) for one JSON answer - the same inference the
 skill does, headless - and stores it through the same validated path,
-sending the catalog's objection back once if the first answer is
-refused. It runs wherever the claude CLI is signed in, which is the
-host: `load_authored` derives pending drafts before it mirrors,
-`orchestrator.py up` and `status` derive them and re-mirror the stack's
-database, and the `derive_strategies` tool does it on demand. Inside
-the containers the CLI is absent, so drafts stay pending until the host
-runs. No API key anywhere: the free-only rule holds. Sign the CLI in
-once with `claude login`; until then the engine says so and leaves the
-draft as it was.
+sending the catalog's objection back once if the first answer is refused.
+It runs wherever the claude CLI is signed in, which is the host:
+`load_authored` derives pending drafts before it mirrors, `orchestrator.py
+up` and `status` derive them and re-mirror the stack's database, and the
+`derive_strategies` tool does it on demand. Inside the containers the CLI
+is absent, so drafts stay pending until the host runs. No API key
+anywhere. Sign the CLI in once with `claude login`; until then the engine
+says so and leaves the draft as it was.
 
 Expressions are a whitelist, compiled once and validated against the
 metrics registry when the catalog loads: the `team`, `enemy`, `matchup`,
 `map`, `world` and `params` sections, arithmetic, comparisons, `and`,
 `or`, `not`, `x if c else y`, and `min`, `max`, `abs`, `round`, `len`,
-`int`, `float`, `bool`. A key that is not in the registry, or a `params.NAME`
-not declared under `params:`, is refused at load, so a typo never scores
-silently. `params:` (an indented block of NAME: number) are the dials an
-expression reads as `params.NAME`.
+`int`, `float`, `bool`. A key that is not in the registry, or a
+`params.NAME` not declared under `params:`, is refused at load, so a typo
+never scores silently. `params:` (an indented block of NAME: number) are
+the dials an expression reads as `params.NAME`.
 
-The catalog itself - every file, and the full vocabulary a strategy may
+The catalog - every file, and the full vocabulary a strategy may
 reference - is generated into the end of this document.
 
 ## How the weights move
@@ -103,26 +102,20 @@ flowchart LR
     HEUR --> SOLVER["the solver, next click"]
 ```
 
-Every change to the brain is a line in the log with its reason.
-
-
-Weights do not yet learn on their own: since recording comps and
-outcomes was removed there is no match signal to learn from, and the
-backlog holds what learning would take. The board's sliders (under each
-heuristic in the playbook tab) override a weight for one board at a
-time - `weight=<id>:<0..10>` on `/board`, `weights` on the `board`
-tool - and the file is untouched until the slider's *store*, which is
-a `tune` call; every result names the weights it was scored under. One
-path changes a file, logged in `strategies/tuning-log.md` with a reason
-and who asked:
-
-- **`tune`** - one validated frontmatter edit: `weight` (0..10),
-  `direction`, `soft`, `when`, `require`, `bonus`, `penalty`, `metric`, or a
-  `params.NAME` dial. The edited file is loaded through the catalog before
-  it is written, so an invalid change never lands. The `/tune` skill is
-  the conversational front: "it keeps ignoring anti-heal" becomes a
-  `tune` call and a re-run of the board to show the effect.
-
+Weights do not learn on their own: recording comps and outcomes was
+removed, so there is no match signal to learn from, and the backlog holds
+what learning would take. The board's sliders (under each heuristic in
+the playbook tab) override a weight for one board at a time -
+`weight=<id>:<0..10>` on `/board`, `weights` on the `board` tool - and
+the file is untouched until the slider's *store*, which is a `tune` call;
+every result names the weights it was scored under. One path changes a
+file, logged in `strategies/tuning-log.md` with a reason and who asked:
+**`tune`**, one validated frontmatter edit - `weight` (0..10),
+`direction`, `soft`, `when`, `require`, `bonus`, `penalty`, `metric`, or a
+`params.NAME` dial. The edited file is loaded through the catalog before
+it is written, so an invalid change never lands. The `/tune` skill is the
+conversational front: "it keeps ignoring anti-heal" becomes a `tune` call
+and a re-run of the board to show the effect.
 
 ## Layout
 
@@ -130,9 +123,9 @@ and who asked:
 inference/
   __init__.py      the package's map
   experiments/     other playbooks to run the stack on, one folder each,
-                   chosen with COUNTER_MATRIX_STRATEGIES (its README says how)
-  strategies/      the playbook: one markdown file per constraint or heuristic,
-                   and tuning-log.md
+                   chosen with COUNTER_MATRIX_STRATEGIES (its README says how); none ships
+  strategies/      the playbook: one markdown file per constraint, heuristic
+                   or assumption, and tuning-log.md
   catalog.py       reads, validates and mirrors the strategy files
   expr.py          the expression language the frontmatter uses
   solver.py        enumerate, prune, normalise, score, refine
@@ -144,30 +137,21 @@ inference/
 
 | file | purpose |
 | --- | --- |
-| `catalog.py` | Parses each file's frontmatter (a flat dialect plus one `params:` block), builds a `Strategy` with `kind`, `form`, compiled expressions and validation against the metrics registry, orders the catalog (constraints by form, then heuristics), mirrors it into the `strategies` table, and writes the catalog at the end of this document. |
+| `catalog.py` | Parses each file's frontmatter (a flat dialect plus one `params:` block), builds a `Strategy` with `kind`, `form`, compiled expressions and validation against the metrics registry, orders the catalog (constraints - limits, then scored - heuristics, assumptions), mirrors it into the `strategies` table, and writes the catalog at the end of this document. |
 | `expr.py` | A safe subset of Python expressions: the AST is checked once, compiled, and evaluated over a scope whose missing keys read as zero, so a metric that does not apply to a board never crashes a score. |
 | `solver.py` | For a board: every role shape the hard limits allow around the locked picks; per-role pools of released heroes (an announced hero waits for its release) ranked by a cheap prior; every candidate prepared (namespace, limit check, raw metric values) and scored with the frozen bounds; local search from the best few. The bounds come from a seeded reference sample of legal sixes for that map, side, enemy and bans, so `infer`, `evaluate` and the current comp share one scale and a score means the same thing across calls. |
-| `engine.py` | `infer` (the optimal six around the locked picks), `evaluate` (a full six ranked against the field), `current` (the picks as they stand, partial or full), and `board` - whose two independent solves, blue's optimal and red's counter, run in two spawned worker processes while the parent solves the fill (a click takes about half the time on a machine with spare cores; `COUNTER_MATRIX_PARALLEL=0` keeps it in one process, as does a single core or a caller-supplied catalog; a dead worker means that board runs sequentially and the pool is rebuilt) - (at any stage of a draft: blue's optimal as the counter to red's selection, red's optimal as their counter to blue's, both current comps scored on those scales, blue's picks against red's best counter, blue's locked picks with the empty slots filled, the fight odds, the game plan in prose, and the shapes the playbook's limits allow - what the roster enforces as you pick - the ground, what to play, what red's picks mean, the family to stay in - from the same facts). Each result carries the picks with reasons and `[F#]` citations into the board's FactSet, the score breakdown per strategy, alternatives, and the assumptions as "ground rules to reconcile against". |
+| `engine.py` | `infer` (the optimal six around the locked picks), `evaluate` (a full six ranked against the field), `current` (the picks as they stand, partial or full), and `board`: at any stage of a draft, blue's optimal as the counter to red's selection, red's optimal as their counter to blue's, both current comps scored on those scales, blue's picks against red's best counter, blue's locked picks with the empty slots filled, red's likely starting comp, the fight odds, the game plan in prose, and the shapes the playbook's limits allow. Its two independent solves, blue's optimal and red's counter, run in two spawned worker processes while the parent solves the fill - a click takes about half the time on a machine with spare cores; `COUNTER_MATRIX_PARALLEL=0` keeps it in one process, as does a single core or a caller-supplied catalog; a dead worker means that board runs sequentially and the pool is rebuilt. Each result carries the picks with reasons and `[F#]` citations into the board's FactSet, the score breakdown per strategy, alternatives, and the assumptions as "ground rules to reconcile against". |
 | `tune.py` | `tune(id, field, value, reason)`: one frontmatter edit; `add(id, name, kind, prose, fields, reason)`: a new file from what the user gave and what `/strategy` inferred; `complete(id, fields, reason)`: a draft's frontmatter in one step. Each is validated by loading the catalog with the new text, then written, re-mirrored and logged. |
-| `derive.py` | `derive()`: for every draft, the prompt (the three inputs, the vocabulary, four catalog files for style), `claude -p` on the subscription, the JSON answer through `tune.complete`, one retry carrying the catalog's objection. `available()` says whether the CLI is here. |
+| `derive.py` | `derive()`: for every draft, the prompt (the three inputs, the vocabulary, one finished file of each form for style), `claude -p` on the subscription, the JSON answer through `tune.complete`, one retry carrying the catalog's objection; at most ten drafts a run. `available()` says whether the CLI is here. |
 | `serve.py` | `/board`, `/infer`, `/evaluate`, `/strategies`, `/health` - the same functions, over HTTP, for a board that runs in another container. |
 
 ## The skills
 
-Documented in [skills.md](skills.md); the tools in [mcp.md](mcp.md).
-
-| skill | does |
-| --- | --- |
-| `/strategy` | asks for a name, a kind and prose, infers the frontmatter from the prose and the vocabulary, stores the file through `add_strategy` (or completes a draft through `infer_strategy`), and shows the effect on a board |
-| `/comp` | the agent: pulls map, side, bans, red and locked blue picks out of what you say, calls `infer` (or `board`), reads `facts`, adopts or improves on the solver's optimum against the assumptions, answers with `[F#]` citations |
-| `/tune` | a manual tune through the `tune` tool; shows the effect on the board |
-| `/up` | brings the stack up and current before a game |
-
-All of it runs on the MCP tools the data layer serves (`infer`,
+`/strategy`, `/comp`, `/tune` and `/up` are this layer's; [skills.md](skills.md)
+documents them and [mcp.md](mcp.md) the tools they run on (`infer`,
 `evaluate`, `board`, `facts`, `strategies`, `metrics`, `add_strategy`,
-`infer_strategy`, `derive_strategies`, `tune`, `tuning_log`), which is
-what makes a session and the board
-see the same numbers.
+`infer_strategy`, `derive_strategies`, `tune`, `tuning_log`), which is what
+makes a session and the board see the same numbers.
 
 ## The catalog
 
@@ -187,9 +171,9 @@ A comp never fields five supports. Five healers leave one pick to make the space
 `require team.tanks <= 2` (hard)
 
 The game is 6v6 Open Queue: six picks, any mix of roles, with the one limit the queue
-itself enforces - no more than two tanks. That limit is the only shape limit the solver
-applies, and the roster holds both teams to it. To search Role Queue's 2-2-2 instead,
-tighten this file to `require: team.tanks == 2 and team.damage == 2 and team.supports == 2`.
+itself enforces - no more than two tanks. The roster holds both teams to it. To search
+Role Queue's 2-2-2 instead, tighten this file to
+`require: team.tanks == 2 and team.damage == 2 and team.supports == 2`.
 
 #### Heuristics
 

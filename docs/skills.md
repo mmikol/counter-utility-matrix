@@ -2,16 +2,17 @@
 
 A skill is a playbook a Claude Code session follows: a markdown file with
 a name, a one-line description the session matches your request against,
-and the steps to take, naming the MCP tools ([docs/mcp.md](mcp.md)) it
-calls in which order and the ground rules it keeps. They live in
-`.claude/skills/<name>/SKILL.md` and are yours the moment the repo is open
-in a session - type `/name`, or just say what you want and the description
-matches. Nine of them, and together they are the whole loop: bring the app
-up, get a comp, tune the engine, grow the playbook, keep the game's
-patches, heroes and maps current, refresh everything, keep the repo clean.
+and the steps to take - the MCP tools ([mcp.md](mcp.md)) it calls in
+which order and the ground rules it keeps. They live in
+`.claude/skills/<name>/SKILL.md` and are yours the moment the repo is
+open in a session: type `/name`, or say what you want and the description
+matches. Nine of them, and together they are the whole loop: bring the
+app up, get a comp, tune the engine, grow the playbook, keep the game's
+patches, heroes and maps current, refresh everything, keep the repo
+clean.
 
 No API key, no per-token bill: a skill runs inside your session on your
-subscription. The `/refresh` skill also runs headless, driven by
+subscription. `/refresh` also runs headless, driven by
 `orchestrator.py agents`.
 
 ## `/up` - bring it up and prove it
@@ -23,11 +24,11 @@ layer, health waited on) and reads the verdict. `READY` means the data
 layer answers with no pending migrations and a populated database, the
 inference engine sees the strategies, the board serves the roster; it
 reports the URLs and the rates' capture date. `NOT READY` names the
-problem and the skill applies the usual fixes in order: a stale bind mount
-(`docker compose up -d --force-recreate`), a schema behind the migrations
-(the data container rebuilds on its own), a database that never answered
-(`docker compose logs db`). If the capture date is not today and you are
-about to play, it offers a refresh.
+problem and the skill applies the usual fixes in order: a stale bind
+mount (`docker compose up -d --force-recreate`), a schema behind the
+migrations (the data container rebuilds on its own), a database that
+never answered (`docker compose logs db`). If the capture date is not
+today and you are about to play, it offers a refresh.
 
 **Ground rule:** never `docker compose down -v`, which deletes the
 database volume.
@@ -37,22 +38,23 @@ database volume.
 **Say:** "comp for King's Row, they have Zarya and Pharah, I'm on Ana",
 "who beats Pharah?", "what works on Ilios?".
 
-**Takes:** the map, blue's side on Escort and Hybrid maps, the bans (up to
-five), the red picks revealed so far, your locked blue picks, and the
-actual question - whatever you gave; missing pieces mean the board knows
-less. One clarifying question at most.
+**Takes:** the map, blue's side on Escort and Hybrid maps, the bans (up
+to five), the red picks revealed so far, your locked blue picks, and the
+question - whatever you gave; missing pieces mean the board knows less.
+One clarifying question at most.
 
-**Does:** `infer` (or `board` for both seats and the current comp) for the
-optimal six under the playbook, then `facts` for the evidence behind the
-numbers - every fact numbered `F1..` and citable, the playbook's record
-below as `S1..`. Then it decides: you are the agent in
+**Does:** `infer` (or `board` for both seats and the current comp) for
+the optimal six under the playbook, then `facts` for the evidence behind
+the numbers - every fact numbered `F1..` and citable, the playbook's
+record below as `S1..`. Then it decides: you are the agent in
 `COMP = ARGMAX[ STRATEGIES( FACTS ) ]` - the solver's optimum is the straw
 man, and the session adopts it and says why or improves on it and says
-why, holding the comp to the assumptions, inside the limits (six
-picks, at most two tanks, at most four supports, no banned hero). It answers tersely: the
-playstyle, six picks each with one line of why and its `[F#]` tags, a
-short overall argument, the vintage warning if the facts opened with one.
-A follow-up ("what if they swap to Pharah?") re-runs the inference.
+why, holding the comp to the assumptions, inside the limits (six picks,
+at most two tanks, at most four supports, no banned hero). It answers
+tersely: the playstyle, six picks each with one line of why and its
+`[F#]` tags, a short overall argument, the vintage warning if the facts
+opened with one. A follow-up ("what if they swap to Pharah?") re-runs the
+inference.
 
 **Ground rules:** every pick cites facts that genuinely justify it; rates
 are a stated proxy (Competitive Role Queue on console), leaned on for
@@ -62,19 +64,19 @@ direction, not decimals; never a comp that dies with a likely ban.
 
 **Say:** "it keeps ignoring anti-heal", "reweight coverage".
 
-**A manual tune:** reads the catalog (`strategies`), finds the strategy
-you mean, decides the smallest change that does what you asked - a weight
-(kept within 0.25..5 unless you insist), a `params.NAME` dial, or an
-expression from the vocabulary (`metrics`) - and calls `tune`, which
-validates the edited file against the catalog before writing it,
-re-mirrors the table, and logs the change with your reason. Then it
-re-runs `board` for the board you are looking at and says what moved. One
-change per request; never a strategy you did not name.
+**Does:** reads the catalog (`strategies`), finds the strategy you mean,
+decides the smallest change that does what you asked - a weight (kept
+within 0.25..5 unless you insist), a `params.NAME` dial, or an expression
+from the vocabulary (`metrics`) - and calls `tune`, which validates the
+edited file against the catalog before writing it, re-mirrors the table,
+and logs the change with your reason. Then it re-runs `board` for the
+board you are looking at and says what moved. One change per request;
+never a strategy you did not name.
 
 **Ground rules:** players are assumed to play optimally, so a lobby's
-habits are not strategies to add; a weight of 0
-silences a heuristic, deleting a file is a human decision; the
-`open-queue-tanks` limit is the game's own rule.
+habits are not strategies to add; a weight of 0 silences a heuristic, and
+deleting a file is a human decision; the `open-queue-tanks` limit is the
+game's own rule.
 
 ## `/strategy` - grow the playbook from three things
 
@@ -93,19 +95,20 @@ fit the prose, saying why.
 **Does:** first it standardizes the three inputs into the playbook's form
 - a two-to-six-word name in sentence case, a kebab id, a category, and
 the prose rewritten into three sentences at most (the claim; why and
-when; what is measured) with the meaning untouched - and shows the before and after with one line of what changed;
-a nod stores it. Then it reads the vocabulary (`metrics`) and the catalog
-(`strategies`), names the nearest existing strategy, and derives the
-mathematics with its working shown: a heuristic's one numeric metric,
-direction and weight on a stated scale; a constraint's `require` limit,
-or its `when` guard with `bonus`/`penalty` expressions and `params` for
-any threshold; `kind: assumption` when nothing measurable captures it.
-It checks the metric actually varies across comps before storing with
-`add_strategy` (the reason quoting the sentence each field follows from;
-the catalog refuses an unknown key or an expression that does not parse,
-and nothing is written until it passes). For a draft you dropped in
-yourself, it completes it with `infer_strategy`. Then it runs `board`
-where the strategy applies and points at the new line in the breakdown,
+when; what is measured) with the meaning untouched - and shows the before
+and after with one line of what changed; a nod stores it. Then it reads
+the vocabulary (`metrics`) and the catalog (`strategies`), names the
+nearest existing strategy, and derives the mathematics with its working
+shown: a heuristic's one numeric metric, direction and weight on a stated
+scale; a constraint's `require` limit, or its `when` guard with
+`bonus`/`penalty` expressions and `params` for any threshold;
+`kind: assumption` when nothing measurable captures it. It checks the
+metric actually varies across comps before storing with `add_strategy`
+(the reason quoting the sentence each field follows from; the catalog
+refuses an unknown key or an expression that does not parse, and nothing
+is written until it passes). For a draft you dropped in yourself, it
+completes it with `infer_strategy`. Then it runs `board` where the
+strategy applies and points at the new line in the breakdown,
 regenerates the catalog docs with `db_docs`, and reports the standardized
 strategy, the mathematics in words, the effect, and the one dial to turn.
 
@@ -123,14 +126,14 @@ and `python orchestrator.py` runs it after bringing the stack up.
 things stand; the data refreshed - `sync_all` with `refresh: true` when
 the newest capture is older than a day or a patch shipped since, else the
 daily set (`pull_rates`, `pull_counters`, `load_authored`); every draft
-completed with `infer_strategy`, exactly as `/strategy` would; a restrained re-read of
-the catalog against the fresh data (a heuristic whose metric no longer
-varies may be silenced, with a logged reason; nothing is added here);
-`db_docs`, `export_csv`, and `load_authored` for the strategies if
-anything changed; `query` for a look at the data along the way; then a
-report of under fifteen lines - the capture date
-now, what was refetched, drafts completed, weights moved, anything
-skipped and why, and that the board is ready.
+completed with `infer_strategy`, exactly as `/strategy` would; a
+restrained re-read of the catalog against the fresh data (a heuristic
+whose metric no longer varies may be silenced, with a logged reason;
+nothing is added here); `db_docs`, `export_csv`, and `load_authored` for
+the strategies if anything changed; `query` for a look at the data along
+the way; then a report of under fifteen lines - the capture date now,
+what was refetched, drafts completed, weights moved, anything skipped and
+why, and that the board is ready.
 
 **Ground rules:** deterministic at game time - never a draft half-written
 or a file the catalog refuses; drafts move through inference and weights
@@ -142,14 +145,14 @@ nothing else; the report is honest about failures.
 **Say:** "a patch dropped", "are we on the latest patch", "update for the
 patch".
 
-**Does:** `pull_patches` for the wiki's patch list, then `db_status` and the
-first lines of `facts` to see whether a patch shipped since the rates were
-captured. Nothing new: it says so and stops. A patch shipped: `pull_rates`
-(a new dated snapshot stamped with the patch), `pull_kits` (the numbers a
-patch changes), `pull_heroes` (Blizzard's text and any hero the patch
-released), `pull_counters` if a hero was reworked, then `db_docs` and
-`export_csv`, one call at a time. Reports the patch on record, the capture
-date and each pull's summary.
+**Does:** `pull_patches` for the wiki's patch list, then `db_status` and
+the first lines of `facts` to see whether a patch shipped since the rates
+were captured. Nothing new: it says so and stops. A patch shipped:
+`pull_rates` (a new dated snapshot stamped with the patch), `pull_kits`
+(the numbers a patch changes), `pull_heroes` (Blizzard's text and any
+hero the patch released), `pull_counters` if a hero was reworked, then
+`db_docs` and `export_csv`, one call at a time. Reports the patch on
+record, the capture date and each pull's summary.
 
 ## `/heroes` - add or update characters
 
@@ -161,20 +164,21 @@ released hero's role, subrole, portrait and text; an announced hero
 Blizzard now lists flips to released), `pull_kits` (the wiki's numbers,
 and the announced heroes: an upcoming article becomes a row with role,
 subrole, health and release day, so the kit loads and the board shows the
-hero in its role column, never picked until it ships), `pull_counters` for
-a released hero, `pull_rates` on request, then `load_authored`, `db_docs`,
-`export_csv`. Reports what was added or flipped, and what the facts now
-say about the hero.
+hero in its role column, never picked until it ships), `pull_counters`
+for a released hero, `pull_rates` on request, then `load_authored`,
+`db_docs`, `export_csv`. Reports what was added or flipped, and what the
+facts now say about the hero.
 
 ## `/maps` - add or update maps
 
 **Say:** "add the new map", "is X in the pool", "update the maps".
 
 **Does:** `roster` for the pool, `pull_maps` (the wiki's maps, modes and
-stages), `load_authored` for the playstyle notes - and names the maps that
-have none, offering the line to add to `map_playstyle.csv` (a person edits
-the file; the skill does not), `pull_rates` and `pull_counters` for the
-per-map rates and each hero's best maps, then `db_docs` and `export_csv`.
+stages), `load_authored` for the playstyle notes - and names the maps
+that have none, offering the line to add to `map_playstyle.csv` (a person
+edits the file; the skill does not), `pull_rates` and `pull_counters` for
+the per-map rates and each hero's best maps, then `db_docs` and
+`export_csv`.
 
 ## `/maintain` - keep the repo clean
 
@@ -182,22 +186,23 @@ per-map rates and each hero's best maps, then `db_docs` and `export_csv`.
 current" - or nothing, after a batch of changes, before a commit.
 
 **Does, in order:** lint and the tests three ways, under the coverage bar
-(with the database, as CI runs them with none, inside the image); the
-documentation current -
-the generated sections through `db_docs`, the hand-written ones read
-against what changed; a grep for stale names, paths and counts, with
-`db_status` and `strategies` as the truth for the numbers; a pass for
-dead code and duplicated definitions; the layout and the one-door rule
-held; the security posture checked against `docs/security.md` and one
-sentry pass. Then a report of under fifteen lines and a proposed commit.
+(with the database, as CI runs them with none, inside the image), and
+GitHub's own run read after a push; the documentation current - the
+generated sections through `db_docs`, the hand-written ones read against
+what changed; a grep for stale names, paths and counts, with `db_status`
+and `strategies` as the truth for the numbers; a pass for dead code and
+duplicated definitions; the layout and the one-door rule held; the
+security posture checked against `docs/security.md` and one sentry pass.
+Then a report of under fifteen lines and a proposed commit.
 
 **The backlog:** the skill keeps `pm/backlog.md` current - an item that
-landed moves to done with its commit, what a check suggests is added, what
-no longer applies is dropped.
+landed moves to done with its commit, what a check suggests is added,
+what no longer applies is dropped.
 
 **Lessons learned:** the skill keeps a log of what a run caught that its
 checks did not - what slipped, why the checks missed it, what catches it
-now - and every run that finds such a thing adds a line before it reports.
+now - and every run that finds such a thing adds a line before it
+reports.
 
 **Ground rules:** fix what a check points at, report what needs a
 decision, never skip a failing test to get green, never commit or push

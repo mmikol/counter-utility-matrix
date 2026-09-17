@@ -14,18 +14,14 @@ into a namespace of dicts ({"team": {...}, "enemy": {...}, "matchup": ...,
 """
 
 import ast
-import operator
 
 FUNCTIONS = {"min": min, "max": max, "abs": abs, "round": round,
              "len": len, "int": int, "float": float, "bool": bool}
 
-BINARY = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
-          ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv,
-          ast.Mod: operator.mod, ast.Pow: operator.pow}
-COMPARE = {ast.Eq: operator.eq, ast.NotEq: operator.ne, ast.Lt: operator.lt,
-           ast.LtE: operator.le, ast.Gt: operator.gt, ast.GtE: operator.ge,
-           ast.In: lambda a, b: a in b, ast.NotIn: lambda a, b: a not in b}
-UNARY = {ast.Not: operator.not_, ast.USub: operator.neg, ast.UAdd: operator.pos}
+# the operators the whitelist admits; the compiled code object does the arithmetic
+BINARY = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)
+COMPARE = (ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.In, ast.NotIn)
+UNARY = (ast.Not, ast.USub, ast.UAdd)
 
 
 class ExprError(ValueError):
@@ -55,9 +51,6 @@ class Scope(dict):
         if key in FUNCTIONS:
             return FUNCTIONS[key]
         return Section({})
-
-
-_EMPTY = Section({})
 
 
 class Expr:
@@ -188,23 +181,10 @@ class Expr:
 _GLOBALS = dict(FUNCTIONS, __builtins__={})
 
 
-def scope(namespace, params=None):
-    """A reusable Scope for many evaluations over one candidate."""
-    s = Scope((k, Section(v)) for k, v in namespace.items())
-    if params is not None:
-        s["params"] = Section(params)
-    return s
-
-
-def lookup(namespace, dotted, default=0):
-    """namespace["team"]["dps_floor"] for "team.dps_floor"; None -> default."""
-    node = namespace
-    for part in dotted.split("."):
-        if isinstance(node, dict) and part in node:
-            node = node[part]
-        else:
-            return default
-    return default if node is None else node
+def scope(namespace):
+    """A reusable Scope for many evaluations over one candidate; the caller
+    sets its `params` slot per strategy."""
+    return Scope((k, Section(v)) for k, v in namespace.items())
 
 
 def compile_expr(source):

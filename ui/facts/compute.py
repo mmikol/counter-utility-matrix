@@ -20,8 +20,10 @@ from collections import Counter, OrderedDict
 from ui.facts.model import ROLES, SQUISHY_POOL
 
 TEAM_SIZE = 6             # 6v6 Open Queue
+MAX_BANS = 5              # each team's two and the lobby's
 SIDED_MODES = ("Escort", "Hybrid")   # modes with an attacking and a defending side
 SIDES = ("attack", "defense")
+ROLE_COUNT = {"tank": "tanks", "damage": "damage", "support": "supports"}   # role -> its count key
 SPECIALIST_DELTA = 2.5
 RANK_SENSITIVE = 6.0
 TREND_POINTS = 1.5
@@ -176,7 +178,6 @@ def _mean(values):
     return sum(values) / len(values) if values else 0.0
 
 
-OPEN_QUEUE_TANKS = 2      # the queue's own limit, not a strategy: no more than two tanks
 EXPECTED_SHAPE = {"tank": 2, "damage": 2, "support": 2}   # what a lobby fields: two of each
 SYNERGY_PULL = 2.0        # pick-rate points a hero gains per authored partner already on the six
 
@@ -228,10 +229,9 @@ def expected_picks(world, m, revealed=(), bans=(), shape=None):
         chosen.append(best)
         taken.add(best.id)
         shape[best.role] -= 1
-    order = {"tank": 0, "damage": 1, "support": 2}
     out = [{"hero": h.name, "role": h.role, "rate": None, "locked": True, "why": "revealed"}
            for h in revealed]
-    return out + sorted(picked, key=lambda p: (order.get(p["role"], 3), p["hero"]))
+    return out + sorted(picked, key=lambda p: (ROLES.index(p["role"]), p["hero"]))
 
 
 def team_metrics(world, heroes, m=None, enemies=(), lean=False):
@@ -242,8 +242,7 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t = {}
     t["size"], t["open_slots"] = n, max(0, TEAM_SIZE - n)
     for role in ROLES:
-        t[{"tank": "tanks", "damage": "damage", "support": "supports"}[role]] = \
-            sum(1 for h in heroes if h.role == role)
+        t[ROLE_COUNT[role]] = sum(1 for h in heroes if h.role == role)
     subs = sorted({h.subrole for h in heroes})
     t["subroles"] = subs
     t["subrole_diversity"] = len(subs) / n if n else 0.0
@@ -273,8 +272,7 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     dev = 0
     if map_style and map_style in world.archetypes:
         for role, (slots, _) in world.archetypes[map_style].items():
-            key = {"tank": "tanks", "damage": "damage", "support": "supports"}[role]
-            dev += max(0, t[key] - slots)
+            dev += max(0, t[ROLE_COUNT[role]] - slots)
     t["archetype_deviation"] = dev
 
     pools = [h.pool for h in heroes]

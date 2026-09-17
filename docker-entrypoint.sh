@@ -55,7 +55,7 @@ case "$role" in
                 echo "data: $state database - running the first build (scrapes the sources once)"
                 python -m db.mcp call db_rebuild ;;
             stale*)
-                echo "data: schema behind the migrations ($state) - rebuilding from the caches;"
+                echo "data: schema behind the migrations ($state) - rebuilding from the caches"
                 python -m db.mcp call db_rebuild ;;
             *)
                 echo "data: database current" ;;

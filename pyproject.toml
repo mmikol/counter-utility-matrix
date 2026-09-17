@@ -4,7 +4,7 @@
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["db/psql/cluster", "db/raw", ".venv", ".cache-*"]
+extend-exclude = ["db/psql/cluster", "db/raw", ".cache-*"]
 
 [tool.ruff.lint]
 # pycodestyle, pyflakes, isort, bugbear, comprehensions, simplify, pyupgrade,
@@ -19,8 +19,6 @@ known-first-party = ["db", "ui", "inference"]
 
 [tool.coverage.run]
 source = ["db", "ui", "inference", "orchestrator"]
-omit = ["db/psql/migrations/*"]
-branch = false
 
 [tool.coverage.report]
 # the bar: three quarters of the code under test where the database exists

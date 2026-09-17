@@ -38,18 +38,13 @@ MAX_PER_RUN = 10            # drafts completed per run: a runaway folder is not 
 PROSE_CAP = 8000            # characters of a draft's prose shown to the model
 FIELDS = {"metric", "direction", "weight", "when", "require", "soft", "bonus", "penalty",
           "params", "kind", "category"}
-STYLE = ("anti-heal-answer", "coverage", "squish-limit", "open-queue-tanks")
 
 
 def style_anchors(catalog):
-    """The finished files the prompt shows as its style: the ones STYLE names
-    when the playbook holds them, and otherwise one file of each form the
-    playbook has, so a playbook of the user's own rules anchors the style as
-    well as the reference one did."""
-    named = [h for h in catalog if h.id in STYLE]
-    if len(named) >= 2:
-        return named
-    out, forms = list(named), {h.form for h in named}
+    """The finished files the prompt shows as its style: one of each form the
+    playbook holds, the first by id, so the prompt is anchored on the user's
+    own rules and never goes bare."""
+    out, forms = [], set()
     for h in sorted(catalog, key=lambda h: h.id):
         if h.form not in forms and h.form != "draft":
             out.append(h)
@@ -97,9 +92,9 @@ def prompt(draft, catalog, objection=None):
               ' "params": {"NAME": <number>}}'
               ' (when/bonus/penalty/params each optional) or {"kind": "assumption"}')
     text = """You complete a strategy file for counter-utility-matrix, a deterministic
-Overwatch 2 6v6
-composition solver. A person wrote the file's name, its kind and its prose; you write the
-frontmatter that makes the solver act on it. Answer with ONE JSON object and nothing else:
+Overwatch 2 6v6 composition solver. A person wrote the file's name, its kind and its prose;
+you write the frontmatter that makes the solver act on it. Answer with ONE JSON object and
+nothing else:
 
 {"fields": %s, "reason": "<one sentence quoting the prose each field follows from>"}
 

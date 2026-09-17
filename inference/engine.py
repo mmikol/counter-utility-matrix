@@ -22,8 +22,7 @@ from inference.solver import Candidate, Solver, evaluate_comp, legal_shapes
 from ui.facts import compute
 from ui.facts import engine as facts_engine
 from ui.facts.compute import TEAM_SIZE, is_sided, opposite
-
-ROLE_ORDER = {"tank": 0, "damage": 1, "support": 2}
+from ui.facts.model import ROLES
 
 
 def _pct(score, best):
@@ -31,8 +30,8 @@ def _pct(score, best):
     the current comp its percentage of blue's optimal, an alternative its
     share of the winner. A best at or below zero makes the scale meaningless,
     so only the best itself scores 100 there."""
-    if best is None or best <= 0:
-        return 100 if score >= (best if best is not None else score) else 0
+    if best <= 0:
+        return 100 if score >= best else 0
     return max(0, min(100, round(100.0 * score / best)))
 
 
@@ -47,7 +46,7 @@ def _unscored(result):
     anything: the playbook holds no term that scores, or none of its terms
     applies to this board (a heuristic waiting on its `when`), so the best
     six itself sums to zero."""
-    if getattr(result, "kind", None) == "infer":
+    if result.kind == "infer":
         return None
     return _waiting(result)
 
@@ -55,22 +54,18 @@ def _unscored(result):
 def _waiting(result):
     """The reason nothing on this board scores, or None: read off any result,
     the optimal included (a seat with no picks has no comp to read it from)."""
-    catalog = getattr(result, "catalog", None)
-    if catalog is None:                                    # the tests' stand-ins
-        return None
-    if not catalog_module.scores(catalog):
+    if not catalog_module.scores(result.catalog):
         return UNSCORED
-    best = result.best if getattr(result, "best", None) is not None else result.score
+    best = result.best if result.best is not None else result.score
     if best > 0:
         return None
-    by_id = {h.id: h for h in catalog}
+    by_id = {h.id: h for h in result.catalog}
     waiting = []
-    for c in getattr(result, "contributions", []) or []:
-        h = by_id.get(c.get("id"))
-        if h is None or c.get("applies", True) or c.get("kind") not in ("heuristic", "constraint"):
+    for c in result.contributions:
+        h = by_id.get(c["id"])
+        if h is None or c["applies"]:
             continue
-        when = getattr(h, "when_source", None) or getattr(getattr(h, "when", None), "source", None)
-        waiting.append("%s waits for %s" % (h.name, when) if when else h.name)
+        waiting.append("%s waits for %s" % (h.name, h.when.source) if h.when else h.name)
     return ("unscored on this board - no scoring strategy applies yet"
             + (": " + "; ".join(waiting) if waiting else ""))
 
@@ -112,23 +107,19 @@ class Result:
         """What crosses a process boundary: everything but the solver (its
         reference sample and bounds stay with the worker that used them) and
         the catalog's compiled expressions - a strategy's id, name, kind, form,
-        weight and softness is all a result needs of it afterwards (the
-        weights it was scored under; whether the playbook scores at all)."""
+        weight, softness and the source of its `when` is all a result needs of
+        it afterwards (the weights it was scored under; whether the playbook
+        scores at all; what a waiting strategy waits for)."""
         state = dict(self.__dict__)
         state.pop("solver", None)
-        state["catalog"] = [types.SimpleNamespace(id=h.id, name=h.name, kind=h.kind,
-                                                  pending=getattr(h, "pending", False),
-                                                  form=getattr(h, "form", None),
-                                                  weight=getattr(h, "weight", None),
-                                                  soft=getattr(h, "soft", False),
-                                                  when_source=getattr(
-                                                      getattr(h, "when", None), "source", None))
-                            for h in self.catalog]
+        state["catalog"] = [types.SimpleNamespace(
+            id=h.id, name=h.name, kind=h.kind, pending=h.pending, form=h.form,
+            weight=h.weight, soft=h.soft,
+            when=types.SimpleNamespace(source=h.when.source) if h.when else None)
+            for h in self.catalog]
         return state
 
     def to_dict(self, include_facts=False):
-        counts = {k: sum(1 for h in self.catalog if h.kind == k)
-                  for k in catalog_module.KINDS}
         cited = {}
         if self.facts is not None:
             ids = {fid for p in self.picks for fid in p["evidence"]}
@@ -140,15 +131,14 @@ class Result:
                 "red": self.red, "blue": self.blue, "locked": self.locked,
                 "bans": self.bans, "side": self.side, "partial": self.partial,
                 "score": round(self.score, 3), "scoring": scoring, "unscored": unscored,
-                "weights": {h.id: getattr(h, "weight", None)
-                            for h in self.catalog if h.kind == "heuristic"},
+                "weights": {h.id: h.weight for h in self.catalog if h.kind == "heuristic"},
                 "normalized": (_pct(self.score, self.best if self.best is not None else self.score)
                                if scoring else None),
                 "playstyle": self.playstyle, "picks": self.picks,
                 "contributions": self.contributions, "violations": self.violations,
                 "alternatives": self.alternatives, "rank": self.rank,
                 "considered": self.considered, "seconds": round(self.seconds, 2),
-                "strategies": counts, "cited": cited,
+                "strategies": catalog_module.counts(self.catalog), "cited": cited,
                 "considerations": self.considerations, "pending": self.pending,
                 "facts": self.facts.to_dict() if (include_facts and self.facts) else None}
 
@@ -164,8 +154,7 @@ class Result:
             ", ".join(self.red) or "an unknown enemy",
             " (locked: %s)" % ", ".join(self.locked) if self.locked else "",
             " (banned: %s)" % ", ".join(self.bans) if self.bans else "")
-        counts = {k: sum(1 for h in self.catalog if h.kind == k)
-                  for k in catalog_module.KINDS}
+        counts = catalog_module.counts(self.catalog)
         unscored = _unscored(self)
         share = ("(%d/100)" % _pct(self.score, self.best if self.best is not None else self.score)
                  if unscored is None else "(unscored)")
@@ -247,7 +236,7 @@ def _fill(result, cand, fs, solver):
     team = cand.ns["team"]
     result.playstyle = team["style_lean"] or team["style_top"] or ""
     locked = set(result.locked)
-    for h in sorted(cand.heroes, key=lambda h: (ROLE_ORDER[h.role], h.name)):
+    for h in sorted(cand.heroes, key=lambda h: (ROLES.index(h.role), h.name)):
         why, evidence = _reasons(fs, h.name, h.name in locked)
         result.picks.append({"hero": h.name, "role": h.role, "subrole": h.subrole,
                              "portrait": h.portrait, "locked": h.name in locked,
@@ -268,15 +257,13 @@ def _fill(result, cand, fs, solver):
 # a metric whose number rides inside another metric's fact line
 FACT_ALIASES = {
     "team.coverage_share": "team.coverage", "team.unanswered": "team.coverage",
-    "team.exposed_count": "team.exposed_count", "team.double_covered": "team.double_covered",
     "team.answer_edges": "team.net_edges", "team.exposure_edges": "team.net_edges",
     "team.synergy_score": "team.synergy_edges", "team.synergy_density": "team.synergy_edges",
-    "team.isolated_count": "team.isolated_count", "team.max_ban_rate": "team.availability",
-    "team.map_strategy_hits": "team.map_specialists", "team.heal_ratio": "team.heal_peak_supports",
-    "team.ult_damage_total": "team.dmg_ults", "team.damage": "team.tanks",
-    "team.supports": "team.tanks", "team.size": "team.size",
+    "team.max_ban_rate": "team.availability", "team.map_strategy_hits": "team.map_specialists",
+    "team.heal_ratio": "team.heal_peak_supports", "team.ult_damage_total": "team.dmg_ults",
+    "team.damage": "team.tanks", "team.supports": "team.tanks",
     "team.barrier_count": "team.barrier_hp", "team.style_lean": "team.style_top",
-    "matchup.ult_answers": "matchup.ult_threat", "matchup.style_lean_red": "matchup.style_lean_red",
+    "matchup.ult_answers": "matchup.ult_threat",
 }
 
 
@@ -301,7 +288,7 @@ def _cited_fact(fs, keys):
 
 
 def _order(heroes):
-    return [h.name for h in sorted(heroes, key=lambda h: (ROLE_ORDER[h.role], h.name))]
+    return [h.name for h in sorted(heroes, key=lambda h: (ROLES.index(h.role), h.name))]
 
 
 def _side(m, side):
@@ -638,7 +625,7 @@ def _plan(world, m, side, bans, red_h, blue_r):
 # handed the world (0.6 MB, a few ms to pickle) and the names on a board. Blue's
 # optimal and red's counter do not depend on each other; each worker also
 # scores that seat's current comp, which needs the solver's scale and so stays
-# where the solver is. The parent solves the fill meanwhile and the pessimistic
+# where the solver is. The parent solves the fill meanwhile and the countered
 # case after. Off with COUNTER_MATRIX_PARALLEL=0, on one core, or with a
 # catalog the caller supplied (a worker loads the playbook from its files).
 

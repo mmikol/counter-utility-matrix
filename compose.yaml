@@ -19,17 +19,19 @@
 #
 # Every container runs as an unprivileged user on a read-only root
 # filesystem with every capability dropped and no new privileges, on one
-# network (Docker publishes ports only on a routable one; what keeps a
-# container off the internet is that its code opens no connection out).
+# network. What keeps a container off the internet is that its code opens
+# no connection out: only data and refresher fetch, from three fixed hosts.
 # Every published port binds to 127.0.0.1. No keys, no accounts. Set
 # COUNTER_MATRIX_MCP_TOKEN (in .env) to require a bearer token at the door.
-# One image, built once (by `data`), shared by every container.
+# One image, built once (by `data`), shared by every container; each
+# container mounts only what it reads, read-only unless it writes there.
 
 name: counter-utility-matrix
 
 x-app: &app
   image: counter-utility-matrix
-  user: "${COUNTER_MATRIX_UID:-1000}:${COUNTER_MATRIX_GID:-1000}"   # match the checkout's owner on Linux
+  # the checkout's owner on a Linux host, so the bind mounts stay writable
+  user: "${COUNTER_MATRIX_UID:-1000}:${COUNTER_MATRIX_GID:-1000}"
   restart: unless-stopped
   read_only: true
   tmpfs:
@@ -43,22 +45,12 @@ x-app: &app
       limits:
         memory: 1g
         pids: 256
+  networks: [stack]
   environment: &env
     DATABASE_URL: postgresql://overwatch:${POSTGRES_PASSWORD:-overwatch}@db/overwatch
     # another playbook for an experiment: a path under the repo, e.g.
     # inference/experiments/<name> (see inference/experiments/README.md)
     COUNTER_MATRIX_STRATEGIES: ${COUNTER_MATRIX_STRATEGIES:-}
-    PYTHONUNBUFFERED: "1"
-    PYTHONDONTWRITEBYTECODE: "1"
-  volumes: &mounts
-    - ./.cache-blizzard:/app/.cache-blizzard
-    - ./.cache-wiki:/app/.cache-wiki
-    - ./.cache-counterpick:/app/.cache-counterpick
-    - ./db/raw:/app/db/raw
-    - ./db/data/authored:/app/db/data/authored
-    - ./inference/strategies:/app/inference/strategies
-    - ./inference/experiments:/app/inference/experiments
-    - ./docs:/app/docs
 
 networks:
   stack: {}
@@ -101,10 +93,18 @@ services:
           pids: 256
     build: .
     command: ["data"]
-    networks: [stack]
     environment:
       <<: *env
       COUNTER_MATRIX_MCP_TOKEN: ${COUNTER_MATRIX_MCP_TOKEN:-}
+    volumes:                         # every tool lands here: the pulls, the mirror, a tune,
+      - ./.cache-blizzard:/app/.cache-blizzard             # a draft, the docs, the audit log
+      - ./.cache-wiki:/app/.cache-wiki
+      - ./.cache-counterpick:/app/.cache-counterpick
+      - ./db/raw:/app/db/raw
+      - ./db/data/authored:/app/db/data/authored
+      - ./inference/strategies:/app/inference/strategies
+      - ./inference/experiments:/app/inference/experiments
+      - ./docs:/app/docs
     ports:
       - "127.0.0.1:8020:8020"        # MCP over HTTP: /mcp, /health
     depends_on:
@@ -122,16 +122,9 @@ services:
   inference:
     <<: *app
     command: ["inference"]
-    networks: [stack]
-    volumes: &reader_mounts       # reads the playbook and the caches; writes records only
-      - ./.cache-blizzard:/app/.cache-blizzard:ro
-      - ./.cache-wiki:/app/.cache-wiki:ro
-      - ./.cache-counterpick:/app/.cache-counterpick:ro
-      - ./db/raw:/app/db/raw
-      - ./db/data/authored:/app/db/data/authored
+    volumes: &reader_mounts       # the playbook, read-only; everything else comes from the database
       - ./inference/strategies:/app/inference/strategies:ro
       - ./inference/experiments:/app/inference/experiments:ro
-      - ./docs:/app/docs:ro
     ports:
       - "127.0.0.1:8019:8019"
     depends_on:
@@ -148,7 +141,6 @@ services:
   ui:
     <<: *app
     command: ["ui"]
-    networks: [stack]
     volumes: *reader_mounts
     ports:
       - "127.0.0.1:8017:8017"
@@ -167,7 +159,14 @@ services:
   refresher:
     <<: *app
     command: ["refresh"]
-    networks: [stack]
+    volumes:                      # pulls into the caches, re-exports the mirror; reads the rest
+      - ./.cache-blizzard:/app/.cache-blizzard
+      - ./.cache-wiki:/app/.cache-wiki
+      - ./.cache-counterpick:/app/.cache-counterpick
+      - ./db/raw:/app/db/raw
+      - ./db/data/authored:/app/db/data/authored:ro
+      - ./inference/strategies:/app/inference/strategies:ro
+      - ./inference/experiments:/app/inference/experiments:ro
     environment:
       <<: *env
       COUNTER_MATRIX_REFRESH_AT: ${COUNTER_MATRIX_REFRESH_AT:-05:00}
@@ -181,16 +180,11 @@ services:
   sentry:
     <<: *app
     command: ["sentry"]
-    networks: [stack]
-    volumes:                      # quarantines in the playbook, reports in raw; reads the rest
-      - ./.cache-blizzard:/app/.cache-blizzard:ro
-      - ./.cache-wiki:/app/.cache-wiki:ro
-      - ./.cache-counterpick:/app/.cache-counterpick:ro
+    volumes:                      # quarantines in the playbook, the report in raw; reads the inputs
       - ./db/raw:/app/db/raw
       - ./db/data/authored:/app/db/data/authored:ro
       - ./inference/strategies:/app/inference/strategies
       - ./inference/experiments:/app/inference/experiments
-      - ./docs:/app/docs:ro
     environment:
       <<: *env
       COUNTER_MATRIX_SENTRY_EVERY: ${COUNTER_MATRIX_SENTRY_EVERY:-30}

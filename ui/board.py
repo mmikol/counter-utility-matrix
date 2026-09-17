@@ -5,12 +5,12 @@ and the inference layer.
     python -m ui.board            # serves http://localhost:8017
 
 Standard library only. Every click re-reads the database: the facts
-panel is the FactSet for (map, red, blue), the comps panel is the
-inference layer's absolute optimal for blue, red's optimal around its
-revealed picks, and the current blue picks scored against blue's optimal,
-and the playbook panel is the strategies
-catalog as it sits on disk. JSON endpoints under /api/ serve the same
-three things.
+panel is the FactSet for (map, side, red, blue, bans); the comps panel is
+the inference layer's board - red's most likely starting comp, blue's
+optimal counter to the current picks, each seat's picks scored as a share
+of its own optimal, the fight odds and the game plan; the playbook panel
+is the strategies catalog as it sits on disk. JSON endpoints under /api/
+serve the same three things.
 """
 
 import html
@@ -29,7 +29,7 @@ from inference import catalog as catalog_module
 from inference import engine as inference_engine
 from ui.facts import engine as facts_engine
 from ui.facts import model
-from ui.facts.compute import SIDED_MODES, TEAM_SIZE
+from ui.facts.compute import MAX_BANS, SIDED_MODES, TEAM_SIZE
 
 PORT = int(os.environ.get("COUNTER_MATRIX_UI_PORT", "8017"))
 
@@ -86,7 +86,7 @@ def _board(query):
     map_name = (query.get("map") or [None])[0] or None
     red = [x for x in query.get("red", []) if x]
     blue = [x for x in query.get("blue", []) if x]
-    bans = [x for x in query.get("ban", []) if x][:5]
+    bans = [x for x in query.get("ban", []) if x][:MAX_BANS]
     side = (query.get("side") or [""])[0]
     return map_name, red, blue, bans, side
 
@@ -116,9 +116,9 @@ def api_facts(cx, query):
 
 
 def api_infer(cx, query):
-    """Both seats' optimal six and the current comp - the two displays. The
-    playbook tab's sliders ride along as `weight=<id>:<0..10>`, one per
-    heuristic set away from its file."""
+    """The board solved at this stage of the draft - the inference layer's
+    `board()`. The playbook tab's sliders ride along as `weight=<id>:<0..10>`,
+    one per heuristic set away from its file."""
     map_name, red, blue, bans, side = _board(query)
     weights = catalog_module.parse_weights(query.get("weight", []))
     if INFERENCE_URL:
@@ -201,13 +201,9 @@ def api_strategies():
 
 # --- the board page ---------------------------------------------------------
 #
-# The page is a shell: the stylesheet and the scripts are static files under
-# ui/static/ (editable on their own), served by this same handler - comps.js
-# (a seat's result and the two seats), playbook.js (the groups, the cards,
-# the weight sliders) and board.js (state, the rosters, the picks, the bans,
-# the fetches, boot), loaded in that order since board.js calls the others;
-# TEAM and BANS come from the page so the scripts have no constant to keep
-# in step.
+# The page is a shell over the static files: board.js loads last because it
+# calls into comps.js and playbook.js, and TEAM and BANS come from the page so
+# the scripts keep no constant in step with the Python.
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 STATIC_TYPES = {".css": "text/css; charset=utf-8",
@@ -229,8 +225,6 @@ def static_file(name):
 HEAD = ("<!doctype html><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<link rel='stylesheet' href='/static/board.css'>")
-
-
 
 
 def view_board():
@@ -292,10 +286,11 @@ def view_board():
             " over the database, numbered for citation;"
             " the /comp skill and the inference layer read exactly these.</p></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
-            "</main><script>var TEAM = %d, BANS = 5;</script>"
+            "</main><script>var TEAM = %d, BANS = %d;</script>"
             "<script src='/static/comps.js'></script>"
             "<script src='/static/playbook.js'></script>"
-            "<script src='/static/board.js'></script>" % (REPO_URL, GITHUB_MARK, TEAM_SIZE))
+            "<script src='/static/board.js'></script>"
+            % (REPO_URL, GITHUB_MARK, TEAM_SIZE, MAX_BANS))
 
 
 # --- the math page -------------------------------------------------------------

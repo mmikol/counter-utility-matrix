@@ -1,12 +1,12 @@
 # The DATA LAYER - `db/`
 
 Pull every source, clean it, store it in Postgres, and serve the tools
-that do so. This is the layer that owns `DATA = HEROES ∪ MAPS ∪ META`:
-what the sources say about the heroes, the maps and the meta, pulled and
-set - the tables a board's facts are derived from; every domain yields
-independent facts (a selection's own row) and dependent ones (its joins). Any data in the database is just data - every row carries a
-`source_id`, and that is the only distinction drawn between what was
-measured, what was judged and what was written by hand.
+that do so. This layer owns `DATA = HEROES ∪ MAPS ∪ META`: what the
+sources say about the heroes, the maps and the meta, pulled and set - the
+tables a board's facts are derived from. Any data in the database is just
+data: every row carries a `source_id`, and that is the only distinction
+drawn between what was measured, what was judged and what was written by
+hand.
 
 **One door.** The MCP tools in `mcp/tools.py` are the only way in. A
 Claude Code session calls them over MCP, the `refresher` container calls
@@ -21,7 +21,7 @@ a shell calls them the same way:
 ```
 
 The root's `orchestrator.py` drives the same tools for the whole stack;
-there is no per-module script and nothing to keep in step with the tools.
+there is no per-module script to keep in step with them.
 
 ## Layout
 
@@ -48,11 +48,11 @@ db/
 
 | file | purpose |
 | --- | --- |
-| `__init__.py` | What the whole layer must agree on: where the repo, the caches, the authored inputs and the mirror live, and the scope every rates snapshot is pinned to - console, controller, Americas - declared once. |
-| `data/fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `set_max_age`: the freshness policy - a build keeps every cached page, the refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `prepare_cache`: the cache directory a tool hands a pull. |
-| `data/names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. Two keys because they solve two problems. |
+| `__init__.py` | What the whole layer agrees on, declared once: where the repo, the caches, the authored inputs and the mirror live, and the scope every rates snapshot is pinned to - console, controller, Americas. |
+| `data/fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `set_max_age`: the freshness policy - a build keeps every cached page, a refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `prepare_cache`: the cache directory a tool hands a pull. |
+| `data/names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. |
 | `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the authored CSVs and the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `python -m db.sentry --once` is one pass from a shell. |
-| `refresh.py` | The clock. Daily at `COUNTER_MATRIX_REFRESH_AT` it refetches what moves between patches (rates, counters), re-mirrors the authored inputs and the strategies, re-exports the mirror; once the wiki cache is older than `COUNTER_MATRIX_REFRESH_FULL_DAYS` it runs `sync_all` on every source. Refreshes on start when the caches are older than a day. |
+| `refresh.py` | The clock: the daily refresh below, and the full one once the wiki cache is a week old. |
 
 ### `data/` - one package per source
 
@@ -94,47 +94,34 @@ The servers, the transport and the full tool reference are in
 | --- | --- |
 | `__init__.py` | Where the database is (`DATABASE_URL`, or the embedded cluster at `db/psql/cluster`); how a source registers the `sources` row its rows carry; how names look up ids; what a capture is stamped with (now, the current patch and season); the CSV export and its `EXPORT.json` mark naming the database it came from. Knows no particular source or table. |
 | `schema.py` | Applies migrations and records them in the `schema_migrations` ledger; `pending` says which files the database has not seen; `rebuild` drops everything and reapplies; `generate_docs` writes the ER diagrams and the data dictionary at the end of this document from the live schema. |
-| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` outcomes (dropped by `014`), `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `014` the recorded tables dropped, `015` announced heroes. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
+| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` outcomes (dropped by `014`), `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `014` the recorded tables dropped, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
 | `cluster/` | The embedded Postgres cluster `pgserver` creates on first touch (gitignored). The compose stack uses its own `postgres` container instead, reachable from the host through `./docker-db`. |
 
 ### `data/authored/` - what we write
 
 Everything else in the database is fetched by a pull tool. These files are
-written by hand, so they are committed, loaded whole-truth by
-`load_authored`, and never discarded by a rebuild. The loader is this
-folder's own `__init__.py`.
+written by hand and nothing under `authored/` is written by the code, so
+they are committed, loaded whole-truth by `load_authored`, and never
+discarded by a rebuild. The loader is this folder's own `__init__.py`; it
+declares the `sources` row they become, as every source package does, and
+a malformed row or an unknown name is a loud error.
 
 - `synergies.csv` - `hero,other,score,note`: one PAIR per row, written once
-  in either order, stored once. The note is the reasoning the board shows
-  and the solver's `cohesion` heuristic counts.
+  in either order, stored once. The note is the reasoning the board shows;
+  `team.synergy_score` counts the pairs.
 - `archetypes.csv` - `style,role,slots,note`: what a six-stack of each
   playstyle looks like (2-2-2 by default).
 - `map_playstyle.csv` - `map,style,score,note`: what kind of fight each map
-  rewards (1-3). The `style-alignment` heuristic reads the top style.
+  rewards (1-3). `map.style_top` reads the top style; the game plan reads
+  the note.
 - `seasons.csv` - `name,started,note`: the coarse delineator of rates
   snapshots; loading recomputes `season_id` on every snapshot.
 
-There are no free-form notes here. A note that should shape a comp is a
-an assumption in `inference/strategies/` - the playbook holds three kinds of
-file, constraints, heuristics and assumptions, and nothing else - where it is shown on the board,
-read by the `/comp` session, and tuned and logged with the rest.
-
-All follow the same contract: committed, whole-truth on reload, loud errors
-on malformed rows or unknown names. The inference layer's own brain - the
-strategies - lives in [`inference/strategies/`](../inference/strategies/).
-
-Nothing under `authored/` is written by the code: every file is a human's.
-
-
-The inputs that are ours rather than fetched: `synergies.csv`,
-`archetypes.csv`, `map_playstyle.csv`, `seasons.csv`. The folder's `__init__.py`
-is their loader - seasons, synergies, archetypes, map playstyles, each a
-whole-truth reload with loud errors on a malformed row or an unknown
-name - and declares the `sources` row they become, as every source
-package does. They are committed, loaded by `load_authored`, and never
-discarded by a rebuild. The
-strategies themselves - the constraints and heuristics - are not here;
-they are the inference layer's, in `inference/strategies/`.
+There are no free-form notes here. A note that should shape a comp is an
+assumption in [`inference/strategies/`](../inference/strategies/) - the
+playbook holds constraints, heuristics and assumptions, and nothing else -
+where it is shown on the board, read by the `/comp` session, and tuned
+and logged with the rest.
 
 ### `raw/` - the mirror
 
@@ -148,41 +135,10 @@ other database.
 `sync_all` runs the pulls in dependency order - `blizzard.heroes`,
 `wiki.heroes`, `wiki.maps`, `wiki.patches`, `blizzard.meta`,
 `wiki.playstyles`, `counterpick.heroes` - then `load_authored`, then
-`export_csv`. Entity tables refresh in place; each rates
-pull appends a dated snapshot, the series the trend facts difference. The
-page caches (`.cache-blizzard/`, `.cache-wiki/`, `.cache-counterpick/` at
-the repo root) make every build after the first cost almost no requests.
-
-## Keeping it fresh
-
-The `refresher` container refreshes the database once a day, so the board
-is ready when a game starts. The daily refresh refetches what moves day to
-day - the rates (a new dated snapshot, the series the trend facts
-difference) and counterpick's counters - then re-mirrors the authored
-inputs and the strategies and re-exports `raw/`. Once a week (when the
-wiki cache is older than `COUNTER_MATRIX_REFRESH_FULL_DAYS`) it refetches
-every page of every source, hero pages and articles included. It also
-refreshes right away on start when the cached pages are older than a day.
-A page that fails to fetch keeps its cached copy, so a flaky source
-degrades to yesterday's numbers rather than an empty table; the board's
-header shows the capture date and warns when patches shipped since.
-
-| setting | default | meaning |
-| --- | --- | --- |
-| `COUNTER_MATRIX_REFRESH_AT` | `05:00` | daily time, in the container's `TZ` (UTC unless set) |
-| `COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS` | `20` | refresh on start when the cache is older than this |
-| `COUNTER_MATRIX_REFRESH_FULL_DAYS` | `7` | refetch every source (not just rates and counters) when the wiki cache is older than this |
-
-Set them in the environment or a `.env` file next to `compose.yaml`. The
-same refresh from a shell, against whichever database `DATABASE_URL` names:
-
-```bash
-.venv/bin/python -m db.refresh --now        # once, now (daily set; --full for everything)
-.venv/bin/python -m db.refresh              # the daily loop
-.venv/bin/python -m db.mcp call sync_all '{"refresh": true}'
-```
-
-## The life of the database
+`export_csv`. Entity tables refresh in place; each rates pull appends a
+dated snapshot, the series the trend facts difference. The page caches
+(`.cache-blizzard/`, `.cache-wiki/`, `.cache-counterpick/` at the repo
+root) make every build after the first cost almost no requests.
 
 ```mermaid
 stateDiagram-v2
@@ -194,47 +150,51 @@ stateDiagram-v2
     Populated --> Empty: db_rebuild<br/>drop everything
 ```
 
-`python -m db.mcp call <tool>` runs the same tools without a session;
-Docker's `data` container runs `db_rebuild` on an empty or stale database and
-the `refresher` container refreshes once a day (and on start when the
-cached pages are older than a day): the daily refresh refetches the rates
-and the counters and re-mirrors the playbook and the strategies; once the
-wiki cache is older than `COUNTER_MATRIX_REFRESH_FULL_DAYS` (7) it runs
-`sync_all` with refresh on, every page of every source. A page that fails
-to refetch keeps its cached copy, so a bad day at a source degrades to
-yesterday's numbers rather than an empty table.
+Docker's `data` container runs `db_rebuild` on an empty, unfilled or stale
+database, then serves the door.
 
-## Where every kind of data lives
+## Keeping it fresh
 
-Any data in the database is just data: every row carries its `source_id`,
-and that is the only distinction the schema draws. What differs is how a
-row gets there - pulled from a source, or authored by hand.
+The `refresher` container refreshes the database once a day, so the board
+is ready when a game starts. The daily refresh refetches what moves day to
+day - the rates (a new dated snapshot) and counterpick's counters - then
+re-mirrors the authored inputs and the strategies and re-exports `raw/`.
+Once the wiki cache is older than `COUNTER_MATRIX_REFRESH_FULL_DAYS` it
+runs `sync_all` with refresh on: every page of every source, hero pages
+and articles included. It also refreshes on start when the cached pages
+are older than `COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS`. A page that fails
+to fetch keeps its cached copy, so a flaky source degrades to yesterday's
+numbers rather than an empty table; the board's header shows the capture
+date and warns when patches shipped since.
 
-```mermaid
-flowchart TD
-    Q{"Can a pull tool<br/>re-fetch it?"}
-    Q -->|"yes"| F["pulled<br/>blizzard · wiki · counterpick<br/>one package per source: page -> table"]
-    Q -->|"no - we wrote it"| A["authored<br/>db/data/authored/: synergies, archetypes,<br/>map playstyles, seasons, notes<br/>+ inference/strategies/*.md (the brain)"]
+| setting | default | meaning |
+| --- | --- | --- |
+| `COUNTER_MATRIX_REFRESH_AT` | `05:00` | daily time, in the container's `TZ` (UTC unless set) |
+| `COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS` | `20` | refresh on start when the cache is older than this |
+| `COUNTER_MATRIX_REFRESH_FULL_DAYS` | `7` | refetch every source (not just rates and counters) when the wiki cache is older than this |
+
+Set them in the environment or a `.env` file next to `compose.yaml`. The
+same refresh from a shell, against whichever database `DATABASE_URL` names:
+
+```bash
+.venv/bin/python -m db.refresh --now        # once, now (the daily set; --full for every source)
+.venv/bin/python -m db.refresh              # the daily loop
+.venv/bin/python -m db.mcp call sync_all '{"refresh": true}'
 ```
 
 ## Widening the meta's granularity
 
-Everything here is about the *fact* tables - the ones holding rates and
-playbook rows. Hero kits, weapons, maps and modes have no such dimensions: a
+This concerns the *fact* tables - the ones holding rates and playbook
+rows. Hero kits, weapons, maps and modes have no such dimensions: a
 cooldown is a cooldown in every region, on every platform, at every rank.
 
-### The one structural fact that makes this cheap
-
-**A rebuild drops the database and reapplies the migrations from scratch,**
-and the migrations ledger makes the Docker entrypoint do the same the moment
-the files change. So adding a dimension is never a data migration - there is
-no data to migrate. It is an edit to `psql/migrations/004_meta.sql`, an edit to `pull_rates`,
-and a refetch.
-
-That means the schema is *not* the constraint on any of this. The constraint is
-the request count, and it is multiplicative.
-
-### Where each dimension stands
+**A rebuild drops the database and reapplies the migrations from
+scratch,** and the migrations ledger makes the Docker entrypoint do the
+same the moment the files change. Adding a dimension is never a data
+migration - there is no data to migrate. It is an edit to
+`psql/migrations/004_meta.sql`, an edit to `pull_rates`, and a refetch.
+The schema is not the constraint; the request count is, and it is
+multiplicative.
 
 | dimension | column exists? | populated today | to widen it |
 | --- | --- | --- | --- |
@@ -247,69 +207,52 @@ the request count, and it is multiplicative.
 | map stage | `map_stages` 36 rows | stage list loaded | a source with per-stage rates (see below) |
 | any - PLAYBOOK tables | deliberately none | - | judgements are tier- and region-agnostic by design: a current read of the game, not a measurement of a population. Dimensioned numbers live in META |
 
-### The two that are not merely unfetched
+Every dimension has a column; what is missing is data to put in one.
+The columns carry the value that used to be implicit: `map_meta.region_id`
+says Americas, the playbook tables say all-ranks, `meta_snapshots.input`
+says controller. Two are not merely unfetched:
 
 **Input device is not the same as platform**, and only one of them is
-published. Blizzard's filter offers `PC` and `Console` - a platform. It says
-nothing about whether that player held a controller or a mouse, and both
-platforms support both. `meta_snapshots.input` therefore carries the one
-value the pin entails - `controller`, because the project pins console - and
-a real split would need a source that actually separates the two; none of
-the three does.
+published. Blizzard's filter offers `PC` and `Console` - a platform. It
+says nothing about whether that player held a controller or a mouse, and
+both platforms support both. `meta_snapshots.input` therefore carries the
+one value the pin entails - `controller`, because the project pins
+console - and a real split would need a source that separates the two;
+none of the three does.
 
-**Map stages exist; per-stage rates do not.** The stage list itself is now
-loaded - 36 stages across the ten Control and Flashpoint maps, read from each
-map's wiki article - so `map_stages` is populated and `map_meta.stage_id` has
-a real vocabulary to point at. What is still missing is any source that
-reports rates *per stage*: Blizzard's map filter stops at whole maps, so every
-`map_meta` row keeps `stage_id` NULL until someone publishes
-King's-Row-first-point numbers.
+**Map stages exist; per-stage rates do not.** The stage list is loaded -
+36 stages across the ten Control and Flashpoint maps, read from each map's
+wiki article - so `map_stages` is populated and `map_meta.stage_id` has a
+real vocabulary to point at. No source reports rates *per stage*:
+Blizzard's map filter stops at whole maps, so every `map_meta` row keeps
+`stage_id` NULL. NULL means the whole map, so `map_meta` uses
+`UNIQUE NULLS NOT DISTINCT`; Postgres treats NULLs as distinct by default,
+which would let the same hero, map and rank be inserted over and over.
 
-### Why the request count is the real ceiling
-
-The dimensions compose multiplicatively, and the source refuses long sweeps.
-`map_meta` at full granularity:
+**The request count is the real ceiling.** The dimensions compose
+multiplicatively, and the source refuses long sweeps. `map_meta` at full
+granularity:
 
 ```
 30 maps × 9 ranks × 3 regions × 2 platforms = 1,620 requests
 ```
 
-The rates endpoint began answering `504 Gateway Time-out` partway through a
-**280**-request sweep, and then closed connections outright. 1,620 is not
-reachable in one pass at any polite rate.
+The rates endpoint began answering `504 Gateway Time-out` partway through
+a **280**-request sweep, and then closed connections outright. 1,620 is
+not reachable in one pass at any polite rate. What makes it tractable is
+that the page cache is permanent and keyed by the full query, so
+granularity can be widened one dimension at a time across many runs, each
+resuming from what is already on disk. Widen first along whichever
+dimension separates the numbers most; rank is the evidence-backed answer:
+Widowmaker swings about fifteen points between Bronze and Grandmaster on
+a single map, which the all-ranks figure averages away.
 
-What makes it tractable is that the page cache is permanent and keyed by the
-full query, so granularity can be widened one dimension at a time across many
-runs, each resuming from what is already on disk. The order to widen in is
-whichever dimension separates the numbers most, and rank is the current
-evidence-backed answer: Widowmaker swings about fifteen points between Bronze
-and Grandmaster on a single map, which the all-ranks figure averages away.
-
-### Every dimension now has a column
-
-There is no longer a dimension that needs a migration to add - only data to
-put in one. One is empty because nothing publishes it:
-`map_meta.stage_id` is NULL on every row. The rest carry a real value that
-used to be implicit: `map_meta.region_id` says Americas rather than
-leaving it to be inferred from the database as a whole, the playbook tables
-say all-ranks rather than leaving rank unstated, and `meta_snapshots.input`
-says controller because the console platform entails it.
-
-`stage_id` is nullable and NULL means the whole map, so `map_meta` uses
-`UNIQUE NULLS NOT DISTINCT`. Postgres treats NULLs as distinct by default,
-which would let the same hero, map and rank be inserted over and over - every
-whole-map row looking unique because its stage is NULL.
-
-### What is already safe to assume
-
-- adding a dimension never invalidates existing rows, because there are none
-  that survive a run
-- every fact table already carries `snapshot_id`, so a dimension that belongs
-  to the whole capture (platform, queue) can be added to `meta_snapshots`
-  without touching the fact tables at all
-- `map_meta` rows already carry `tier_id`, set to the all-ranks tier, so
-  restoring rank granularity there needs no migration whatsoever
-
+Safe to assume: adding a dimension never invalidates existing rows,
+because none survive a run; every fact table already carries
+`snapshot_id`, so a dimension that belongs to the whole capture (platform,
+queue) can be added to `meta_snapshots` without touching the fact tables;
+`map_meta` rows already carry `tier_id`, set to the all-ranks tier, so
+restoring rank granularity there needs no migration.
 
 ## The schema
 
@@ -494,7 +437,7 @@ are on all of them: `source_id` (which source the row came from, see
 
 *HEROES · `002_heroes.sql`*
 
-kind_id is NULL until the wiki pipeline sets it. Blizzard's markup labels neither weapons nor ultimates, and its ordering does not identify them either, so nothing is guessed at scrape time.
+kind_id is NULL until pull_kits sets it. Blizzard's markup labels neither weapons nor ultimates, and its ordering does not identify them either, so nothing is guessed at scrape time.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -618,7 +561,7 @@ Rates by region and tier. All rates are percentages as published (47.9 means 47.
 
 *HEROES · `002_heroes.sql`*
 
-The composite foreign key makes it impossible to pair a hero with a subrole belonging to a different role than the hero's own. health, shield and armor are the hero's own pool, all in hp. Blizzard publishes none of them, so the wiki pipeline fills them in; a hero with no shield or armor leaves those NULL rather than storing a zero the source never states.
+The composite foreign key makes it impossible to pair a hero with a subrole belonging to a different role than the hero's own. health, shield and armor are the hero's own pool, all in hp. Blizzard publishes none of them, so pull_kits fills them in; a hero with no shield or armor leaves those NULL rather than storing a zero the source never states.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -638,7 +581,7 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 
 *META · `004_meta.sql`*
 
-Rates per map, and per tier within a map. The source's filters compose, so a hero's rates on King's Row in Bronze are a different figure from the same hero's rates on King's Row overall - and both are published. tier_id 'all' is the unfiltered figure for that map, which keeps the dimension key non-nullable. Region is not broken out here: map x tier is already 240 requests, and map x tier x region would be 720.
+Rates per map. The source's filters compose, so a hero's rates on King's Row in Bronze are a different figure from its rates on King's Row overall, and both are published; only the whole-map figure is pulled, under tier_id 'all', which keeps the dimension key non-nullable. Region is carried but not swept: every row is the Americas. Widening either is a loop, not a migration - map x tier alone is about 270 requests against a source that refuses long sweeps.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -681,7 +624,7 @@ Which playstyle suits which map: the bridge between MAPS and the playbook. map_s
 
 *MAPS · `003_maps.sql`*
 
-Stages within a map: King's Row's first point, Ilios' Well. Defined and deliberately empty. No source publishes per-stage rates - Blizzard's map filter lists thirty whole maps and stops - so there is nothing to load here yet. It exists so map_meta can carry a stage_id now rather than needing the column bolted on later.
+Stages within a map: Ilios' Well, Lighthouse and Ruins. Loaded from each map's own article for the Control and Flashpoint maps, which play their rounds on submaps; the other modes have none. No source publishes per-stage rates, so map_meta.stage_id stays NULL - the vocabulary is here for when one does.
 
 | column | type | null | references |
 | --- | --- | --- | --- |

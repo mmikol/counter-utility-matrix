@@ -1,15 +1,10 @@
 """Pull + clean + store: overwatch.blizzard.com - the roster.
 
-Heroes, roles, subroles (with their icons and the hero portraits the user
-layer draws), ability and perk text. Blizzard publishes no numbers and no
-map data, so weapons, stats and maps come from the wiki.
-
-Extracting hero data from Blizzard's hero pages.
-
-The roster page carries every hero's role, subrole and portrait; each hero
-page carries an abilities carousel and a perks section. Blizzard publishes
-prose only - no numbers - and omits some abilities outright, which the wiki
-supplies.
+The roster page carries every hero's role, subrole and portrait, and the
+role and subrole icons the UI layer draws; each hero page carries an
+abilities carousel and a perks section. Blizzard publishes prose only - no
+numbers, no map data - and omits some abilities outright, so weapons,
+stats, the missing abilities and the maps come from the wiki.
 """
 
 import re

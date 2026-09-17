@@ -8,9 +8,8 @@ import pytest
 from inference import catalog, serve
 from ui import board
 
-pytestmark = pytest.mark.invariant
 
-
+@pytest.mark.invariant
 def test_service_infers_evaluates_and_lists(db):
     data, code = serve.handle_infer(db, {"map": ["King's Row"], "red": ["Zarya"],
                                          "blue": ["Ana"]})
@@ -20,15 +19,15 @@ def test_service_infers_evaluates_and_lists(db):
     assert code == 200 and data["kind"] == "evaluate"
     data, code = serve.handle_evaluate(db, {"blue": ["Ana"]})
     assert code == 400 and "exactly 6" in data["error"]
-    data, code = serve.handle_heuristics()
+    data, code = serve.handle_strategies()
     assert code == 200 and len(data["strategies"]) == len(catalog.load())
     data, code = serve.handle_board(db, {"map": ["King's Row"], "red": ["Zarya"],
                                          "blue": ["Ana"], "side": ["defense"]})
     assert code == 200 and data["red"]["side"] == "attack" and data["current"]["partial"]
-    assert not hasattr(serve, "handle_record")          # recording is gone
     db.rollback()
 
 
+@pytest.mark.invariant                    # default_dsn() touches the embedded cluster
 def test_health_reports_the_catalog_and_the_database():
     data, code = serve.handle_health()
     assert code == 200 and data["strategies"] == len(catalog.load())

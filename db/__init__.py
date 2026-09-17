@@ -4,13 +4,14 @@
                   authored), and what they share: the page cache (fetch) and
                   name matching (names). Page to table.
     psql/         the database: where it is and the helpers every writer
-                  needs (psql), the schema, the ledger, rebuild, restore
-                  and the generated docs (psql.schema), the migrations, and
-                  the embedded cluster a local build creates (gitignored)
+                  needs (psql), the schema, the ledger, rebuild and the
+                  generated docs (psql.schema), the migrations, and the
+                  embedded cluster a local build creates (gitignored)
     mcp/          the MCP server and its tools - the one door to this
                   layer, for a session, the refresher, Docker's entrypoint
                   and the shell (`python -m db.mcp call <tool>`) alike
     refresh       the daily refresh
+    sentry        the guard: the playbook, the authored inputs, the door
     raw/          the CSV mirror the tools export (gitignored)
 
 docs/db.md walks the tree. This file holds what the whole layer must

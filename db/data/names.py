@@ -16,6 +16,10 @@
                   "Eject!". Drops one trailing parenthetical and folds case;
                   always scoped to one hero, so the looser key cannot
                   collide across heroes.
+
+    index               a {name: id} lookup rekeyed by name_key
+    abilities_named_in  the ability names a text mentions, longest first
+                        so an overlap resolves to the longer name
 """
 
 import re

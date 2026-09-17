@@ -9,4 +9,8 @@ db/raw
 __pycache__
 **/__pycache__
 .pytest_cache
+.ruff_cache
+.coverage
+.coverage.*
+.DS_Store
 .claude

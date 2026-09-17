@@ -2,16 +2,16 @@
 
 [![ci](https://github.com/mmikol/counter-utility-matrix/actions/workflows/ci.yml/badge.svg)](https://github.com/mmikol/counter-utility-matrix/actions/workflows/ci.yml)
 
-Counter Utility Matrix: optimal Overwatch 2 team compositions from a database pulled from the sources,
-a board that turns every pick into facts, and a deterministic solver over a
-markdown playbook of constraints and heuristics. Free to run - no accounts,
-no keys, no API billing.
+Optimal Overwatch 2 team compositions: a database pulled from the sources,
+a board that turns every pick into facts, and a deterministic solver over
+a markdown playbook of constraints, heuristics and assumptions. Free to
+run - no accounts, no keys, no API billing.
 
 ## Install
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or any docker + compose v2)
-- Python 3.12 for the orchestrator, the tests and a Docker-less run - the version the image runs (no PostgreSQL install needed: `pgserver` embeds one on macOS and Linux x86_64)
-- [Claude Code](https://claude.com/claude-code), for the skills and the agents' run - signed in once with `claude login`
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/), or any docker with compose v2
+- Python 3.12 - the version the image runs - for the orchestrator, the tests and a Docker-less run (no PostgreSQL install: `pgserver` embeds one on macOS and Linux x86_64)
+- [Claude Code](https://claude.com/claude-code) for the skills and the agents' run, signed in once with `claude login`
 
 ```bash
 git clone git@github.com:mmikol/counter-utility-matrix.git && cd counter-utility-matrix
@@ -24,11 +24,10 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python orchestrator.py
 ```
 
-That is the whole run: the stack comes up (one container per layer; the
-first time, the data container pulls every source and builds the database
-- a few minutes, at a pace the sources can bear), the agents run headless
-on the `/refresh` skill (refresh the data, derive draft strategies,
-regenerate the docs), and the app is left running:
+The stack comes up, one container per layer (the first time, the data
+container pulls every source and builds the database: minutes, at a pace
+the sources can bear); the agents run headless on the `/refresh` skill;
+the app is left running:
 
 | | |
 | --- | --- |
@@ -37,8 +36,8 @@ regenerate the docs), and the app is left running:
 | the MCP server | http://localhost:8020/mcp |
 | PostgreSQL | localhost:5433 (`./docker-db <command>` points a host command at it) |
 
-Every port binds to 127.0.0.1. Without the `claude` CLI signed in, the run
-still brings the stack up and says what it skipped. The other verbs:
+Every port binds to 127.0.0.1. Without the `claude` CLI signed in, the
+run still brings the stack up and says what it skipped. The other verbs:
 
 ```bash
 .venv/bin/python orchestrator.py up        # the stack only
@@ -65,19 +64,18 @@ Open the repo in a Claude Code session and the skills are there: `/up`,
 ## License
 
 Copyright (c) 2026 Miliano Mikol. Licensed under the
-[PolyForm Strict License 1.0.0](LICENSE): you may use it for noncommercial
-purposes, and that is all - no redistribution, no changes or new works
-based on it, no commercial use of any kind. Any commercial use, and any
-use outside those terms, needs a separate written license from the author.
-The data the app pulls - Blizzard's hero pages, the wiki, the counterpick
-lists - and the hero portraits remain their owners'.
+[PolyForm Strict License 1.0.0](LICENSE): noncommercial use only - no
+redistribution, no changes or new works, no commercial use of any kind.
+Anything else needs a separate written license from the author. The data
+the app pulls - Blizzard's hero pages, the wiki, the counterpick lists -
+and the hero portraits remain their owners'.
 
 ## Documentation
 
 - [docs/architecture.md](docs/architecture.md) - how the three layers fit: the folders, the root files, the diagrams, the skills, the scope
-- [docs/db.md](docs/db.md) - the DATA LAYER: the sources, the MCP tools, the schema with its ER diagrams and data dictionary, the refresh, the mirror
+- [docs/db.md](docs/db.md) - the DATA LAYER: the sources, the tools, the schema with its ER diagrams and data dictionary, the refresh, the mirror
 - [docs/ui.md](docs/ui.md) - the UI LAYER: the board, its endpoints, the facts behind it
 - [docs/inference.md](docs/inference.md) - the INFERENCE LAYER: the strategy files, the solver, the tuning loop, the deriver, the catalog
-- [docs/skills.md](docs/skills.md) - the nine skills a Claude Code session runs here: what each takes, does, and refuses
+- [docs/skills.md](docs/skills.md) - the nine skills a Claude Code session runs here
 - [docs/mcp.md](docs/mcp.md) - the two MCP servers and every tool they expose
-- [docs/security.md](docs/security.md) - the threat model and what stands in the way: prompt injection, the door, SQL, files, the containers, the sentry
+- [docs/security.md](docs/security.md) - the threat model and what stands in the way

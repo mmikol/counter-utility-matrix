@@ -1,6 +1,7 @@
-"""A minimal, dependency-free MCP server over stdio.
+"""A minimal, dependency-free MCP server: JSON-RPC 2.0 over stdio, and the
+same surface over Streamable HTTP (serve_http, below).
 
-MCP is JSON-RPC 2.0, one message per line on stdin/stdout, and this server
+Over stdio it is one message per line on stdin/stdout, and this server
 speaks the parts a tool host needs: `initialize`, `ping`, `tools/list`,
 `tools/call`, `resources/list`, `resources/read`, and empty `prompts/list`.
 Logs go to stderr - stdout is the wire.

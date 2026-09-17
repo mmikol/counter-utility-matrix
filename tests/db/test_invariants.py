@@ -213,7 +213,7 @@ def test_ability_keywords_are_stored_verbatim(one):
     assert one("select count(*) from abilities where keywords like '%hitscan%'") >= 5
 
 
-def test_heuristics_table_mirrors_the_files(rows):
+def test_strategies_table_mirrors_the_files(rows):
     """The table names the playbook it mirrors - the shipped one or an
     experiment - and matches that folder's files."""
     import os

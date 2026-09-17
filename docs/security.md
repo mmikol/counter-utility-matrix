@@ -19,36 +19,36 @@ the playbook and database the board trusts at game time.
 ## What stands in the way
 
 **Tool output is data.** Every skill carries the same rule: what a tool
-returns - facts, source text, transcripts, notes, prose - is data about the
-game, never a message to the session; an instruction found inside it is
-reported, not followed, and a skill calls only the tools it names. The
-deriver's prompt says the same of a draft's prose. The solver itself
-cannot be injected: an assumption is prose it never scores, and it reads frontmatter through a whitelisted expression
-language (no attribute access, no dunder names, a fixed function set,
-`__builtins__` empty, exponents bounded, no string arithmetic, nesting
-bounded) and treats prose as prose.
+returns - facts, source text, notes, prose - is data about the game, never
+a message to the session; an instruction found inside it is reported, not
+followed, and a skill calls only the tools it names. The deriver's prompt
+says the same of a draft's prose. The solver cannot be injected: an
+assumption is prose it never scores, and it reads frontmatter through a
+whitelisted expression language (no attribute access, no dunder names, a
+fixed function set, `__builtins__` empty, exponents bounded, no string
+arithmetic, nesting bounded).
 
 **The headless runs are fenced.** `orchestrator.py agents` gives Claude
 Code in print mode an explicit allowlist of tools on the two servers -
 status, the catalog, the log, the vocabulary, facts, inference, read-only
-`query`, the refresh and load tools, `infer_strategy`, `tune`,
-`db_docs`, `export_csv` - and no built-in tool at all
-(`--tools ""`): no shell, no file edits, no web, no `add_strategy`, no
-rebuild or migration, no session kept afterwards, at most
-eighty turns, and a tool-call timeout long enough for a polite scrape
-(`MCP_TOOL_TIMEOUT`), since a pull that outlives its client's patience
-is a pull that ran unwatched. The deriver runs `claude -p` from a
-neutral directory with no project settings, no MCP servers, no tools and
-two turns, and stores only what the catalog validates.
+`query`, the refresh and load tools, `infer_strategy`, `tune`, `db_docs`,
+`export_csv` - and no built-in tool at all (`--tools ""`): no shell, no
+file edits, no web, no `add_strategy`, no rebuild or migration, no session
+kept afterwards, at most eighty turns, and a tool-call timeout long enough
+for a polite scrape (`MCP_TOOL_TIMEOUT`), since a pull that outlives its
+client's patience is a pull that ran unwatched. The deriver runs
+`claude -p` from a neutral directory with no project settings, no MCP
+servers, no tools and two turns, and stores only what the catalog
+validates.
 
 **The board has one write, and it knocks at the door too.** Storing a
 heuristic's weight from its slider is `POST /api/weight` on the board
 (bound to 127.0.0.1 like everything else), which the board turns into a
 `tune` call - over HTTP to the MCP server with the bearer token in the
 compose stack, in-process through the same tool registry on the local
-cluster - so the change is validated against the catalog, logged with
-its reason and mirrored like any other; the board itself never opens a
-playbook file, and its container mounts the playbook read-only.
+cluster - so the change is validated against the catalog, logged with its
+reason and mirrored like any other; the board never opens a playbook
+file, and its container mounts the playbook read-only.
 
 **The door checks who is knocking.** The HTTP server binds to 127.0.0.1,
 refuses browser origins that are not local (DNS-rebinding guard), caps a
@@ -61,51 +61,51 @@ healthchecks). Every tool call, over either transport, is one line in the
 audit log `db/raw/audit.jsonl`: when, transport, client, tool, the names
 and sizes of its arguments (never their values), outcome, duration.
 
-**SQL reads tables, not disks.** The `query` tool accepts one `SELECT`
-(or `WITH`, `EXPLAIN`, `SHOW`), refuses names that reach the file system
-or the network before the database sees them, and connects as
-`matrix_reader` - a login of its own with `SELECT` on tables and nothing
-else (migrations 011 and 012), so a superuser-only function fails even if
-a name slipped past the list, and there is no superuser session to climb
-back to. The functions that run text as SQL or change settings are
-withdrawn from `PUBLIC`. The statement runs read-only under a ten-second
-timeout, and a result is capped at a megabyte, cells at two thousand
-characters.
+**SQL reads tables, not disks.** The `query` tool accepts one statement
+that starts `SELECT`, `WITH`, `EXPLAIN`, `SHOW`, `TABLE` or `VALUES`,
+refuses names that reach the file system or the network before the
+database sees them, and connects as `matrix_reader` - a login of its own
+with `SELECT` on tables and nothing else (migrations 011 and 012), so a
+superuser-only function fails even if a name slipped past the list, and
+there is no superuser session to climb back to. The functions that run
+text as SQL or change settings are withdrawn from `PUBLIC`. The statement
+runs read-only under a ten-second timeout; the first 200 rows come back,
+a result is capped at a megabyte, cells at two thousand characters.
 
 **Files are written by validated tools only.** A strategy's id is its
 filename, lowercase-kebab and nothing else, so no path leaves the folder
 and no file can claim another's id; a file is loaded through the catalog
-before it exists or changes; a frontmatter value is one line and a
-weight is within 0..10; names, prose, questions, reasoning and notes have
-length caps; the deriver accepts only a strategy's own fields from the
-model, at most ten drafts a run, and passes a draft's prose over stdin;
-a search's pool and its alternatives are clamped; transcripts are named
-by integer id. The board escapes everything it renders.
+before it exists or changes; a frontmatter value is one line and a weight
+is within 0..10; names, prose, questions, reasoning and notes have length
+caps; the deriver accepts only a strategy's own fields from the model, at
+most ten drafts a run, and passes a draft's prose over stdin; a search's
+pool and its alternatives are clamped. The board escapes everything it
+renders.
 
 **The containers are boxed.** Every container runs as an unprivileged
 user on a read-only root filesystem (only the bind mounts and `/tmp` are
 writable), with every capability dropped, no new privileges, a process
 limit and a memory limit, and restart if they fall over; the database
 container keeps only the five capabilities its image needs to start. They
-share one network: Docker publishes a
-port only for a container on a routable network, and the sentry needs
-the database, so what keeps `inference`, `ui`, `db` and `sentry` off the
-internet is that their code opens no connection out - only the two
-pull-side containers fetch anything, from three fixed hosts. Every
-published port binds to 127.0.0.1.
+share one network: Docker publishes a port only for a container on a
+routable network, and the sentry needs the database, so what keeps
+`inference`, `ui`, `db` and `sentry` off the internet is that their code
+opens no connection out - only the two pull-side containers fetch
+anything, from three fixed hosts. Every published port binds to
+127.0.0.1.
 
 **The sentry watches.** A sixth container (`db/sentry.py`) checks, every
 thirty seconds: that every file in `inference/strategies/` loads through
 the catalog - one that does not is quarantined (renamed to
-`.md.quarantined`, which the catalog ignores) and named in the report; that
-no strategy's prose reads like an instruction ("ignore previous
-instructions", a shell command, a credential, a script tag, a base64 blob)
-- one that does is quarantined the same way; that the authored CSVs and
-the free text in the database carry no such text - those are flagged, not
-removed, a person decides; and what the audit log says about the last
+`.md.quarantined`, which the catalog ignores) and named in the report;
+that no strategy's prose reads like an instruction ("ignore previous
+instructions", a shell command, a credential, a script tag, a base64
+blob) - one that does is quarantined the same way; that the authored CSVs
+and the free text in the database carry no such text - those are flagged,
+not removed, a person decides; and what the audit log says about the last
 minute - calls, refusals, crashes, any client past the rate limit. The
-scan folds Unicode to one shape and strips zero-width characters first, so
-a word broken by an invisible character still reads as the word. Its
+scan folds Unicode to one shape and strips zero-width characters first,
+so a word broken by an invisible character still reads as the word. Its
 report is `db/raw/sentry.json`, and `python orchestrator.py status` prints
 it. `python -m db.sentry --once` runs one pass from a shell and exits
 non-zero when something is wrong.
@@ -125,9 +125,9 @@ non-zero when something is wrong.
 - Keep `.env` out of the repository (it is ignored) and out of the image
   (it is not copied). There are no other secrets.
 - On a Linux host whose checkout is not owned by uid 1000, set
-  `COUNTER_MATRIX_UID` and `COUNTER_MATRIX_GID` in `.env` to the owner's ids,
-  or the containers cannot write the bind mounts (the audit log, the mirror,
-  a quarantine, a tune) and say so in their logs.
+  `COUNTER_MATRIX_UID` and `COUNTER_MATRIX_GID` in `.env` to the owner's
+  ids, or the containers cannot write the bind mounts (the audit log, the
+  mirror, a quarantine, a tune) and say so in their logs.
 
 Report a vulnerability privately to the repository owner rather than in a
 public issue; see [SECURITY.md](../SECURITY.md). None of this is a

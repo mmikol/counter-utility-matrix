@@ -32,6 +32,7 @@ can read them as evidence. Ids are dense and stable within a board.
 
 from ui.facts import compute
 from ui.facts.compute import (
+    MAX_BANS,
     RANK_SENSITIVE,
     SIDES,
     SPECIALIST_DELTA,
@@ -78,7 +79,7 @@ def _plain(value):
 
 
 PLAYBOOK_SCOPE = "playbook"
-PLAYBOOK_DIVIDER = "-- the playbook's record: what it holds, decided and saw - not facts --"
+PLAYBOOK_DIVIDER = "-- the playbook's record: what it holds - not facts --"
 
 
 class FactSet:
@@ -194,8 +195,8 @@ def _meta_facts(fs, world):
 
 def _ban_facts(fs, world, bans, red, blue):
     """What the bans took off the table, for both sides."""
-    fs.add("bans", "match", "bans.count", "bans this match: %d of 5 - %s"
-           % (len(bans), ", ".join(h.name for h in bans)),
+    fs.add("bans", "match", "bans.count", "bans this match: %d of %d - %s"
+           % (len(bans), MAX_BANS, ", ".join(h.name for h in bans)),
            value=[h.name for h in bans], source="derived:bans.count")
     for h in bans:
         fs.add("bans", h.name, "bans.hero", "%s is banned this match - neither team"

@@ -1,15 +1,19 @@
 """The INFERENCE LAYER: facts in, the optimal composition out.
 
-    strategies/   the brain - STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS: one markdown
-                  file per strategy, of two kinds. A constraint is a limit
-                  (require: must hold), a scored adjustment (bonus/penalty
-                  while a condition holds) or prose the agent holds a comp
-                  to; a heuristic maximises or minimises a metric
+    strategies/   the playbook - STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS:
+                  one markdown file per strategy. A constraint is a limit
+                  (require: must hold) or a scored adjustment (bonus/penalty
+                  while a condition holds); a heuristic maximises or
+                  minimises a metric; an assumption is prose the agent holds
+                  a comp to
+    experiments/  other playbooks, chosen with COUNTER_MATRIX_STRATEGIES
     catalog       reads, validates and mirrors the strategies
     expr          the safe expression language the frontmatter uses
     solver        searches compositions under the constraints and heuristics;
                   players are assumed to play optimally
-    engine        infer() and evaluate(): the solver plus citations into
-                  the facts the UI layer generated
-    record        the storage gates and the transcript for a decided comp
+    engine        infer(), evaluate() and board(): the solver plus citations
+                  into the facts the UI layer generated
+    tune          one validated, logged edit to a strategy file; add and complete
+    derive        the engine asking the model for a draft's frontmatter
+    serve         the engine over HTTP, for the compose stack's board
 """

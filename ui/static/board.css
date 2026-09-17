@@ -7,7 +7,7 @@ body { margin:0; background:var(--bg) fixed; color:var(--text);
   font:14px/1.45 -apple-system,"Segoe UI",Roboto,sans-serif;
   background-image: repeating-linear-gradient(115deg, transparent 0 46px,
     rgba(255,255,255,.018) 46px 48px); }
-h1,h2,h3,.ow { font-family:"Bebas Neue",Impact,"Arial Narrow",sans-serif;
+h1,h2,h3 { font-family:"Bebas Neue",Impact,"Arial Narrow",sans-serif;
   letter-spacing:.06em; text-transform:uppercase; font-weight:400; }
 a { color:var(--blue); text-decoration:none; } a:hover { text-decoration:underline; }
 main { max-width:1440px; margin:0 auto; padding:14px 18px 60px; }
@@ -48,7 +48,6 @@ header.top .gh:hover { color:var(--text); border-color:var(--muted); }
 button { background:#263041; color:#fff; border:1px solid #35435a; border-radius:6px;
   padding:8px 14px; font:inherit; cursor:pointer; }
 button:hover { background:#31405a; }
-button.primary { background:var(--blue2); border-color:var(--blue); }
 .flash { color:var(--gold); font-size:12px; min-width:160px; text-align:right; }
 
 /* --- the bans bar: a collapsible picker built from the same tiles ----- */
@@ -75,7 +74,6 @@ button.primary { background:var(--blue2); border-color:var(--blue); }
 .bans .slot.full { border-color:#ff7a8a; box-shadow:0 0 14px rgba(255,75,87,.35); }
 .bans .slot .idx { inset:0; left:0; display:flex; align-items:center; justify-content:center;
   color:#6b2f3a; letter-spacing:.12em; text-transform:uppercase; }
-.score.unscored { font-size:14px; letter-spacing:.08em; text-transform:uppercase; color:var(--gold); }
 .tile.capped { opacity:.28; filter:grayscale(.8); cursor:not-allowed; }   /* no legal six seats one more of this role */
 .tile.capped:hover { transform:none; border-color:#2a3240; }
 .tile.banned { opacity:.28; filter:grayscale(1); cursor:not-allowed; }
@@ -166,14 +164,13 @@ table.facts tr.h td.head { font-family:"Bebas Neue",Impact,sans-serif; font-size
 table.facts tr.red td.tag { color:var(--red); } table.facts tr.blue td.tag { color:var(--blue); }
 table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color:#ffd67a; }
 
-/* the comps panel: the two seats side by side, the current comp below */
+/* the comps panel: the game plan, then the two seats side by side */
 .plan { padding:12px 14px; margin-bottom:10px; border-radius:10px; border:1px solid var(--line); background:linear-gradient(170deg,#1b2436 0%,#161a24 70%); }
 .plan .lbl, .momentum .lbl { font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
 .plan .text { margin-top:6px; line-height:1.55; font-size:13.5px; }
 .momentum { display:flex; align-items:center; gap:16px; padding:10px 14px; margin:14px 0 0; border-radius:10px; border:1px solid var(--line); background:#151a24; }
 .momentum .lbl { flex:0 0 auto; }
 .momentum .mbars { flex:1; display:grid; grid-template-columns:44px 1fr 74px; gap:5px 10px; align-items:center; }   /* the two bars stacked on one track width */
-.momentum b { font-weight:600; }
 .momentum .mbar { display:contents; }
 .momentum .mbar .side { font-family:"Bebas Neue",Impact,sans-serif; font-size:16px; letter-spacing:.08em; }
 .momentum .mbar.blue .side { color:var(--blue); } .momentum .mbar.red .side { color:var(--red); }
@@ -190,17 +187,9 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .seat.red .inf-head h3 { color:var(--red); } .seat.blue .inf-head h3 { color:var(--blue); }
 .seats .comp { grid-template-columns:repeat(3,1fr); }
 .seats .bars { grid-template-columns:1fr; }
-.partial { color:var(--gold); font-size:12px; margin:6px 0; }
 .inf-head { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
 .seat .meta { margin:10px 0 0; }
 .inf-head h3 { margin:0; font-size:24px; color:var(--gold); }
-.inf-head .score { font-family:"Bebas Neue",Impact,sans-serif; font-size:36px; line-height:1;
-  color:#fff; cursor:help; }
-.inf-head .score small { font-size:16px; color:var(--muted); letter-spacing:.08em; margin-left:5px; }
-.inf-head .raw { font-family:ui-monospace,monospace; font-size:11.5px; color:var(--muted); }
-.inf-head .raw .meaning { display:block; font-family:-apple-system,"Segoe UI",sans-serif; font-size:11.5px; color:#8f9bb0; margin-top:2px; }
-.altn { font-family:"Bebas Neue",Impact,sans-serif; font-size:15px; letter-spacing:.06em;
-  color:var(--gold); }
 .comp { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin:12px 0; }
 @media (max-width:900px) { .comp { grid-template-columns:repeat(3,1fr); } }
 .card { background:#10141c; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
@@ -209,7 +198,6 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .card .pic img { width:100%; height:100%; object-fit:cover; display:block; }
 .card .pic .role { position:absolute; top:6px; left:6px; font-size:10px; letter-spacing:.14em;
   text-transform:uppercase; background:rgba(0,0,0,.6); padding:2px 6px; border-radius:3px; }
-.card .pic .lock { position:absolute; top:6px; right:6px; color:var(--gold); font-size:11px; }
 .slot.suggested { border:1px dashed var(--blue); cursor:pointer; opacity:.7; }
 .slot.suggested:hover { opacity:1; box-shadow:0 0 16px rgba(62,166,255,.35); }
 .slot.suggested img { filter:saturate(.6); }

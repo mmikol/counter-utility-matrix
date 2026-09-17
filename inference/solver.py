@@ -4,7 +4,7 @@
                locked picks from a per-role pool ranked by a cheap prior
                (six per role by default)
     score      STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS: limits prune (soft ones charge),
-               heuristics normalise and weigh, scored constraints add; prose constraints are
+               heuristics normalise and weigh, scored constraints add; assumptions are
                the agent's. Heuristics are normalised against a REFERENCE:
                a seeded sample of random legal sixes for this board (map,
                side, enemies, bans), so infer, evaluate and the current
@@ -19,14 +19,13 @@ import random
 
 from inference.expr import scope
 from ui.facts import compute
-from ui.facts.compute import TEAM_SIZE
+from ui.facts.compute import ROLE_COUNT, TEAM_SIZE
 
 REFERENCE_SIZE = 1200
 REFERENCE_SEED = 20260913
 
 SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size",
               "team.open_slots"}
-ROLE_KEY = {"tank": "tanks", "damage": "damage", "support": "supports"}
 
 
 class Candidate:
@@ -74,6 +73,7 @@ class Solver:
                        "world": compute.world_metrics(world)}
         self.bounds = {}                     # heuristic id -> (min, max)
         self.considered = 0
+        self._reference = None               # the sample, once drawn
 
     # --- namespace and scoring -----------------------------------------------
 
@@ -120,7 +120,7 @@ class Solver:
         what every heuristic is normalised against. Deterministic for a given
         map, side, enemies and bans, and independent of the locked picks
         and the pool, so every call on one board shares a scale."""
-        if getattr(self, "_reference", None) is not None:
+        if self._reference is not None:
             return self._reference
         rng = random.Random("%d|%s|%s|%s|%s" % (        # a str seed is stable across processes
             REFERENCE_SEED, self.m.id if self.m else 0, self.side,
@@ -128,8 +128,8 @@ class Solver:
             ",".join(str(i) for i in sorted(self.banned))))
         by_role = {r: [h for h in self.world.heroes.values()
                        if h.role == r and h.released and h.id not in self.banned]
-                   for r in ROLE_KEY}
-        shapes = self._shapes(locked_counts=dict.fromkeys(ROLE_KEY, 0))
+                   for r in ROLE_COUNT}
+        shapes = legal_shapes(self.catalog)
         out, seen = [], set()
         if shapes:
             while len(out) < size:
@@ -144,12 +144,10 @@ class Solver:
         self._reference = [c for c in out if not c.violations]
         return self._reference
 
-    def freeze_bounds(self, candidates=None):
-        """Bounds per heuristic from the reference sample (default) or from an
-        explicit list of prepared candidates."""
-        candidates = self.reference() if candidates is None else candidates
+    def freeze_bounds(self):
+        """Bounds per heuristic from the reference sample."""
         for g in self.heuristics:
-            values = [c.raw[g.id] for c in candidates if c.raw.get(g.id) is not None]
+            values = [c.raw[g.id] for c in self.reference() if c.raw.get(g.id) is not None]
             self.bounds[g.id] = (min(values), max(values)) if values else (0.0, 0.0)
 
     def score(self, cand):
@@ -205,12 +203,8 @@ class Solver:
     def shapes(self):
         """(tanks, damage, supports) triples the shape-only hard limits
         allow, that can still seat the locked picks."""
-        return self._shapes({r: sum(1 for h in self.locked if h.role == r)
-                             for r in ROLE_KEY})
-
-    def _shapes(self, locked_counts):
-        return legal_shapes(self.catalog, locked_counts)
-
+        return legal_shapes(self.catalog, {r: sum(1 for h in self.locked if h.role == r)
+                                           for r in ROLE_COUNT})
 
     def prior(self, h):
         """A cheap ranking to cut each role's pool before enumeration."""
@@ -226,7 +220,7 @@ class Solver:
     def pools(self):
         locked_ids = {h.id for h in self.locked} | self.banned
         pools = {}
-        for role in ROLE_KEY:
+        for role in ROLE_COUNT:
             heroes = [h for h in self.world.heroes.values()      # announced heroes wait
                       if h.role == role and h.released and h.id not in locked_ids]
             heroes.sort(key=self.prior, reverse=True)
@@ -235,7 +229,7 @@ class Solver:
 
     def enumerate(self):
         pools = self.pools()
-        locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLE_KEY}
+        locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLE_COUNT}
         seen, out = set(), []
         for t, d, s in self.shapes():
             need = {"tank": t - len(locked_by_role["tank"]),
@@ -316,7 +310,7 @@ def legal_shapes(catalog, locked_counts=None):
     2-2-2) - optionally only those that can still seat the picks counted per
     role. The board carries the full list so the roster can refuse a pick no
     legal six could seat."""
-    locked_counts = locked_counts or dict.fromkeys(ROLE_KEY, 0)
+    locked_counts = locked_counts or dict.fromkeys(ROLE_COUNT, 0)
     shape_constraints = [h for h in catalog if h.form == "limit" and not h.soft and h.require
                          and set(h.require.names) <= SHAPE_KEYS
                          and (h.when is None or set(h.when.names) <= SHAPE_KEYS)]

@@ -1,12 +1,8 @@
 """Pull + clean + store: overwatch.fandom.com - maps, game modes, stages.
 
-Only the wiki's "Standard Play" section is read; Former Standard Play,
-Stadium, Arcade, Custom Games, Training and seasonal modes are out of scope.
-
-Extracting maps and game modes from the wiki's Maps article.
-
-Only the "Standard Play" section is read; Former Standard Play (Assault,
-Clash), Stadium, Arcade and seasonal modes are out of scope.
+Only the Maps article's "Standard Play" section is read; Former Standard
+Play (Assault, Clash), Stadium, Arcade, Custom Games, Training and seasonal
+modes are out of scope. Each map's own article supplies its stages.
 """
 
 import re

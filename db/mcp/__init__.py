@@ -3,6 +3,7 @@ stores it in Postgres - plus the board tools the other two layers expose
 through the same door.
 
     python -m db.mcp                 serve over stdio (what .mcp.json launches)
+    python -m db.mcp --http H:PORT   serve over HTTP (the data container)
     python -m db.mcp list            print the tools
     python -m db.mcp call pull_maps  run one tool from the shell
 

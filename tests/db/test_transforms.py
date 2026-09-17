@@ -1,4 +1,4 @@
-"""Unit tests: the pure functions the pipelines lean on. No database, no
+"""Unit tests: the pure functions the pulls lean on. No database, no
 network - every lesson here was paid for once already."""
 
 from db.data.names import name_key

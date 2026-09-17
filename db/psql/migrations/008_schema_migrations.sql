@@ -4,7 +4,7 @@
 -- which migrations a cluster carried - and a container holding an older
 -- schema looked "populated" and was never rebuilt. This ledger lets the
 -- entrypoint (and db_status) compare the files on disk with what the
--- database applied, and rebuild when they differ. db/schema.py fills it
+-- database applied, and rebuild when they differ. db/psql/schema.py fills it
 -- after applying; rows carry no source_id because they are not data.
 
 BEGIN;

@@ -36,12 +36,10 @@ def _dsn():
 
 @pytest.fixture(scope="session")
 def dsn(db):
-    """The connection string the suite runs against - with its password, which a
-    connection's own `info.dsn` leaves out. A test that takes it needs the
-    built database as much as one that takes `db`, so it rides on that
-    fixture and skips the same way - an embedded cluster that exists but
-    holds no tables (one a default_dsn() call created on a fresh clone) is
-    not a database to test against."""
+    """The connection string the suite runs against, password included (a
+    connection's own `info.dsn` drops it). It rides on `db` so it skips the
+    same way: an embedded cluster with no tables is not a database to test
+    against."""
     return _dsn()
 
 
@@ -79,13 +77,13 @@ def fetch():
     """A network GET for validation tests; failures skip, never fail."""
     import requests
 
-    session = requests.Session()
-    session.headers.update({"User-Agent":
-                            "counter-utility-matrix/0.1 (personal project; contact via repo)"})
+    from db.data.fetch import session
+
+    web = session()
 
     def get(url):
         try:
-            response = session.get(url, timeout=30)
+            response = web.get(url, timeout=30)
             response.raise_for_status()
             return response
         except requests.RequestException as error:

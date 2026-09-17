@@ -9,14 +9,13 @@ import os
 import psycopg
 import pytest
 
-from db import ROOT
+from db import CACHE_DIRS
 from db.mcp import tools
 
 pytestmark = pytest.mark.invariant
 
-CACHES = {"blizzard": ".cache-blizzard", "wiki": ".cache-wiki", "counterpick": ".cache-counterpick"}
 needs_caches = pytest.mark.skipif(
-    not all(os.path.isdir(os.path.join(ROOT, d)) for d in CACHES.values()),
+    not all(os.path.isdir(path) for path in CACHE_DIRS.values()),
     reason="the page caches are not on this machine")
 
 
@@ -69,17 +68,19 @@ def test_wiki_kits_pull_from_the_cache_and_keep_the_announced(ctx):
 @needs_caches
 def test_wiki_maps_patches_and_playstyles_pull_from_the_cache(ctx):
     text, data = tools.run_tool(ctx, "pull_maps")
-    assert text.startswith("pull_maps:") and data
+    assert text.startswith("pull_maps:") and data["modes"] == 5 and data["stages"] >= 2
     text, data = tools.run_tool(ctx, "pull_patches")
-    assert text.startswith("pull_patches: patches stored") and data
+    assert text.startswith("pull_patches: patches stored") and data["patches"] > 0
     text, data = tools.run_tool(ctx, "pull_playstyles")
-    assert text.startswith("pull_playstyles:") and data
+    assert text.startswith("pull_playstyles:") and data["links"] > 0
+    assert {name.lower() for name in data["playstyles"]} >= {"dive", "brawl", "poke"}
 
 
 @needs_caches
 def test_counterpick_pulls_from_the_cache_and_leaves_no_snapshot_behind(ctx, snapshots, db):
     text, data = tools.run_tool(ctx, "pull_counters")
-    assert text.startswith("pull_counters:") and data
+    assert text.startswith("pull_counters:") and data["counters"] > 100
+    assert data["queue"] == "competitive_unspecified_queue"
     db.rollback()
     assert db.execute("select count(*) from meta_snapshots").fetchone()[0] == snapshots
 
@@ -87,4 +88,4 @@ def test_counterpick_pulls_from_the_cache_and_leaves_no_snapshot_behind(ctx, sna
 @needs_caches
 def test_load_authored_reads_every_authored_input(ctx):
     text, data = tools.run_tool(ctx, "load_authored")
-    assert "load_authored" in text and data
+    assert text.startswith("load_authored:") and set(data) == set(tools.AUTHORED_INPUTS)

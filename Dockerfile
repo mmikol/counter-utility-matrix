@@ -4,7 +4,7 @@
 FROM python:3.12-slim
 
 # Nothing here runs as root. The uid matters for the bind mounts: files the
-# data layer writes (caches, db/raw, transcripts) stay owned by the bind
+# data layer writes (caches, db/raw, the playbook) stay owned by the bind
 # mounts' owner: uid 1000 by default, COUNTER_MATRIX_UID/GID on a Linux host
 # whose checkout belongs to someone else (compose.yaml).
 RUN useradd --create-home --uid 1000 app

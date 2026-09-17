@@ -24,8 +24,8 @@ FACTS(D) &cap; FACTS(E) = the joins of D with E: what only their intersection ca
 STRATEGIES     = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS   the playbook: markdown files
 COMP           = ARGMAX[ STRATEGIES( FACTS ) ]            the solver searches, the agent argues
 </pre>
-<p><b>DATA</b> is the authoritative data, and only that: what is pulled from the sources and set
-in the database. <b>HEROES</b> are the kits - roles, subroles, health pools, every ability with its
+<p><b>DATA</b> is what the sources say, pulled and set in the database, and only that.
+<b>HEROES</b> are the kits - roles, subroles, health pools, every ability with its
 published numbers, who counters whom, which pairs work together. <b>MAPS</b> are the pool - the
 mode, the stages, whether a map has sides, and the authored note on what kind of fight it
 rewards. <b>META</b> is the record - win, pick and ban rates per hero, per map, per rank, captured
@@ -36,22 +36,22 @@ a domain are each selection alone, read from its own row, and no other selection
 hero's role, pool, range, every ability's numbers, its overall rates and its style; the map's
 mode, stages, sides and the note on what it rewards; the meta's vintage, source and queue. The
 <b>dependent</b> facts are the selection joined with others - &#8904;, the rows of two tables that
-meet on a key, which is what intersecting two selections means in a database - and a join belongs
-to every domain it touches, so the dependent facts are where the domains' fact sets intersect: a
-hero's rate on this map and its delta against its baseline (HEROES &cap; MAPS &cap; META: heroes
-&#8904; map_meta &#8904; maps), who among red's picks it answers and who answers it (HEROES &cap;
-HEROES: heroes &#8904; counters &#8904; heroes), who among your picks it pairs with (&#8904;
-synergies), the map's leaders and strugglers and how your picks fit its style (MAPS &cap; HEROES
-&cap; META), the team as one thing (the six joined and aggregated), the matchup (the twelve,
-compared), and the bans (a banned hero joined with both teams' counters). The tables themselves
-share no rows - DATA is their union - and every intersection is a join. Every selection you add
-opens new joins, and the engine derives every fact they support: a board with nothing on it has
-only the meta's facts, a full board about a thousand. The facts are numbered F1, F2, ... and every
-claim the board makes cites them; the numbers a strategy reads are the dependent facts.</p>
+meet on a key - and a join belongs to every domain it touches, so the dependent facts are where
+the domains' fact sets intersect: a hero's rate on this map and its delta against its baseline
+(HEROES &cap; MAPS &cap; META: heroes &#8904; map_meta &#8904; maps), who among red's picks it
+answers and who answers it (HEROES &cap; HEROES: heroes &#8904; counters &#8904; heroes), who
+among your picks it pairs with (&#8904; synergies), the map's leaders and strugglers and how your
+picks fit its style (MAPS &cap; HEROES &cap; META), the team as one thing (the six joined and
+aggregated), the matchup (the twelve, compared), and the bans (a banned hero joined with both
+teams' counters). The tables share no rows - DATA is their union - and every intersection is a
+join. Every selection you add opens new joins, and the engine derives every fact they support: a
+board with nothing on it has only the meta's facts, a full board about a thousand. The facts are
+numbered F1, F2, ... and every claim the board makes cites them; the numbers a strategy reads are
+the dependent facts.</p>
 <p><b>STRATEGIES</b> is the playbook: markdown files, one per strategy, in three kinds.
-A <b>constraint</b> is a limit the comp may not cross (at most two tanks, never five supports), a scored adjustment
-(a bonus or a penalty when a condition holds), or a ground rule in prose. A <b>heuristic</b> is a
-metric to push in a direction with a weight: effective HP up, exposure down, cohesion up.
+A <b>constraint</b> is a limit the comp may not cross (at most two tanks, never five supports) or
+a scored adjustment (a bonus or a penalty when a condition holds). A <b>heuristic</b> is a metric
+to push in a direction with a weight: effective HP up, exposure down, cohesion up.
 An <b>assumption</b> is prose by definition - what the model takes as given (players play
 optimally; rates are Role Queue on console) - shown with every result and never scored. A
 strategy is written as a name, a kind and a paragraph; the formula, the metric and the weight
@@ -76,8 +76,8 @@ normalises it to 0..1 against a reference sample - 1200 random legal sixes for t
 from the map, side, enemies and bans, so every call on one board shares one scale - flips it when
 the direction is minimise, and multiplies by its weight. A <b>scored constraint</b> evaluates its
 bonus and penalty while its <code>when</code> holds, and its weight multiplies the difference. An
-<b>assumption</b> and a prose constraint contribute nothing: they are shown, and they are the
-agent's to argue with.</p>
+<b>assumption</b> and a draft contribute nothing: they are shown, and they are the agent's to
+argue with.</p>
 <pre class='eq'>for one six x, with every hard limit holding:
 
 score(x) = &Sigma; heuristics h     w_h &middot; norm_h( metric_h(x) )
@@ -140,8 +140,8 @@ from then on it is the default for everyone. Only heuristics have a weight to se
                    inference/strategies (STRATEGIES) → inference/solver (ARGMAX) → the board</pre>
 <p><b>The data layer</b> (<code>db/</code>) pulls the sources - Blizzard's hero pages, the wiki, the
 counter lists, the authored files - into one Postgres schema, and exposes it through one door:
-thirty-odd MCP tools over stdio and HTTP. Everything else, including this page, reads through
-those tools or the same functions behind them. A sentry container watches the strategy files and
+the MCP tools over stdio and HTTP. Everything else, including this page, reads through those
+tools or the same functions behind them. A sentry container watches the strategy files and
 the audit log while the stack runs.</p>
 <p><b>The inference layer</b> (<code>inference/</code>) holds the playbook and the solver. It
 compiles each strategy's expression once, whitelists what an expression may do, and runs the

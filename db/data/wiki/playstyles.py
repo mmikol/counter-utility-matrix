@@ -1,12 +1,9 @@
 """Pull + clean + store: overwatch.fandom.com - team composition playstyles.
 
-The playstyles (dive, brawl, poke) and the heroes listed under each; a hero
-can appear in several, so the link table is many-to-many. The page is
-reloaded wholesale - it is the whole truth about styles.
-
-Extracting team-composition playstyles from the wiki.
-
-A hero appears under every playstyle they suit, so the lists overlap by design.
+The playstyles (dive, brawl, poke) and the heroes listed under each. A hero
+appears under every playstyle it suits, so the link table is many-to-many
+and the lists overlap by design. The page is reloaded wholesale - it is the
+whole truth about styles.
 """
 
 import re

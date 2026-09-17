@@ -25,22 +25,23 @@ from db import psql
 from inference import catalog as catalog_module
 from inference import engine
 from ui.facts import model
-from ui.facts.compute import TEAM_SIZE
+from ui.facts.compute import MAX_BANS, TEAM_SIZE
 
 PORT = int(os.environ.get("COUNTER_MATRIX_INFERENCE_PORT", "8019"))
 
 
-def board(query):
+def parse_board(query):
+    """The board a query names: (map, red, blue, bans, side)."""
     map_name = (query.get("map") or [None])[0] or None
     red = [x for x in query.get("red", []) if x]
     blue = [x for x in query.get("blue", []) if x]
-    bans = [x for x in query.get("ban", []) if x][:5]
+    bans = [x for x in query.get("ban", []) if x][:MAX_BANS]
     side = (query.get("side") or [""])[0]
     return map_name, red, blue, bans, side
 
 
 def handle_infer(cx, query):
-    map_name, red, blue, bans, side = board(query)
+    map_name, red, blue, bans, side = parse_board(query)
     top = int((query.get("top") or ["5"])[0])
     pool = int((query.get("pool") or ["6"])[0])
     world = model.load(cx)
@@ -57,7 +58,7 @@ def handle_infer(cx, query):
 
 
 def handle_evaluate(cx, query):
-    map_name, red, blue, bans, side = board(query)
+    map_name, red, blue, bans, side = parse_board(query)
     world = model.load(cx)
     try:
         result = engine.evaluate(world, map_name, red, blue, bans=bans, side=side)
@@ -68,7 +69,7 @@ def handle_evaluate(cx, query):
 
 def handle_board(cx, query):
     """Both seats and the current comp - what the board's two displays show."""
-    map_name, red, blue, bans, side = board(query)
+    map_name, red, blue, bans, side = parse_board(query)
     pool = int((query.get("pool") or ["6"])[0])
     weights = catalog_module.parse_weights(query.get("weight", []))
     world = model.load(cx)
@@ -80,7 +81,7 @@ def handle_board(cx, query):
     return engine.board_dict(b), 200
 
 
-def handle_heuristics():
+def handle_strategies():
     return {"strategies": [h.to_dict() for h in catalog_module.load()],
             "playbook": catalog_module.playbook_name()}, 200
 
@@ -115,7 +116,7 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/health":
                 return self._json(*handle_health())
             if path == "/strategies":
-                return self._json(*handle_heuristics())
+                return self._json(*handle_strategies())
             if path not in ("/board", "/infer", "/evaluate"):
                 return self._json({"error": "nothing here"}, 404)
             with psycopg.connect(psql.default_dsn()) as cx:   # only these routes connect
@@ -126,6 +127,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(*handle_evaluate(cx, query))
         except Exception:
             self._json({"error": traceback.format_exc()}, 500)
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

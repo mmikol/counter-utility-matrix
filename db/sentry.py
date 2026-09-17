@@ -15,8 +15,8 @@ Every COUNTER_MATRIX_SENTRY_EVERY seconds (30):
                    the same way: a strategy tells the solver how to score,
                    it does not tell an agent what to do.
     the inputs     the same scan over the authored CSVs and the free text in
-                   the database (descriptions, notes, transcripts); those are
-                   flagged, not removed - a person decides
+                   the database (descriptions, notes, strategy bodies);
+                   those are flagged, not removed - a person decides
     the door       the audit log the MCP server writes (db/raw/audit.jsonl):
                    calls in the last minute, refusals, crashes, and any
                    client past the rate limit

@@ -13,7 +13,6 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
 
 import psycopg
 
@@ -201,7 +200,8 @@ AUTHORED_INPUTS = ("seasons", "synergies", "archetypes", "map_playstyle", "strat
 
 @tool("load_authored", "Store the inputs we write instead of fetch: seasons,"
       " synergies, comp archetypes, map playstyles, and the mirror of the"
-      " markdown constraints and heuristics (the strategies catalog). Whole-truth reloads.",
+      " strategies catalog (the playbook's constraints, heuristics and assumptions)."
+      " Whole-truth reloads.",
       {"only": {"type": "array", "items": {"type": "string",
                                             "enum": list(AUTHORED_INPUTS)},
                 "description": "a subset to reload (default: all)"}})
@@ -251,8 +251,6 @@ def sync_all(ctx, refresh=False):
 @tool("db_status", "Which database the tools are pointed at, its table and"
       " row counts, and the rates snapshots it holds.")
 def db_status(ctx):
-    import re
-
     from db.psql import schema
     with ctx.connect() as cx:
         tables = schema.table_count(cx)
@@ -262,7 +260,7 @@ def db_status(ctx):
                       "counters", "synergies", "strategies"):
                 if cx.execute("select to_regclass(%s)", (t,)).fetchone()[0]:
                     counts[t] = cx.execute("select count(*) from " + t).fetchone()[0]
-            if "heroes" in counts and cx.execute("select to_regclass('heroes')").fetchone()[0]:
+            if "heroes" in counts:
                 counts["announced"] = cx.execute(
                     "select count(*) from heroes where status = 'announced'").fetchone()[0]
             if cx.execute("select to_regclass('meta_snapshots')").fetchone()[0]:
@@ -386,7 +384,6 @@ MAX_CELL = 2000                        # characters per cell
 def reader_dsn(dsn):
     """The same database, connected as the reader: a non-superuser session
     cannot SET ROLE its way back up, whatever the SQL says."""
-    import psycopg
     parts = psycopg.conninfo.conninfo_to_dict(dsn)
     parts["user"] = READER_ROLE
     parts["password"] = READER_ROLE
@@ -407,7 +404,6 @@ def query(ctx, sql):
     if denied:
         raise ToolError("query refuses %r: SQL here reads tables, not files or servers"
                         % denied.group(1))
-    import psycopg
     with psycopg.connect(reader_dsn(ctx.dsn)) as cx:
         cx.execute("SET TRANSACTION READ ONLY")
         cx.execute("SET LOCAL statement_timeout = '10s'")
@@ -433,8 +429,7 @@ def query(ctx, sql):
 
 
 def _plain(value):
-    if isinstance(value, (datetime,)):
-        return value.isoformat()
+    """A cell as JSON carries it: dates and times as ISO text, the rest as is."""
     if hasattr(value, "isoformat"):
         return value.isoformat()
     if isinstance(value, (int, float, str, bool)) or value is None:

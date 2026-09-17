@@ -8,19 +8,14 @@ from pathlib import Path
 import pytest
 
 from inference import catalog, tune
-
-pytestmark = pytest.mark.invariant
-
-
-FIXTURE_PLAYBOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures",
-                                "playbook")   # the former shipped playbook: every form to tune
+from tests.inference import FIXTURE_PLAYBOOK
 
 
 @pytest.fixture()
 def catalog_copy(tmp_path):
     """A private copy of the reference playbook to tune without touching the repo."""
     for name in os.listdir(FIXTURE_PLAYBOOK):
-        if name.endswith(".md") and name not in catalog.NOT_HEURISTICS:
+        if name.endswith(".md") and name not in catalog.NOT_STRATEGIES:
             shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
     return str(tmp_path)
 
@@ -44,14 +39,14 @@ def test_a_strategy_is_three_sentences_at_most(catalog_copy):
         assert tune.sentences(h.body) <= tune.MAX_SENTENCES, h.id
 
 
-def test_tune_edits_validates_mirrors_and_logs(catalog_copy):
+def test_tune_edits_validates_and_logs(catalog_copy):
     change = tune.tune("coverage", "weight", 3.5, "test: more coverage", catalog_copy)
     assert change["old"] == "3" and change["new"] == "3.5"
     cat = {h.id: h for h in catalog.load(catalog_copy)}
     assert cat["coverage"].weight == 3.5
     change = tune.tune("under-healed", "params.HEAL_MARGIN", 0.8, "test", catalog_copy)
     assert cat["under-healed"].params["HEAL_MARGIN"] == 0.75 and change["old"] == "0.75"
-    assert catalog.load(catalog_copy)[0] and {h.id: h for h in catalog.load(catalog_copy)}[
+    assert {h.id: h for h in catalog.load(catalog_copy)}[
         "under-healed"].params["HEAL_MARGIN"] == 0.8
     tune.tune("anti-air", "when", "enemy.flyers >= 1 and map.known == 1", "test",
               catalog_copy)
@@ -143,7 +138,6 @@ def test_add_stores_a_validated_strategy_and_complete_finishes_a_draft(catalog_c
         tune.complete("sustain-first", {}, "r", directory=catalog_copy)
 
 
-
 # --- deriving: the engine asks the model, the catalog keeps the gate ------------------
 
 def _draft(directory, hid="heal-line", kind="constraint"):
@@ -154,16 +148,15 @@ def _draft(directory, hid="heal-line", kind="constraint"):
                      " dealer. One is rewarded; two overlap.\n" % kind)
 
 
-def test_the_derive_prompt_anchors_its_style_on_files_the_playbook_holds():
-    """STYLE names reference files; a playbook without them - the user's own
-    rules - still gets one anchor per form, so the prompt never goes bare."""
+def test_the_derive_prompt_anchors_its_style_on_one_file_per_form(catalog_copy):
+    """The prompt shows one finished file of each form the playbook holds -
+    the first by id, so the anchors are stable - and never a draft."""
     from inference import derive
-    reference = catalog.load(FIXTURE_PLAYBOOK)
-    assert {h.id for h in derive.style_anchors(reference)} >= {"anti-heal-answer", "coverage"}
-    own = [h for h in reference if h.id not in derive.STYLE]
-    anchors = derive.style_anchors(own)
-    assert anchors and {h.form for h in anchors} == {h.form for h in own if h.form != "draft"}
-    assert not {h.id for h in anchors} & set(derive.STYLE)
+    _draft(catalog_copy)
+    cat = catalog.load(catalog_copy)
+    anchors = derive.style_anchors(cat)
+    assert [h.id for h in anchors] == ["anti-air", "anti-heal-answer", "cohesion", "locked-picks"]
+    assert {h.form for h in anchors} == {h.form for h in cat} - {"draft"}
 
 
 def test_derive_completes_a_draft_from_the_models_answer(catalog_copy):

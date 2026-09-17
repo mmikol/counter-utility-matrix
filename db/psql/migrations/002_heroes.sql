@@ -33,7 +33,7 @@ CREATE TABLE subroles (
 -- The composite foreign key makes it impossible to pair a hero with a subrole
 -- belonging to a different role than the hero's own.
 -- health, shield and armor are the hero's own pool, all in hp. Blizzard
--- publishes none of them, so the wiki pipeline fills them in; a hero with no
+-- publishes none of them, so pull_kits fills them in; a hero with no
 -- shield or armor leaves those NULL rather than storing a zero the source
 -- never states.
 CREATE TABLE heroes (
@@ -63,7 +63,7 @@ FROM (VALUES (1, 'weapon'), (2, 'ability'), (3, 'ultimate'), (4, 'passive'))
      AS v(kind_id, code), sources s
 WHERE s.code = 'wiki';
 
--- kind_id is NULL until the wiki pipeline sets it. Blizzard's markup labels
+-- kind_id is NULL until pull_kits sets it. Blizzard's markup labels
 -- neither weapons nor ultimates, and its ordering does not identify them
 -- either, so nothing is guessed at scrape time.
 CREATE TABLE abilities (

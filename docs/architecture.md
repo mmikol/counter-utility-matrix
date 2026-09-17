@@ -26,11 +26,11 @@ never during one.
 | --- | --- | --- |
 | `db/` | **DATA LAYER** - pulls every source, cleans it, stores it; the MCP server that is the one door to everything; the schema, its migrations and the embedded cluster | [db.md](db.md) |
 | `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet | [ui.md](ui.md) |
-| `inference/` | **INFERENCE LAYER** - the playbook of constraints and heuristics in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
-| `tests/` | one folder per layer: `tests/db`, `tests/ui`, `tests/inference`, and `tests/fixtures/playbook/` - nineteen of the former shipped rules, kept as the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the user's own rules; `pytest -q` runs them, skipping what needs a built database when there is none | |
+| `inference/` | **INFERENCE LAYER** - the playbook of constraints, heuristics and assumptions in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
+| `tests/` | one folder per layer (`tests/db`, `tests/ui`, `tests/inference`) and `tests/fixtures/playbook/`: nineteen of the former shipped rules, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the user's own rules. `pytest -q` runs them, skipping what needs a built database when there is none | |
 | `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain` | [skills.md](skills.md) |
-| `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order - the maintainer skill keeps it current | |
-| `.github/workflows/` | `ci.yml`: lint, and the tests that need no built database | |
+| `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
+| `.github/workflows/` | `ci.yml`: lint and the tests that need no built database, on pushes to `main` and on pull requests | |
 | `.cache-blizzard/` `.cache-wiki/` `.cache-counterpick/` | the page caches (gitignored): every build after the first costs almost no requests | |
 
 How they fit:
@@ -41,7 +41,7 @@ flowchart LR
         BLZ["Blizzard<br/>roster, portraits, rates"]
         WIKI["Overwatch wiki<br/>kits, numbers, keywords,<br/>maps, patches, styles"]
         CPK["counterpick.gg<br/>counters, best maps"]
-        CSV["authored files<br/>synergies, archetypes,<br/>map styles, seasons, notes"]
+        CSV["authored files<br/>synergies, archetypes,<br/>map styles, seasons"]
     end
 
     subgraph DATA["DATA LAYER - db/mcp/ (an MCP server)"]
@@ -81,47 +81,45 @@ flowchart LR
     CHAT["Claude Code session<br/>/comp skill"] <-->|"MCP tools:<br/>pull_*, facts, infer, board"| DATA
 ```
 
-The data layer owns the writes to Postgres and the playbook. The UI
-layer reads (its one write, a heuristic's weight stored from the board,
-is handed to the data layer's `tune` tool),
-turns every table into facts, and computes every metric in one place
-(`ui/facts/compute.py`) so the number on the board and the number the
-solver scores are the same function. The inference layer reads the facts,
-never the tables.
+The data layer owns every write to Postgres and the playbook. The UI
+layer reads, turns every table into facts, and defines every metric once
+(`ui/facts/compute.py`), so the number on the board and the number the
+solver scores are the same function; its one write, a heuristic's weight
+stored from the board, is handed to the data layer's `tune` tool. The
+inference layer reads the facts, never the tables.
 
-The equation at the top is the whole repo's term sheet - the name is the
-definition, and the math page heads it "The Counter Utility Matrix". The
-data layer owns DATA, the tables as pulled and set. The UI layer's fact
-engine owns FACTS: for one board, every domain yields independent facts
-(a selection's own row - a hero's kit, rates and style; the map's mode
-and note; the meta's vintage) and dependent ones (the selection joined
-with others: the hero on this map, the hero against each enemy and
-beside each ally, the six aggregated, the twelve compared, a banned hero
-against both teams' counters) - a join belongs to every domain it
+The equation is the repo's term sheet - the name is the definition, and
+the math page heads it "The Counter Utility Matrix". The data layer owns
+DATA. The UI layer's fact engine owns FACTS: for one board, every domain
+yields independent facts (a selection's own row - a hero's kit, rates and
+style; the map's mode and note; the meta's vintage) and dependent ones
+(the selection joined with others: the hero on this map, against each
+enemy, beside each ally, the six aggregated, the twelve compared, a banned
+hero against both teams' counters). A join belongs to every domain it
 touches, so the dependent facts are where the domains' fact sets
-intersect, and every selection added opens new joins. The inference
-layer owns STRATEGIES - the playbook of exactly three kinds of file: a
-*constraint* (a limit, hard unless soft, or a scored adjustment while a
-condition holds), a *heuristic* (a metric weighed, maximised or
-minimised) and an *assumption* (prose taken as given, shown, never
-scored) - and the argmax: `STRATEGIES( FACTS )` is the score the solver
-maximises, and the agent (a Claude Code session on `/comp`) reads the
-same facts and strategies and reconciles them where arithmetic cannot.
-The UI numbers the facts F1.. and carries the playbook's record below
-them as S1.., so both are citable and neither is mistaken for the other.
+intersect, and every selection added opens new joins. The inference layer
+owns STRATEGIES - three kinds of file: a *constraint* (a limit, hard
+unless soft, or a scored adjustment while a condition holds), a
+*heuristic* (a metric weighed, maximised or minimised) and an *assumption*
+(prose taken as given, shown, never scored) - and the argmax:
+`STRATEGIES( FACTS )` is the score the solver maximises, and the agent (a
+Claude Code session on `/comp`) reads the same facts and strategies and
+reconciles them where arithmetic cannot. The UI numbers the facts F1.. and
+the playbook's record below them S1.., so both are citable and neither is
+mistaken for the other.
 
 ## The files
 
 | file | purpose |
 | --- | --- |
-| `orchestrator.py` | the end-to-end run. `python orchestrator.py` brings the stack up (the data container pulls and ingests when the database is empty or stale), runs the agents headless on the `/refresh` skill (refresh, derive draft strategies, tune with a reason, regenerate the docs), and leaves the app running. Verbs: `run` (default) · `up` · `agents` · `status` · `refresh` · `test` · `down` |
-| `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock), `sentry` (the guard). Every container is unprivileged on a read-only root with no capabilities; every published port binds to 127.0.0.1. Bind mounts keep the caches, `db/raw`, `db/data/authored`, `inference/strategies` and `docs` on the host, so tuning, authoring and regenerating need no rebuild |
-| `Dockerfile` | the one image, run as an unprivileged user (uid 1000, or `COUNTER_MATRIX_UID`/`GID` from `.env` on a Linux host whose checkout is owned by someone else); `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty or its schema is behind the migrations |
+| `orchestrator.py` | the end-to-end run. `python orchestrator.py` brings the stack up (the data container pulls and ingests when the database is empty or stale), runs the agents headless on the `/refresh` skill, and leaves the app running. Verbs: `run` (default) · `up` · `agents` · `status` · `refresh` · `test` · `down` |
+| `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock), `sentry` (the guard). Every container is unprivileged on a read-only root with no capabilities; every published port binds to 127.0.0.1. Bind mounts keep the caches, `db/raw`, `db/data/authored`, `inference/strategies`, `inference/experiments` and `docs` on the host, so tuning, authoring and regenerating need no rebuild |
+| `Dockerfile` | the one image, run as an unprivileged user (uid 1000, or `COUNTER_MATRIX_UID`/`GID` from `.env` on a Linux host whose checkout is owned by someone else); `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty, unfilled or behind the migrations |
 | `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'` |
 | `.mcp.json` | registers the two MCP servers a Claude Code session sees: `counter-utility-matrix` (stdio, the local cluster) and `counter-utility-matrix-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
 | `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pytest-cov, ruff, and pgserver (the embedded PostgreSQL a local build uses) |
 | `pyproject.toml` | ruff's rules (line length 100); the coverage bar, 75% where a database exists |
-| `pytest.ini` | the `invariant` marker for tests that need a built database |
+| `pytest.ini` | the `invariant` marker for tests that need a built database, `validation` for those that need the network |
 | `SECURITY.md` | the terms - you run it at your own risk, no security commitment from the author - and how to report a vulnerability privately; the measures themselves are in [security.md](security.md) |
 | `LICENSE` | PolyForm Strict 1.0.0: noncommercial use only, no redistribution, no changes or new works; anything else needs a separate license from the author |
 | `.gitignore` `.dockerignore` | the caches, the cluster, the mirror, the venv, `.env` |
@@ -135,7 +133,7 @@ flowchart LR
         BROWSER["browser"]
         SHELL["./docker-db<br/>DATABASE_URL -> :5433"]
     end
-    subgraph DOCKER["docker compose (one image, six containers, plus postgres)"]
+    subgraph DOCKER["docker compose (one image, five containers, plus postgres)"]
         DATA["data - DATA LAYER<br/>builds when empty or stale,<br/>then MCP over HTTP :8020/mcp"]
         INF["inference - INFERENCE ENGINE<br/>:8019 infer · evaluate ·<br/>board · strategies"]
         UI["ui - UI LAYER<br/>:8017 the board<br/>facts in-process,<br/>comps via INFERENCE_URL"]
@@ -155,19 +153,16 @@ flowchart LR
 ```
 
 The containers share one network; only `data` and `refresher` ever open
-a connection out. [security.md](security.md) has the rest of the measures.
-
-`docker-entrypoint.sh` takes the role as its argument (`data`,
-`inference`, `ui`, `refresh`, `sentry`); the others wait until the data layer reports
-the database current, and compose's healthchecks order the start the same
-way. Bind mounts keep the page caches, `db/raw`, `db/data/authored` and
-`inference/strategies/` on the host, so tuning a strategy or authoring a
-synergy needs no image rebuild.
+a connection out. `docker-entrypoint.sh` takes the role as its argument
+(`data`, `inference`, `ui`, `refresh`, `sentry`); the others wait until
+the data layer reports the database current, and compose's healthchecks
+order the start the same way. [security.md](security.md) has the rest of
+the measures.
 
 Local-only works identically: without `DATABASE_URL`, everything runs in
-one process against the embedded pgserver cluster at `db/psql/cluster` - the
-MCP server over stdio, the board with the engine in-process - same tools,
-same facts, same strategies.
+one process against the embedded pgserver cluster at `db/psql/cluster` -
+the MCP server over stdio, the board with the engine in-process - same
+tools, same facts, same strategies.
 
 ## The skills
 
@@ -182,22 +177,23 @@ the servers and every tool.
 | `/comp` | "comp for King's Row, they have Zarya and Pharah, I'm on Ana": calls `infer` and `facts`, argues against the solver's optimum under the assumptions, answers with `[F#]` citations |
 | `/tune` | changes a weight, a dial or an expression through `tune` |
 | `/strategy` | asks for a name, a kind and prose, infers the frontmatter and stores the strategy through `add_strategy` |
-| `/patches` | pulls the patch list, and when a patch shipped since the capture refetches what it changes: rates, kits, Blizzard's text |
+| `/patches` | pulls the patch list and, when a patch shipped since the capture, refetches what it changes: rates, kits, Blizzard's text |
 | `/heroes` | adds or refreshes heroes: Blizzard's roster, the wiki's kits, the announced heroes ahead of release, counters |
 | `/maps` | adds or refreshes maps and names the ones without an authored playstyle note |
-| `/refresh` | the agents' run, the one `orchestrator.py agents` executes headless: refresh, derive drafts, re-infer with restraint, regenerate, report |
+| `/refresh` | the agents' run, the one `orchestrator.py agents` executes headless: refresh, complete drafts, re-infer with restraint, regenerate, report |
 | `/maintain` | the repo's maintainer: lint and tests three ways, docs current, stale names, dead code, layout, security posture, a report |
 
 No API key, no per-token bill: the skills run on your subscription.
 
 ## Scope, honestly
 
-Open Queue Competitive is the target; no source publishes Open Queue rates,
-so META is Competitive Role Queue on console (Americas), stated on every
-snapshot fact rather than assumed away. Rates carry the patch and season
-they were captured under, and the board warns when patches shipped since.
-Judgements (counters, synergies, playstyles) are tier- and region-agnostic
-by design, and a table is a table: every row carries its source, and that
-is the only distinction drawn between measured, judged and hand-written
-data. Players are assumed to play optimally - the central assumption,
-named in [inference/strategies/optimal-play.md](../inference/strategies/optimal-play.md).
+Open Queue Competitive is the target; no source publishes Open Queue
+rates, so META is Competitive Role Queue on console (Americas), stated on
+every snapshot fact rather than assumed away. Rates carry the patch and
+season they were captured under, and the board warns when patches shipped
+since. Judgements (counters, synergies, playstyles) are tier- and
+region-agnostic by design, and a table is a table: every row carries its
+source, and that is the only distinction drawn between measured, judged
+and hand-written data. Players are assumed to play optimally - the
+central assumption, named in
+[inference/strategies/optimal-play.md](../inference/strategies/optimal-play.md).

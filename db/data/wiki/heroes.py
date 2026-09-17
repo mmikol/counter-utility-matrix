@@ -1,22 +1,19 @@
 """Pull + clean + store: overwatch.fandom.com - hero kit data, via Cargo.
 
-The wiki stores its ability data in a Cargo table with one row per ability,
-every stat as its own column, an explicit `removed` flag and a keyword list
-("hitscan", "strong movement", "stun", "lesser cleanse", ...). A few template
-parameters are never registered as Cargo fields - the interaction flags
-among them - so those are supplemented from the article wikitext.
+The wiki stores its ability data in a Cargo table with one row per ability:
+every stat as its own column, an explicit `removed` flag for retired kit, an
+`ability_key` naming the input slot and a keyword list ("hitscan", "strong
+movement", "stun", "lesser cleanse", ...). A few template parameters are
+never registered as Cargo fields - the interaction flags among them - so
+those are supplemented from the article wikitext, which also carries the
+hero's health pool and, for a hero marked upcoming, its announcement.
 
 Loads weapons and their firing configs, classifies every ability, adds the
 abilities Blizzard does not publish, stores each ability's keywords, and
-attaches stat measurements to abilities, weapons and perks. Runs after
-blizzard.heroes, which owns the hero, ability and perk rows this fills in.
-
-Extracting hero kit from the wiki's Cargo Abilities table.
-
-One Cargo row per ability, with every stat as its own column, an explicit
-`removed` flag for retired kit, and an `ability_key` naming the input slot.
-Rows come back alphabetically, so weapons are sorted by firing slot here -
-grouping them into weapons is weapons.py's job.
+attaches stat measurements to abilities, weapons and perks. Rows come back
+alphabetically, so weapons are sorted by firing slot here; grouping them
+into weapons is weapons.py's job. Runs after blizzard.heroes, which owns
+the hero, ability and perk rows this fills in.
 """
 
 import collections

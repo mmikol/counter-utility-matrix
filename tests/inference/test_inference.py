@@ -2,17 +2,14 @@
 solver and evaluation run against the built database."""
 
 import os
+import shutil
 
 import pytest
 
-from inference import catalog, expr
+from inference import catalog
 from inference.expr import Expr, ExprError
+from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts import compute
-
-# the former shipped playbook - every form, every category - kept as the reference the
-# solver's behaviours are proven against; the live playbook is the user's own
-FIXTURE_PLAYBOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fixtures",
-                                "playbook")
 
 # --- the expression language (pure) --------------------------------------
 
@@ -35,7 +32,6 @@ def test_expressions_refuse_anything_beyond_the_whitelist():
 def test_expression_names_are_the_full_dotted_keys():
     assert Expr("team.tanks + enemy.flyers * params.K").names == [
         "enemy.flyers", "params.K", "team.tanks"]
-    assert expr.lookup({"a": {"b": None}}, "a.b", default=7) == 7
 
 
 # --- the catalog (pure) -----------------------------------------------------
@@ -58,8 +54,6 @@ def test_the_reference_and_the_live_playbooks_are_valid_and_reference_real_metri
     forms = {h.form for h in cat}
     assert forms == {"limit", "scored", "heuristic", "assumption"}
     assert all(h.form == "heuristic" for h in cat if h.kind == "heuristic")
-    assert any(h.form == "limit" for h in cat)         # open-queue-tanks
-    assert any(h.form == "scored" for h in cat)        # peel, under-healed...
     assert all(h.form == "assumption" and not h.scored for h in cat if h.kind == "assumption")
     assert {h.id for h in cat if h.kind == "assumption"} >= {"optimal-play", "vintage", "objective"}
     registry = compute.registry()
@@ -90,14 +84,11 @@ def test_catalog_rejects_a_goal_on_an_unknown_metric(tmp_path):
 @pytest.fixture(scope="module")
 def kings_row_board(world):
     """The board the tests read most - King's Row, Zarya and Pharah revealed, Ana and
-    Reinhardt locked, the live playbook, one process - solved once per module."""
+    Reinhardt locked, the reference playbook - solved once per module (a caller's
+    catalog keeps the solve in one process)."""
     from inference import engine
-    parallel = engine.PARALLEL
-    engine.PARALLEL = False
-    try:
-        return engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"])
-    finally:
-        engine.PARALLEL = parallel
+    return engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+                        catalog=catalog.load(FIXTURE_PLAYBOOK))
 
 
 @pytest.fixture(scope="module")
@@ -139,7 +130,7 @@ def test_infer_honours_a_hitscan_answer_to_a_flier(world):
 
 
 @pytest.mark.invariant
-def test_evaluate_ranks_a_full_five_against_the_field(world):
+def test_evaluate_ranks_a_full_six_against_the_field(world):
     from inference import engine
     r = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"],
                         ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"])
@@ -149,20 +140,20 @@ def test_evaluate_ranks_a_full_five_against_the_field(world):
 
 
 @pytest.mark.invariant
-def test_the_tank_limit_is_the_only_shape_constraint(world, tmp_path):
-    import os
-    import shutil
-
+def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(world, tmp_path):
     from inference import engine
-    # two tanks is allowed by default; a third is not
-    r = engine.infer(world, "King's Row", ["Zarya"], ["Winston", "D.Va"], pool_size=4)
+    fix = catalog.load(FIXTURE_PLAYBOOK)
+    # two tanks is allowed under the two-tank limit; a third is not
+    r = engine.infer(world, "King's Row", ["Zarya"], ["Winston", "D.Va"], pool_size=4,
+                     catalog=fix)
     assert {"Winston", "D.Va"} <= set(r.blue)
     with pytest.raises(ValueError, match="no composition satisfies"):
-        engine.infer(world, "King's Row", [], ["Winston", "D.Va", "Reinhardt"], pool_size=4)
-    # a stricter authored constraint narrows the search the same way
-    for name in os.listdir(catalog.STRATEGIES_DIR):
+        engine.infer(world, "King's Row", [], ["Winston", "D.Va", "Reinhardt"], pool_size=4,
+                     catalog=fix)
+    # a stricter authored limit narrows the search the same way
+    for name in os.listdir(FIXTURE_PLAYBOOK):
         if name != "open-queue-tanks.md":
-            shutil.copy(os.path.join(catalog.STRATEGIES_DIR, name), tmp_path / name)
+            shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
     (tmp_path / "shape.md").write_text(
         "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and"
         " team.damage == 2 and team.supports == 2\n---\nx\n", "utf-8")
@@ -235,7 +226,6 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert "Above all: " in plan
     assert plan.endswith("Based on: the rates and counters, the map, the side,"
                          " red's 2 revealed picks.")
-    assert "Held to" not in plan and "D - " not in plan
     d = engine.board_dict(b)
     assert d["side"] == "attack" and d["red"]["seat"] == "red" and d["current"]["partial"]
     assert d["red_current"]["seat"] == "red"
@@ -250,7 +240,6 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert "defense-holds-the-ground" in ids
 
 
-@pytest.mark.invariant
 def test_weights_override_a_heuristic_for_one_board_and_never_the_file():
     """The playbook tab's sliders: `id:value` strings or a mapping become
     weights clamped to the file's range; the catalog's heuristic carries the
@@ -259,7 +248,7 @@ def test_weights_override_a_heuristic_for_one_board_and_never_the_file():
     parsed = catalog.parse_weights(["a:2", "b:11", "c:-1", "nonsense", "d:x"])
     assert parsed == {"a": 2.0, "b": 10.0, "c": 0.0}
     assert catalog.parse_weights({"a": "3.5"}) == {"a": 3.5}
-    cat = catalog.load()
+    cat = catalog.load(FIXTURE_PLAYBOOK)
     heuristic = next(h for h in cat if h.kind == "heuristic")
     limit = next(h for h in cat if h.form == "limit")
     before = heuristic.weight
@@ -270,33 +259,28 @@ def test_weights_override_a_heuristic_for_one_board_and_never_the_file():
     assert catalog.weighted(cat, {}) is cat and len(over) == len(cat)
 
 
-def test_the_board_scores_under_the_weights_it_is_given(world, kings_row_board, monkeypatch):
+@pytest.mark.invariant
+def test_the_board_scores_under_the_weights_it_is_given(world, kings_row_board):
     """A weight set on the board changes the score, every result says the
-    weights it was scored under, and the two workers apply the same override
-    as the sequential path."""
+    weights it was scored under, and the file is untouched."""
     from inference import engine
-    monkeypatch.setattr(engine, "PARALLEL", False)
     plain = kings_row_board
+    fix = catalog.load(FIXTURE_PLAYBOOK)
     # a heuristic that actually moves this comp's score (one at the reference floor would not)
     moving = next(c["id"] for c in plain["current"].contributions
                   if c["kind"] == "heuristic" and c.get("weighted"))
-    heuristic = next(h for h in catalog.load() if h.id == moving)
+    heuristic = next(h for h in fix if h.id == moving)
     weights = {heuristic.id: 10.0 if heuristic.weight < 10 else 0.5}
     tilted = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
-                          weights=weights)
+                          catalog=fix, weights=weights)
     assert tilted["current"].to_dict()["weights"][heuristic.id] == weights[heuristic.id]
     assert plain["current"].to_dict()["weights"][heuristic.id] == heuristic.weight
     assert tilted["current"].score != plain["current"].score
-    assert next(h for h in catalog.load() if h.id == heuristic.id).weight == heuristic.weight
-    monkeypatch.setattr(engine, "PARALLEL", True)
-    if engine.parallel_available():
-        split = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
-                             weights=weights)
-        for key in ("blue", "red", "current", "red_current"):
-            assert split[key].to_dict()["weights"] == tilted[key].to_dict()["weights"]
-            assert round(split[key].score, 6) == round(tilted[key].score, 6)
+    assert next(h for h in catalog.load(FIXTURE_PLAYBOOK)
+                if h.id == heuristic.id).weight == heuristic.weight
 
 
+@pytest.mark.invariant
 def test_fight_odds_pit_the_two_shares_against_each_other(world, kings_row_board):
     """Both seats scored: each side's odds are its share over the two shares'
     sum, the pair splits 100, and the verdict says so; one seat unscored or
@@ -309,19 +293,20 @@ def test_fight_odds_pit_the_two_shares_against_each_other(world, kings_row_board
     blue_odds = round(100.0 * n / (n + m))
     assert mo["odds"] == {"blue": blue_odds, "red": 100 - blue_odds}
     assert "fight odds blue %d%%, red %d%%" % (blue_odds, 100 - blue_odds) in mo["verdict"]
-    alone = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"], []))
+    alone = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"], [],
+                                           catalog=catalog.load(FIXTURE_PLAYBOOK)))
     assert alone["momentum"]["blue"] is None and alone["momentum"]["odds"] is None
 
 
-def test_a_playbook_that_scores_nothing_reads_unscored(world, monkeypatch):
+@pytest.mark.invariant
+def test_a_playbook_that_scores_nothing_reads_unscored(world):
     """Hard limits and prose alone tie every legal six at zero: the results
     carry no share of a best, say so, and the verdict is the one line."""
     from inference import engine
-    shipped = catalog.load(FIXTURE_PLAYBOOK)
-    assert catalog.scores(shipped)
-    limit_only = [h for h in shipped if h.form == "limit" and not h.soft]
+    reference = catalog.load(FIXTURE_PLAYBOOK)
+    assert catalog.scores(reference)
+    limit_only = [h for h in reference if h.form == "limit" and not h.soft]
     assert limit_only and not catalog.scores(limit_only)
-    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
     b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                      catalog=limit_only)
     d = engine.board_dict(b)
@@ -333,23 +318,26 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world, monkeypatch):
     assert d["momentum"]["verdict"].startswith("unscored") and d["momentum"]["blue"] is None
     assert "(unscored)" in b["current"].rendered() and "UNSCORED:" in b["current"].rendered()
     scored = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
-                                            ["Ana", "Reinhardt"], catalog=shipped))
+                                            ["Ana", "Reinhardt"], catalog=reference))
     assert scored["current"]["scoring"] is True and 0 < scored["current"]["normalized"] < 100
     assert scored["current"]["unscored"] is None
 
 
+@pytest.mark.invariant
 def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reason(world,
-                                                                                    monkeypatch):
+                                                                                    tmp_path):
     """A playbook whose only scoring term is guarded (hitscan cover while red
     fields a flier) scores nothing until the guard holds: the best six itself
     is zero, so no comp is a share of anything - the board says which
     strategy waits and for what, and scores once the flier appears."""
     from inference import engine
-    # the two-tank limit and the guarded hitscan heuristic alone, whatever else the
-    # playbook holds today: the premise is one scoring term that waits on red
-    scratch = [h for h in catalog.load() if h.id in ("open-queue-tanks", "fliers-need-cover")]
-    assert len(scratch) == 2 and catalog.scores(scratch)
-    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
+    # the two-tank limit and one guarded heuristic: a scoring term that waits on red
+    shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), tmp_path)
+    (tmp_path / "fliers-need-cover.md").write_text(
+        "---\nname: Fliers need hitscan cover\nkind: heuristic\ndirection: maximize\n"
+        "metric: team.hitscan\nweight: 1\nwhen: matchup.flyers >= 1\n---\nx\n", "utf-8")
+    scratch = catalog.load(str(tmp_path))
+    assert catalog.scores(scratch)
     grounded = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Ana"],
                                               ["Reinhardt", "Cassidy"], catalog=scratch))
     for key in ("blue", "red"):
@@ -383,13 +371,14 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     assert flying["momentum"]["red"] is None and flying["momentum"]["odds"] is None
 
 
+@pytest.mark.invariant
 def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
     """The roster enforces what the shape limits allow: the two-tank limit
     means no triple the solver would search seats a third tank, and the
     board says so in a form the script can read."""
     from inference import engine
     from inference.solver import legal_shapes
-    cat = catalog.load()
+    cat = catalog.load(FIXTURE_PLAYBOOK)
     shapes = legal_shapes(cat)
     assert shapes and all(t + d + s == 6 for t, d, s in shapes)
     assert (2, 2, 2) in shapes and all(t <= 2 for t, _, _ in shapes)
@@ -406,12 +395,12 @@ def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
     assert not any(p["locked"] for p in d["expected"]["picks"])
 
 
+@pytest.mark.invariant
 def test_blue_counters_the_likely_six_until_red_reveals_a_pick(world, monkeypatch):
     """With no red pick the board solves blue against red's likely six, so the
     opening suggestion is a counter to what the map and the meta say red
     fields; the first reveal replaces that with red's actual picks."""
     from inference import engine
-    from ui.facts import compute
     monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
     m = world.map("King's Row")
     likely = [p["hero"] for p in compute.expected_picks(world, m, [], [])]
@@ -425,16 +414,18 @@ def test_blue_counters_the_likely_six_until_red_reveals_a_pick(world, monkeypatc
     assert revealed["expected"].blue == likely                      # static
 
 
+@pytest.mark.invariant
 def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     from inference import engine
+    fix = catalog.load(FIXTURE_PLAYBOOK)
     six = ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]
-    b = engine.board(world, "Ilios", ["Pharah"], six, side="attack")
+    b = engine.board(world, "Ilios", ["Pharah"], six, side="attack", catalog=fix)
     assert b["side"] == "" and b["blue"].side == "" and b["red"].side == ""
     assert b["current"].kind == "evaluate" and b["current"].rank >= 1
     assert set(b["current"].blue) == set(six)
     assert b["blue"].locked == [] and b["blue"].to_dict()["normalized"] == 100
     assert 0 <= b["current"].to_dict()["normalized"] <= 100      # against the absolute optimal
-    b = engine.board(world, None, [], [])
+    b = engine.board(world, None, [], [], catalog=fix)
     assert not b["current"].blue and b["current"].partial
     # nothing locked: the optimal is the fill
     assert b["countered"] is None and b["fill"] is None
@@ -443,7 +434,7 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     assert b["plan"].startswith("No map yet, so this is the meta's best six")
     assert b["plan"].endswith("Based on: the rates and counters.")
     assert len(b["blue"].blue) == 6                      # the meta's best six, before any map
-    b = engine.board(world, "Ilios", [], [], bans=["Widowmaker"])
+    b = engine.board(world, "Ilios", [], [], bans=["Widowmaker"], catalog=fix)
     assert b["plan"].endswith("the map, 1 ban.") and b["plan"].count("\n") >= 2
     assert b["plan"].startswith("Ilios is a Control map: one point in three arenas")
     assert "Ledges and open points reward mobility; well punishes immobile comps." in b["plan"]
@@ -474,7 +465,7 @@ def test_scores_share_one_scale_per_board(world):
         world, "King's Row", ["Zarya", "Pharah"], again.blue, catalog=fix).score) < 1e-9
 
 
-def test_a_constraint_is_a_limit_or_scored_or_prose_never_a_heuristic(tmp_path):
+def test_a_constraint_is_a_limit_or_scored_and_an_assumption_is_prose(tmp_path):
     def load_one(text):
         (tmp_path / "x.md").write_text(text, encoding="utf-8")
         return catalog.load(str(tmp_path))[0]
@@ -495,7 +486,6 @@ def test_a_constraint_is_a_limit_or_scored_or_prose_never_a_heuristic(tmp_path):
                 "---\nname: b\nkind: constraint\nrequire: team.tanks <= 2\nsoft: true\n---\nx\n",
                 "---\nname: b\nkind: rule\nrequire: team.tanks <= 2\n---\nx\n",
                 "---\nname: b\nkind: assumption\nrequire: team.tanks <= 2\n---\nx\n",
-                "---\nname: b\nkind: constraint\nprose: true\n---\nx\n",
                 "---\nname: b\nkind: goal\ndirection: maximize\nmetric: team.tanks\n---\nx\n",
                 "---\nname: b\nkind: strategy\n---\nx\n"):
         with pytest.raises(catalog.CatalogError):
@@ -514,20 +504,25 @@ def test_the_sandbox_refuses_what_would_hang_or_exhaust_it():
 
 def test_the_momentum_verdict_reads_the_two_current_comps():
     from inference import engine
-    class R:
-        def __init__(self, blue, score, best, partial=False):
-            self.blue, self.score, self.best, self.partial = blue, score, best, partial
-    even = engine._momentum(R(["a"], 8, 10), R(["b"], 7.8, 10), None)
+    fix = catalog.load(FIXTURE_PLAYBOOK)
+
+    def comp(blue, score, best, partial=False):
+        r = engine.Result("current", None, [], blue, blue, fix)
+        r.score, r.best, r.partial = score, best, partial
+        return r
+    even = engine._momentum(comp(["a"], 8, 10), comp(["b"], 7.8, 10), None)
     assert even["verdict"].startswith("even") and even["blue"] == 80 and even["red"] == 78
-    blue = engine._momentum(R(["a"] * 6, 9, 10), R(["b"] * 6, 5, 10), R(["a"] * 6, 3, 10))
+    blue = engine._momentum(comp(["a"] * 6, 9, 10), comp(["b"] * 6, 5, 10),
+                            comp(["a"] * 6, 3, 10))
     assert blue["verdict"].startswith("blue ahead by 40") and blue["countered"] == 30
     assert "your picks hold 30 / 100" in blue["verdict"] and not blue["partial"]
-    red = engine._momentum(R(["a"], 2, 10, partial=True), R(["b"] * 6, 9, 10), None)
+    red = engine._momentum(comp(["a"], 2, 10, partial=True), comp(["b"] * 6, 9, 10), None)
     assert red["verdict"].startswith("red ahead by 70") and "(partial picks)" in red["verdict"]
-    only_red = engine._momentum(R([], 0, 10), R(["b"], 5, 10), None)
+    only_red = engine._momentum(comp([], 0, 10), comp(["b"], 5, 10), None)
     assert only_red["verdict"].startswith("red has revealed")
 
 
+@pytest.mark.invariant
 def test_the_plan_reads_every_authored_map_note(world, kings_row_board):
     """Every map's authored note is a sentence of its plan. One board is solved
     through the public path; the other maps' plans are composed from that
@@ -545,6 +540,7 @@ def test_the_plan_reads_every_authored_map_note(world, kings_row_board):
     assert names == ["Winston", "D.Va", "Wrecking Ball"]
 
 
+@pytest.mark.invariant
 def test_an_announced_hero_is_described_but_never_picked(world):
     from inference import engine
     from ui.facts import engine as facts_engine
@@ -558,13 +554,12 @@ def test_an_announced_hero_is_described_but_never_picked(world):
         engine.infer(world, None, [], [h.name])                    # a pick may not
     with pytest.raises(ValueError, match="announced"):
         engine.board(world, None, [h.name], [])
-    # the default pool: a pool of 8 with no locks needs more than the container's 1 GiB
     r = engine.infer(world, None, [], [])
     assert h.name not in r.blue and all(a["blue"] for a in r.alternatives)
     assert not any(h.name in a["blue"] for a in r.alternatives)   # nor does the field hold it
     # and under a playbook that ties most sixes, where the local search swaps freely:
     # the announced hero reached the alternatives through refine once
-    limit_only = [s for s in catalog.load() if s.form == "limit" and not s.soft]
+    limit_only = [s for s in catalog.load(FIXTURE_PLAYBOOK) if s.form == "limit" and not s.soft]
     r = engine.infer(world, None, [], [], catalog=limit_only)
     assert h.name not in r.blue and not any(h.name in a["blue"] for a in r.alternatives)
 
@@ -603,18 +598,22 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
 @pytest.mark.invariant
 def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(world, monkeypatch):
     """Blue's optimal and red's counter run in two workers, the fill in the
-    parent; the answer is byte-for-byte the sequential one."""
+    parent; the answer is byte-for-byte the sequential one, the board's
+    weight overrides included (a worker loads the playbook from its files)."""
     from inference import engine
     if not engine.parallel_available():
         pytest.skip("one core, or COUNTER_MATRIX_PARALLEL=0")
     assert engine.warm() == engine.WORKERS
+    weights = {h.id: 10.0 if h.weight < 10 else 0.5
+               for h in catalog.load() if h.kind == "heuristic"}
     split = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
-                         side="attack")
+                         side="attack", weights=weights)
     assert split["blue"].catalog and not hasattr(split["blue"], "solver")   # crossed the boundary
+    assert split["blue"].to_dict()["weights"] == weights         # the override reached the worker
     monkeypatch.setattr(engine, "PARALLEL", False)
     assert not engine.parallel_available()
     straight = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
-                            side="attack")
+                            side="attack", weights=weights)
     assert hasattr(straight["blue"], "solver")
 
     def timeless(b):

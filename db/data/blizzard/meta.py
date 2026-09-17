@@ -10,8 +10,6 @@ Three deliberate restrictions, all recorded on the snapshot:
   platform  Console (the parameter is spelled input=Console).
   region    Americas, on every request including the baseline.
 
-Extracting hero rates from Blizzard's statistics page.
-
 The page carries its rows as JSON on a blz-data-table element, and its filter
 vocabularies as ordinary select options.
 """
@@ -77,12 +75,9 @@ RETRY_BACKOFF = 5.0
 
 QUEUE_NAME = "competitive_role_queue"
 QUEUE_LABEL = "Competitive - Role Queue"
-INPUT_PARAM = "Console"
-PLATFORM_NAME = PLATFORM
-# Derived, not published: console supports no input but a controller.
+INPUT_PARAM = "Console"           # the site's spelling of PLATFORM
 ALL_TIER = "All"
-REGION_PARAM = "Americas"
-REGION_CODE = REGION
+REGION_PARAM = "Americas"         # the site's spelling of REGION
 REGION_NAME = "Americas"
 
 
@@ -132,7 +127,7 @@ def run(connection, cache_dir=None, session=None, log=print):
         "INSERT INTO regions (code, name, source_id) VALUES (%s, %s, %s)"
         " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name"
         " RETURNING region_id",
-        (REGION_CODE, REGION_NAME, source_id),
+        (REGION, REGION_NAME, source_id),
     )
     region_id = cursor.fetchone()[0]
 
@@ -151,7 +146,7 @@ def run(connection, cache_dir=None, session=None, log=print):
         "INSERT INTO meta_snapshots (captured_at, queue, platform, input,"
         " patch_id, season_id, source_id)"
         " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING snapshot_id",
-        (cao, QUEUE_NAME, PLATFORM_NAME, INPUT_DEVICE,
+        (cao, QUEUE_NAME, PLATFORM, INPUT_DEVICE,
          current_patch(cursor), current_season(cursor), source_id),
     )
     snapshot_id = cursor.fetchone()[0]
@@ -217,7 +212,7 @@ def run(connection, cache_dir=None, session=None, log=print):
     connection.commit()
     snapshots = cursor.execute("SELECT count(*) FROM meta_snapshots").fetchone()[0]
     log("hero/map rows: %d   snapshots held: %d" % (map_rows, snapshots))
-    return {"queue": QUEUE_NAME, "platform": PLATFORM_NAME, "region": REGION_CODE,
+    return {"queue": QUEUE_NAME, "platform": PLATFORM, "region": REGION,
             "tiers": len(tier_ids), "maps": len(maps) - len(skipped_maps),
             "hero_rows": rows, "map_rows": map_rows, "snapshot_id": snapshot_id,
             "snapshots": snapshots, "unmatched": sorted(unmatched),
