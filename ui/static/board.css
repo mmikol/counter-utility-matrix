@@ -16,7 +16,6 @@ header.top { position:relative; display:flex; align-items:center; gap:18px; flex
   border:1px solid var(--line); border-radius:10px; }
 header.top h1 { margin:0; font-size:30px; }
 header.top h1 span { color:var(--gold); }
-header.top .sub { color:var(--muted); font-size:13px; }
 header.top .mathlink { color:var(--muted); font-size:12px; letter-spacing:.14em; text-transform:uppercase; text-decoration:none;
   border:1px solid var(--line); border-radius:999px; padding:5px 11px; }
 header.top .mathlink:hover { color:var(--gold); border-color:var(--gold); }

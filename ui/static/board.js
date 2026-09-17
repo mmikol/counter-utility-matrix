@@ -150,7 +150,7 @@ function paint() {
   var sided = !!(m && m.sided);
   if (!sided) st.side = '';
   el('mode').textContent = m ? m.mode + (m.style ? ' · rewards ' + m.style : '') +
-    (sided ? (st.side ? ' · blue ' + (st.side === 'attack' ? 'attacks' : 'defends') : ' · pick a side') : ' · no sides') : 'map unknown';
+    (sided ? (st.side ? ' · blue ' + (st.side === 'attack' ? 'attacks' : 'defends') : '') : ' · no sides') : 'map unknown';
   el('sideseg').className = 'sideseg' + (sided ? ' show' : '');
   var sb = el('sideseg').querySelectorAll('button');
   for (var s = 0; s < sb.length; s++) sb[s].className = sb[s].getAttribute('data-side') === st.side ? 'on' : '';

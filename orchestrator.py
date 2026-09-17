@@ -300,9 +300,7 @@ def test():
     read-only), and the shipped playbook is used whatever experiment .env names."""
     sh("docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage",
        "-e", "COUNTER_MATRIX_STRATEGIES=", "data",
-       "python", "-m", "pytest", "-q",
-       "-p", "no:cacheprovider", "--cov=db", "--cov=ui", "--cov=inference",
-       "--cov=orchestrator", "--cov-report=term-missing:skip-covered")
+       "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--cov")
     return 0
 
 

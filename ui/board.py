@@ -278,13 +278,9 @@ def view_board():
             "<div class='seat blue' id='inf-blue'></div><div class='seat red' id='inf-red'>"
             "</div></div></section>"
             "<section class='panel' id='tab-facts'><div class='tools'>"
-            "<input type='text' id='filter' placeholder='filter"
-            " facts - try a hero, CAUTION, derived:, team.'>"
+            "<input type='text' id='filter' placeholder='filter'>"
             "<span id='chips'></span><span id='factsn' class='count'></span></div>"
-            "<table class='facts'><tbody id='factbody'></tbody></table>"
-            "<p class='legend'>every line is a row or a formula"
-            " over the database, numbered for citation;"
-            " the /comp skill and the inference layer read exactly these.</p></section>"
+            "<table class='facts'><tbody id='factbody'></tbody></table></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
             "</main><script>var TEAM = %d, BANS = %d;</script>"
             "<script src='/static/comps.js'></script>"
@@ -298,7 +294,7 @@ def view_board():
 def _page(title, body):
     return (HEAD + "<title>%s</title>"
             "<main><header class='top'><h1><a href='/'>Counter <span>Utility Matrix</span></a></h1>"
-            "<span class='sub'>%s</span></header>%s</main>" % (esc(title), esc(title), body))
+            "</header>%s</main>" % (esc(title), body))
 
 
 def view_math():

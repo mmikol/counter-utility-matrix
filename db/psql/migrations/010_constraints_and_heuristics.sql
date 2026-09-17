@@ -1,9 +1,10 @@
 -- 010: STRATEGIES = CONSTRAINTS ∪ HEURISTICS
 --
--- The playbook - inference/strategies/*.md - holds exactly two kinds of
--- file. A CONSTRAINT is a limit (`require`, hard unless soft), a scored
--- adjustment (`bonus`/`penalty` while `when` holds), or prose the agent
--- holds a comp to; a HEURISTIC weighs a metric, maximised or minimised.
+-- The playbook - inference/strategies/*.md - held two kinds of file here
+-- (013 added the third, ASSUMPTION, and retired prose constraints). A
+-- CONSTRAINT is a limit (`require`, hard unless soft) or a scored
+-- adjustment (`bonus`/`penalty` while `when` holds); a HEURISTIC weighs a
+-- metric, maximised or minimised.
 -- The table that mirrors the files is `strategies`, so the name means one
 -- thing: what were "constraints" and "strategies" are constraints now, and
 -- what were "goals" are heuristics.

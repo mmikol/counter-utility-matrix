@@ -1,13 +1,10 @@
--- INFERENCE: what the model was asked, what it was shown, what it answered.
+-- INFERENCE (history): the recommendations the model produced - what it was
+-- asked, what it was shown, what it answered, the strategies and evidence
+-- behind each pick - and the operator's free-form strategy notes.
 --
--- The proprietary layer's output side. A recommendation here is an opinion
--- the database PRODUCED, not one it recorded - so every row must be
--- explainable: the strategies it read, the evidence lines it was shown, and
--- which of them justified each pick, all kept alongside the answer.
---
--- These tables are a session log. `rebuild` drops them like everything else;
--- the durable record is the transcript each recommendation also writes into
--- db/data/authored/recommendations/, which is committed and survives.
+-- Superseded: 010 replaced the notes table with the playbook's mirror, and
+-- 014 dropped the recorded tables - nothing is recorded now. The file stays
+-- as the sequence's record; a rebuild replays it and the later migrations.
 --
 -- Depends on heroes (002), maps (003) and the playbook (005).
 

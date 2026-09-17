@@ -14,12 +14,13 @@ or the user points at, and leave a report.
 1. **Lint and tests, three ways.** From the repo root:
 
        .venv/bin/ruff check db ui inference tests orchestrator.py
-       .venv/bin/python -m pytest -q -p no:cacheprovider --cov=db --cov=ui --cov=inference \
-           --cov=orchestrator --cov-report=term-missing:skip-covered
+       .venv/bin/python -m pytest -q -p no:cacheprovider --cov
        COUNTER_MATRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -p no:cacheprovider \
-           --cov=db --cov=ui --cov=inference --cov=orchestrator \
-           --cov-report=term-missing:skip-covered --cov-fail-under=0
+           --cov --cov-fail-under=0
        .venv/bin/python orchestrator.py test        # inside the image, if the stack is up
+
+   `--cov` alone: the sources, the bar and the report's shape are
+   pyproject.toml's, defined once.
 
    The bar is 75% of the code under test where the database exists (the
    local run and the image); CI, which builds none, reports only. The

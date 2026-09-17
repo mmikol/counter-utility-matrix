@@ -224,7 +224,7 @@ def _map_facts(fs, world, m, side=""):
                 source="derived:map.side")
         else:
             fs.add("map", m.name, "map.side", "%s has an attacking and a defending side"
-                   " - pick blue's side to tune the comps" % m.name, value="",
+                   "; blue's side is not set" % m.name, value="",
                    source="derived:map.side")
         fs.add("map", m.name, "map.side_caveat", "the rates do not split by side on"
                " %s: side-specific advice comes from the kit facts and the side"

@@ -3,8 +3,9 @@
 -- The tool already refuses anything but one SELECT; this makes the database
 -- refuse the rest too. Both database users the project uses are superusers
 -- (the embedded cluster's owner, the compose image's POSTGRES_USER), and a
--- superuser's SELECT can read files off the disk it runs on. `SET LOCAL ROLE
--- matrix_reader` inside the query's transaction drops to a role that cannot.
+-- superuser's SELECT can read files off the disk it runs on. Here `SET LOCAL
+-- ROLE matrix_reader` inside the query's transaction dropped to a role that
+-- cannot; 012 went further and the tool now connects as the reader itself.
 -- Roles are cluster-wide, so this is guarded: a rebuild reapplies it safely.
 
 DO $$

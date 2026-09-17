@@ -7,11 +7,8 @@ ordered by payoff over blast radius; the first is the one to pick up.
 
 ## In progress
 
-**Maintenance, end to end** - `maintain` branch. Five parallel passes
-(the three layers, the docs and skills, the root and infrastructure):
-dead code, dead styling and stale comments out, the docs shorter and
-true, each container mounting only what it reads, the gitignore cut to
-what the tree produces, tests that could not fail replaced by pins.
+Nothing - main holds everything and every feature branch is deleted; the
+next feature opens its own branch.
 
 ## Next
 
@@ -124,6 +121,14 @@ counters table is a list).
 
 ## Done
 
+- **Maintenance, end to end** - `maintain` branch. Five parallel passes
+  (the three layers, the docs and skills, the root and infrastructure):
+  dead code, dead styling and stale comments out, the docs shorter and
+  true, each container mounting only what it reads, the gitignore cut to
+  what the tree produces, tests that could not fail replaced by pins;
+  then the older migrations' comments rewritten as history, the board's
+  last helper text removed, the launch configs named for the project,
+  and `--cov` defined once in pyproject.
 - **Never five supports** - `b00aafd`. The playbook's second hard limit,
   `require: team.supports <= 4`; the roster refuses the fifth.
 - **The look is the game's again** - `fe32e70`. Dark surfaces, Bebas

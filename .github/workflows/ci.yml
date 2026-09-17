@@ -36,6 +36,4 @@ jobs:
 
       - name: Tests (pure + protocol; db-bound tests skip without a built cluster)
         run: >-
-          python -m pytest -q -rs -p no:cacheprovider
-          --cov=db --cov=ui --cov=inference --cov=orchestrator
-          --cov-report=term-missing:skip-covered --cov-fail-under=0
+          python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=0

@@ -14,14 +14,12 @@
 --       what lets the facts layer count engage tools, peel, anti-air and
 --       cleanses instead of leaving those formulas blocked.
 --   heuristics
---       The inference layer's brain lives as markdown files in
---       inference/heuristics/ - one heuristic per file, of three kinds
---       (constraint, goal, strategy), machine-readable frontmatter (metric,
---       direction, weight, expressions) over a prose body. This table MIRRORS the files at load time so the
---       catalog is queryable and a recommendation can cite the exact
---       heuristic ids it was scored under. The files are the truth; the
---       loader clears and reloads. Every dial a heuristic reads sits in its
---       own `params` frontmatter.
+--       The inference layer's catalog, mirrored from markdown files - then
+--       inference/heuristics/, one file per rule of three kinds (constraint,
+--       goal, strategy), frontmatter (metric, direction, weight,
+--       expressions) over a prose body. The files are the truth; the loader
+--       clears and reloads. History: 010 renamed the table `strategies` and
+--       the kinds constraint and heuristic, 013 added assumptions.
 
 BEGIN;
 

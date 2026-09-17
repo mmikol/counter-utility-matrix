@@ -1,16 +1,11 @@
--- OUTCOMES: what actually happened - the feedback the inference layer learns
--- from.
+-- OUTCOMES (history): the match that followed a recommendation - one row
+-- per played match with the result, the map, blue's side and, in
+-- outcome_picks, both sixes and the bans; a fit read them to nudge the
+-- weights toward the metrics that separated wins from losses.
 --
--- A recommendation is an opinion the database produced; an outcome is the
--- match that followed. One row per played match: the result, the map and
--- blue's side, and - in outcome_picks - both sixes and the bans. rec_id
--- links back to the recommendation that was played when there was one,
--- and is NULL for a match recorded on its own.
---
--- Like recommendations, outcomes are the one thing no pull tool can
--- re-fetch: they are mirrored to db/raw and restored after every
--- rebuild. inference/fit.py reads them to nudge the goal weights toward
--- the metrics that separated wins from losses.
+-- Superseded: 014 dropped both tables - nothing learns from played matches
+-- now (the backlog's "weights that learn" is the way back). The file stays
+-- as the sequence's record.
 
 BEGIN;
 

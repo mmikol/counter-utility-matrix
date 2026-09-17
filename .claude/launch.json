@@ -2,18 +2,18 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "overwatch-board",
+      "name": "counter-utility-matrix",
       "runtimeExecutable": "sh",
       "runtimeArgs": ["-c", ".venv/bin/python -m ui.board --port 8018"],
       "port": 8018
     },
     {
-      "name": "overwatch-board-attach",
+      "name": "counter-utility-matrix-attach",
       "url": "http://localhost:8018",
       "port": 8018
     },
     {
-      "name": "overwatch-docker",
+      "name": "counter-utility-matrix-docker",
       "url": "http://localhost:8017",
       "port": 8017
     }
