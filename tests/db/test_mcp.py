@@ -59,7 +59,7 @@ def test_tools_call_without_a_database_and_unknown_method():
     assert replies[0]["result"]["isError"] is False
     assert replies[1]["error"]["code"] == -32601
     uris = {r["uri"] for r in replies[2]["result"]["resources"]}
-    assert "strategy://open-queue-tanks" in uris and "strategy://tuning-log" in uris
+    assert "strategy://queue-allows-two-tanks" in uris and "strategy://tuning-log" in uris
 
 
 def test_bad_json_is_a_parse_error_not_a_crash():

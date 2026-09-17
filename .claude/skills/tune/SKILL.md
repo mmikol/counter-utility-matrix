@@ -16,15 +16,15 @@ reason in `inference/strategies/tuning-log.md`. Nothing is edited by hand.
 
 1. Read the catalog: the `strategies` tool lists every strategy with its
    kind, metric, direction, weight, expressions and params. Find the one
-   the user means (`counters-with-salt`, a heuristic on
-   `matchup.coverage_share` at weight 0.5).
+   the user means (`answer-more-than-exposed`, a heuristic on
+   `matchup.net_edges` at weight 1).
 2. Decide the smallest change that does what they asked: a weight
    (heuristics and scored constraints; keep it within 0.25..5 unless they
    insist), a `params.NAME` dial, or an expression (the vocabulary is
    every `team.*`, `enemy.*`, `matchup.*`, `map.*`, `world.*` key - the
    `metrics` tool, or the vocabulary in docs/inference.md).
-3. Call `tune`: `{"id": "counters-with-salt", "field": "weight",
-   "value": 1, "reason": "user: the solver keeps ignoring the counter
+3. Call `tune`: `{"id": "answer-more-than-exposed", "field": "weight",
+   "value": 2, "reason": "user: the solver keeps ignoring the counter
    lists"}`. A metric that does not exist or an expression that does not
    parse is refused; nothing changes.
 4. Show the effect: re-run `board` (or `infer`) for the board the user is
@@ -39,7 +39,7 @@ reason in `inference/strategies/tuning-log.md`. Nothing is edited by hand.
   is a human decision, not a tune.
 - `tuning_log` (tool) or the `strategy://tuning-log` resource is the
   audit trail - show it when the user asks how the weights got here.
-- The `open-queue-tanks` limit is the game's own rule (at most two
+- The `queue-allows-two-tanks` limit is the game's own rule (at most two
   tanks); change it only if the user is playing a different queue.
 
 ## What is data

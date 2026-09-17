@@ -1,14 +1,13 @@
 # The playbook's sources
 
-`inference/strategies/` holds the user's own rules - the two shape limits,
-two heuristics and one assumption built one at a time - and one hundred
-rules the Overwatch community states again and again on
-r/OverwatchUniversity, r/Competitiveoverwatch and r/Overwatch, each
-standardized into the playbook's form and given the one metric that
-measures it. Every file was stored through the tune module's validated
-add and is logged in tuning-log.md; "applies" and "spreads" below are the
-six-board check made before the hundred were chosen. The catalog itself
-is `docs/inference.md`. Sources per strategy:
+One entry per strategy file in this folder: 102 rules, every one
+drawn from what the Overwatch community states again and again on
+r/OverwatchUniversity, r/Competitiveoverwatch and r/Overwatch (the top threads'
+comments through reddit's feeds and the Arctic Shift archive's search), each
+standardized into the playbook's form and given the one metric that measures it.
+Every community rule was stored through the tune module's validated add and is
+logged in tuning-log.md; "applies" and "spreads" are the six-board check made
+before it was chosen. The catalog itself is `docs/inference.md`.
 
 - `amplified-healing` - Amplified healing saves more (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
@@ -156,6 +155,8 @@ is `docs/inference.md`. Sources per strategy:
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1noeger/i_have_reached_legend_in_every_role_in_stadium_so/
+- `four-supports-unproven` - the queue's shape, written from the corpus (constraint).
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
 - `healing-beyond-supports` - Healing beyond the supports (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/10pwudc/guide_to_competitive_ctf/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
@@ -243,6 +244,8 @@ is `docs/inference.md`. Sources per strategy:
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
 - `popular-here-losing-here` - Popular here and losing here (constraint). applies on 0/6 boards, spreads on 0.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+- `queue-allows-two-tanks` - the queue's shape, written from the corpus (constraint).
+  - https://www.reddit.com/r/Overwatch/comments/1t4f5on/korean_server_tank_players_dont_even_bother/
 - `raise-the-weakest-pool` - Raise the weakest pool (constraint). applies on 5/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/

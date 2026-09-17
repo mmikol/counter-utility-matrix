@@ -195,5 +195,5 @@ since. Judgements (counters, synergies, playstyles) are tier- and
 region-agnostic by design, and a table is a table: every row carries its
 source, and that is the only distinction drawn between measured, judged
 and hand-written data. Players are assumed to play optimally - the
-central assumption, named in
-[inference/strategies/optimal-play.md](../inference/strategies/optimal-play.md).
+ground rule every skill holds a comp to ([skills.md](skills.md)), so a
+strategy encodes the game, never a lobby's habits.

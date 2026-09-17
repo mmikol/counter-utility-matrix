@@ -280,7 +280,7 @@ def test_an_experiment_playbook_is_chosen_by_the_environment(monkeypatch, tmp_pa
     assert catalog.strategies_dir() == catalog.SHIPPED_DIR
     experiment = tmp_path / "experiment"            # one rule, copied from the playbook
     experiment.mkdir()
-    shutil.copy(os.path.join(catalog.SHIPPED_DIR, "open-queue-tanks.md"), experiment)
+    shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), experiment)
     monkeypatch.setenv("COUNTER_MATRIX_STRATEGIES", str(experiment))
     chosen = catalog.strategies_dir()
     assert chosen == str(experiment)

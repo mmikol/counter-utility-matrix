@@ -75,8 +75,8 @@ never a strategy you did not name.
 
 **Ground rules:** players are assumed to play optimally, so a lobby's
 habits are not strategies to add; a weight of 0 silences a heuristic, and
-deleting a file is a human decision; the `open-queue-tanks` limit is the
-game's own rule.
+deleting a file is a human decision; the `queue-allows-two-tanks` limit
+is the game's own rule.
 
 ## `/strategy` - grow the playbook from three things
 
