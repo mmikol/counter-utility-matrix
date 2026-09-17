@@ -115,12 +115,32 @@ still yield, best first:
   the team brings; on defense, its deployables and barriers. A side
   constraint would read these; a fact should state them. Cost: an hour.
 
+- **What the community says and no metric measures.** Building the
+  community playbook left these unexpressed, each said by several voices:
+  a rush archetype and speed boost (Lúcio, Juno); peel as its own tool
+  set; main-tank and main-healer tags; per-role splits (a support line's
+  damage, a tank pair's synergy, mobility per role); negative synergies
+  (pairs that clash); healing and defensive ultimates as sustain (only
+  damage ultimates carry a figure); projectile-eating tools (Defense
+  Matrix, Kinetic Grasp) and hack against deployables; damage mitigation;
+  a hero's win-rate variance across maps (generalist or specialist); ult
+  charge lost on a swap. Each is a metric in `ui/facts/compute.py` first,
+  then a rule. Cost: an hour to a day each; the per-role splits are the
+  cheapest and unlock the most.
+
 What the sources do not publish, so no fact can: per-map rates by rank,
 per-side rates, per-stage rates, and a strength for a counter (the
 counters table is a list).
 
 ## Done
 
+- **The community playbook** - `community-playbook` branch. One hundred
+  rules mined from reddit (r/OverwatchUniversity, r/Competitiveoverwatch,
+  r/Overwatch: the top threads' comments and the archive's search), five
+  analysts in parallel, standardized, deduplicated, stored through the
+  validated add into `inference/experiments/community/` with the five
+  live rules, board-checked (every rule acts on the solver's sample), a
+  source per rule in its README. An experiment until `.env` names it.
 - **Maintenance, end to end** - `maintain` branch. Five parallel passes
   (the three layers, the docs and skills, the root and infrastructure):
   dead code, dead styling and stale comments out, the docs shorter and
