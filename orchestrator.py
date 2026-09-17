@@ -33,6 +33,10 @@ URLS = {"data": "http://localhost:8020/health",
         "ui": "http://localhost:8017/api/roster"}
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BOARD = "http://localhost:8017"
+# one board solved through the service before the stack is called ready: the
+# playbook's size decides the solver's memory and time, and only the container
+# (1 GiB, a read-only root) can say whether it holds
+PROBE = "http://localhost:8019/board?map=King%27s%20Row&red=Zarya&red=Pharah&side=attack"
 
 
 def sh(*args, check=True, capture=False, timeout=None):
@@ -65,8 +69,21 @@ def wait_for(url, seconds, what):
 
 
 def health():
-    """{layer: json or None} for the three served layers."""
-    return {layer: get_json(url) for layer, url in URLS.items()}
+    """{layer: json or None} for the three served layers, and "board": the
+    probe's seconds and picks, or None when the service could not solve one."""
+    h = {layer: get_json(url) for layer, url in URLS.items()}
+    h["board"] = probe() if h.get("inference") else None
+    return h
+
+
+def probe():
+    """One board solved through the inference service -> {"seconds", "picks"}."""
+    started = time.time()
+    data = get_json(PROBE, timeout=120)
+    picks = (data or {}).get("blue", {}).get("blue") or []
+    if len(picks) != 6:                            # a six, or the service failed
+        return None
+    return {"seconds": round(time.time() - started, 1), "picks": picks}
 
 
 def verdict(h):
@@ -105,6 +122,13 @@ def verdict(h):
                          % (inf["strategies"], inf.get("heroes", 0),
                             " - %d draft(s) awaiting /strategy" % inf["pending"]
                             if inf.get("pending") else ""))
+            if "board" in h:                        # probed; absent in a bare verdict
+                if h["board"] is None:
+                    ok = False
+                    lines.append("inference: a board did not solve - the service fails"
+                                 " under this playbook (`docker compose logs inference`)")
+                else:
+                    lines[-1] += ", a board in %.1fs" % h["board"]["seconds"]
     ui = h.get("ui")
     if not ui or "heroes" not in ui:
         ok = False

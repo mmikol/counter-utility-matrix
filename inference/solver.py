@@ -37,6 +37,7 @@ class Candidate:
         "raw",
         "scope",
         "score",
+        "tiebreak",
         "violations",
     )
 
@@ -46,6 +47,7 @@ class Candidate:
         self.ns = None
         self.scope = None
         self.score = 0.0
+        self.tiebreak = 0.0
         self.contributions = []
         self.violations = []
         self.raw = {}
@@ -111,7 +113,24 @@ class Solver:
             else:
                 raw[g.id] = None
         cand.raw = raw
+        cand.tiebreak = cand.ns["team"]["map_win_mean"]
         return cand
+
+    @staticmethod
+    def slim(cand):
+        """Keep the verdict, drop the working: the namespace, the scope, the raw
+        values and the breakdown. A search holds thousands of candidates at
+        once and reads only their score, tie-break and picks; the winners are
+        hydrated again before they are shown."""
+        cand.ns = cand.scope = cand.raw = None
+        cand.contributions = []
+        return cand
+
+    def hydrate(self, cand):
+        """A slim candidate prepared and scored again, with its breakdown."""
+        if cand.ns is None:
+            self.prepare(cand)
+        return self.score(cand)
 
     # --- the reference: one scale per board -------------------------------------
 
@@ -150,8 +169,8 @@ class Solver:
             values = [c.raw[g.id] for c in self.reference() if c.raw.get(g.id) is not None]
             self.bounds[g.id] = (min(values), max(values)) if values else (0.0, 0.0)
 
-    def score(self, cand):
-        """Score with the frozen bounds; fills contributions."""
+    def score(self, cand, detail=True):
+        """Score with the frozen bounds; with detail, fill the breakdown too."""
         total, contributions = 0.0, []
         sc = cand.scope
         for h in self.limits:
@@ -160,15 +179,17 @@ class Solver:
             ok = bool(h.require.eval(sc)) if applies else True
             penalty = float(h.penalty.eval(sc)) if (h.soft and applies and not ok) else 0.0
             total -= penalty
-            contributions.append({"id": h.id, "kind": "constraint", "form": "limit",
-                                  "applies": applies, "ok": ok, "weighted": -penalty,
-                                  "metric": h.require.source})
+            if detail:
+                contributions.append({"id": h.id, "kind": "constraint", "form": "limit",
+                                      "applies": applies, "ok": ok, "weighted": -penalty,
+                                      "metric": h.require.source})
         for g in self.heuristics:
             raw = cand.raw.get(g.id)
             if raw is None:
-                contributions.append({"id": g.id, "kind": "heuristic", "form": "heuristic",
-                                      "applies": False, "raw": None, "norm": 0.0,
-                                      "weighted": 0.0, "metric": g.metric})
+                if detail:
+                    contributions.append({"id": g.id, "kind": "heuristic",
+                                          "form": "heuristic", "applies": False, "raw": None,
+                                          "norm": 0.0, "weighted": 0.0, "metric": g.metric})
                 continue
             lo, hi = self.bounds.get(g.id, (raw, raw))
             if hi > lo:
@@ -180,10 +201,11 @@ class Solver:
                 norm = 1.0 - norm
             weighted = g.weight * norm
             total += weighted
-            contributions.append({"id": g.id, "kind": "heuristic", "form": "heuristic",
-                                  "applies": True, "raw": raw, "norm": norm,
-                                  "weighted": weighted, "metric": g.metric,
-                                  "spread": hi > lo})
+            if detail:
+                contributions.append({"id": g.id, "kind": "heuristic", "form": "heuristic",
+                                      "applies": True, "raw": raw, "norm": norm,
+                                      "weighted": weighted, "metric": g.metric,
+                                      "spread": hi > lo})
         for r in self.scored_constraints:
             sc["params"] = r.params_section
             applies = self._holds(r, sc)
@@ -191,9 +213,10 @@ class Solver:
             penalty = float(r.penalty.eval(sc)) if (applies and r.penalty is not None) else 0.0
             weighted = r.weight * (bonus - penalty)
             total += weighted
-            contributions.append({"id": r.id, "kind": "constraint", "form": "scored",
-                                  "applies": applies, "bonus": bonus, "penalty": penalty,
-                                  "weighted": weighted, "metric": r.expressions})
+            if detail:
+                contributions.append({"id": r.id, "kind": "constraint", "form": "scored",
+                                      "applies": applies, "bonus": bonus, "penalty": penalty,
+                                      "weighted": weighted, "metric": r.expressions})
         cand.score = total
         cand.contributions = contributions
         return cand
@@ -249,22 +272,26 @@ class Solver:
     # --- the search -------------------------------------------------------------------
 
     def solve(self, top=5, refine=True):
-        candidates = [self.prepare(c) for c in self.enumerate()]
+        """The best sixes, each prepared, scored and slimmed in one pass so a
+        search of thousands holds only verdicts; the top are hydrated."""
+        self.freeze_bounds()
+        candidates = self.enumerate()
         self.considered = len(candidates)
-        feasible = [c for c in candidates if not c.violations]
+        feasible = []
+        for c in candidates:
+            self.prepare(c)
+            if not c.violations:
+                feasible.append(self.slim(self.score(c, detail=False)))
         if not feasible:
             return []
-        self.freeze_bounds()
-        for c in feasible:
-            self.score(c)
         feasible.sort(key=self._rank_key)
         if refine:
             feasible = self.refine(feasible, max(top, 3))
-        return feasible[:top]
+        return [self.hydrate(c) for c in feasible[:top]]
 
     @staticmethod
     def _rank_key(c):
-        return (-c.score, -c.ns["team"]["map_win_mean"], c.names)
+        return (-c.score, -c.tiebreak, c.names)
 
     def refine(self, ranked, seeds):
         """Local search: swap any open slot for any same-role hero."""
@@ -292,7 +319,7 @@ class Solver:
                             self.considered += 1
                             if cand.violations:
                                 continue
-                            self.score(cand)
+                            self.slim(self.score(cand, detail=False))
                             known[cand.key] = cand
                         if cand.score > best.score + 1e-9:
                             best = cand
@@ -337,14 +364,15 @@ def legal_shapes(catalog, locked_counts=None):
 def evaluate_comp(world, m, red, heroes, catalog, pool_size=6, bans=(), side=""):
     """Score one full six against the field the solver would search."""
     solver = Solver(world, m, red, [], catalog, pool_size, bans, side)
-    field = [solver.prepare(c) for c in solver.enumerate()]
-    solver.considered = len(field)
-    target = solver.prepare(Candidate(heroes))
-    feasible = [c for c in field if not c.violations]
     solver.freeze_bounds()                    # the same reference scale as infer
-    for c in feasible:
-        solver.score(c)
-    solver.score(target)
+    field = solver.enumerate()
+    solver.considered = len(field)
+    feasible = []
+    for c in field:
+        solver.prepare(c)
+        if not c.violations:
+            feasible.append(solver.slim(solver.score(c, detail=False)))
+    target = solver.score(solver.prepare(Candidate(heroes)))
     feasible.sort(key=Solver._rank_key)
     rank = 1 + sum(1 for c in feasible if c.score > target.score + 1e-9)
-    return target, feasible[:5], rank, solver
+    return target, [solver.hydrate(c) for c in feasible[:5]], rank, solver

@@ -521,7 +521,7 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
     if t["style_counts"]:
         add("style_top", "%s style profile: %s%s" % (label, ", ".join(
             "%s %d/%d" % (s, c, t["size"]) for s, c in sorted(
-                t["style_counts"].items(), key=lambda kv: -kv[1])),
+                t["style_counts"].items(), key=lambda kv: (-kv[1], kv[0]))),
             " - leans %s" % t["style_lean"] if t["style_lean"] else " - no majority style"))
     if m is not None and m.style_top:
         add("style_fit", "%s fit with the %s style %s rewards: %.0f%% of picks"

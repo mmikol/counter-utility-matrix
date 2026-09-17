@@ -1,6 +1,6 @@
 # The playbook's sources
 
-One entry per strategy file in this folder: 102 rules, every one
+One entry per strategy file in this folder: 300 rules, every one
 drawn from what the Overwatch community states again and again on
 r/OverwatchUniversity, r/Competitiveoverwatch and r/Overwatch (the top threads'
 comments through reddit's feeds and the Arctic Shift archive's search), each
@@ -22,32 +22,91 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
 - `answer-more-than-exposed` - Answer more than they answer (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+- `answer-the-answerers` - Answer the ones who answer you (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wg0tx5/i_dont_understand_how_im_supposed_to_carry_on_dps/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+- `answer-the-ban-magnet` - Answer the must-ban that slipped through (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
+  - https://www.reddit.com/r/Overwatch/comments/1r28wns/how_it_feels_to_play_comp_rn/
 - `answer-their-ults` - Invulnerability answers their ultimates (heuristic). applies on 4/6 boards, spreads on 4.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/vcjrk7/where_did_the_dallas_fuel_go_wrong_analysis/
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+- `answers-that-fit-map` - Counter-pick on this map only (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1utl22o/ranked_is_giving_me_cognitive_dissidence/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
 - `antiheal-heavy-heal-line` - Anti-heal a heavy heal line (heuristic). applies on 2/6 boards, spreads on 2.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/10pwudc/guide_to_competitive_ctf/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+- `antiheal-melts-two-tanks` - Anti-heal melts a tank pair (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1uweo7e/mauga_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1r40x7r/noobs_guide_to_ranking_up/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+- `antiheal-stops-self-sustain` - Anti-heal turns off self-sustain (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/yc8i2n/supports_are_you_struggling_to_stay_alive_in_ow2/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9xf9y/why_does_orisa_feel_so_impossible_to_win_against/
 - `area-damage-punishes-grouping` - Area damage punishes grouping (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+- `armor-blunts-heavy-floor` - Armor blunts a heavy floor (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1un09jk/some_heroes_like_juno_or_domina_have_a_large/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1slxvdi/psa_orisas_fortify_does_not_prevent_maugas/
+- `armor-eats-hitscan-spam` - Armor eats hitscan spam (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1un09jk/some_heroes_like_juno_or_domina_have_a_large/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w5v9nd/what_3_dps_and_3_tanks_would_you_choose_and_why/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/i9oyyz/as_rein_leave_your_shield_down_against_whole_hog/
+- `armor-eats-rapid-fire` - Armor eats rapid fire (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1slxvdi/psa_orisas_fortify_does_not_prevent_maugas/
+- `armor-is-extra-health` - Armor is extra health (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/12nh0zj/the_complete_overwatch_hero_guide_75000_words/
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
 - `armor-shrugs-off-spam` - Armor shrugs off spam (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1noeger/i_have_reached_legend_in_every_role_in_stadium_so/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1un09jk/some_heroes_like_juno_or_domina_have_a_large/
+- `attackers-arrive-with-ults` - Attackers arrive with ultimates (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w78a4q/common_problem_i_noticed_climbing_through_metal/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w6ihev/what_causes_steamrolls/
+- `attackers-bring-answers` - Attackers bring the answers (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
 - `attackers-bring-engage-tools` - Attackers bring engage tools (heuristic). applies on 2/6 boards, spreads on 2.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rppa93/simple_guide_to_tanking_from_bronze_5_to_gmchamp/
+- `attackers-make-progress` - Attackers must make progress (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w888wc/is_it_a_bad_idea_to_shoot_the_tank_the_entire_game/
+- `attackers-need-damage` - Attackers need damage picks (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
+- `attackers-pick-counters` - Attackers pick the counters (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+- `attackers-ults-back-fast` - Attackers need ultimates back fast (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w78a4q/common_problem_i_noticed_climbing_through_metal/
+- `ban-breaks-built-comp` - A ban breaks a built comp (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1vcs69k/thoughts_on_the_absence_of_the_prevalent/
 - `ban-proof-answers` - Answers that survive the ban (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
 - `bans-target-counters` - Bans target the counters (constraint). applies on 6/6 boards, spreads on 0.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
+- `barrier-blocks-big-hits` - A barrier blocks the big hit (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/d4poqw/i_have_way_more_sympathy_for_dps_players_with/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4gaz2/what_to_do_against_guaranteed_death_ults_during/
 - `barrier-blunts-hitscan` - A barrier blunts their hitscan (heuristic). applies on 4/6 boards, spreads on 4.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
@@ -57,13 +116,67 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
-- `barriers-block-burst` - Barriers block the burst (constraint). applies on 5/6 boards, spreads on 0.
+- `barriers-against-snipers` - Barriers against a sniper (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/d4poqw/i_have_way_more_sympathy_for_dps_players_with/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1ukr2uk/how_pro_mei_players_actually_use_ice_wall/
+- `barriers-block-burst` - Barriers block the burst (constraint). applies on 6/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
   - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
+- `barriers-eat-projectile-spam` - A barrier eats projectile spam (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tmv9w3/korean_tank_players_creating_a_literal_tank_union/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+- `beams-into-dive-line` - Beams through a dive tank line (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1r40x7r/noobs_guide_to_ranking_up/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w5v9nd/what_3_dps_and_3_tanks_would_you_choose_and_why/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4iezj/does_hazard_have_a_hard_counter/
+- `beams-melt-fat-comps` - Beams melt a fat comp (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4iezj/does_hazard_have_a_hard_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w5v9nd/what_3_dps_and_3_tanks_would_you_choose_and_why/
+- `beams-melt-on-armor` - Beams melt on armor (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1un09jk/some_heroes_like_juno_or_domina_have_a_large/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/naye5a/how_to_play_winston/
+- `below-fifty-is-losing` - Below fifty is losing ground (constraint). applies on 1/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vyt9si/is_it_my_fault_as_a_tank_that_my_teams_dies_a_lot/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wg0tx5/i_dont_understand_how_im_supposed_to_carry_on_dps/
+- `bench-heals-heavy-fire` - Bench healing into heavy fire (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/Overwatch/comments/1t4f5on/korean_server_tank_players_dont_even_bother/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `big-hits-beat-armor` - Big hits beat armor (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1un09jk/some_heroes_like_juno_or_domina_have_a_large/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1mwkecz/a_grandmasters_overly_detailed_echo_guide/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1slxvdi/psa_orisas_fortify_does_not_prevent_maugas/
+- `big-saves-big-hits` - Big saves for big hits (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `boost-the-hitscan` - Boost a hitscan pair (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vwr13l/how_do_you_counter_mercy_pocket_hitscan_as_flex/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+- `boosted-guns-two-tap` - Boosted guns two-tap squishies (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vwr13l/how_do_you_counter_mercy_pocket_hitscan_as_flex/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
+- `brawl-beats-dive` - Brawl beats dive (constraint). applies on 2/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+- `brawl-cuts-their-heals` - Brawl brings anti-heal (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w5v9nd/what_3_dps_and_3_tanks_would_you_choose_and_why/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vwg6wr/how_to_deal_with_ana_as_a_tank/
+- `brawl-has-no-backline` - Brawl has no backline (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+- `brawl-locks-flankers` - Brawl locks down flankers (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
 - `brawl-maps-reward-durability` - Brawl maps reward durability (heuristic). applies on 2/6 boards, spreads on 2.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
-- `brawl-on-dive-map` - Brawl has no vertical answer (constraint). applies on 0/6 boards, spreads on 0.
+- `brawl-maps-stack-ults` - Brawl maps stack win conditions (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/vcjrk7/where_did_the_dallas_fuel_go_wrong_analysis/
+- `brawl-mirror-pool` - Bigger ball wins the brawl (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jbk577/is_dva_actually_not_a_dive_tank/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `brawl-on-dive-map` - Brawl has no vertical answer (constraint). applies on 1/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
 - `brawl-on-poke-map` - Brawl cannot close a poke map (constraint). applies on 0/6 boards, spreads on 0.
@@ -73,11 +186,23 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
-- `brawl-outsustains` - Brawl wins by outlasting (heuristic). applies on 2/6 boards, spreads on 2.
+- `brawl-outsustains` - Brawl wins by outlasting (heuristic). applies on 4/6 boards, spreads on 4.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
   - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
-- `brawl-stacks-win-conditions` - Brawl stacks fight-winning ultimates (heuristic). applies on 2/6 boards, spreads on 2.
+- `brawl-splashes-the-scrum` - Brawl splashes the scrum (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `brawl-stacks-win-conditions` - Brawl stacks fight-winning ultimates (heuristic). applies on 4/6 boards, spreads on 4.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+- `brawl-swings-melee` - Brawl swings at melee (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jbk577/is_dva_actually_not_a_dive_tank/
+- `brawl-walks-in-together` - Brawl walks in together (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+- `brawl-wears-armor` - Brawl wears armor (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jbk577/is_dva_actually_not_a_dive_tank/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
 - `break-heavy-barriers` - Break a heavy barrier line (heuristic). applies on 3/6 boards, spreads on 3.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
@@ -88,38 +213,127 @@ before it was chosen. The catalog itself is `docs/inference.md`.
 - `bring-map-specialists` - Bring the map's specialists (heuristic). applies on 5/6 boards, spreads on 5.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+- `broad-answers-beat-narrow` - Broad answers beat narrow ones (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+- `build-around-strong-pick` - Build around the strong pick (constraint). applies on 5/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
+- `bunkers-fall-to-ultimates` - Bunkers fall to ultimates (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/cutjkt/psa_death_blossom_does_more_damage_to_barriers/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/7xaq6l/dear_moira_youre_great_superbly_designed_and_well/
+- `bunkers-take-two-answers` - Bunkers take two answers (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/cutjkt/psa_death_blossom_does_more_damage_to_barriers/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
 - `burst-beats-their-saves` - Burst through their saves (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+- `burst-over-big-save` - Burst over their big save (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wd2f17/curious_which_supports_have_the_highest_healing/
+- `burst-the-isolated-enemy` - Burst the enemy who fights alone (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/vcjrk7/where_did_the_dallas_fuel_go_wrong_analysis/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9xf9y/why_does_orisa_feel_so_impossible_to_win_against/
 - `burst-through-heals` - Burst through their biggest save (heuristic). applies on 4/6 boards, spreads on 4.
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+- `cc-halts-close-fighters` - Crowd control halts close fighters (constraint). applies on 4/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1r40x7r/noobs_guide_to_ranking_up/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1uweo7e/mauga_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
 - `cc-interrupts-ults` - Crowd control interrupts ultimates (heuristic). applies on 4/6 boards, spreads on 4.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rppa93/simple_guide_to_tanking_from_bronze_5_to_gmchamp/
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
 - `cheap-ultimates-come-often` - Cheap ultimates come often (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w6ihev/what_causes_steamrolls/
+- `cheap-ultimates-need-answers` - Cheap ultimates need answers (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/Overwatch/comments/1t4f5on/korean_server_tank_players_dont_even_bother/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4gaz2/what_to_do_against_guaranteed_death_ults_during/
+- `cheap-ults-crack-bunkers` - Cheap ultimates crack bunkers (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/cutjkt/psa_death_blossom_does_more_damage_to_barriers/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+- `chew-fat-red-faster` - Chew a fat red faster (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/cutjkt/psa_death_blossom_does_more_damage_to_barriers/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wg0tx5/i_dont_understand_how_im_supposed_to_carry_on_dps/
 - `chew-through-them-first` - Chew through them first (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w6ihev/what_causes_steamrolls/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
+- `choke-maps-reward-melee` - Choke maps reward melee (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
 - `chokes-reward-crowd-control` - Chokes reward crowd control (heuristic). applies on 2/6 boards, spreads on 2.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1ukr2uk/how_pro_mei_players_actually_use_ice_wall/
   - https://www.reddit.com/r/OverwatchUniversity/comments/j3enem/reinhardt_a_comprehensive_indepth_guide_from/
+- `cleanse-heavy-crowd-control` - Cleanse a crowd-control-heavy red (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1noeger/i_have_reached_legend_in_every_role_in_stadium_so/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1noef1t/i_have_reached_legend_in_every_role_in_stadium_so/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1uw5jxr/i_got_spawned_camped_by_two_enemy_players_who_did/
+- `cleanse-loaded-ult-bars` - Cleanse a loaded ultimate bar (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/Overwatch/comments/1t4f5on/korean_server_tank_players_dont_even_bother/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/yc8i2n/supports_are_you_struggling_to_stay_alive_in_ow2/
+- `cleanse-the-counters-tool` - Cleanse the counter's tool (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1pbe527/smurfing_5_stacks_endofseason_is_problematic_for/
+- `coin-flip-lineup` - A coin-flip lineup is no plan (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
 - `commit-to-one-style` - Half a comp each way fails (constraint). applies on 0/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1u9mxr2/ive_identified_10_recurring_situations_in_my_low/
+- `contest-a-dive-red` - Contest a dive red (constraint). applies on 4/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vyt9si/is_it_my_fault_as_a_tank_that_my_teams_dies_a_lot/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+- `control-area-healing` - Control rewards area healing (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/7xaq6l/dear_moira_youre_great_superbly_designed_and_well/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/9fmwwg/the_composition_dictionary_for_intermediate_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/yc8i2n/supports_are_you_struggling_to_stay_alive_in_ow2/
+- `control-points-have-edges` - Control points have edges (constraint). applies on 2/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tmv9w3/korean_tank_players_creating_a_literal_tank_union/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/7xaq6l/dear_moira_youre_great_superbly_designed_and_well/
+- `core-answers-core` - A core answers a core (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+- `core-takes-two-answers` - One pick cannot answer a core (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/9fmwwg/the_composition_dictionary_for_intermediate_owl/
+- `count-the-cooldowns` - Count the cooldowns (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4iezj/does_hazard_have_a_hard_counter/
+- `counter-comp-stays-safe` - A counter comp must be safe (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+- `countered-answers-are-none` - Answered answers are no answers (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1utl22o/ranked_is_giving_me_cognitive_dissidence/
+- `countered-lynchpin-sinks-comp` - A countered lynchpin sinks the comp (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
 - `counterpick-knows-its-maps` - The counterpick lists know their maps (heuristic). applies on 5/6 boards, spreads on 5.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w90zka/working_on_a_tank_guide_what_are_some_general/
 - `counters-get-countered` - Counters get countered (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+- `cover-the-swing` - Cover the swing with a cleanse (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1utl22o/ranked_is_giving_me_cognitive_dissidence/
 - `cycle-faster` - Cycle cooldowns faster than they do (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/vcjrk7/where_did_the_dallas_fuel_go_wrong_analysis/
+- `cycle-ults-faster` - Cycle ultimates faster than red (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w6ihev/what_causes_steamrolls/
 - `damage-seals-kills` - Damage seals the kills (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1u9mxr2/ive_identified_10_recurring_situations_in_my_low/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+- `damage-slots-counter-pick` - Damage slots are the counter-pick slots (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/d4poqw/i_have_way_more_sympathy_for_dps_players_with/
+- `damage-ults-punish-squishies` - Damage ultimates punish squishies (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w78a4q/common_problem_i_noticed_climbing_through_metal/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
 - `defenders-set-deployables` - Defenders set deployables (heuristic). applies on 1/6 boards, spreads on 1.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
@@ -127,20 +341,85 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/10pwudc/guide_to_competitive_ctf/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+- `deployables-stop-flankers` - Deployables stop the flankers (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vxqniw/genuinely_how_do_you_fight_anran/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+- `discord-the-armored-tank` - Discord the armored tank (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1ulsogp/i_havent_won_a_match_in_3_days/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1uweo7e/mauga_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+- `dive-bursts-the-target` - Dive bursts its target (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1mwkecz/a_grandmasters_overly_detailed_echo_guide/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w5v9nd/what_3_dps_and_3_tanks_would_you_choose_and_why/
+- `dive-cycles-cooldowns` - Dive runs on cooldowns (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1mwkecz/a_grandmasters_overly_detailed_echo_guide/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w45p4i/is_it_true_that_supports_shouldnt_need_or_expect/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w3o72b/how_do_i_use_macro_concepts_in_game_tank/
 - `dive-finds-weakest` - A dive finds the weakest pool (heuristic). applies on 4/6 boards, spreads on 4.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
-- `dive-needs-mobility` - A dive comp moves as one (heuristic). applies on 3/6 boards, spreads on 3.
+- `dive-hunts-the-exposed` - A dive red hunts the exposed (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tj5z04/one_tricking_is_the_fastest_way_to_get_better_in/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vyt9si/is_it_my_fault_as_a_tank_that_my_teams_dies_a_lot/
+- `dive-into-saves` - Saves blunt a full dive (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1mwkecz/a_grandmasters_overly_detailed_echo_guide/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1urel91/support_vulnerabilities/
+- `dive-is-cooldown-war` - Dive is a cooldown war (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vxqniw/genuinely_how_do_you_fight_anran/
+- `dive-is-one-core` - Dive is one connected core (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1noeger/i_have_reached_legend_in_every_role_in_stadium_so/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jbk577/is_dva_actually_not_a_dive_tank/
+- `dive-maps-need-peel` - Dive maps need peel (constraint). applies on 2/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w45p4i/is_it_true_that_supports_shouldnt_need_or_expect/
+- `dive-needs-mobility` - A dive comp moves as one (heuristic). applies on 1/6 boards, spreads on 1.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
-- `dive-still-needs-heals` - Dive still needs forward healing (heuristic). applies on 3/6 boards, spreads on 3.
+- `dive-still-needs-heals` - Dive still needs forward healing (heuristic). applies on 1/6 boards, spreads on 1.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1w2bqyb/thoughts_on_japanese_and_na_servers_from_koreas/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `dive-supports-partner-divers` - Dive supports must partner the divers (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1w2bqyb/thoughts_on_japanese_and_na_servers_from_koreas/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1u6tb1m/played_comp_for_the_first_time_in_a_couple_years/
+- `dive-takes-the-air` - Dive takes the high ground (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jbk577/is_dva_actually_not_a_dive_tank/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w5v9nd/what_3_dps_and_3_tanks_would_you_choose_and_why/
+- `dive-the-pocket` - Dive the pocket (constraint). applies on 2/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vwr13l/how_do_you_counter_mercy_pocket_hitscan_as_flex/
+- `double-hitscan-grounds-fliers` - Double hitscan grounds fliers (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/d4poqw/i_have_way_more_sympathy_for_dps_players_with/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
+  - https://www.reddit.com/r/Overwatch/comments/1r28wns/how_it_feels_to_play_comp_rn/
+- `double-the-must-ban` - Two answers to the must-ban (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4iezj/does_hazard_have_a_hard_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1uweo7e/mauga_counter/
+- `dps-check-on-barriers` - Barriers are a DPS check (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w888wc/is_it_a_bad_idea_to_shoot_the_tank_the_entire_game/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/7xaq6l/dear_moira_youre_great_superbly_designed_and_well/
+- `escape-beats-one-shot` - An escape beats the one-shot (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1u5r05c/walls_have_unlimited_health_the_1_rule_of/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vjjd1p/when_your_team_pushes_far_forward_is_it_better_to/
+- `escort-longest-gun` - Escort lanes reward the longest gun (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
 - `every-pair-has-plan` - Every pair should have a plan (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1noeger/i_have_reached_legend_in_every_role_in_stadium_so/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
 - `everyone-shoots` - Every pick should shoot (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1v8u51x/when_i_offangle_on_support_my_teammates_just_die/
+- `exposed-but-ahead` - Countered but ahead on the ledger (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+- `exposed-picks-need-partners` - Countered picks need partners (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1noeger/i_have_reached_legend_in_every_role_in_stadium_so/
+- `extra-supports-carry-guns` - Extra supports carry guns (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
 - `fewer-squishies` - Fewer squishies to focus (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
@@ -151,44 +430,141 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+- `flankers-catch-the-loner` - Flankers catch the pick fighting alone (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vxqniw/genuinely_how_do_you_fight_anran/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vyikbe/how_can_i_have_higher_survivability_as_support/
+- `fly-over-projectile-spam` - Fly over a projectile team (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1mwkecz/a_grandmasters_overly_detailed_echo_guide/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1u9mxr2/ive_identified_10_recurring_situations_in_my_low/
 - `fly-over-projectiles` - Fly over a projectile team (heuristic). applies on 3/6 boards, spreads on 3.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1noeger/i_have_reached_legend_in_every_role_in_stadium_so/
+- `four-damage-quick-play` - Four damage is a quick-play comp (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/d4poqw/i_have_way_more_sympathy_for_dps_players_with/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+- `four-supports-no-pressure` - Four supports make no pressure (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
 - `four-supports-unproven` - the queue's shape, written from the corpus (constraint).
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+- `grind-down-the-brawl` - Grind the brawl down (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w5v9nd/what_3_dps_and_3_tanks_would_you_choose_and_why/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `hard-choke-needs-barrier` - A hard choke needs a barrier (constraint). applies on 2/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/naye5a/how_to_play_winston/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
 - `healing-beyond-supports` - Healing beyond the supports (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/10pwudc/guide_to_competitive_ctf/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
+- `heavy-fire-finds-weakest` - Heavy fire finds the weakest (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w90zka/working_on_a_tank_guide_what_are_some_general/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/n0hgxf/i_know_a_lot_of_support_mains_get_bitchy_about/
+- `held-point-needs-tank` - A held point needs its tank (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1qe83r5/reached_gm_mostly_onetricking_moira_here_are_the/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tj5z04/one_tricking_is_the_fastest_way_to_get_better_in/
+- `high-ground-over-barrier` - High ground looks over a barrier (constraint). applies on 2/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/naye5a/how_to_play_winston/
+- `high-ground-strands-melee` - High ground strands melee (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wck8j1/who_are_the_heroes_in_each_role_that_are_the_most/
+- `hitscan-into-brawl` - Hitscan into brawl (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
 - `invuln-against-dive` - An invulnerability survives the dive (heuristic). applies on 4/6 boards, spreads on 4.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1weutpi/so_with_vendetta_apparently_coming_back_into_the/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jbk577/is_dva_actually_not_a_dive_tank/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
-- `lean-with-the-map` - Lean the way the map leans (constraint). applies on 0/6 boards, spreads on 0.
+- `kite-short-range-comps` - Kite a short-range comp (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `last-pick-answers-all` - Last pick answers what is shown (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1noeger/i_have_reached_legend_in_every_role_in_stadium_so/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+- `lean-with-the-map` - Lean the way the map leans (constraint). applies on 1/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1u9mxr2/ive_identified_10_recurring_situations_in_my_low/
+- `leave-nothing-diveable` - Leave nothing diveable (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w45p4i/is_it_true_that_supports_shouldnt_need_or_expect/
 - `leave-off-map-picks` - Leave off-map picks at home (heuristic). applies on 5/6 boards, spreads on 5.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
   - https://www.reddit.com/r/OverwatchUniversity/comments/j3enem/reinhardt_a_comprehensive_indepth_guide_from/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+- `lifelines-cover-thin-heals` - Self-heal covers thin support (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/10pwudc/guide_to_competitive_ctf/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
+- `lift-the-shortest-gun` - Lift the shortest gun (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tj5z04/one_tricking_is_the_fastest_way_to_get_better_in/
+- `loners-lose-the-ledger` - Loners lose the ledger (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w6ihev/what_causes_steamrolls/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+- `magnet-needs-backup-answer` - A banned answer needs a backup (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1uuq8wx/it_gets_to_a_point_man_bronze_2_tank_hundreds_of/
+- `map-affinity-outlasts-rates` - Map affinity outlasts the patch (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
 - `map-has-own-meta` - Each map has its own meta (heuristic). applies on 5/6 boards, spreads on 5.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+- `map-lift-beats-ladder` - Map lift beats the ladder rate (constraint). applies on 4/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+- `map-outweighs-the-counter` - The map outweighs the counter (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4iezj/does_hazard_have_a_hard_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1qz5oak/from_masters_to_low_diamond_and_back_to_masters_a/
+- `match-fast-cooldown-cycles` - Match a fast cooldown cycle (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w45p4i/is_it_true_that_supports_shouldnt_need_or_expect/
+- `match-their-longest-gun` - Match their longest gun (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1fy7mpf/whats_the_point_of_matching_the_enemy_teams/
+- `match-their-synergy` - Match their synergy (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
+- `match-two-tank-fronts` - Match a two-tank front (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+  - https://www.reddit.com/r/Overwatch/comments/1t4f5on/korean_server_tank_players_dont_even_bother/
+- `melee-loses-to-snipers` - Melee loses to a sniper (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1r40x7r/noobs_guide_to_ranking_up/
+- `melee-swings-through-barriers` - Melee swings through barriers (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tkb0a3/tank_genuinely_how_do_you_counter_lazer_heros/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/d4poqw/i_have_way_more_sympathy_for_dps_players_with/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w5v9nd/what_3_dps_and_3_tanks_would_you_choose_and_why/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1usux6e/is_sigma_the_anti_engage_tank/
 - `meta-drifts-to-mobility` - The meta drifts toward mobility (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
 - `meta-drifts-to-range` - The meta drifts toward range (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+- `more-buttons-than-red` - More buttons than red (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wgyiqp/as_a_tank_what_should_you_do_if_you_are_about_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
+- `more-cooldowns-to-trade` - More cooldowns to trade (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
 - `must-ban-no-plan` - A must-ban is not a plan (constraint). applies on 0/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1qz5oak/from_masters_to_low_diamond_and_back_to_masters_a/
 - `never-hinge-ban-magnet` - Never hinge on a ban magnet (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1vcs69k/thoughts_on_the_absence_of_the_prevalent/
+- `no-barrier-into-beams` - No barrier into beams (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tkb0a3/tank_genuinely_how_do_you_counter_lazer_heros/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1r40x7r/noobs_guide_to_ranking_up/
 - `no-pick-fights-alone` - No pick fights alone (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1w2bqyb/thoughts_on_japanese_and_na_servers_from_koreas/
+- `one-anti-every-fight` - One anti-heal every fight (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1qz5oak/from_masters_to_low_diamond_and_back_to_masters_a/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+- `one-cleanse-every-six` - Every six wants one cleanse (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wck8j1/who_are_the_heroes_in_each_role_that_are_the_most/
 - `one-connected-core` - One connected core, not two cliques (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
@@ -199,20 +575,58 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1usf49f/what_am_i_supposed_to_do_when_enemy_supports_are/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wck8j1/who_are_the_heroes_in_each_role_that_are_the_most/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1ujg1s8/got_to_gm_as_a_flex_dps_main_mostly_anran_my_tips/
+- `one-long-gun` - One long gun (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/Overwatch/comments/1w8a38j/overwatchs_most_impressive_feature_might_be_that/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1mwkecz/a_grandmasters_overly_detailed_echo_guide/
+- `one-real-healer` - Seat one real healer (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wd2f17/curious_which_supports_have_the_highest_healing/
+- `one-shots-hunt-squishies` - One-shots hunt squishies (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1ssvxq9/top_500_sojourn_positioning_in_a_double_ball_lobby/
+- `out-ult-their-ults` - Out-ult their ultimates (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+- `outdamage-heavy-heal-line` - Outdamage a heavy heal line (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
 - `outdamage-their-floor` - Outdamage their floor (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+- `outlast-heavy-floor` - Outlast a heavy floor (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/cutjkt/psa_death_blossom_does_more_damage_to_barriers/
 - `outlast-their-damage` - Outlast their damage (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1usf49f/what_am_i_supposed_to_do_when_enemy_supports_are/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1r6fqwu/it_is_never_a_heal_diff_but_it_is_a_support_gap/
+- `outmanoeuvre-a-static-red` - Outmanoeuvre a static red (constraint). applies on 2/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1ukr2uk/how_pro_mei_players_actually_use_ice_wall/
+- `outpool-the-enemy` - Outpool the enemy (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+- `outrange-the-brawl` - Outrange the brawl (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1qe83r5/reached_gm_mostly_onetricking_moira_here_are_the/
 - `outrange-them` - Outrange them (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+- `outreach-their-brawler` - Outreach their brawler (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1r40x7r/noobs_guide_to_ranking_up/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `outside-beam-reach` - Stay out of beam reach (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tkb0a3/tank_genuinely_how_do_you_counter_lazer_heros/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/7xaq6l/dear_moira_youre_great_superbly_designed_and_well/
 - `outsustain-the-enemy` - Outsustain them in long fights (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
+- `overhealth-answers-one-shots` - Overhealth answers one-shots (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
 - `overhealth-blunts-burst` - Overhealth blunts the burst (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
+- `pairs-must-survive-bans` - Documented pairs must survive the bans (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1vcs69k/thoughts_on_the_absence_of_the_prevalent/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
 - `peak-single-save` - Carry one big burst heal (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
@@ -236,17 +650,44 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1weutpi/so_with_vendetta_apparently_coming_back_into_the/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1tmv9w3/korean_tank_players_creating_a_literal_tank_union/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1vlioxa/does_performance_impact_your_rating/
+- `poke-beats-brawl` - Poke beats brawl (constraint). applies on 1/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
+- `poke-boosts-its-damage` - Poke amplifies its damage (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+- `poke-gives-ground` - Poke needs an exit (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
 - `poke-holds-behind-barriers` - Poke holds ground behind barriers (heuristic). applies on 1/6 boards, spreads on 1.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
 - `poke-needs-reach` - Poke needs reach (heuristic). applies on 1/6 boards, spreads on 1.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+- `poke-no-short-pick` - Poke carries no short pick (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
+- `poke-shoots-hitscan` - Poke shoots hitscan (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
+- `poke-wants-one-shot` - Poke wants a one-shot (heuristic). applies on 1/6 boards, spreads on 1.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1usf49f/what_am_i_supposed_to_do_when_enemy_supports_are/
 - `popular-here-losing-here` - Popular here and losing here (constraint). applies on 0/6 boards, spreads on 0.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+- `popular-here-winning-here` - Popular here and winning here (constraint). applies on 5/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+- `popular-winners-are-meta` - Popular winners are the meta (constraint). applies on 5/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wck8j1/who_are_the_heroes_in_each_role_that_are_the_most/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
+- `press-thin-heal-lines` - Press a thin heal line (constraint). applies on 2/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `projectiles-hit-big-bodies` - Projectiles land on big bodies (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1r40x7r/noobs_guide_to_ranking_up/
 - `queue-allows-two-tanks` - the queue's shape, written from the corpus (constraint).
   - https://www.reddit.com/r/Overwatch/comments/1t4f5on/korean_server_tank_players_dont_even_bother/
-- `raise-the-weakest-pool` - Raise the weakest pool (constraint). applies on 5/6 boards, spreads on 0.
+- `raise-the-weakest-pool` - Raise the weakest pool (constraint). applies on 6/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
 - `rank-swing-is-noise` - A rank-swinging rate is noise (heuristic). applies on 6/6 boards, spreads on 6.
@@ -254,11 +695,47 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1sokein/what_do_i_do_against_a_good_doomfist_player_as_a/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+- `reach-the-flier` - Reach the flier (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+- `red-overcommits-on-one` - Red overcommits on one pick (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1qe83r5/reached_gm_mostly_onetricking_moira_here_are_the/
+- `red-plays-the-map` - Match red on the map (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1u9mxr2/ive_identified_10_recurring_situations_in_my_low/
+- `saves-against-heavy-damage` - Big saves against heavy damage (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9vje7/how_do_you_counter_bastion_and_torb_in_super/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
+- `saves-against-loaded-ults` - Saves against loaded ultimates (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+- `saves-answer-many-ults` - Big saves answer many ultimates (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4gaz2/what_to_do_against_guaranteed_death_ults_during/
+- `saves-cycle-against-bait` - Two saves outlast the bait (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w90zka/working_on_a_tank_guide_what_are_some_general/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jbk577/is_dva_actually_not_a_dive_tank/
+- `saves-outlast-fast-tempo` - Saves outlast a faster tempo (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/vcjrk7/where_did_the_dallas_fuel_go_wrong_analysis/
 - `saves-outpace-burst` - Saves must outpace their burst (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `self-heal-effective-hp` - Self-heal is effective HP (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/yc8i2n/supports_are_you_struggling_to_stay_alive_in_ow2/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1qe83r5/reached_gm_mostly_onetricking_moira_here_are_the/
+- `self-sufficient-under-dive` - Self-sufficient under a dive (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1u9mxr2/ive_identified_10_recurring_situations_in_my_low/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1vocppi/what_dmon_is_good_at/
+- `shield-points-regrow` - Shield points regrow (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1un09jk/some_heroes_like_juno_or_domina_have_a_large/
 - `shields-recharge-themselves` - Shields recharge themselves (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1un09jk/some_heroes_like_juno_or_domina_have_a_large/
+- `shields-shrug-off-chip` - Shields shrug off chip (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1un09jk/some_heroes_like_juno_or_domina_have_a_large/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
 - `short-reach-fails-poke` - Short reach fails on poke maps (heuristic). applies on 1/6 boards, spreads on 1.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
@@ -268,6 +745,14 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+- `sniper-must-be-answered` - A sniper must be answered (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/cvgyni/double_shield_is_not_the_problem_but_rather_a/
+- `snipers-want-a-barrier` - Snipers want a barrier (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/cvgyni/double_shield_is_not_the_problem_but_rather_a/
 - `solo-heal-cannot-hold` - One support cannot hold a six (constraint). applies on 0/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
@@ -275,36 +760,152 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
+- `solo-heal-lifelines` - A solo healer needs lifelines (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/d4poqw/i_have_way_more_sympathy_for_dps_players_with/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
+- `solo-heal-main-healer` - Solo healer, main healer (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/d4poqw/i_have_way_more_sympathy_for_dps_players_with/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
+- `solo-healer-needs-escape` - A solo healer needs an escape (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+- `solo-tank-backline-peels` - A solo tank's backline peels itself (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w45p4i/is_it_true_that_supports_shouldnt_need_or_expect/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/yc8i2n/supports_are_you_struggling_to_stay_alive_in_ow2/
+- `solo-tank-cannot-dive` - A solo tank cannot dive (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Overwatch/comments/1t4f5on/korean_server_tank_players_dont_even_bother/
+- `solo-tank-needs-armor` - A solo tank needs armor (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wck8j1/who_are_the_heroes_in_each_role_that_are_the_most/
+- `solo-tank-solo-heal` - Solo tank plus solo heal throws (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+- `splash-answers-tight-core` - Splash answers a tight core (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
+- `splash-over-barriers` - Splash over the barriers (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1mwkecz/a_grandmasters_overly_detailed_echo_guide/
 - `stacked-counters-swap` - Stacked counters force a swap (constraint). applies on 6/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+- `stages-want-both-reaches` - Stages ask for both reaches (constraint). applies on 2/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/j3enem/reinhardt_a_comprehensive_indepth_guide_from/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
+- `stall-tools-contest-point` - Stall tools contest the point (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1u6tb1m/played_comp_for_the_first_time_in_a_couple_years/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4gaz2/what_to_do_against_guaranteed_death_ults_during/
+- `strength-outlasts-counters` - Raw strength outlasts counters (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tj5z04/one_tricking_is_the_fastest_way_to_get_better_in/
 - `sturdy-third-damage` - Third damage picks must be sturdy (heuristic). applies on 0/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
 - `support-duo-must-heal` - Two supports must heal between them (constraint). applies on 0/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `support-heavy-needs-uptime` - A support-heavy six needs uptime (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+- `supports-heal-in-chunks` - Supports must heal in chunks (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wd2f17/curious_which_supports_have_the_highest_healing/
+- `supports-pair-against-dive` - Supports work together against dive (heuristic). applies on 4/6 boards, spreads on 4.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1w2bqyb/thoughts_on_japanese_and_na_servers_from_koreas/
 - `survive-map-bans` - Survive this map's ban screen (heuristic). applies on 5/6 boards, spreads on 5.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w4iezj/does_hazard_have_a_hard_counter/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1usf49f/what_am_i_supposed_to_do_when_enemy_supports_are/
-- `survive-their-spike` - Survive their high-tempo spike (heuristic). applies on 3/6 boards, spreads on 3.
+- `survive-their-spike` - Survive their high-tempo spike (heuristic). applies on 4/6 boards, spreads on 4.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/vcjrk7/where_did_the_dallas_fuel_go_wrong_analysis/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
 - `sustained-healing-floor` - Bring sustained healing (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
-- `synergy-decides-between-fits` - Synergy decides between fits (constraint). applies on 5/6 boards, spreads on 0.
+- `sustained-pressure-baits-saves` - Sustained pressure baits the saves (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w90zka/working_on_a_tank_guide_what_are_some_general/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/yc8i2n/supports_are_you_struggling_to_stay_alive_in_ow2/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vrjua5/how_do_you_actually_kill_the_supports/
+- `symmetrical-leave-deployables` - Symmetrical modes leave deployables behind (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/Overwatch/comments/1t4f5on/korean_server_tank_players_dont_even_bother/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
+- `symmetrical-race-centre` - Symmetrical modes race to the centre (constraint). applies on 2/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/v1r3si/understanding_owl_metagames_analysis/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tj5z04/one_tricking_is_the_fastest_way_to_get_better_in/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1rtseib/to_my_fellow_flanker_dps_heres_something_i/
+- `synergy-decides-between-fits` - Synergy decides between fits (constraint). applies on 4/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+- `synergy-that-answers` - Synergy that also answers (constraint). applies on 6/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1vcs69k/thoughts_on_the_absence_of_the_prevalent/
+- `tank-answer-needs-second` - A tank answer needs a second (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1whed0u/as_a_tank_what_should_i_do_vs_mauga_swap_when_my/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4iezj/does_hazard_have_a_hard_counter/
+- `teamwork-answers-uncounterable` - Teamwork answers the uncounterable (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w4iezj/does_hazard_have_a_hard_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdivt5/how_to_counter_bastion_torbjorn_mauga_in_low_elo/
+- `thin-line-self-heals` - Self-heals cover a thin line (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/yc8i2n/supports_are_you_struggling_to_stay_alive_in_ow2/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wgyiqp/as_a_tank_what_should_you_do_if_you_are_about_to/
 - `thin-map-sample-noise` - A thin map sample is noise (constraint). applies on 0/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1wdbiw9/how_much_can_you_really_influence_the_outcome_of/
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
-- `three-supports-must-shoot` - Three supports must still shoot (heuristic). applies on 0/6 boards, spreads on 0.
+- `thin-map-trust-ladder` - Thin map sample, trust the ladder (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wdbiw9/how_much_can_you_really_influence_the_outcome_of/
+- `third-healer-overheals` - A third heavy healer overheals (constraint). applies on 1/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+- `three-damage-both-tanks` - Three damage need both tanks (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
+- `three-damage-three-jobs` - Three damage picks, three jobs (heuristic). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wck8j1/who_are_the_heroes_in_each_role_that_are_the_most/
+- `three-supports-both-tanks` - Three supports need both tanks (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/10pwudc/guide_to_competitive_ctf/
+- `three-supports-cannot-attack` - Three supports cannot break a hold (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
+- `three-supports-must-shoot` - Three supports must still shoot (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+- `three-supports-three-flavours` - Three supports, three flavours (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1v8u51x/when_i_offangle_on_support_my_teammates_just_die/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wck8j1/who_are_the_heroes_in_each_role_that_are_the_most/
 - `two-answers-each` - Answer their key picks twice (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1uweo7e/mauga_counter/
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+- `two-barriers-at-most` - Two barriers at most (constraint). applies on 6/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/d4poqw/i_have_way_more_sympathy_for_dps_players_with/
+- `two-counters-playable` - Two counters playable, three not (constraint). applies on 6/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tj5z04/one_tricking_is_the_fastest_way_to_get_better_in/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/naye5a/how_to_play_winston/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/ghwczr/if_your_healers_pumped_everything_they_had_into/
 - `two-damage-minimum` - Field two damage picks (constraint). applies on 6/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
 - `two-light-healers-lose` - Two light healers lose fights (constraint). applies on 6/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+- `two-off-map-picks` - Two off-map picks, wrong comp (constraint). applies on 0/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1tj5z04/one_tricking_is_the_fastest_way_to_get_better_in/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+- `two-supports-hold` - Two supports hold a six (constraint). applies on 6/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/d4poqw/i_have_way_more_sympathy_for_dps_players_with/
+- `two-swingers-no-rate` - Two rank swingers, no rate (constraint). applies on 4/6 boards, spreads on 0.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1v2khtv/why_does_zen_have_such_a_high_win_rate/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/1wdhogb/calculating_the_map_synergy_of_every_overwatch/
+- `two-tanks-need-heals` - Two tanks need real heals (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/12nh0zj/the_complete_overwatch_hero_guide_75000_words/
+- `two-tanks-need-partners` - Two tanks need documented partners (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/naye5a/how_to_play_winston/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
+- `two-tanks-two-batteries` - Two tanks are two batteries (heuristic). applies on 5/6 boards, spreads on 5.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w888wc/is_it_a_bad_idea_to_shoot_the_tank_the_entire_game/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+- `two-tanks-two-jobs` - A main tank and an off-tank (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
+- `two-tanks-two-targets` - Two tanks are two counter targets (heuristic). applies on 6/6 boards, spreads on 6.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1vurhgt/new_player_here_do_tanks_get_blamed_regardless/
 - `two-tanks-up-front` - Two tanks hold the front (constraint). applies on 6/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
@@ -312,13 +913,26 @@ before it was chosen. The catalog itself is `docs/inference.md`.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1t4f5on/korean_server_tank_players_dont_even_bother/
 - `two-two-two-baseline` - Two per role is the baseline (heuristic). applies on 5/6 boards, spreads on 5.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+- `ultimates-beat-heavy-healing` - Ultimates beat heavy healing (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1wd2f17/curious_which_supports_have_the_highest_healing/
 - `ultimates-win-fights` - Damage ultimates win fights (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1jge0s5/a_detailed_guide_on_how_to_think_through_which/
+- `ults-clear-fat-red` - Ultimates clear a fat red (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/cutjkt/psa_death_blossom_does_more_damage_to_barriers/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
 - `unanswered-enemy-costs` - Every unanswered enemy costs (constraint). applies on 6/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
 - `unexposed-picks` - Field picks they cannot answer (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
+- `vertical-maps-reward-fliers` - Vertical maps reward fliers (heuristic). applies on 2/6 boards, spreads on 2.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w5v9nd/what_3_dps_and_3_tanks_would_you_choose_and_why/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1mwkecz/a_grandmasters_overly_detailed_echo_guide/
+- `walls-split-a-brawl` - Walls split a brawl (heuristic). applies on 3/6 boards, spreads on 3.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1ukr2uk/how_pro_mei_players_actually_use_ice_wall/
+  - https://www.reddit.com/r/Competitiveoverwatch/comments/vcjrk7/where_did_the_dallas_fuel_go_wrong_analysis/
 - `win-on-this-ground` - Win on this ground (heuristic). applies on 5/6 boards, spreads on 5.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w90zka/working_on_a_tank_guide_what_are_some_general/

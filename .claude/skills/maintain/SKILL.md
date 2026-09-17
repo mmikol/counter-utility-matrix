@@ -169,6 +169,21 @@ is a lesson the next run relearns.
   `SimpleNamespace` stand-ins for a `Result`; the production path carried
   the tests' convenience. Now: a test builds the real object (`Result`,
   `Strategy`) and the code reads attributes plainly.
+- **Green locally, dead in the container.** A playbook of 300 rules
+  solved fine on the host and returned 502 from the stack: the solver
+  kept a namespace, 244 raw values and a 300-line breakdown for each of
+  13,000 candidates, 1.8 GB at peak, over the inference container's
+  1 GiB. Now: the solver scores candidates slim and hydrates only the
+  winners (150 MB), `orchestrator.py up` solves one board through the
+  service before it says READY, and a change that scales with the
+  playbook's size is tried in the stack, not only on the host.
+- **A fact worded by set order.** The style profile fact listed tied
+  styles in whatever order the tag set iterated, which differs by
+  process hash seed, so the parallel board and the sequential one
+  disagreed on a fact's text - unseen until three hundred rules cited
+  it. Now: every fact that lists names sorts ties by name, and the
+  parity test (`test_the_board_splits_its_solves...`) is the check that
+  the two paths agree byte for byte.
 - **The container is small and read-only.** A pool of 8 with no locks
   needs more than the data container's 1 GiB, and coverage cannot write
   `/app/.coverage`. Now: tests solve at the default pool, and the image

@@ -134,15 +134,19 @@ counters table is a list).
 
 ## Done
 
-- **The community's hundred rules in the playbook** - `community-playbook`
+- **Three hundred community rules are the playbook** - `community-playbook`
   branch. Mined from reddit (r/OverwatchUniversity, r/Competitiveoverwatch,
-  r/Overwatch: the top threads' comments and the archive's search) by five
-  analysts in parallel, standardized, deduplicated, stored through the
-  validated add, board-checked (every rule acts on the solver's sample),
-  a source per rule in `inference/strategies/README.md`; built as an
-  experiment, then moved into `inference/strategies/` on the user's word.
-  A board now solves in about 4 seconds instead of 1.5 - the memoization
-  item below is the way back.
+  r/Overwatch: 172 threads and 11,800 comments through the feeds and the
+  archive's search) by twelve analysts over two passes, standardized,
+  deduplicated by mathematics, stored through the validated add,
+  checked on six boards and their reference samples (every rule acts), a
+  source per rule in `inference/strategies/README.md`. The user's five
+  hand-built rules were removed on their word; the queue's two-tank cap
+  returned as a quoted rule. Under 300 rules a board peaked at 1.8 GB and
+  died in its 1 GiB container: the solver now scores every candidate
+  slim (score and tie-break only) and hydrates the winners' breakdowns,
+  so a board peaks at 150 MB and solves in about 5 seconds instead of
+  1.5 - the memoization item below is the rest of the way back.
 - **Maintenance, end to end** - `maintain` branch. Five parallel passes
   (the three layers, the docs and skills, the root and infrastructure):
   dead code, dead styling and stale comments out, the docs shorter and

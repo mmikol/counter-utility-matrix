@@ -213,3 +213,23 @@ def test_mcp_posts_a_tool_call_and_reads_the_text(monkeypatch):
     assert orchestrator.mcp("db_status", {"a": 1}) == "hello"
     assert seen["body"]["params"] == {"name": "db_status", "arguments": {"a": 1}}
     assert seen["auth"] == "Bearer t0k"
+
+
+def test_readiness_solves_one_board_through_the_service(monkeypatch):
+    """The probe is what tells a playbook too big for the container from one
+    that fits: a six back means ready, anything else means not."""
+    calls = []
+    six = {"blue": {"blue": ["D.Va", "Winston", "Cassidy", "Genji", "Ana", "Brigitte"]}}
+    monkeypatch.setattr(orchestrator, "get_json", lambda url, timeout=10: calls.append(url) or six)
+    probe = orchestrator.probe()
+    assert probe["picks"] == six["blue"]["blue"] and probe["seconds"] >= 0
+    assert calls == [orchestrator.PROBE]
+    monkeypatch.setattr(orchestrator, "get_json", lambda url, timeout=10: {"error": "died"})
+    assert orchestrator.probe() is None
+    inf = {"status": "ok", "strategies": 300, "heroes": 54}
+    served = {"data": {"status": "ok", "tables": 36, "heroes": 54}, "inference": inf,
+              "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
+    ok, lines = orchestrator.verdict(dict(served, board={"seconds": 2.4, "picks": six}))
+    assert ok and any(line.endswith("a board in 2.4s") for line in lines)
+    ok, lines = orchestrator.verdict(dict(served, board=None))
+    assert not ok and any("a board did not solve" in line for line in lines)
