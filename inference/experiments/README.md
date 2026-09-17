@@ -24,12 +24,10 @@ ties at zero, the board reads *unscored* wherever a share of the best would
 go, and the "optimal" is the solver's tie-break (mean map win rate, then
 names). One heuristic or scored constraint is what makes it score.
 
-`inference/strategies/` is the playbook, built one rule at a time on the
-user's word. One experiment ships beside it: `community/`, the five live
-rules plus one hundred the Overwatch community states again and again on
-reddit, each standardized and given its metric (its README lists every
-source; nothing in it runs until `.env` names it). The 38-rule playbook
-the live one replaced lives on, nineteen of its rules, as the tests'
-reference at `tests/fixtures/playbook/` - every kind and every form, to
-prove the solver against - and is a ready starting point for another
+No experiment ships. `inference/strategies/` is the playbook: the user's
+own rules, built one at a time, and the hundred the Overwatch community
+states again and again on reddit (its README lists a source per rule).
+The 38-rule playbook it replaced lives on, nineteen of its rules, as the
+tests' reference at `tests/fixtures/playbook/` - every kind and every
+form, to prove the solver against - and is a ready starting point for an
 experiment: copy the files you want into a folder here and name it.

@@ -1,14 +1,14 @@
-# The community playbook
+# The playbook's sources
 
-One hundred rules the Overwatch community states again and again - on
-r/OverwatchUniversity, r/Competitiveoverwatch and r/Overwatch - each
+`inference/strategies/` holds the user's own rules - the two shape limits,
+two heuristics and one assumption built one at a time - and one hundred
+rules the Overwatch community states again and again on
+r/OverwatchUniversity, r/Competitiveoverwatch and r/Overwatch, each
 standardized into the playbook's form and given the one metric that
-measures it. An experiment: the stack runs on it when `.env` says
-`COUNTER_MATRIX_STRATEGIES=inference/experiments/community` and the
-stack is recreated; `inference/strategies/` stays the playbook until then.
-
-Every file was stored through the tune module's validated add and is
-logged in this folder's tuning-log.md. Sources per strategy:
+measures it. Every file was stored through the tune module's validated
+add and is logged in tuning-log.md; "applies" and "spreads" below are the
+six-board check made before the hundred were chosen. The catalog itself
+is `docs/inference.md`. Sources per strategy:
 
 - `amplified-healing` - Amplified healing saves more (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/

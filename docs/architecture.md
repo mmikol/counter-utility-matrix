@@ -27,7 +27,7 @@ never during one.
 | `db/` | **DATA LAYER** - pulls every source, cleans it, stores it; the MCP server that is the one door to everything; the schema, its migrations and the embedded cluster | [db.md](db.md) |
 | `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet | [ui.md](ui.md) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints, heuristics and assumptions in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
-| `tests/` | one folder per layer (`tests/db`, `tests/ui`, `tests/inference`) and `tests/fixtures/playbook/`: nineteen of the former shipped rules, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the user's own rules. `pytest -q` runs them, skipping what needs a built database when there is none | |
+| `tests/` | one folder per layer (`tests/db`, `tests/ui`, `tests/inference`) and `tests/fixtures/playbook/`: nineteen of the former shipped rules, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the user's own rules and the community's hundred. `pytest -q` runs them, skipping what needs a built database when there is none | |
 | `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain` | [skills.md](skills.md) |
 | `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
 | `.github/workflows/` | `ci.yml`: lint and the tests that need no built database, on pushes to `main` and on pull requests | |
