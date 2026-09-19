@@ -570,7 +570,7 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
 
 
 @tool("reach", "Can the playbook ever pick this hero? A board that suits it - one of"
-      " its maps, a red it answers, up to two bans of the rivals holding its seat - on"
+      " its maps, a red it answers, the match's bans spent on the rivals holding its seat - on"
       " which it is in the optimal six; with none, the closest it came. A hero that"
       " cannot be reached is one the facts or the strategies cannot see.",
       {"hero": {"type": "string", "description": "a released hero (any spelling)"}},
@@ -587,7 +587,7 @@ def reach_tool(ctx, hero):
     where = "%s%s against %s" % (found["map"], " " + found["side"] if found["side"] else "",
                                  ", ".join(found["red"]) or "the likely six")
     if found["bans"] is None:
-        return ("%s is never the optimal pick within two bans; closest on %s, %.2f behind"
+        return ("%s is never the optimal pick, even with every ban; closest on %s, %.2f behind"
                 % (found["hero"], where, found["gap"])), found
     return ("%s is optimal on %s%s: %s" % (
         found["hero"], where,

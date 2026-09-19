@@ -2,8 +2,8 @@
 
 The playbook may make a hero rare; it may not make one impossible. For a hero this finds
 a board that suits it - one of its maps, a red it answers, a side - on which it is in the
-optimal six, banning up to MAX_BANS of the rivals that hold its seat where it must, as a
-match's bans would. A hero with no such board is one the facts or the strategies cannot
+optimal six, banning the rivals that hold its seat where it must, up to the five bans a
+match has. A hero with no such board is one the facts or the strategies cannot
 see: a wrong number, a tool no metric reads, a rule that charges it for what it is not.
 
     maps   the four its map rates lift it most on, and the listed ones the rates do not
@@ -16,8 +16,8 @@ from inference import engine
 from ui.facts import compute
 
 MAPS = 4
-MAX_BANS = 2
-CLOSEST = 3                       # boards the ban search starts from
+MAX_BANS = compute.MAX_BANS       # a match bans up to five; a rival banned is a real board
+CLOSEST = 5                       # boards the ban search starts from
 CONTRADICTED = -1.0               # a listed map this far under the hero's own rate is not its map
 
 
