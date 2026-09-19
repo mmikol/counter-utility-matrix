@@ -65,6 +65,12 @@ keeps it current.
   candidate and is ~41% of a sequential board. A per-world term table
   measured 3x on the function, ~5% on a board. Cost: a day; risk: none to
   the answer if the memo is keyed on the hero and the map.
+- **Kit numbers the wiki publishes unevenly.** Widowmaker's scoped shot
+  is not her burst, Lifeweaver's healing rate came from a tick, Orisa
+  publishes no falloff, Winston's alt fire reads as hitscan, anti-heal
+  is a count of two heroes. `ui/facts/model.py` now keeps ultimates out
+  of burst, healing and reach; the rest needs a per-weapon pass against
+  the game. Cost: two days.
 - **Shard the local search by seed.** The countered case's refine is the
   last serial block (~0.12 s). The result set holds; the reported
   `considered` count depends on seed order and would change.

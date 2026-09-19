@@ -4,6 +4,7 @@ kind: constraint
 category: matchup
 when: enemy.size >= 1
 penalty: max(0, team.exposure_edges - params.TOLERATED * team.exposed_count) * 0.75
+weight: 0.5
 params:
   TOLERATED: 2
 ---

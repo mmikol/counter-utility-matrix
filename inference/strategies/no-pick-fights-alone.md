@@ -4,7 +4,7 @@ kind: heuristic
 category: synergy
 metric: team.isolated_count
 direction: minimize
-weight: 1
+weight: 0.5
 ---
 
 # No pick fights alone

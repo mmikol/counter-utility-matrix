@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: matchup.burst_vs_heal
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.heal_peak_max >= 250
 ---
 # Burst over their big save

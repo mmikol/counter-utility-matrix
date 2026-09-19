@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.antiheal
 direction: maximize
-weight: 1
+weight: 0.25
 when: enemy.lifelines >= 5
 ---
 # Anti-heal turns off self-sustain

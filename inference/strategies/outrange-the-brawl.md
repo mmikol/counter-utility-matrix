@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.range_median
 direction: maximize
-weight: 1.5
+weight: 0.75
 when: matchup.style_lean_red == 'brawl'
 ---
 

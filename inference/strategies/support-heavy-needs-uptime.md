@@ -4,7 +4,7 @@ kind: heuristic
 category: tempo
 metric: team.cooldown_median
 direction: minimize
-weight: 1
+weight: 0.75
 when: team.supports >= 3
 ---
 

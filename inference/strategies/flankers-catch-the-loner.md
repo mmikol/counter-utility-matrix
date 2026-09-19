@@ -4,7 +4,7 @@ kind: heuristic
 category: synergy
 metric: team.isolated_count
 direction: minimize
-weight: 0.75
+weight: 0.25
 when: matchup.dive_pressure >= 4
 ---
 # Flankers catch the pick fighting alone

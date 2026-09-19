@@ -4,7 +4,7 @@ kind: heuristic
 category: synergy
 metric: team.core_size
 direction: maximize
-weight: 1
+weight: 0.25
 when: enemy.core_size >= 4
 ---
 # A core answers a core

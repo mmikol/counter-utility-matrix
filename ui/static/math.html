@@ -42,12 +42,16 @@ Deterministic: the same board gives the same six.</p>
 own numbers.</p>
 <p>A hard limit that fails removes the six; a soft one subtracts its penalty. A heuristic
 normalises its metric to 0..1 against 1,200 random legal sixes for the board (seeded from map,
-side, enemies and bans), flips it when minimising, and multiplies by its weight. A scored
+side, enemies and bans), flips it when minimising, and multiplies by its weight. A heuristic
+guarded on the six's own state (<code>team.*</code>, or a <code>matchup.*</code> blue decides) is
+a <i>need</i>: met in full it costs nothing, unmet it costs its weight, so entering the guarded
+state never pays. Needs on one guard cost 2 together at most. A scored
 constraint adds bonus minus penalty while its <code>when</code> holds. An assumption adds
 nothing.</p>
 <pre class='eq'>for one six x, with every hard limit holding:
 
 score(x) = &Sigma; heuristics h     w_h &middot; norm_h( metric_h(x) )
+         + &Sigma; needs n          w_n &middot; ( norm_n( metric_n(x) ) &minus; 1 )
          + &Sigma; scored r         w_r &middot; ( bonus_r(x) &minus; penalty_r(x) )
          &minus; &Sigma; soft limits l    penalty_l(x)
 

@@ -4,6 +4,7 @@ kind: constraint
 category: meta
 when: team.availability < params.COINFLIP
 penalty: 1.5
+weight: 0.7
 params:
   COINFLIP: 0.5
 ---

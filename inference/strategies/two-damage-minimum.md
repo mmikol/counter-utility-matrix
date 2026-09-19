@@ -4,6 +4,7 @@ kind: constraint
 category: shape
 when: team.size >= 4
 penalty: max(0, params.MIN_DAMAGE - team.damage) * 1.5
+weight: 0.8
 params:
   MIN_DAMAGE: 2
 ---

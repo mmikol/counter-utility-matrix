@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: matchup.chew_time_ours
 direction: minimize
-weight: 1
+weight: 0.5
 when: enemy.invuln >= 2
 ---
 

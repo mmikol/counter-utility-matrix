@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.cleanse
 direction: maximize
-weight: 0.75
+weight: 0.25
 when: matchup.ult_threat >= 1000
 ---
 # Cleanse a loaded ultimate bar

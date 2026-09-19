@@ -4,7 +4,7 @@ kind: heuristic
 category: tempo
 metric: team.ult_cost_mean
 direction: minimize
-weight: 0.75
+weight: 0.25
 when: matchup.barrier_need >= 1200
 ---
 # Cheap ultimates crack bunkers

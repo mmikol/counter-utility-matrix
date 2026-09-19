@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.cleanse
 direction: maximize
-weight: 0.75
+weight: 0.25
 when: team.exposure_edges >= 8
 ---
 # Cleanse the counter's tool

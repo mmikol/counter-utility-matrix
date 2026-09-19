@@ -4,7 +4,7 @@ kind: heuristic
 category: synergy
 metric: team.synergy_score
 direction: maximize
-weight: 1.5
+weight: 1
 ---
 
 # Play documented partners

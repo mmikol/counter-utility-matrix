@@ -4,6 +4,7 @@ kind: constraint
 category: matchup
 when: enemy.size >= 1
 penalty: max(0, enemy.size - team.coverage) * 0.5
+weight: 0.8
 ---
 
 # Every unanswered enemy costs

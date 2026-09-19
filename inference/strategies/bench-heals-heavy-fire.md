@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.heal_ratio
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.dps_floor >= 900
 ---
 # Bench healing into heavy fire

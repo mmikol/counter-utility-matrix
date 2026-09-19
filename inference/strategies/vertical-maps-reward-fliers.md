@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.flyers
 direction: maximize
-weight: 0.75
+weight: 0.25
 when: map.style_top == 'dive'
 ---
 

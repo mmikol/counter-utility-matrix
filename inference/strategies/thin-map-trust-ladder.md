@@ -4,7 +4,7 @@ kind: heuristic
 category: uncertainty
 metric: team.win_mean
 direction: maximize
-weight: 1
+weight: 0.5
 when: map.known == 1 and team.map_pick_mass < 30
 ---
 

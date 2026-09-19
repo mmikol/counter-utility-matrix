@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.dps_floor
 direction: maximize
-weight: 1
+weight: 0.5
 when: matchup.barrier_need >= 1200
 ---
 # Break a heavy barrier line

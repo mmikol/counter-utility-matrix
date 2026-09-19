@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.range_max
 direction: maximize
-weight: 0.75
+weight: 0.25
 when: map.mode == 'Escort'
 ---
 # Escort lanes reward the longest gun

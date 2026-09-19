@@ -4,7 +4,7 @@ kind: heuristic
 category: side
 metric: team.coverage
 direction: maximize
-weight: 1
+weight: 0.5
 when: map.side == 'attack'
 ---
 # Attackers bring the answers

@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.heal_peak_max
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.burst_max >= 500
 ---
 # Big saves for big hits

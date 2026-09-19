@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.burst_max
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.armor_total >= 300
 ---
 # Big hits beat armor

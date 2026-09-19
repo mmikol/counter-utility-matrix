@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.antiheal
 direction: maximize
-weight: 1.5
+weight: 0.5
 when: matchup.antiheal_need >= world.heal_bench * 1.25
 ---
 # Anti-heal a heavy heal line

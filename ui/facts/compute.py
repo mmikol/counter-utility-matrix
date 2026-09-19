@@ -432,6 +432,18 @@ def _largest_component(adjacency):
     return best
 
 
+def red_matchup(red_t):
+    """The matchup metrics red alone decides: the same for every blue six on
+    a board."""
+    return {"dive_pressure": red_t["mobility_count"], "flyers": red_t["flyers"],
+            "barrier_need": red_t["barrier_hp"], "antiheal_need": red_t["heal_peak_supports"],
+            "ult_threat": red_t["ult_damage_total"], "style_lean_red": red_t["style_lean"]}
+
+
+RED_MATCHUP = frozenset("matchup." + key for key in (
+    "dive_pressure", "flyers", "barrier_need", "antiheal_need", "ult_threat", "style_lean_red"))
+
+
 def matchup_metrics(blue_t, red_t):
     """MATCHUP_METRICS from blue's seat, given both teams' metrics."""
     x = {}
@@ -451,13 +463,8 @@ def matchup_metrics(blue_t, red_t):
     x["exposure_share"] = (blue_t["exposed_count"] / blue_t["size"]
                            if blue_t["size"] else 0.0)
     x["double_covered"] = blue_t["double_covered"]
-    x["dive_pressure"] = red_t["mobility_count"]
-    x["flyers"] = red_t["flyers"]
-    x["barrier_need"] = red_t["barrier_hp"]
-    x["antiheal_need"] = red_t["heal_peak_supports"]
-    x["ult_threat"] = red_t["ult_damage_total"]
+    x.update(red_matchup(red_t))
     x["ult_answers"] = blue_t["invuln"] + blue_t["cleanse"]
-    x["style_lean_red"] = red_t["style_lean"]
     x["style_lean_blue"] = blue_t["style_lean"]
     return x
 

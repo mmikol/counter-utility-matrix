@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.cleanse
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.cc_count >= 3
 ---
 # Cleanse a crowd-control-heavy red

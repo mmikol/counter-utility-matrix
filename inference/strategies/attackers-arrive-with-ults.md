@@ -4,7 +4,7 @@ kind: heuristic
 category: side
 metric: team.ult_damage_total
 direction: maximize
-weight: 1
+weight: 0.5
 when: map.side == 'attack'
 ---
 # Attackers arrive with ultimates

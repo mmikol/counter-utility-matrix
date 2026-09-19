@@ -80,6 +80,23 @@ class Kit:
         values = [s.value for s in self.stats.get(code, ()) if s.value is not None]
         return max(values) if values else None
 
+OPEN_REACH = 50.0       # metres credited to a weapon that publishes no limit
+MIN_FALLOFF = 10.0      # a "falloff range" under this is a splash radius, not a reach
+
+
+def _reach(weapon):
+    """How far a weapon fights: its published range or the end of its damage
+    falloff; a projectile that publishes neither reaches as far as it flies
+    in a second, OPEN_REACH at most; anything else with no limit, OPEN_REACH."""
+    falloff = weapon.max_stat("damage_falloff_range") or 0.0
+    published = [v for v in (weapon.max_stat("range"),
+                             falloff if falloff >= MIN_FALLOFF else None) if v]
+    if published:
+        return max(published)
+    speed = weapon.max_stat("pspeed")
+    return min(OPEN_REACH, speed) if speed else OPEN_REACH
+
+
 class Hero:
     @property
     def released(self):
@@ -116,17 +133,22 @@ class Hero:
             values = [v for v in values if v is not None]
             return max(values) if values else None
 
-        heal_values = [k.max_stat(c) for k in kits for c in ("heal", "hps")]
+        # what the hero does fight after fight: an ultimate's numbers are its
+        # own (ult_damage, the ult facts), not the hero's healing, damage or burst
+        steady = [k for k in kits if k.kind != "ultimate"]
+        heal_values = [k.max_stat(c) for k in steady for c in ("heal", "hps")]
         heal_values = [v for v in heal_values if v is not None]
         self.peak_heal = max(heal_values) if heal_values else 0.0
-        self.hps = max([s.per_second for k in kits for c in ("hps", "heal")
+        # a published healing rate over one derived from a tick ("90 per 0.3 s")
+        rates = [s.per_second for k in steady for s in k.stats.get("hps", ()) if s.per_second]
+        self.hps = max(rates or [s.per_second for k in steady for s in k.stats.get("heal", ())
+                                 if s.per_second] or [0.0])
+        self.dps = max([s.per_second for k in steady for c in ("dps", "damage")
                         for s in k.stats.get(c, ()) if s.per_second] or [0.0])
-        self.dps = max([s.per_second for k in kits for c in ("dps", "damage")
-                        for s in k.stats.get(c, ()) if s.per_second] or [0.0])
-        burst = [s.value for k in kits for s in k.stats.get("damage", ())
+        burst = [s.value for k in steady for s in k.stats.get("damage", ())
                  if s.value is not None and s.unit_den is None]
         self.burst = max(burst) if burst else 0.0
-        self.max_range = kit_max("range") or 0.0
+        self.max_range = max([r for r in map(_reach, self.weapons) if r] or [0.0])
         cds = [s.value for k in self.abilities for s in k.stats.get("cooldown", ())
                if s.value is not None]
         self.cooldowns = sorted(cds)

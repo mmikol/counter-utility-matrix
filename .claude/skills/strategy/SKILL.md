@@ -86,6 +86,13 @@ question is allowed.
      `team.squish_count minimize`. If no single metric captures it, say
      which comes closest and why, or say that no metric exists yet - that
      is a code change in `ui/facts/compute.py`, not a frontmatter trick.
+     A `when` on the six's own state (`team.*`, or a `matchup.*` key blue
+     decides) makes the heuristic a need: met it costs nothing, unmet its
+     weight, and the needs on one guard cost 2 together at most. Write it
+     for "if our six is X, it needs Y". A `when` on red or the map
+     (`enemy.*`, `map.*`, red's `matchup.*` keys) keeps it a reward. Before
+     adding a rule, read `strategies` for the ones already on its metric:
+     a trait paid by several rules wants a small weight, not another 1.
    - **constraint, limit**: a `require` that must hold ("at most two
      tanks" is `team.tanks <= 2`); `soft: true` with a numeric `penalty`
      when it should cost rather than forbid.

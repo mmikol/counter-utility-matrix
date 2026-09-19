@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.range_median
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.range_max <= 60 and enemy.size >= 5
 ---
 # Kite a short-range comp

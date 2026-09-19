@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.melee
 direction: minimize
-weight: 1
+weight: 0.5
 when: map.style_top == 'dive'
 ---
 # High ground strands melee

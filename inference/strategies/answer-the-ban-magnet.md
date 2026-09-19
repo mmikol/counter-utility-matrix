@@ -4,7 +4,7 @@ kind: heuristic
 category: meta
 metric: team.coverage
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.max_ban_rate >= 30
 ---
 # Answer the must-ban that slipped through

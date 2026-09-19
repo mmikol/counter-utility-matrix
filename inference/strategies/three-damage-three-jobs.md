@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.subrole_diversity
 direction: maximize
-weight: 1
+weight: 0.75
 when: team.damage >= 3
 ---
 

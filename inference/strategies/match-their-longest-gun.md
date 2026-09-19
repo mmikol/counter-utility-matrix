@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.range_max
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.range_max >= 100
 ---
 

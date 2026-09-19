@@ -43,7 +43,7 @@ The share of revealed enemies at least one of our picks answers...
 
 | kind | form | frontmatter | what the solver does |
 | --- | --- | --- | --- |
-| heuristic | | `metric`, `direction`, `weight` | normalises the metric to [0, 1] against a seeded sample of legal sixes for the board (flipped for minimize) and adds `weight x norm` |
+| heuristic | | `metric`, `direction`, `weight` | normalises the metric to [0, 1] against a seeded sample of legal sixes for the board (flipped for minimize) and adds `weight x norm`; guarded on the six's own state (`team.*`, or a `matchup.*` key blue decides) it is a need and adds `weight x (norm - 1)` - met it costs nothing, unmet its weight - and the needs on one guard are scaled to cost `NEED_BUDGET` (2) together at most |
 | constraint | limit | `require: <expr>`, optionally `soft: true` + `penalty: <number>` | discards a candidate that fails (a soft one subtracts the penalty) |
 | constraint | scored | `bonus: <expr>` and/or `penalty: <expr>`, optionally `when` | adds `weight x (bonus - penalty)` while `when` holds |
 | assumption | | nothing - prose by definition | nothing: what the solver takes as given and the agent holds a comp to; shown on the board and read by the session |
@@ -174,23 +174,23 @@ Two light healers such as Lúcio and Mercy or Brigitte and Zenyatta cannot keep 
 
 ##### Barriers block the burst (`barriers-block-burst`, durability, scored)
 
-weight 1; when `matchup.heal_vs_burst < 0`; bonus `min(team.barrier_count, 2) * 0.75`
+weight 1; when `enemy.burst_max >= 350`; bonus `min(team.barrier_count, 2) * 0.75`
 
-A barrier is the one kind of sustain that stops a hit before it lands, so against hits too big to heal a comp wants something to hide behind. Reinhardt's and Sigma's barriers eat the shot, the rocket and the ultimate that no heal would have beaten. Read only while red's biggest single hit exceeds our biggest single heal, and rewarded per barrier pick, two at most.
+A barrier is the one kind of sustain that stops a hit before it lands, so against hits too big to heal a comp wants something to hide behind. Reinhardt's and Sigma's barriers eat the shot, the rocket and the ultimate that no heal would have beaten. Read only while red's biggest single hit is 350 or more, and rewarded per barrier pick, two at most.
 
 ##### Control points have edges (`control-points-have-edges`, map, scored)
 
 weight 1; when `map.mode == 'Control'`; bonus `min(team.cc_count, params.BOOP_CAP) * 0.5`
-params: BOOP_CAP=2
+params: BOOP_CAP=4
 
-Control stages are built around drops, the well on Ilios, the sanctum pit on Nepal, the edges of Lijiang Tower, and a knockback or a pull turns a full-health enemy into a kill. Roadhog hooking into the well and Lúcio booping on Lighthouse are the community's Control examples, and Orisa is named as good on maps with environmental hazards. Each pick with crowd control earns half a point on a Control map, up to 2 picks.
+Control stages are built around drops, the well on Ilios, the sanctum pit on Nepal, the edges of Lijiang Tower, and a knockback or a pull turns a full-health enemy into a kill. Roadhog hooking into the well and Lúcio booping on Lighthouse are the community's Control examples, and Orisa is named as good on maps with environmental hazards. Each pick with crowd control earns half a point on a Control map, up to 4 picks.
 
 ##### Dive maps need peel (`dive-maps-need-peel`, map, scored)
 
 weight 1; when `map.style_top == 'dive'`; bonus `min(team.cc_count + team.invuln, params.PEEL_CAP) * 0.5`
-params: PEEL_CAP=2
+params: PEEL_CAP=4
 
-On a map whose geometry lets the enemy land on the backline from above, the supports need a tool that makes the landing a mistake. The same six needs barely any peel on Circuit Royal and more than can be provided on Ilios: distance substitutes for peel on a poke map and nothing does on a dive map. Each pick with crowd control or an invulnerability earns half a point where the map rewards dive, up to 2 picks.
+On a map whose geometry lets the enemy land on the backline from above, the supports need a tool that makes the landing a mistake. The same six needs barely any peel on Circuit Royal and more than can be provided on Ilios: distance substitutes for peel on a poke map and nothing does on a dive map. Each pick with crowd control or an invulnerability earns half a point where the map rewards dive, up to 4 picks.
 
 ##### A hard choke needs a barrier (`hard-choke-needs-barrier`, map, scored)
 
@@ -223,9 +223,9 @@ A hero winning more on this map than on the ladder has something in the kit that
 ##### Popular here and losing here (`popular-here-losing-here`, map, scored)
 
 weight 1; when `map.known == 1 and team.map_win_mean < params.TRAP_WIN`; penalty `min(team.map_pick_mass / params.TRAP_MASS, 1) * 1`
-params: TRAP_MASS=90, TRAP_WIN=50
+params: TRAP_MASS=90, TRAP_WIN=48
 
-A six of heroes the map's lobby picks heavily but loses with is a six of trap picks. The map's pick rate is the crowd's belief about the map and its win rate is the result, and where the two disagree the result is the one to trust. It charges up to a point, scaled by the six's summed pick rate on the map against a dial of 90, while the mean win rate on the map is under 50.
+A six of heroes the map's lobby picks heavily but loses with is a six of trap picks. The map's pick rate is the crowd's belief about the map and its win rate is the result, and where the two disagree the result is the one to trust. It charges up to a point, scaled by the six's summed pick rate on the map against a dial of 90, while the mean win rate on the map is under 48.
 
 ##### Popular here and winning here (`popular-here-winning-here`, map, scored)
 
@@ -244,9 +244,9 @@ A Control or Flashpoint map is 3 or 5 different stages with one six for all of t
 ##### Symmetrical modes race to the centre (`symmetrical-race-centre`, map, scored)
 
 weight 1; when `map.known == 1 and map.sided == 0`; bonus `min(team.mobility_count, params.MOBILE_CAP) * 0.5`
-params: MOBILE_CAP=3
+params: MOBILE_CAP=5
 
-On Control, Push and Flashpoint both teams leave spawn at once and the first to the strong positions in the neutral centre holds them. Mobile heroes are called vital in symmetrical modes, Flashpoint is said to punish low mobility outright, and a Push flanker gets back to the team because of mobility. Each pick with a movement or evasive ability earns half a point on a symmetrical map, up to 3 picks.
+On Control, Push and Flashpoint both teams leave spawn at once and the first to the strong positions in the neutral centre holds them. Mobile heroes are called vital in symmetrical modes, Flashpoint is said to punish low mobility outright, and a Push flanker gets back to the team because of mobility. Each pick with a movement or evasive ability earns half a point on a symmetrical map, up to 5 picks.
 
 ##### Two off-map picks, wrong comp (`two-off-map-picks`, map, scored)
 
@@ -272,9 +272,9 @@ A red team whose reach is short has to walk into ours to do anything, and every 
 ##### Contest a dive red (`contest-a-dive-red`, matchup, scored)
 
 weight 1; when `matchup.dive_pressure >= 4`; penalty `max(0, enemy.size - team.coverage) * params.PER_HEAD`
-params: PER_HEAD=0.75
+params: PER_HEAD=0.4
 
-Against a red with four or more movement tools, every red pick our six cannot answer is a diver who runs the lobby. The call against a full dive is to contest their tank at the least, and a good Doomfist or Wrecking Ball is either countered or left to run over the whole lobby. Three quarters of a point is taken for every revealed red pick that no pick of ours answers, while red fields four or more movement tools.
+Against a red with four or more movement tools, every red pick our six cannot answer is a diver who runs the lobby. The call against a full dive is to contest their tank at the least, and a good Doomfist or Wrecking Ball is either countered or left to run over the whole lobby. 0.4 of a point is taken for every revealed red pick that no pick of ours answers, while red fields four or more movement tools.
 
 ##### Saves blunt a full dive (`dive-into-saves`, matchup, scored)
 
@@ -286,16 +286,16 @@ A dive six that commits into a backline holding immortality, cleanse and defensi
 ##### Dive the pocket (`dive-the-pocket`, matchup, scored)
 
 weight 1; when `enemy.dmg_amp >= 2`; bonus `min(team.mobility_count, params.MOBILE_CAP) * 0.5`
-params: MOBILE_CAP=4
+params: MOBILE_CAP=5
 
-A red team built around two amplifiers, a Mercy beam and a Nano say, is answered by reaching the amplifier rather than out-shooting the target. Nano is played around by diving the Ana, and the flex player losing to a pocketed hitscan is told the fix is a tank that walks up, both of which take movement tools. Read while 2 or more red picks amplify damage, and rewarded per pick of ours with a movement or evasive ability, four at most.
+A red team built around two amplifiers, a Mercy beam and a Nano say, is answered by reaching the amplifier rather than out-shooting the target. Nano is played around by diving the Ana, and the flex player losing to a pocketed hitscan is told the fix is a tank that walks up, both of which take movement tools. Read while 2 or more red picks amplify damage, and rewarded per pick of ours with a movement or evasive ability, five at most.
 
 ##### Outmanoeuvre a static red (`outmanoeuvre-a-static-red`, matchup, scored)
 
 weight 1; when `enemy.size >= 3 and enemy.mobility_count <= 3`; bonus `min(team.mobility_count, params.MOBILE_CAP) * 0.5`
-params: MOBILE_CAP=4
+params: MOBILE_CAP=5
 
-A red team with few movement tools cannot follow a pick that goes in and out, so mobility on our side is worth more against a bunker than against a dive. The bunker thread's answer to Bastion and Torbjörn is that their comp is immobile and has problems with anything that can leave. Read while at least 3 red picks are revealed and 3 or fewer carry a movement tool, and rewarded per pick of ours with one, four at most.
+A red team with few movement tools cannot follow a pick that goes in and out, so mobility on our side is worth more against a bunker than against a dive. The bunker thread's answer to Bastion and Torbjörn is that their comp is immobile and has problems with anything that can leave. Read while at least 3 red picks are revealed and 3 or fewer carry a movement tool, and rewarded per pick of ours with one, five at most.
 
 ##### Poke beats brawl (`poke-beats-brawl`, matchup, scored)
 
@@ -306,14 +306,14 @@ A poke lean against a brawl lean is the favourable side of the triangle. The bra
 
 ##### Two counters playable, three not (`two-counters-playable`, matchup, scored)
 
-weight 1; when `enemy.size >= 1`; penalty `max(0, team.exposure_edges - params.TOLERATED * team.exposed_count) * 0.75`
+weight 0.5; when `enemy.size >= 1`; penalty `max(0, team.exposure_edges - params.TOLERATED * team.exposed_count) * 0.75`
 params: TOLERATED=2
 
 A pick plays into one or two counters, and every counter past the second on the same pick makes it unplayable. Players say they play well into about two counters but beyond that there is only so much yin to go around, that supposed counters do not work unless they are chained, and that heroes go from amazing to feed when their opponents play two or more counters. Each counter edge beyond two per answered pick costs three quarters of a point, with the tolerance a dial.
 
 ##### Every unanswered enemy costs (`unanswered-enemy-costs`, matchup, scored)
 
-weight 1; when `enemy.size >= 1`; penalty `max(0, enemy.size - team.coverage) * 0.5`
+weight 0.8; when `enemy.size >= 1`; penalty `max(0, enemy.size - team.coverage) * 0.5`
 
 The one agreed reason to swap is an enemy on a hero that needs a counter when the team holds none, an aerial Pharah into Reaper and Symmetra being the stock example. Each revealed enemy that no pick of ours answers is one such gap. Half a point is taken for every revealed enemy outside every pick's counter list.
 
@@ -333,7 +333,7 @@ A six whose mean win rate sits under fifty is losing on the ladder before the bo
 
 ##### A coin-flip lineup is no plan (`coin-flip-lineup`, meta, scored)
 
-weight 1; when `team.availability < params.COINFLIP`; penalty `1.5`
+weight 0.7; when `team.availability < params.COINFLIP`; penalty `1.5`
 params: COINFLIP=0.5
 
 A six that reaches the match intact less than half the time is a plan for some other lobby. Two ban magnets on one six multiply their odds against each other, so even moderate ban rates stack into a lineup that usually loses a piece at the ban screen. It charges a flat point and a half while the chance every pick survives the ban screen is under the dial, one half by default.
@@ -341,9 +341,9 @@ A six that reaches the match intact less than half the time is a plan for some o
 ##### Popular winners are the meta (`popular-winners-are-meta`, meta, scored)
 
 weight 1; when `team.win_mean >= params.EVEN`; bonus `min(team.pick_mass / params.MASS_UNIT, 2) * 0.5`
-params: EVEN=50, MASS_UNIT=50
+params: EVEN=52, MASS_UNIT=50
 
-The meta is what wins and gets picked at once. A winning rate on a deep sample is the ladder's verdict and a winning rate on a shallow one is a rumour, so pick rate is worth counting only once the six is on the winning side of even. While the six's mean win rate is at or above the dial, 50 by default, half a point per fifty points of summed pick rate is added, capped at one point.
+The meta is what wins and gets picked at once. A winning rate on a deep sample is the ladder's verdict and a winning rate on a shallow one is a rumour, so pick rate is worth counting only once the six is on the winning side of even. While the six's mean win rate is at or above the dial, 52 by default, half a point per fifty points of summed pick rate is added, capped at one point.
 
 ##### Half a comp each way fails (`commit-to-one-style`, shape, scored)
 
@@ -361,9 +361,9 @@ Four damage picks leave a six with no second tank or no second support, and usua
 ##### Four supports is unproven ground (`four-supports-unproven`, shape, scored)
 
 weight 1; when `team.supports >= 4`; penalty `(team.supports - 3) * params.PER_SUPPORT`
-params: PER_SUPPORT=1.5
+params: PER_SUPPORT=0.8
 
-Two tanks with three supports is a strong six; a fourth support is unproven and a fifth leaves one pick to make the space and take the fights. Comps of four or five healers appear in the community only as anecdotes that got shut down once the enemy adjusted, so the playbook charges for them rather than forbidding them. Each support past three costs 1.5 points.
+Two tanks with three supports is a strong six; a fourth support is unproven and a fifth leaves one pick to make the space and take the fights. Comps of four or five healers appear in the community only as anecdotes that got shut down once the enemy adjusted, so the playbook charges for them rather than forbidding them. Each support past three costs 0.8 points.
 
 ##### A solo tank cannot dive (`solo-tank-cannot-dive`, shape, scored)
 
@@ -398,7 +398,7 @@ A third barrier on the six is mitigation that nobody shoots through, and the com
 
 ##### Field two damage picks (`two-damage-minimum`, shape, scored)
 
-weight 1; when `team.size >= 4`; penalty `max(0, params.MIN_DAMAGE - team.damage) * 1.5`
+weight 0.8; when `team.size >= 4`; penalty `max(0, params.MIN_DAMAGE - team.damage) * 1.5`
 params: MIN_DAMAGE=2
 
 A six needs at least two damage picks, because damage heroes make the pressure that lets a tank take space and that stops red from pushing. Supports can deal damage but cannot focus it or sustain it through their cooldown gaps the way a damage kit does. The penalty grows by one and a half per damage pick short of two.
@@ -420,16 +420,16 @@ In 6v6 two tanks hold the front and the off angle at once: one takes the space a
 ##### Three supports cannot break a hold (`three-supports-cannot-attack`, side, scored)
 
 weight 1; when `map.side == 'attack' and team.supports >= 3`; penalty `params.THIRD_SUPPORT`
-params: THIRD_SUPPORT=1
+params: THIRD_SUPPORT=0.5
 
-A third support keeps the six alive at the choke and no closer to the point, because a hold is broken by damage. The community calls two tanks and four supports fine on defence and trash at attacking, and says a choke is impossible to break without the damage roster. It charges a flat point, 1 by default, on the attacking side while the six carries 3 or more supports.
+A third support keeps the six alive at the choke and no closer to the point, because a hold is broken by damage. The community calls two tanks and four supports fine on defence and trash at attacking, and says a choke is impossible to break without the damage roster. It charges half a point, 0.5 by default, on the attacking side while the six carries 3 or more supports.
 
 ##### Two light healers lose fights (`two-light-healers-lose`, sustain, scored)
 
 weight 1; when `team.supports >= 2`; penalty `max(0, params.HEAL_MARGIN - team.heal_ratio) * 2`
-params: HEAL_MARGIN=0.9
+params: HEAL_MARGIN=1.1
 
-Two supports who both heal lightly cannot hold anyone alive under fire. Lúcio, Mercy, Brigitte and Zenyatta bring utility and a trickle, so one of the two has to be a heavy healer. The support line's summed peak single heal is read against the roster's two-support bench, and every tenth it falls short of 0.9 of that bench is charged 0.2.
+Two supports who both heal lightly cannot hold anyone alive under fire. Lúcio, Mercy, Brigitte and Zenyatta bring utility and a trickle, so one of the two has to be a heavy healer. The support line's summed peak single heal is read against the roster's two-support bench, and every tenth it falls short of 1.1 of that bench is charged 0.2.
 
 ##### Synergy that also answers (`synergy-that-answers`, synergy, scored)
 
@@ -461,7 +461,7 @@ Damage that hits an area is worth more than its number against a team that stand
 
 ##### Big hits beat armor (`big-hits-beat-armor`, damage)
 
-`maximize team.burst_max` - the biggest single damage figure on the team. weight 1; when `enemy.armor_total >= 300`
+`maximize team.burst_max` - the biggest single damage figure on the team. weight 0.5; when `enemy.armor_total >= 300`
 
 Against an armored red, one big hit keeps its value where a stream of small ones loses half. Armor removes a flat 7 from each instance of damage up to half of it, so a Hanzo arrow or a Roadhog hook combo lands almost whole on Orisa or D.Va while Reaper's pellets and Mauga's minigun rounds are cut in two. The biggest single damage figure on the six is measured, read while red fields 300 or more summed armor.
 
@@ -491,25 +491,25 @@ A comp carries one pick whose single hit can delete a 250-pool target, because a
 
 ##### Bunkers fall to ultimates (`bunkers-fall-to-ultimates`, damage)
 
-`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 1; when `enemy.barrier_count >= 2`
+`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 0.25; when `enemy.barrier_count >= 2`
 
 A red with two barriers is a bunker, and the community's answer to a bunker is not to shoot the barrier but to wait for the ultimates that go around or through it. Death Blossom, Dragonstrike, RIP-Tire and Barrage each carry a damage ceiling that no barrier's health absorbs in the second it lands. Measured as the summed maximum damage across our damage ultimates, read while 2 or more red picks carry a barrier.
 
 ##### Burst over their big save (`burst-over-big-save`, damage)
 
-`maximize matchup.burst_vs_heal` - blue's biggest hit minus red's biggest single save. weight 1; when `enemy.heal_peak_max >= 250`
+`maximize matchup.burst_vs_heal` - blue's biggest hit minus red's biggest single save. weight 0.5; when `enemy.heal_peak_max >= 250`
 
 When red carries a single save of 250 or more, the damage that kills is the hit that lands before the save does. Healing a critical target from under 20 percent back over 65 percent undoes any 120-damage rocket, and nobody heals a Widowmaker headshot. Measured as our biggest single hit minus red's biggest single heal, read while red's biggest single heal is 250 or more.
 
 ##### Burst the enemy who fights alone (`burst-the-isolated-enemy`, damage)
 
-`maximize team.burst_max` - the biggest single damage figure on the team. weight 0.75; when `enemy.isolated_count >= 1`
+`maximize team.burst_max` - the biggest single damage figure on the team. weight 0.5; when `enemy.isolated_count >= 1`
 
 A red pick with no documented partner is the one nobody on their side is built to save, and a big single hit removes it before help arrives. Compositions split the opponent and focus down the isolated target, which is how a red whose damage heroes do not synergise with one another or with their tank is beaten. Measured as the biggest single damage figure on our six, while red fields at least one pick with no authored partner.
 
 ##### Chew a fat red faster (`chew-fat-red-faster`, damage)
 
-`minimize matchup.chew_time_ours` - seconds of blue's floor damage to chew red's pool (999 if unknown). weight 1; when `enemy.pool_total >= 1900`
+`minimize matchup.chew_time_ours` - seconds of blue's floor damage to chew red's pool (999 if unknown). weight 0.5; when `enemy.pool_total >= 1900`
 
 When red fields a fat six, the comp that chews through that pool fastest ends its fights before red's ultimates come up. A Bastion at 225 damage per second gives every tank about 2.5 seconds of life under full focus, so against 1,900 or more summed hit points steady damage turns a tank line into kills. Measured as the seconds of our floor damage needed to chew red's pool, lower being better, read while red's summed pool is 1,900 or more.
 
@@ -557,19 +557,19 @@ Anti-heal is the only cooldown that turns a target's healing off rather than rac
 
 ##### One long gun (`one-long-gun`, damage)
 
-`maximize team.range_max` - the longest range on the team. weight 0.5; when `team.style_lean != 'brawl'`
+`maximize team.range_max` - the longest range on the team. weight 0.25; when `enemy.size >= 0`
 
 A comp carries one pick whose reach opens every sightline the map offers. A long-range threat forces cover from anyone crossing it, and a kit without falloff pokes enemies and barriers from a distance to soften them before the fight. The longest published range on the six is measured.
 
 ##### Out-ult their ultimates (`out-ult-their-ults`, damage)
 
-`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 1; when `matchup.ult_threat >= 600`
+`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 0.5; when `matchup.ult_threat >= 600`
 
 When red carries 600 or more of summed ultimate damage, the fight goes to whoever spends the bigger ultimate first. Teams that farm ultimates win by pressing Q for full team wipes, and a comp without damage ultimates is left on picks and neutral fights while red's ultimates roll in. Summed maximum damage across our damage ultimates is measured, read while red's summed damage-ultimate ceiling is 600 or more.
 
 ##### Outdamage a heavy heal line (`outdamage-heavy-heal-line`, damage)
 
-`maximize matchup.dps_diff` - blue damage floor minus red. weight 1.5; when `enemy.hps_floor >= 400`
+`maximize matchup.dps_diff` - blue damage floor minus red. weight 0.75; when `enemy.hps_floor >= 400`
 
 When red's supports heal at a heavy per-second rate, only a damage floor that clears theirs by a margin turns their healing into wasted resource. Two damage picks outdamage any amount of healing plus mitigation when they hit, and no support outheals a Bastion alone. Measured as our summed per-second damage minus red's, read while red's summed healing floor is 400 or more.
 
@@ -611,7 +611,7 @@ Two barriers on red block what is shot at them and nothing that is lobbed over t
 
 ##### Sustained pressure baits the saves (`sustained-pressure-baits-saves`, damage)
 
-`minimize matchup.chew_time_ours` - seconds of blue's floor damage to chew red's pool (999 if unknown). weight 1; when `enemy.invuln >= 2`
+`minimize matchup.chew_time_ours` - seconds of blue's floor damage to chew red's pool (999 if unknown). weight 0.5; when `enemy.invuln >= 2`
 
 A red with two or more escape or immortality tools, Suzu, Immortality Field, Fade or Wraith Form, cannot be killed in one engage, so the fight goes to whoever spends the saves faster than they come back. That takes a damage floor high enough to force a save every time a pick peeks. Measured as the seconds our floor damage needs to chew red's pool, kept low while 2 or more red picks carry an invulnerability.
 
@@ -629,7 +629,7 @@ Damage ultimates are the go-buttons that end a fight outright. A team without th
 
 ##### Ultimates clear a fat red (`ults-clear-fat-red`, damage)
 
-`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 1; when `enemy.pool_total >= 1900`
+`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 0.25; when `enemy.pool_total >= 1900`
 
 Against a red that fields 1,900 or more summed hit points, steady fire does not break the line and the fight waits for ultimates. A bunker of Orisa, Bastion and Torbjörn is broken by waiting for ults to come in, and a Graviton Surge with a team-wipe ultimate behind it is the plan. Summed maximum damage across the six's damage ultimates is measured, read while red's summed pool is 1,900 or more.
 
@@ -755,9 +755,9 @@ When one tank holds the front alone, the comp needs the armor to stand under foc
 
 ##### Counter-pick on this map only (`answers-that-fit-map`, map)
 
-`maximize matchup.coverage_share` - share of red answered by blue. weight 0.75; when `map.known == 1 and team.map_offmap == 0`
+`maximize matchup.coverage_share` - share of red answered by blue. weight 0.75; when `map.known == 1 and enemy.size >= 1`
 
-An answer that runs under its own baseline on this map is a swap into a throw pick, so coverage is worth more once no pick of the six is off-map. The community's example is the tank who swaps to Zarya on Numbani, where she is bad, because red has the tank she is said to counter. Measured as the share of revealed red picks the six answers, read only while every pick runs at or above its own baseline here.
+An answer that runs under its own baseline on this map is a swap into a throw pick, so coverage is worth more once no pick of the six is off-map. The community's example is the tank who swaps to Zarya on Numbani, where she is bad, because red has the tank she is said to counter. Measured as the share of revealed red picks the six answers, read on a known map once red reveals a pick.
 
 ##### Brawl maps reward durability (`brawl-maps-reward-durability`, map)
 
@@ -791,7 +791,7 @@ A pick the counterpick lists file under their best maps here belongs in the comp
 
 ##### Escort lanes reward the longest gun (`escort-longest-gun`, map)
 
-`maximize team.range_max` - the longest range on the team. weight 0.75; when `map.mode == 'Escort'`
+`maximize team.range_max` - the longest range on the team. weight 0.25; when `map.mode == 'Escort'`
 
 Escort maps run the payload down long lanes, and the pick with the longest reach on the six owns the lane before the fight closes. Every payload route opens onto a long sightline somewhere along the path, which is why the community names Escort as the mode that favours poke and Ashe as a Junkertown pick. The longest published range on the team is the measure, read on Escort maps.
 
@@ -803,7 +803,7 @@ A six built of the playstyle a map rewards wins the fights that map sets up. The
 
 ##### High ground strands melee (`high-ground-strands-melee`, map)
 
-`minimize team.melee` - picks with a melee weapon. weight 1; when `map.style_top == 'dive'`
+`minimize team.melee` - picks with a melee weapon. weight 0.5; when `map.style_top == 'dive'`
 
 On a map built around high ground a melee pick has no way to touch an enemy standing above and no quick way up. Reinhardt is named as the tank who suffers most where high ground matters, with nothing to throw at it but a Fire Strike, and brawl's movement tools are said to have no vertical component at all. Picks with a melee weapon are counted, minimised where the map rewards dive.
 
@@ -839,7 +839,7 @@ On Control, Push and Flashpoint the fight moves, from the neutral centre to the 
 
 ##### Vertical maps reward fliers (`vertical-maps-reward-fliers`, map)
 
-`maximize team.flyers` - picks that fly or hover. weight 0.75; when `map.style_top == 'dive'`
+`maximize team.flyers` - picks that fly or hover. weight 0.25; when `map.style_top == 'dive'`
 
 A map with high ground everywhere rewards the picks that travel between its levels without a staircase. Echo is named as the fill pick for maps with verticality, and the maps with the most high ground are called best for heroes that move easily between low and high ground. Picks that fly or hover are counted, read where the map rewards dive.
 
@@ -869,13 +869,13 @@ A comp facing heavy damage ultimates survives them with invulnerabilities and cl
 
 ##### Anti-heal a heavy heal line (`antiheal-heavy-heal-line`, matchup)
 
-`maximize team.antiheal` - picks with anti-heal. weight 1.5; when `matchup.antiheal_need >= world.heal_bench * 1.25`
+`maximize team.antiheal` - picks with anti-heal. weight 0.5; when `matchup.antiheal_need >= world.heal_bench * 1.25`
 
 Against a support line that heals well above the roster's bench, a landed anti-heal is an instant fight win: 4 seconds without healing turns a pocketed tank into a kill. Moira, Mauga and a double pocket are all played around Ana's grenade, and no damage pick replaces it. Measured as the count of picks with a negative healing modifier, read while red's supports' summed peak heal is at least 1.25 times the world's heal bench.
 
 ##### Anti-heal turns off self-sustain (`antiheal-stops-self-sustain`, matchup)
 
-`maximize team.antiheal` - picks with anti-heal. weight 1; when `enemy.lifelines >= 5`
+`maximize team.antiheal` - picks with anti-heal. weight 0.25; when `enemy.lifelines >= 5`
 
 When five or more red picks carry healing of their own, Mauga's overdrive, Roadhog's breather, Bastion's repair and Reaper's leech on top of the supports, anti-heal switches all of it off at once. Ana's grenade on a breathing Roadhog or an overdriving Mauga is the standing example. Measured as our picks with anti-heal, read while 5 or more red picks carry any healing.
 
@@ -917,7 +917,7 @@ Brawl beats dive: a dive comp trades durability for mobility, so a team that gro
 
 ##### Break a heavy barrier line (`break-heavy-barriers`, matchup)
 
-`maximize team.dps_floor` - summed published per-second damage figures (a floor: misses and healing ignored). weight 1; when `matchup.barrier_need >= 1200`
+`maximize team.dps_floor` - summed published per-second damage figures (a floor: misses and healing ignored). weight 0.5; when `matchup.barrier_need >= 1200`
 
 A Reinhardt or Ramattra barrier line only moves when something melts it, and the shield busters are the picks with a high sustained damage figure: Bastion and Junkrat chew barriers that hitscan poke never dents. Damage per second decides whether the barrier is down before their fire finishes ours. Measured as the summed published per-second damage of the team, read while red fields 1200 or more barrier health.
 
@@ -935,7 +935,7 @@ A red built on sustained damage, Bastion behind a barrier with a turret beside h
 
 ##### Burst through their biggest save (`burst-through-heals`, matchup)
 
-`maximize matchup.burst_vs_heal` - blue's biggest hit minus red's biggest single save. weight 0.75; when `matchup.antiheal_need >= world.heal_bench`
+`maximize matchup.burst_vs_heal` - blue's biggest hit minus red's biggest single save. weight 0.25; when `matchup.antiheal_need >= world.heal_bench`
 
 Healing that brings a pick from low to full in seconds makes chip damage worthless, so a comp facing a strong heal line needs single hits that outsize the biggest save. A Widowmaker headshot or a Hanzo storm arrow volley cannot be healed after the fact. Measured as our biggest single hit minus red's biggest single heal, read while red's support heal peak is at or above the world's heal bench.
 
@@ -947,13 +947,13 @@ A channelled or wound-up ultimate dies to a stun or a sleep on the way out: a sl
 
 ##### Cleanse a crowd-control-heavy red (`cleanse-heavy-crowd-control`, matchup)
 
-`maximize team.cleanse` - picks with a cleanse. weight 1; when `enemy.cc_count >= 3`
+`maximize team.cleanse` - picks with a cleanse. weight 0.5; when `enemy.cc_count >= 3`
 
 A red team stacked with stuns, sleeps, hinders and knockbacks wins by chaining them onto one target, and a cleanse breaks the chain before the follow-up lands. Kiriko is the community's counterpick into a team with a lot of crowd control, and a second cleanse on the six means the second chain fails too. Measured as the count of picks with a cleanse, read while 3 or more red picks carry crowd control.
 
 ##### Cleanse the counter's tool (`cleanse-the-counters-tool`, matchup)
 
-`maximize team.cleanse` - picks with a cleanse. weight 0.75; when `team.exposure_edges >= 8`
+`maximize team.cleanse` - picks with a cleanse. weight 0.25; when `team.exposure_edges >= 8`
 
 When counters stack onto the six, a cleanse on a teammate turns the counter's key cooldown into nothing and keeps the countered pick in the fight. Mauga wins against Ana if his team picks Kiriko to cleanse the grenade, and a coordinated stack's own trick is a suzu out the door against the counters thrown at its play. Measured as the count of our picks with a cleanse, while eight or more counter edges land on the six.
 
@@ -965,19 +965,19 @@ Against a red whose picks are documented partners, no single hero counters three
 
 ##### A counter comp must be safe (`counter-comp-stays-safe`, matchup)
 
-`minimize matchup.exposure_share` - share of blue answered by red. weight 1; when `matchup.coverage_share >= 0.67`
+`minimize matchup.exposure_share` - share of blue answered by red. weight 1; when `enemy.size >= 1`
 
-A six assembled to answer most of red's picks is only worth playing if red cannot answer it back. Pro teams stayed on GOATS rather than swap to one of its counters and risk losing a fight to Widowmaker, so a heavy-coverage six is judged on its own exposure. Measured as the share of our picks that some revealed red pick answers, kept low while we answer at least two thirds of theirs.
+A six assembled to answer most of red's picks is only worth playing if red cannot answer it back. Pro teams stayed on GOATS rather than swap to one of its counters and risk losing a fight to Widowmaker, so a heavy-coverage six is judged on its own exposure. Measured as the share of our picks that some revealed red pick answers, kept low once red reveals a pick.
 
 ##### Answered answers are no answers (`countered-answers-are-none`, matchup)
 
-`minimize team.exposure_edges` - (pick, enemy) counter edges: enemies answering picks. weight 0.75; when `team.coverage >= 1`
+`minimize team.exposure_edges` - (pick, enemy) counter edges: enemies answering picks. weight 0.75; when `enemy.size >= 1`
 
-An answer that red already counters is not an answer: the pick meant to solve one enemy spends the match dodging another. Every counter to GOATS could be shut down by a swap to Widowmaker, and the ladder's version is the swap that counters the enemy tank but is countered by several others on their team. Measured as the total of counter edges from revealed red picks onto ours, kept low while the six answers at least one red pick.
+An answer that red already counters is not an answer: the pick meant to solve one enemy spends the match dodging another. Every counter to GOATS could be shut down by a swap to Widowmaker, and the ladder's version is the swap that counters the enemy tank but is countered by several others on their team. Measured as the total of counter edges from revealed red picks onto ours, kept low once red reveals a pick.
 
 ##### Damage slots are the counter-pick slots (`damage-slots-counter-pick`, matchup)
 
-`maximize team.answer_edges` - (enemy, pick) counter edges: picks answering enemies. weight 0.75; when `team.damage >= 3 and enemy.size >= 1`
+`maximize team.answer_edges` - (enemy, pick) counter edges: picks answering enemies. weight 0.5; when `team.damage >= 3 and enemy.size >= 1`
 
 A damage-heavy six is the six with the most counter-pick options, and it should use them. Damage players have the deepest hero pool and the most flexibility at counter picking, so three damage slots that do not answer the revealed enemy waste it. The count of counter edges from our picks onto their revealed picks is read, only while three or more damage picks are on the six and red has revealed a pick.
 
@@ -1025,7 +1025,7 @@ A diver's burst is timed to land inside one cooldown window, and an invulnerabil
 
 ##### Kite a short-range comp (`kite-short-range-comps`, matchup)
 
-`maximize team.range_median` - median of each pick's longest published range. weight 1; when `enemy.range_max <= 60 and enemy.size >= 5`
+`maximize team.range_median` - median of each pick's longest published range. weight 0.5; when `enemy.range_max <= 60 and enemy.size >= 5`
 
 A red whose longest gun stops at 60 metres has to walk into our fire to deal any, so every extra metre of reach on our side is damage they take for free before the fight starts. Reinhardt has one of the lowest effective ranges in the game and everyone who outranges him holds the advantage until the gap is closed. Measured as the median of each pick's longest range, read while 5 or more red picks are revealed and none reaches past 60 metres.
 
@@ -1043,13 +1043,13 @@ When red's typical pick reaches 30 m or more, our shortest gun spends the fight 
 
 ##### Match their longest gun (`match-their-longest-gun`, matchup)
 
-`maximize team.range_max` - the longest range on the team. weight 1; when `enemy.range_max >= 100`
+`maximize team.range_max` - the longest range on the team. weight 0.5; when `enemy.range_max >= 100`
 
 When red fields a gun that reaches 100 m, our six needs one that reaches as far or the sightline is theirs. A Widowmaker denies open ground to every pick that cannot shoot back, and the mirror swap works because she is then contested at her own range. The longest published range on the six is measured, read while red's longest reach is 100 m or more.
 
 ##### Melee loses to a sniper (`melee-loses-to-snipers`, matchup)
 
-`minimize team.melee` - picks with a melee weapon. weight 0.75; when `enemy.range_max >= 60`
+`minimize team.melee` - picks with a melee weapon. weight 0.5; when `enemy.range_max >= 60`
 
 A melee pick has one of the shortest effective ranges in the game, and a sniper on red has the advantage every second until the gap is closed. The brawl thread's verdict is that everyone who outranges Reinhardt is ahead of him, and the heavy tanks are countered by long-range poke before anything else. Measured as the count of picks with a melee weapon, fewer is better, read while red's longest reach is 60 metres or more.
 
@@ -1067,13 +1067,13 @@ A barrier helps a beam team: Symmetra charges her beam on it, Zarya's beam passe
 
 ##### Outrange the brawl (`outrange-the-brawl`, matchup)
 
-`maximize team.range_median` - median of each pick's longest published range. weight 1.5; when `matchup.style_lean_red == 'brawl'`
+`maximize team.range_median` - median of each pick's longest published range. weight 0.75; when `matchup.style_lean_red == 'brawl'`
 
 Poke beats brawl because a brawl has to cross open ground to do anything, and every metre of that crossing is a free shot for the longer reach. Measured as the median of each pick's longest published range, read only while red's majority playstyle is brawl.
 
 ##### Outrange them (`outrange-them`, matchup)
 
-`maximize matchup.range_diff` - blue median reach minus red's. weight 0.75; when `enemy.size >= 1`
+`maximize matchup.range_diff` - blue median reach minus red's. weight 0.5; when `enemy.size >= 1`
 
 Whoever outranges the other chooses when the fight starts and takes free damage during the approach. Reinhardt has one of the lowest effective ranges in the game and is behind everyone until the gap is closed, and Ashe loses to a Widowmaker at range because falloff decides the duel before aim does. Measured as our median longest reach minus red's.
 
@@ -1133,7 +1133,7 @@ A brawl team is dangerous only together, and a deployable wall or barrier splits
 
 ##### Answer the must-ban that slipped through (`answer-the-ban-magnet`, meta)
 
-`maximize team.coverage` - enemies answered by at least one pick. weight 1; when `enemy.max_ban_rate >= 30`
+`maximize team.coverage` - enemies answered by at least one pick. weight 0.5; when `enemy.max_ban_rate >= 30`
 
 When red fields a hero the lobby usually bans, the ban went elsewhere and the six needs an answer to it. A Mauga is answered by the supports swapping to Ana or Zenyatta; a hero left unbanned while the team bans her counter dominates the lobby. Measured as the count of revealed red picks answered by at least one of ours, while red's highest ban rate is 30 percent or more.
 
@@ -1265,19 +1265,19 @@ With one tank, nobody can leave the front to peel, so the peel has to come from 
 
 ##### Third damage picks must be sturdy (`sturdy-third-damage`, shape)
 
-`minimize team.squish_count` - picks at or under 250 pool. weight 1.5; when `team.damage >= 3`
+`minimize team.squish_count` - picks at or under 250 pool. weight 1; when `team.damage >= 3`
 
 A comp that runs three damage picks gives up a tank or a support, so the extra damage pick has to be one that survives the front it now shares. Three glass cannons behind one tank are three targets red's dive finds first. Measured as picks at or under 250 pool, read only while three or more damage picks are on the six.
 
 ##### Three damage picks, three jobs (`three-damage-three-jobs`, shape)
 
-`maximize team.subrole_diversity` - distinct subroles / size (1.0 = every pick a different job). weight 1; when `team.damage >= 3`
+`maximize team.subrole_diversity` - distinct subroles / size (1.0 = every pick a different job). weight 0.75; when `team.damage >= 3`
 
 A damage line of three has to cover three different jobs. Two hitscans or two flex picks doubled up is a terrible comp on most maps and a third of the same job is worse, because each job answers a different angle and range of the map. Distinct subroles divided by picks across the six is read, only while three or more damage picks are on the six.
 
 ##### Three supports must still shoot (`three-supports-must-shoot`, shape)
 
-`maximize team.dps_floor` - summed published per-second damage figures (a floor: misses and healing ignored). weight 1.5; when `team.supports >= 3`
+`maximize team.dps_floor` - summed published per-second damage figures (a floor: misses and healing ignored). weight 1; when `team.supports >= 3`
 
 A comp that fields three or more supports only works when the supports themselves bring the damage the missing damage pick would have. Healing past the point of need adds nothing. Measured as the summed published per-second damage of the six while three or more supports are picked.
 
@@ -1295,13 +1295,13 @@ Counter-swapping lands on tanks more than any other role, so a six with two tank
 
 ##### Attackers arrive with ultimates (`attackers-arrive-with-ults`, side)
 
-`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 1; when `map.side == 'attack'`
+`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 0.5; when `map.side == 'attack'`
 
 Attackers need one won fight to take the point and they choose when to take it, so they arrive with the ultimates the defence has to answer. The community expects the attackers to have ults on the second or third push and to blow them each time the defence sets up. The summed maximum damage across the team's damage ultimates is the measure, read on the attacking side.
 
 ##### Attackers bring the answers (`attackers-bring-answers`, side)
 
-`maximize team.coverage` - enemies answered by at least one pick. weight 1; when `map.side == 'attack'`
+`maximize team.coverage` - enemies answered by at least one pick. weight 0.5; when `map.side == 'attack'`
 
 On attack the six that answers more of red's picks wins the one fight it needs, because attackers can re-pick between fights while a defense that has set up cannot. The community calls rock-paper-scissors matchups horrible for defenders: attackers blow ults and swap to the counter comp each time the defense gets set up. Measured as the count of revealed red picks answered by at least one of ours, on the attacking side of a sided map.
 
@@ -1313,7 +1313,7 @@ Attackers have to break a position the defenders chose, and engage tools are how
 
 ##### Attackers must make progress (`attackers-make-progress`, side)
 
-`minimize matchup.chew_time_ours` - seconds of blue's floor damage to chew red's pool (999 if unknown). weight 1; when `map.side == 'attack' and matchup.chew_time_ours < 999`
+`minimize matchup.chew_time_ours` - seconds of blue's floor damage to chew red's pool (999 if unknown). weight 1; when `map.side == 'attack'`
 
 A slow fight that ends even is a loss for the attackers, because only the defence gains from the clock running. Aggression is what pays on Escort attack, and a six that cannot chew through red's pool before the timer does never moves the cart. Seconds of blue's floor damage to chew red's pool is the measure, minimised on the attacking side.
 
@@ -1331,19 +1331,19 @@ A kit that multiplies incoming healing raises the whole heal line for a few seco
 
 ##### Bench healing into heavy fire (`bench-heals-heavy-fire`, sustain)
 
-`maximize team.heal_ratio` - support heal peak / the roster's two-support bench. weight 1; when `enemy.dps_floor >= 900`
+`maximize team.heal_ratio` - support heal peak / the roster's two-support bench. weight 0.5; when `enemy.dps_floor >= 900`
 
 Against a red whose damage floor is heavy, the support line has to heal at or above the roster's bench or the tanks fold under it. Without heals pumped in a pick dies in half a second to the current damage numbers, so into a Bastion or Mauga floor the pick is Kiriko or Ana over a light healer. Measured as the supports' summed heal peak over the roster's two-support bench, read while red's per-second damage floor is 900 or more.
 
 ##### Big saves for big hits (`big-saves-big-hits`, sustain)
 
-`maximize team.heal_peak_max` - the biggest single heal on the team. weight 1; when `enemy.burst_max >= 500`
+`maximize team.heal_peak_max` - the biggest single heal on the team. weight 0.5; when `enemy.burst_max >= 500`
 
 When red carries a 500-damage hit, the heal that matters is the one large enough to bring a target back from the edge in one press. A Baptiste or Ana line is picked into high burst because a burst heal undoes a rocket volley that a beam only chases, and Lifeweaver with Mercy or Brigitte is two weak burst heals into a bursty red. The biggest single heal on the six is measured, read while red's biggest single hit is 500 or more.
 
 ##### Brawl brings anti-heal (`brawl-cuts-their-heals`, sustain)
 
-`maximize team.antiheal` - picks with anti-heal. weight 0.75; when `team.style_lean == 'brawl'`
+`maximize team.antiheal` - picks with anti-heal. weight 0.25; when `team.style_lean == 'brawl'`
 
 A brawl is a sustain war at close range, and the side whose healing still works at the end of it wins. Junker Queen's wounds and Ana's grenade are the anti-heal a brawl six carries into the ball. Measured as picks with anti-heal, read only while brawl is the majority style.
 
@@ -1355,7 +1355,7 @@ A red whose ultimates cost 2,100 charge or less on average fires them a fight so
 
 ##### Cleanse a loaded ultimate bar (`cleanse-loaded-ult-bars`, sustain)
 
-`maximize team.cleanse` - picks with a cleanse. weight 0.75; when `matchup.ult_threat >= 1000`
+`maximize team.cleanse` - picks with a cleanse. weight 0.25; when `matchup.ult_threat >= 1000`
 
 When red's damage ultimates add up to 1,000 or more, the fight that matters is the one where two of them land together, and a cleanse is the button that lifts a Graviton's hold or an anti-heal in the middle of it. Kiriko's Suzu is credited with negating half the roster's ultimates for exactly that reason. Measured as our picks with a cleanse, read while red's summed ultimate damage is 1,000 or more.
 
@@ -1391,7 +1391,7 @@ Every comp wants one support whose single heal is big enough to undo a hit at on
 
 ##### Big saves answer many ultimates (`saves-answer-many-ults`, sustain)
 
-`maximize team.heal_peak_max` - the biggest single heal on the team. weight 1; when `enemy.dmg_ults >= 4`
+`maximize team.heal_peak_max` - the biggest single heal on the team. weight 0.5; when `enemy.dmg_ults >= 4`
 
 When four or more red picks carry a damage ultimate, at least one fight a round is decided by whether a team-wide save meets the stack. Transcendence is the save the community remembers stopping four ultimates at once, and a big save is what turns a Tire, a Nano-Visor and a Graviton into a survived fight. Measured as the biggest single heal on the team, read while 4 or more red picks carry a damage ultimate.
 
@@ -1439,19 +1439,19 @@ A six with two tanks up front takes most of red's damage on those two, and the s
 
 ##### A core answers a core (`core-answers-core`, synergy)
 
-`maximize team.core_size` - largest connected group in the team's synergy graph. weight 1; when `enemy.core_size >= 4`
+`maximize team.core_size` - largest connected group in the team's synergy graph. weight 0.25; when `enemy.core_size >= 4`
 
 When red's picks chain into one synergy group of four or more, the answer is a connected six of our own, because a comp beats a comp and loose counters get countered. The metas that stuck were mirrors of one interlocking core, and mirroring a structure leaves neither side the compositional edge. Measured as the size of the largest connected group in our synergy graph, while red's largest connected group is four or more.
 
 ##### A countered lynchpin sinks the comp (`countered-lynchpin-sinks-comp`, synergy)
 
-`minimize team.exposed_count` - picks answered by at least one enemy. weight 0.75; when `team.synergy_edges >= 1`
+`minimize team.exposed_count` - picks answered by at least one enemy. weight 0.75; when `team.exposed_count >= 1`
 
-A six built on documented pairs has a lynchpin, and when red answers that pick the pair swaps apart and the plan goes with it. The example is a comp with Mei as the lynchpin pick where Zarya is a hard counter, so the counter to one pick is the counter to the whole comp. Measured as the count of our picks that at least one revealed red pick answers, kept low while the six holds at least one authored pair.
+A six built on documented pairs has a lynchpin, and when red answers that pick the pair swaps apart and the plan goes with it. The example is a comp with Mei as the lynchpin pick where Zarya is a hard counter, so the counter to one pick is the counter to the whole comp. Measured as the count of our picks that at least one revealed red pick answers, kept low while at least one of ours is answered.
 
 ##### Cover the swing with a cleanse (`cover-the-swing`, synergy)
 
-`maximize team.cleanse` - picks with a cleanse. weight 0.75; when `team.melee >= 1`
+`maximize team.cleanse` - picks with a cleanse. weight 0.25; when `team.melee >= 1`
 
 A melee pick commits its whole body to every swing, and a stun or a sleep in the middle of it is a dead tank. The off-tank's job with a Reinhardt is to bubble him so he can swing without being stunned, and a Suzu does the same. Measured as the count of picks with a cleanse, read while the six carries at least one melee pick.
 
@@ -1475,37 +1475,37 @@ A six with three or more countered picks needs documented pairs among them, sinc
 
 ##### Flankers catch the pick fighting alone (`flankers-catch-the-loner`, synergy)
 
-`minimize team.isolated_count` - picks with no authored partner on the team. weight 0.75; when `matchup.dive_pressure >= 4`
+`minimize team.isolated_count` - picks with no authored partner on the team. weight 0.25; when `matchup.dive_pressure >= 4`
 
 Against a red with four or more movement tools, a pick with no documented partner is the one caught alone and burst down before anyone turns around. A flanker's victim is whoever is caught alone, and the reason lone hitscans cannot answer her is that they cannot burst her down fast enough by themselves. Measured as the count of our picks with no authored partner on the six, kept low while red fields four or more movement tools.
 
 ##### Match their synergy (`match-their-synergy`, synergy)
 
-`maximize team.synergy_edges` - authored synergy pairs among the picks. weight 1; when `enemy.synergy_edges >= 2`
+`maximize team.synergy_edges` - authored synergy pairs among the picks. weight 0.25; when `enemy.synergy_edges >= 2`
 
 When red's picks are documented partners, a six without partners of its own starts the match behind. A comp built from strong synergistic heroes is what makes a metagame in the first place. Measured as the count of authored synergy pairs among our picks, while red carries two or more authored pairs.
 
 ##### No pick fights alone (`no-pick-fights-alone`, synergy)
 
-`minimize team.isolated_count` - picks with no authored partner on the team. weight 1
+`minimize team.isolated_count` - picks with no authored partner on the team. weight 0.5
 
 A pick with no documented partner on the six fights its own game while the other five fight theirs. A close-range flanker beside four long-range heroes, or a pocket support beside no one who wants a pocket, never plays as a unit. The count of picks with no authored partner on the team is read.
 
 ##### One connected core, not two cliques (`one-connected-core`, synergy)
 
-`maximize team.core_size` - largest connected group in the team's synergy graph. weight 1
+`maximize team.core_size` - largest connected group in the team's synergy graph. weight 0.5
 
 A six whose synergy pairs chain into one group plays one fight, while two separate pairs and two loners play three. The comps that defined a meta were built from one interlocking core, three supports whose kits complete each other, or a tank pair and the support who enables both. The size of the largest connected group in the six's synergy graph is read.
 
 ##### Play documented partners (`play-documented-partners`, synergy)
 
-`maximize team.synergy_score` - summed synergy scores among the picks. weight 1.5
+`maximize team.synergy_score` - summed synergy scores among the picks. weight 1
 
 The strength of a comp is the synergy between its heroes more than any one pick. A nano on the dive tank, speed on the brawl core or a pocket on the flier is an authored pair with a reason. The summed scores of authored synergy pairs among the six are read.
 
 ##### Supports work together against dive (`supports-pair-against-dive`, synergy)
 
-`maximize team.synergy_density` - synergy edges / possible pairs. weight 0.75; when `matchup.dive_pressure >= 4`
+`maximize team.synergy_density` - synergy edges / possible pairs. weight 0.25; when `matchup.dive_pressure >= 4`
 
 Against a red with four or more movement tools, the six survives by playing as documented pairs, since supports have tons of options to deal with divers by working together. Peel is only necessary against a full dive comp, and even then the answer is the supports' own tools used together. Measured as authored synergy pairs divided by the possible pairs among our picks, while red fields four or more movement tools.
 
@@ -1535,7 +1535,7 @@ An ultimate that costs less charge is on the field more often, and the side with
 
 ##### Cheap ultimates crack bunkers (`cheap-ults-crack-bunkers`, tempo)
 
-`minimize team.ult_cost_mean` - mean ultimate charge cost where published. weight 0.75; when `matchup.barrier_need >= 1200`
+`minimize team.ult_cost_mean` - mean ultimate charge cost where published. weight 0.25; when `matchup.barrier_need >= 1200`
 
 When red fields 1,200 or more barrier HP the fight waits for ultimates, so the six whose ultimates come around soonest breaks the hold first. A comp of cheap, fast-charging ultimates reaches that moment a fight earlier than one built on expensive ones. Mean published ultimate cost across the six is measured, lower being faster, read while red's barrier HP is 1,200 or more.
 
@@ -1547,7 +1547,7 @@ A six with more abilities on cooldown has more to trade and more to bait, and th
 
 ##### Cycle ultimates faster than red (`cycle-ults-faster`, tempo)
 
-`minimize team.ult_cost_mean` - mean ultimate charge cost where published. weight 0.75; when `enemy.ult_cost_mean >= 2250`
+`minimize team.ult_cost_mean` - mean ultimate charge cost where published. weight 0.25; when `enemy.ult_cost_mean >= 2250`
 
 When red's ultimates are expensive, a six whose ultimates are cheap reaches its win conditions a fight earlier. Ultimates charge on a point cost balanced to the hero's damage and healing, so a Coalescence or Pulse Bomb comes around while a Graviton Surge is still building. Mean published ultimate cost across the six is measured, lower being faster, read while red's mean cost is 2,250 or more.
 
@@ -1595,7 +1595,7 @@ On Control and Flashpoint a point is lost the second nobody stands on it, and an
 
 ##### A support-heavy six needs uptime (`support-heavy-needs-uptime`, tempo)
 
-`minimize team.cooldown_median` - median cooldown across every ability on the team. weight 1; when `team.supports >= 3`
+`minimize team.cooldown_median` - median cooldown across every ability on the team. weight 0.75; when `team.supports >= 3`
 
 A six seating three or more supports depends on how fast those supports' abilities return. A support forced off an angle has massive downtime and must play safe until her tools are back. The median cooldown across every ability on the six is measured, lower being faster, read while three or more supports are seated.
 
@@ -1607,7 +1607,7 @@ A comp built on long cooldowns spends them together and is strongest for a few s
 
 ##### Two tanks are two batteries (`two-tanks-two-batteries`, tempo)
 
-`minimize team.ult_cost_mean` - mean ultimate charge cost where published. weight 0.75; when `enemy.tanks >= 2`
+`minimize team.ult_cost_mean` - mean ultimate charge cost where published. weight 0.25; when `enemy.tanks >= 2`
 
 Two tanks in front are 1,000 or more hit points that stand still and take fire, and every hit on them is ultimate charge for the shooter. A comp whose ultimates cost less cashes that charge into a fight-winning ultimate one fight sooner than the enemy does. Measured as the mean charge cost of our ultimates, kept low while red has revealed 2 or more tanks.
 
@@ -1619,7 +1619,7 @@ A pick whose win rate moves 6 or more points between ranks carries an all-ranks 
 
 ##### Thin map sample, trust the ladder (`thin-map-trust-ladder`, uncertainty)
 
-`maximize team.win_mean` - mean all-ranks win rate. weight 1; when `map.known == 1 and team.map_pick_mass < 30`
+`maximize team.win_mean` - mean all-ranks win rate. weight 0.5; when `map.known == 1 and team.map_pick_mass < 30`
 
 When the six's map figures rest on few games, the ladder-wide win rate is the number that still means something. A map win rate built from a handful of picks swings with every game, while the all-ranks rate pools every map and every rank into a stable figure. The mean all-ranks win rate is read, only on a known map where the six's summed map pick rate is under 30.
 

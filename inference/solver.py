@@ -30,6 +30,7 @@ from ui.facts import compute
 from ui.facts.compute import ROLE_COUNT, TEAM_SIZE
 
 REFERENCE_SIZE = 1200
+NEED_BUDGET = 2.0                 # the most one guarded state can cost
 REFERENCE_SEED = 20260913
 
 SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size",
@@ -97,6 +98,15 @@ class Solver:
                         for r in self.scored_constraints]
         self._heuristics = [(g, gates[g.id], slots.get(g.id, 0), *g.metric.split(".", 1))
                             for g in self.heuristics]
+        # a heuristic guarded on the six's own state is a need: see score().
+        # Needs that share a guard share NEED_BUDGET: the state costs at most
+        # that much however many rules the playbook writes about it
+        needs = [g for g in self.heuristics if gates[g.id] is None]
+        written = {}
+        for g in needs:
+            written[g.when.source] = written.get(g.when.source, 0.0) + g.weight
+        self._needs = {g.id: min(1.0, NEED_BUDGET / written[g.when.source])
+                       if written[g.when.source] else 1.0 for g in needs}
         self._freeze_norms()
 
     def _gates(self):
@@ -106,12 +116,13 @@ class Solver:
         id, how many slots). Strategies whose `when` and params are the same
         answer together, so they share a slot: a guard a dozen strategies
         write is evaluated once per candidate."""
-        sc = scope(self.static)
+        sc = scope(dict(self.static, matchup=compute.red_matchup(self.red_t)))
         gates, slots, groups = {}, {}, {}
         for h in self.catalog:
             if h.when is None:
                 gates[h.id] = True
-            elif all(n.split(".", 1)[0] in STATIC_SECTIONS for n in h.when.names):
+            elif all(n.split(".", 1)[0] in STATIC_SECTIONS or n in compute.RED_MATCHUP
+                     for n in h.when.names):
                 sc["params"] = h.params_section
                 gates[h.id] = bool(h.when.eval(sc))
             else:
@@ -259,15 +270,23 @@ class Solver:
     def _freeze_norms(self):
         """One tuple per heuristic for the scoring loop: the strategy, the
         reference low, the reference spread (None where the sample never
-        moved: everything then normalises to 0.5), its weight and whether it
-        minimises."""
-        self._norm = [(g, lo, hi - lo if hi > lo else None, g.weight,
-                       g.direction == "minimize")
+        moved: everything then normalises to 0.5), its weight, whether it
+        minimises and whether it is a need."""
+        self._norm = [(g, lo, hi - lo if hi > lo else None,
+                       g.weight * self._needs.get(g.id, 1.0),
+                       g.direction == "minimize", g.id in self._needs)
                       for g, (lo, hi) in ((g, self.bounds.get(g.id, (0.0, 0.0)))
                                           for g in self.heuristics)]
 
     def score(self, cand, detail=True):
-        """Score with the frozen bounds; with detail, fill the breakdown too."""
+        """Score with the frozen bounds; with detail, fill the breakdown too.
+
+        A heuristic with no guard, or a guard on the board (enemy, map), adds
+        weight x norm. A heuristic guarded on the six's own state (team.*,
+        matchup.*) is a need - "a solo healer needs an escape" - and adds
+        weight x (norm - 1): met in full it costs nothing, unmet it costs the
+        weight, and entering the guarded state never pays. Needs written on
+        one guard are scaled to sum to NEED_BUDGET at most."""
         total, contributions = 0.0, []
         sc = cand.scope
         held = [None] * self.gate_slots
@@ -288,7 +307,8 @@ class Solver:
                 contributions.append({"id": h.id, "kind": "constraint", "form": "limit",
                                       "applies": applies, "ok": ok, "weighted": -penalty,
                                       "metric": h.require.source})
-        for raw, (g, lo, span, weight, minimize) in zip(cand.raw, self._norm, strict=True):
+        for raw, (g, lo, span, weight, minimize, need) in zip(cand.raw, self._norm,
+                                                               strict=True):
             if raw is None:
                 if detail:
                     contributions.append({"id": g.id, "kind": "heuristic",
@@ -302,16 +322,16 @@ class Solver:
                 elif norm < 0.0:
                     norm = 0.0
             else:
-                norm = 0.5
-            if minimize:
+                norm = 1.0 if need else 0.5     # a need nothing here can miss costs nothing
+            if minimize and span is not None:
                 norm = 1.0 - norm
-            weighted = weight * norm
+            weighted = weight * (norm - 1.0) if need else weight * norm
             total += weighted
             if detail:
                 contributions.append({"id": g.id, "kind": "heuristic", "form": "heuristic",
                                       "applies": True, "raw": raw, "norm": norm,
                                       "weighted": weighted, "metric": g.metric,
-                                      "spread": span is not None})
+                                      "spread": span is not None, "need": need})
         for r, applies, slot in self._scored:
             if applies is None:
                 applies = held[slot]

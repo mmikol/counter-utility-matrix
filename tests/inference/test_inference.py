@@ -638,3 +638,35 @@ def test_a_mirror_pick_cites_its_own_facts_not_the_enemy_copy(world):
     assert "answers Ana" not in ours["why"] and "Winston" not in ours["why"]
     clues = ("answers Genji", "answers Tracer", "partner of D.Va")
     assert any(clue in ours["why"] for clue in clues)
+
+
+@pytest.mark.invariant
+def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(world, tmp_path):
+    """"A solo healer needs an escape" must not pay a six for fielding one
+    support: met in full it costs nothing, unmet it costs the weight, and the
+    needs written on one guard cost NEED_BUDGET together at most. A guard on
+    the board (red, the map) stays a reward."""
+    from inference import engine
+    from inference import solver as solver_module
+    shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), tmp_path)
+    rule = ("---\nname: %s\nkind: heuristic\ndirection: maximize\nmetric: %s\nweight: 2\n"
+            "when: %s\n---\nx\n")
+    for i, metric in enumerate(("team.mobility_count", "team.cc_count", "team.armor_total")):
+        (tmp_path / ("solo-%d.md" % i)).write_text(
+            rule % ("Solo %d" % i, metric, "team.supports <= 1"), "utf-8")
+    (tmp_path / "their-fliers.md").write_text(
+        rule % ("Their fliers", "team.hitscan", "matchup.flyers >= 1"), "utf-8")
+    scratch = catalog.load(str(tmp_path))
+    solo = engine.evaluate(world, "King's Row", ["Pharah"],
+                           ["Reinhardt", "Cassidy", "Tracer", "Genji", "Mei", "Ana"],
+                           catalog=scratch).to_dict()
+    terms = {c["id"]: c for c in solo["contributions"]}
+    needs = [terms["solo-%d" % i] for i in range(3)]
+    assert all(c["applies"] and c["need"] and c["weighted"] <= 0 for c in needs)
+    assert sum(c["weighted"] for c in needs) >= -solver_module.NEED_BUDGET - 1e-9
+    assert terms["their-fliers"]["need"] is False and terms["their-fliers"]["weighted"] >= 0
+    pair = engine.evaluate(world, "King's Row", ["Pharah"],
+                           ["Reinhardt", "Cassidy", "Tracer", "Genji", "Kiriko", "Ana"],
+                           catalog=scratch).to_dict()
+    assert all(not c["applies"] and c["weighted"] == 0
+               for c in pair["contributions"] if c["id"].startswith("solo-"))

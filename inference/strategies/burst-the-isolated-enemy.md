@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.burst_max
 direction: maximize
-weight: 0.75
+weight: 0.5
 when: enemy.isolated_count >= 1
 ---
 # Burst the enemy who fights alone

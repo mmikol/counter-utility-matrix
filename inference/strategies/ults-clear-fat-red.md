@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.ult_damage_total
 direction: maximize
-weight: 1
+weight: 0.25
 when: enemy.pool_total >= 1900
 ---
 

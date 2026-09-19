@@ -4,7 +4,7 @@ kind: heuristic
 category: tempo
 metric: team.ult_cost_mean
 direction: minimize
-weight: 0.75
+weight: 0.25
 when: enemy.ult_cost_mean >= 2250
 ---
 # Cycle ultimates faster than red

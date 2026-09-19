@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.antiheal
 direction: maximize
-weight: 0.75
+weight: 0.25
 when: team.style_lean == 'brawl'
 ---
 # Brawl brings anti-heal

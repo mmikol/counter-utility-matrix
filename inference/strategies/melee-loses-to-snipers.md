@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.melee
 direction: minimize
-weight: 0.75
+weight: 0.5
 when: enemy.range_max >= 60
 ---
 

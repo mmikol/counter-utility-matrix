@@ -4,7 +4,7 @@ kind: heuristic
 category: synergy
 metric: team.synergy_edges
 direction: maximize
-weight: 1
+weight: 0.25
 when: enemy.synergy_edges >= 2
 ---
 

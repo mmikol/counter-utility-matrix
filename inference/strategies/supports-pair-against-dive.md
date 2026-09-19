@@ -4,7 +4,7 @@ kind: heuristic
 category: synergy
 metric: team.synergy_density
 direction: maximize
-weight: 0.75
+weight: 0.25
 when: matchup.dive_pressure >= 4
 ---
 

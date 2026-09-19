@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.ult_damage_total
 direction: maximize
-weight: 1
+weight: 0.25
 when: enemy.barrier_count >= 2
 ---
 # Bunkers fall to ultimates

@@ -5,7 +5,7 @@ category: side
 metric: matchup.chew_time_ours
 direction: minimize
 weight: 1
-when: map.side == 'attack' and matchup.chew_time_ours < 999
+when: map.side == 'attack'
 ---
 # Attackers must make progress
 

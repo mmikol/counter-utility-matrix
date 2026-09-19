@@ -19,7 +19,14 @@ def world(db):
 def test_world_loads_the_whole_roster_with_kit_numbers(world):
     assert len(world.heroes) > 40 and len(world.maps) >= 25
     ana = world.hero("Ana")
-    assert ana.role == "support" and ana.peak_heal >= 250 and ana.hitscan
+    assert ana.role == "support" and ana.hitscan
+    # an ultimate's numbers are its own: Nano Boost's 250 is not Ana's healing,
+    # Self-Destruct's 1000 not D.Va's burst, Transcendence not Zenyatta's rate,
+    # Deadeye's lock-on not Cassidy's reach
+    assert 75 <= ana.peak_heal < 250
+    assert world.hero("D.Va").burst < 1000 <= world.hero("D.Va").ult_damage
+    assert world.hero("Zenyatta").hps < 100
+    assert 30 <= world.hero("Cassidy").max_range < world.hero("Widowmaker").max_range
     assert "Sleep Dart" in ana.cc_tools
     assert world.hero("Pharah").flyer and not world.hero("Reinhardt").flyer
     assert world.hero("Reinhardt").barrier_hp >= 1000

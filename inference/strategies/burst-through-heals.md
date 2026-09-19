@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: matchup.burst_vs_heal
 direction: maximize
-weight: 0.75
+weight: 0.25
 when: matchup.antiheal_need >= world.heal_bench
 ---
 # Burst through their biggest save

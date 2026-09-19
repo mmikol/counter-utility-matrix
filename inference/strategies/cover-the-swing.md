@@ -4,7 +4,7 @@ kind: heuristic
 category: synergy
 metric: team.cleanse
 direction: maximize
-weight: 0.75
+weight: 0.25
 when: team.melee >= 1
 ---
 # Cover the swing with a cleanse

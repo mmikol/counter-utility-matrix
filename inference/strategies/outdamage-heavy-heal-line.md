@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: matchup.dps_diff
 direction: maximize
-weight: 1.5
+weight: 0.75
 when: enemy.hps_floor >= 400
 ---
 
