@@ -114,7 +114,8 @@ the newest capture is older than a day or a patch shipped since, else the
 daily set (`pull_rates`, `pull_counters`, `load_authored`); every draft
 completed with `infer_strategy`, exactly as `/strategy` would; a
 restrained re-read of the catalog against the fresh data (a heuristic
-whose metric no longer varies may be silenced, with a logged reason;
+`infer` with `compact: true` lists as silent on three boards, red picks
+revealed on each, may be silenced, with a logged reason;
 nothing is added here); `db_docs`, `export_csv`, and `load_authored` for
 the strategies if anything changed; `query` for a look at the data along
 the way; then a report of under fifteen lines - the capture date now,

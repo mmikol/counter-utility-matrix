@@ -129,6 +129,20 @@ def test_facts_and_infer_through_the_tools(ctx):
     assert "optimal comp" in text
 
 
+@pytest.mark.invariant
+def test_a_compact_infer_names_the_silent_heuristics_and_fits_a_reply(ctx):
+    board = {"map": "King's Row", "red": ["Zarya"], "blue": ["Ana"]}
+    _, full = tools.run_tool(ctx, "infer", **board)
+    text, data = tools.run_tool(ctx, "infer", compact=True, **board)
+    assert data["blue"] == full["blue"] and data["score"] == full["score"]
+    silent = sorted(c["id"] for c in full["contributions"]
+                    if c["kind"] == "heuristic" and c["applies"] and not c["spread"])
+    assert data["silent"] == silent
+    assert data["idle"] == sum(1 for c in full["contributions"] if not c["applies"])
+    assert len(data["largest"]) <= tools.COMPACT_TERMS
+    assert len(text) + len(json.dumps(data)) < 10000
+
+
 # --- the Streamable HTTP transport (the data-layer container's door) -----------
 
 @pytest.fixture(scope="module")

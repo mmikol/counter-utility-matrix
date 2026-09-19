@@ -504,8 +504,13 @@ def _clamp(pool, top=5):
       dict(BOARD, top={"type": "integer", "description": "alternatives to"
                                                          " return (default 5)"},
            pool={"type": "integer", "description": "candidates per role the"
-                                                   " search keeps (default 6)"}))
-def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6):
+                                                   " search keeps (default 6)"},
+           compact={"type": "boolean", "description": "true: the comp, the silent"
+                                                      " heuristics (applying, metric"
+                                                      " not varying on this board) and"
+                                                      " the largest terms only"}))
+def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6,
+               compact=False):
     pool, top = _clamp(pool, top)
     from inference import engine
     from ui.facts import model
@@ -516,7 +521,36 @@ def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6):
                               pool_size=pool, bans=list(bans), side=side)
     except ValueError as error:
         raise ToolError(str(error)) from error
+    if compact:
+        return _compact(result)
     return result.rendered(), result.to_dict()
+
+
+COMPACT_TERMS = 15
+
+
+def _compact(result):
+    """A result small enough for a tool reply under a playbook of hundreds:
+    the comp, the heuristics that apply but whose metric does not vary on this
+    board, and the largest terms."""
+    full = result.to_dict()
+    terms = full["contributions"]
+    silent = sorted(c["id"] for c in terms
+                    if c["kind"] == "heuristic" and c["applies"] and not c["spread"])
+    idle = sum(1 for c in terms if not c["applies"])
+    largest = sorted((c for c in terms if c["weighted"]),
+                     key=lambda c: (-abs(c["weighted"]), c["id"]))[:COMPACT_TERMS]
+    payload = {"map": result.map_name, "side": result.side, "red": list(result.red),
+               "blue": list(result.blue), "score": full["score"],
+               "strategies": len(terms), "idle": idle, "silent": silent,
+               "largest": [{"id": c["id"], "weighted": round(c["weighted"], 4)}
+                           for c in largest]}
+    lines = result.rendered().split("\n")[:2]
+    lines.append("  %d strategies, %d not applying here" % (len(terms), idle))
+    lines.append("  silent (applies, metric does not vary here): %s"
+                 % (", ".join(silent) or "none"))
+    lines += ["  %+.2f  %s" % (c["weighted"], c["id"]) for c in largest]
+    return "\n".join(lines), payload
 
 
 @tool("evaluate", "Score a FULL blue six against the strategies without"

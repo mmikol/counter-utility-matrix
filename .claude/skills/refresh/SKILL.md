@@ -36,9 +36,12 @@ is left half-done: a step that fails is reported, not hidden.
    quoting the prose. A refused answer is fixed and sent again, once; a
    draft you cannot complete is reported with why.
 4. **Re-infer what the data changed.** Look at the catalog against the
-   fresh data with restraint: a heuristic whose metric no longer varies
-   across comps (`infer` shows `spread` false in its breakdown) is silent
-   and may say so in a `tune` to weight 0 with the reason; a strategy the
+   fresh data with restraint. Call `infer` with `compact: true` (the full
+   breakdown is too large for a reply) on three boards, each with three
+   red picks (with no red pick every matchup heuristic is silent): no
+   map, a Control map, an Escort map with a side. A heuristic listed
+   under `silent` on all three no longer varies across comps and may say
+   so in a `tune` to weight 0 with the reason; a strategy the
    tuning log shows moved twice the same way this week is left alone. Do
    not add strategies here - that is the user's `/strategy`.
 5. **Regenerate and mirror.** `db_docs` (the catalog in
