@@ -170,8 +170,8 @@ def generate(world, map_name=None, red=(), blue=(), bans=(), side=""):
     if blue_t:
         _team_facts(fs, world, "blue", blue_h, blue_t, m, red_h)
     if red_t and blue_t:
-        _matchup_facts(fs, world, blue_t, red_t)
-    _playbook_record(fs, world, m)
+        _matchup_facts(fs, blue_t, red_t)
+    _playbook_record(fs, world)
     return fs
 
 
@@ -292,9 +292,9 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
            % (name, h.pool, h.health, h.shield, h.armor), value=h.pool, unit="hp",
            source="heroes", team=team)
     passive = world.subrole_passives.get(h.subrole)
-    if passive and passive[1]:
+    if passive:
         fs.add("hero", name, "hero.passive", "%s's %s passive: %s"
-               % (name, h.subrole, _trim(passive[1], 100)), value=h.subrole,
+               % (name, h.subrole, _trim(passive, 100)), value=h.subrole,
                source="subroles", team=team)
     # traits read off the kit's own numbers and keywords
     traits = [
@@ -315,7 +315,7 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
          h.cc_tools, None) if h.cc_tools else None,
         ("hero.mobility", "%s brings movement: %s" % (name, ", ".join(h.mobility_tools)),
          h.mobility_tools, None) if h.mobility_tools else None,
-        ("hero.flyer", "%s takes to the air - a vertical threat hitscan answers"
+        ("hero.flyer", "%s flies: a vertical threat, answered by hitscan"
          % name, True, None) if h.flyer else None,
         ("hero.barrier", "%s fields a %g-hp barrier" % (name, h.barrier_hp),
          h.barrier_hp, "hp") if h.barrier_hp else None,
@@ -413,7 +413,7 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
     if h.rank_spread >= RANK_SENSITIVE:
         lo = min(w[0] for w in h.by_tier.values() if w[0] is not None)
         fs.add("hero", name, "hero.rank_sensitivity", "RANK-SENSITIVE: %s swings %.1f"
-               " points across ranks (%.1f%%-%.1f%%) - advice must know its audience"
+               " points across ranks (%.1f%%-%.1f%%)"
                % (name, h.rank_spread, lo, lo + h.rank_spread), value=h.rank_spread,
                source="derived:hero.rank_sensitivity", team=team)
     if h.trend is not None and abs(h.trend) >= TREND_POINTS:
@@ -539,12 +539,12 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
         add("shield_share", "%s recharging shields: %d of %d pool (%.0f%%) - rewards"
             " disengages" % (label, t["shield_total"], t["pool_total"], 100 * t["shield_share"]))
     if t["squishies"]:
-        add("squish_count", "%s squish index: %d/%d picks at %d pool or less (%s) - dive"
-            " bait if unprotected" % (label, t["squish_count"], t["size"], SQUISHY_POOL,
-                                      ", ".join(t["squishies"])))
+        add("squish_count", "%s squish index: %d/%d picks at %d pool or less (%s)"
+            % (label, t["squish_count"], t["size"], SQUISHY_POOL,
+               ", ".join(t["squishies"])))
     if t["overhealth_total"]:
-        add("overhealth_total", "%s overhealth supply: %g of burst insurance the healing"
-            " number does not see" % (label, t["overhealth_total"]), "hp")
+        add("overhealth_total", "%s overhealth: %g granted, outside the healing figures"
+            % (label, t["overhealth_total"]), "hp")
     add("dps_floor", "%s sustained damage floor: %g per second summed across the %d of %d"
         " kits that publish a rate" % (label, t["dps_floor"], t["dps_count"], t["size"]), "hp/s")
     if t["burst_max"]:
@@ -607,7 +607,7 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
             " score sum %d)%s" % (label, t["synergy_edges"], t["size"] * (t["size"] - 1) // 2,
                                   t["synergy_density"], t["synergy_score"],
                                   " - " + "; ".join("%s+%s" % p[:2] for p in t["pairs"])
-                                  if t["pairs"] else " - strangers so far"))
+                                  if t["pairs"] else " - no documented pair"))
         add("core_size", "%s synergy core: the largest documented group is %d pick(s)"
             % (label, t["core_size"]))
         if t["isolated"]:
@@ -649,7 +649,7 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
                 % (label, ", ".join(t["exposed"]), side, t["safe_count"]))
         if t["double_covered"]:
             add("double_covered", "%s double-covered: %d %s pick(s) answered by two or"
-                " more - ban-proof and swap-proof" % (label, t["double_covered"], side))
+                " more" % (label, t["double_covered"], side))
         if t["max_ban_hero"]:
             add("banproof_coverage", "%s ban-resilient coverage: without %s (%.0f%% ban)"
                 " still %d/%d answered" % (label, t["max_ban_hero"], t["max_ban_rate"],
@@ -661,7 +661,7 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
                        value=answerers, source="counters", team=team)
 
 
-def _matchup_facts(fs, world, blue_t, red_t):
+def _matchup_facts(fs, blue_t, red_t):
     x = compute.matchup_metrics(blue_t, red_t)
 
     def add(key, text, unit=None):
@@ -724,7 +724,7 @@ def _matchup_facts(fs, world, blue_t, red_t):
             x["style_lean_red"] or "nothing yet", x["style_lean_blue"] or "nothing yet"))
 
 
-def _playbook_record(fs, world, m):
+def _playbook_record(fs, world):
     """S1..: the playbook's record - what it holds - never what the sources
     say, and not the constraints and heuristics themselves."""
     scope = PLAYBOOK_SCOPE
@@ -739,6 +739,6 @@ def _playbook_record(fs, world, m):
         fs.add(scope, "catalog", "playbook.catalog",
                "the playbook%s holds %d constraints, %d heuristics and %d assumptions"
                " (STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS)"
-               % (" (%s, an experiment)" % world.playbook if world.playbook else "",
+               % (" (%s)" % world.playbook if world.playbook else "",
                   c.get("constraint", 0), c.get("heuristic", 0), c.get("assumption", 0)),
                value=c, source="strategies")

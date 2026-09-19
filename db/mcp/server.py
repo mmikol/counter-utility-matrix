@@ -45,7 +45,7 @@ def audit(entry, path=None):
 
 
 def _shape(arguments):
-    """{name: size} - what was passed, not what it said."""
+    """{argument name: size} - never the value."""
     out = {}
     for key, value in (arguments or {}).items():
         if isinstance(value, (list, dict, str)):
@@ -68,7 +68,6 @@ class Server:
         self.tools = {t.name: t for t in tools}
         self.resources = resources
         self.log = log or (lambda msg: sys.stderr.write(msg + "\n"))
-        self.initialized = False
         self.transport = transport
         self.audit_path = audit_path
 
@@ -85,9 +84,7 @@ class Server:
             return None            # a response to something we never sent
         try:
             if method.startswith("notifications/"):
-                if method == "notifications/initialized":
-                    self.initialized = True
-                return None
+                return None                # a notification gets no response
             handler = {
                 "initialize": self._initialize,
                 "ping": lambda p: {},

@@ -104,7 +104,7 @@ def parse_rows(rows):
             code = STAT_ALIASES.get(key, key)
             value = markup.html_to_text(raw)
             if value:
-                stats[code] = (value, None, raw)
+                stats[code] = (value, raw)
 
         entry = {
             "name": name,
@@ -121,7 +121,7 @@ def parse_rows(rows):
             perks.append(entry)
         elif base_type.lower().startswith("weapon"):
             entry["kind_id"] = WEAPON_KIND
-            entry["weapon_type"] = (stats.get("shot_type", ("", None, ""))[0]
+            entry["weapon_type"] = (stats.get("shot_type", ("", ""))[0]
                                     .split(";")[0].strip().lower() or None)
             entry["display_name"] = name
             weapons.append(entry)
@@ -290,7 +290,7 @@ def supplement_from_wikitext(session, hero_name, cache_dir):
         for code in SUPPLEMENT_FIELDS:
             value = markup.wikitext_to_text(params.get(code, ""))
             if value:
-                stats[code] = (value, None, params[code])
+                stats[code] = (value, params[code])
         if stats:
             extra[ability_key(name)] = stats
     return extra, parse_hero_profile(text)
@@ -299,7 +299,7 @@ def supplement_from_wikitext(session, hero_name, cache_dir):
 def record_modifiers(cursor, ability_id, entry, key_ids, source_id):
     """Store the buffs and debuffs an ability applies to someone's numbers."""
     written = 0
-    for code, (value_text, _, _) in entry["stats"].items():
+    for code, (value_text, _) in entry["stats"].items():
         if code not in modifiers.MODIFIER_STATS:
             continue
         keywords = entry.get("keywords", "")
@@ -342,7 +342,7 @@ def stat_key_ids(cursor, codes, source_id):
 def insert_stats(cursor, table, owner_column, owner_id, stats, key_ids, source_id):
     """Write one row per measurement. Returns how many rows were written."""
     written = 0
-    for code, (value_text, _, raw) in stats.items():
+    for code, (value_text, raw) in stats.items():
         default_unit = STAT_UNITS.get(code)
         implied = STAT_DEFAULT_DENOMINATOR.get(code)
         for value, numerator, denominator, window, condition, text in (
@@ -445,7 +445,6 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
             if inserted is None:
                 continue
             ability_id = inserted[0]
-            existing[ability_key(entry["display_name"])] = ability_id
             existing[ability_key(entry["name"])] = ability_id
             next_position += 1
             tally["added"] += 1

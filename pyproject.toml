@@ -1,5 +1,5 @@
-# Lint and coverage settings. The code itself is configured nowhere else:
-# pytest.ini holds the test paths and markers, requirements.txt the packages.
+# Lint and coverage settings. pytest.ini holds the test paths and markers,
+# requirements.txt the packages.
 
 [tool.ruff]
 line-length = 100
@@ -21,8 +21,8 @@ known-first-party = ["db", "ui", "inference"]
 source = ["db", "ui", "inference", "orchestrator"]
 
 [tool.coverage.report]
-# the bar: three quarters of the code under test where the database exists
-# (locally and inside the image); CI, which builds no database, reports only
+# the bar where the database exists (locally, and inside the image); CI builds
+# no database and reports only
 fail_under = 75
 show_missing = true
 skip_covered = true

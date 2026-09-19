@@ -85,9 +85,9 @@ class Hero:
     def released(self):
         return self.status == "released"
 
-    def __init__(self, hid, slug, name, role, subrole, health, shield, armor,
+    def __init__(self, hid, name, role, subrole, health, shield, armor,
                  portrait, status="released", release_date=None):
-        self.id, self.slug, self.name = hid, slug, name
+        self.id, self.name = hid, name
         self.role, self.subrole = role, subrole
         self.status, self.release_date = status, release_date   # announced: shown, never picked
         self.health, self.shield, self.armor = health or 0, shield or 0, armor or 0
@@ -227,7 +227,7 @@ class World:
         self.archetypes = defaultdict(dict)     # style -> {role: (slots, note)}
         self.snapshots = []
         self.newer_patches = []
-        self.subrole_passives = {}
+        self.subrole_passives = {}              # subrole -> its passive's description
         self.role_icons = {}
         self.heal_bench = 0.0
         self.catalog_counts = {}     # the strategies mirror: kind -> count
@@ -301,19 +301,18 @@ def _rows(cx, sql, *args):
 def load(cx):
     """The whole database -> World."""
     w = World()
-    for hid, slug, name, role, sub, hp, sh, ar, portrait, status, released in _rows(cx, """
-            select h.hero_id, h.slug, h.name, r.code, sr.name, h.health,
+    for hid, name, role, sub, hp, sh, ar, portrait, status, released in _rows(cx, """
+            select h.hero_id, h.name, r.code, sr.name, h.health,
                    h.shield, h.armor, h.portrait_url, h.status, h.release_date
             from heroes h join roles r using(role_id)
             join subroles sr on sr.subrole_id = h.subrole_id"""):
-        w.heroes[hid] = Hero(hid, slug, name, role, sub, hp, sh, ar, portrait, status, released)
+        w.heroes[hid] = Hero(hid, name, role, sub, hp, sh, ar, portrait, status, released)
         w.by_key[name_key(name)] = hid
     for code, url in _rows(cx, "select code, icon_url from roles"):
         w.role_icons[code] = url
-    for role, sub, passive, icon in _rows(cx, """
-            select r.code, sr.name, sr.passive_description, sr.icon_url
-            from subroles sr join roles r using(role_id)"""):
-        w.subrole_passives[sub] = (role, passive, icon)
+    for sub, passive in _rows(
+            cx, "select name, passive_description from subroles"):
+        w.subrole_passives[sub] = passive
 
     abilities = {}
     for aid, hid, name, kind, desc, kw in _rows(cx, """

@@ -9,4 +9,4 @@ when: map.mode == 'Control'
 ---
 # Control rewards area healing
 
-Control fights happen on one point with the whole six stacked on it, so healing and damage that touch an area touch everyone. Lúcio's aura is named as out-healing Moira on Control maps for this reason, a Lúcio and Brigitte pairing was called too strong on king of the hill, and the same geometry makes every splash count. Kit pieces tagged area of effect are counted, read on Control maps.
+Control fights happen on one point with the whole six stacked on it, so healing and damage that touch an area touch everyone. Lúcio's aura out-heals Moira on Control maps, and a Lúcio and Brigitte pairing was called too strong on king of the hill. Kit pieces tagged area of effect are counted, read on Control maps.

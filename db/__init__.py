@@ -14,13 +14,11 @@
     sentry        the guard: the playbook, the authored inputs, the door
     raw/          the CSV mirror the tools export (gitignored)
 
-docs/db.md walks the tree. This file holds what the whole layer must
-agree on: where things live, and the scope every rates snapshot is pinned
-to.
+This file holds what the whole layer must agree on: where things live, and
+the scope every rates snapshot is pinned to. docs/db.md walks the tree.
 
-A table is a table: every row carries a source_id, and that is the only
-distinction drawn between what was measured, what was judged and what was
-written by hand. Any data in the database is just data.
+Every row carries a source_id, and that is the only distinction drawn
+between what was measured, what was judged and what was written by hand.
 """
 
 import os

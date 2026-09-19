@@ -71,7 +71,7 @@ def cache_key(*parts):
     return re.sub(r"[^A-Za-z0-9]+", "_", "_".join(str(p) for p in parts)).strip("_")
 
 
-def cached_get(session, url, cache_dir, key, params=None, suffix=".html",
+def cached_get(session, url, cache_dir, key, params=None,
                timeout=DEFAULT_TIMEOUT, retries=1, delay=DEFAULT_DELAY,
                backoff=DEFAULT_BACKOFF):
     """Fetch one page as text, reading and writing a local cache.
@@ -83,7 +83,7 @@ def cached_get(session, url, cache_dir, key, params=None, suffix=".html",
     giving up mid-run loses the whole stage, and the delay is cheap next to
     refetching everything.
     """
-    path = os.path.join(cache_dir, key + suffix) if cache_dir else None
+    path = os.path.join(cache_dir, key + ".html") if cache_dir else None
     if path and os.path.exists(path) and not is_stale(path):
         return read_cache(path)
 

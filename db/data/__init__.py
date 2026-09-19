@@ -12,6 +12,7 @@ page to table, plus what they share.
     fetch         the page cache and its freshness policy
     names         matching hero, map and ability names across sources
 
-Every module here ends in a run(connection, cache_dir, session, log) the
-MCP tools call; nothing here is an entry point of its own.
+Each fetched source's domain module ends in a
+run(connection, cache_dir, session, log); authored/ ends in its LOADERS.
+The MCP tools call them. Nothing here is an entry point of its own.
 """

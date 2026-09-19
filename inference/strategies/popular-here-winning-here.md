@@ -8,6 +8,7 @@ params:
   GOOD_WIN: 50
   POPULAR_MASS: 90
 ---
+
 # Popular here and winning here
 
-A map win rate built on many games is a map win rate to trust, and a six the map's lobby both picks heavily and wins with is a six the map has already tested. Zenyatta's King's Row rate is read as the real indicator because he is picked 3 to 4 times as often there as on Flashpoint, and the pick rate is the sample behind the win. It earns up to half a point, scaled by the six's summed map pick rate against a dial of 45, while the mean win rate on the map is at or over 50.
+A six the map's lobby both picks heavily and wins with is a six the map has already tested. Zenyatta's King's Row rate is read as the real indicator because he is picked 3 to 4 times as often there as on Flashpoint, and the pick rate is the sample behind the win. It earns up to half a point, scaled by the six's summed map pick rate against a dial of 90, while the mean win rate on the map is at or over 50.

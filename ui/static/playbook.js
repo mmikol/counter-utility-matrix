@@ -12,7 +12,7 @@ function weightRow(h) {
     "<input type='number' class='wval' min='1' max='10' step='0.01' value='" + v + "' aria-label='exact weight of " + esc(h.name) + "'>" +
     "<span class='wbreak'></span>" +
     "<button class='wreset' " + (set ? '' : 'disabled') + ">reset</button>" +
-    "<button class='wstore' " + (set ? '' : 'disabled') + " title='write this weight into the heuristic&#39;s file, through the tune tool'>store</button></div>";
+    "<button class='wstore' " + (set ? '' : 'disabled') + " title='write this weight into the heuristic&#39;s file'>store</button></div>";
 }
 /* store: the weight goes into the heuristic's file through the data layer's
    tune tool (validated, logged, mirrored); the file's weight is then the
@@ -53,7 +53,7 @@ function renderPlaybook(d) {
   KINDS.forEach(function (k) {
     var these = d.strategies.filter(function (h) { return h.kind === k[0]; });
     out += "<section class='pbgroup " + k[0] + "' id='pb-" + k[0] + "'><h3>" + k[1] + " <span class='n'>" + these.length + '</span></h3>';
-    out += these.length ? "<div class='hcards'>" + these.map(card).join('') + '</div>' : "<p class='legend none'>none in the playbook in force</p>";
+    out += these.length ? "<div class='hcards'>" + these.map(card).join('') + '</div>' : "<p class='legend none'>none</p>";
     out += '</section>';
   });
   el('playbook').innerHTML = out;
@@ -74,8 +74,8 @@ function renderPlaybook(d) {
     var meta = h.form === 'heuristic' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight
              : h.form === 'limit' ? 'require ' + h.require + (h.soft ? ' · soft, penalty ' + h.penalty : ' · hard') + (h.when ? ' · when ' + h.when : '')
              : h.form === 'scored' ? [h.when ? 'when ' + h.when : '', h.bonus ? 'bonus ' + h.bonus : '', h.penalty ? 'penalty ' + h.penalty : ''].filter(Boolean).join(' · ') + ' · weight ' + h.weight
-             : h.form === 'draft' ? 'draft - name, kind and prose only; /strategy infers the rest, not scored until then'
-             : h.form === 'assumption' ? 'assumption - taken as given, read by the session, shown here, not scored'
+             : h.form === 'draft' ? 'draft - name, kind and prose only; not scored'
+             : h.form === 'assumption' ? 'assumption - taken as given, shown, not scored'
              : h.form;
     var params = Object.keys(h.params || {}).map(function (k) { return k + '=' + h.params[k]; }).join(', ');
     var body = h.body.replace(/^#[^\n]*\n/, '').split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.replace(/\s+/g, ' ')) + '</p>'; }).join('');

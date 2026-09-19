@@ -9,4 +9,4 @@ when: matchup.ult_threat >= 600
 ---
 # Invulnerability answers their ultimates
 
-A comp facing heavy damage ultimates survives them with invulnerabilities and cleanses, not with health: a double gravity and double bomb kills nobody when everyone is inside a sound barrier or a transcendence. The answer fires once and covers the team, which is why a lower-tempo comp lives through a higher-tempo team's spike. Measured as our invulnerabilities plus cleanses, read while red's summed damage-ultimate ceiling is 600 or more.
+A comp facing heavy damage ultimates survives them with invulnerabilities and cleanses, not with health. A double gravity and double bomb kills nobody inside a sound barrier or a transcendence, and the answer fires once and covers the team. Measured as our invulnerabilities plus cleanses, read while red's summed damage-ultimate ceiling is 600 or more.

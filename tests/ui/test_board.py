@@ -220,7 +220,7 @@ def test_the_page_is_a_shell_over_static_files():
     # the playbook is grouped by kind, in the equation's order, each group headed by its count alone
     kinds = script[script.index("var KINDS = ["):script.index("function renderPlaybook")]
     assert kinds.index("'constraint'") < kinds.index("'heuristic'") < kinds.index("'assumption'")
-    assert "class='pbgroup " in script and "none in the playbook in force" in script
+    assert "class='pbgroup " in script and "class='legend none'>none<" in script
     assert "<h3>\" + k[1] + \" <span class='n'>\" + these.length + '</span></h3>'" in script
     assert "commas(shown) + ' of ' + commas(total) + ' facts'" in script   # the total, with commas
     assert "function commas(n)" in script and "commas(d.considered)" in script

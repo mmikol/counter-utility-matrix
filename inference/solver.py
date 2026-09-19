@@ -1,15 +1,23 @@
 """The solver: the optimal six under the catalog, players playing optimally.
 
-    enumerate  every shape the hard limits allow, filled around the
-               locked picks from a per-role pool ranked by a cheap prior
-               (six per role by default)
-    score      STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS: limits prune (soft ones charge),
-               heuristics normalise and weigh, scored constraints add; assumptions are
-               the agent's. Heuristics are normalised against a REFERENCE:
-               a seeded sample of random legal sixes for this board (map,
-               side, enemies, bans), so infer, evaluate and the current
-               comp share one scale and a score means the same thing
-               across calls.
+    sample     the REFERENCE: a seeded set of random legal sixes for this
+               board (map, side, enemies, bans). Heuristics are normalised
+               against it, so infer, evaluate and the current comp share one
+               scale and a score means the same thing across calls. The seed
+               is a string, so every process draws the same list and any of
+               them can prepare a slice of it.
+    enumerate  every shape the hard limits allow, filled around the locked
+               picks from a per-role pool ranked by a cheap prior (six per
+               role by default)
+    sweep      a slice of the enumeration prepared, scored and slimmed. The
+               slices partition the field, so the search splits across
+               processes.
+    score      STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS: limits prune (soft ones
+               charge), heuristics normalise and weigh, scored constraints add;
+               assumptions are the agent's. A `when` reading only the enemy, the
+               map and the world is settled once per board, not once per candidate.
+    rank       sorted by score, then tie-break, then names - a total order, so
+               the answer does not depend on how the sweep was split
     refine     local search from the best few: swap any slot for any
                same-role hero on the roster, keep improvements
 """
@@ -26,6 +34,11 @@ REFERENCE_SEED = 20260913
 
 SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size",
               "team.open_slots"}
+
+# the namespaces that do not change across the candidates of one board
+STATIC_SECTIONS = ("enemy", "map", "world", "params")
+
+_EMPTY = {}
 
 
 class Candidate:
@@ -50,7 +63,7 @@ class Candidate:
         self.tiebreak = 0.0
         self.contributions = []
         self.violations = []
-        self.raw = {}
+        self.raw = []          # one metric value per heuristic, in catalog order
 
     @property
     def names(self):
@@ -66,9 +79,8 @@ class Solver:
         self.catalog = catalog
         self.pool_size = pool_size
         self.limits = [h for h in catalog if h.form == "limit"]
-        self.heuristics = [h for h in catalog if h.kind == "heuristic"]
+        self.heuristics = [h for h in catalog if h.form == "heuristic"]
         self.scored_constraints = [h for h in catalog if h.form == "scored"]
-        self.heuristic_keys = {g.id: tuple(g.metric.split(".", 1)) for g in self.heuristics}
         # the red side's metrics do not change across candidates
         self.red_t = compute.team_metrics(world, self.red, m, ())
         self.static = {"enemy": self.red_t, "map": compute.map_metrics(m, side),
@@ -76,6 +88,41 @@ class Solver:
         self.bounds = {}                     # heuristic id -> (min, max)
         self.considered = 0
         self._reference = None               # the sample, once drawn
+        # each strategy paired with its gate - True or False where `when` is
+        # settled for the whole board, None where the candidate decides it -
+        # and with the slot it shares with every strategy guarded the same way
+        gates, slots, self.gate_slots = self._gates()
+        self._limits = [(h, gates[h.id], slots.get(h.id, 0)) for h in self.limits]
+        self._scored = [(r, gates[r.id], slots.get(r.id, 0))
+                        for r in self.scored_constraints]
+        self._heuristics = [(g, gates[g.id], slots.get(g.id, 0), *g.metric.split(".", 1))
+                            for g in self.heuristics]
+        self._freeze_norms()
+
+    def _gates(self):
+        """Every strategy's `when`, read once per board: True where there is
+        none, True or False where it touches only the static sections, None
+        where the candidate decides it. -> (gate per id, slot per undecided
+        id, how many slots). Strategies whose `when` and params are the same
+        answer together, so they share a slot: a guard a dozen strategies
+        write is evaluated once per candidate."""
+        sc = scope(self.static)
+        gates, slots, groups = {}, {}, {}
+        for h in self.catalog:
+            if h.when is None:
+                gates[h.id] = True
+            elif all(n.split(".", 1)[0] in STATIC_SECTIONS for n in h.when.names):
+                sc["params"] = h.params_section
+                gates[h.id] = bool(h.when.eval(sc))
+            else:
+                gates[h.id] = None
+                try:
+                    key = (h.when.source, tuple(sorted(h.params.items())))
+                    hash(key)
+                except TypeError:          # a param the dialect read as a list
+                    key = h.id
+                slots[h.id] = groups.setdefault(key, len(groups))
+        return gates, slots, len(groups)
 
     # --- namespace and scoring -----------------------------------------------
 
@@ -95,25 +142,36 @@ class Solver:
 
     def prepare(self, cand):
         """Namespace, hard-limit check, raw heuristic values."""
-        cand.ns = self.namespace(cand.heroes)
-        cand.scope = scope(cand.ns)
-        sc = cand.scope
-        cand.violations = []
-        for h in self.limits:
-            sc["params"] = h.params_section
-            if self._holds(h, sc) and not bool(h.require.eval(sc)) and not h.soft:
-                cand.violations.append(h.id)
-        raw = {}
-        for g in self.heuristics:
-            sc["params"] = g.params_section
-            if self._holds(g, sc):
-                section, key = self.heuristic_keys[g.id]
-                value = cand.ns.get(section, {}).get(key)
-                raw[g.id] = float(value or 0)
+        ns = cand.ns = self.namespace(cand.heroes)
+        sc = cand.scope = scope(ns)
+        held = [None] * self.gate_slots
+        violations = []
+        for h, gate, slot in self._limits:
+            if gate is None:
+                gate = held[slot]
+                if gate is None:
+                    sc["params"] = h.params_section
+                    gate = held[slot] = bool(h.when.eval(sc))
+            if gate:
+                sc["params"] = h.params_section
+                if not bool(h.require.eval(sc)) and not h.soft:
+                    violations.append(h.id)
+        cand.violations = violations
+        raw = []
+        keep = raw.append
+        for g, gate, slot, section, key in self._heuristics:
+            if gate is None:
+                gate = held[slot]
+                if gate is None:
+                    sc["params"] = g.params_section
+                    gate = held[slot] = bool(g.when.eval(sc))
+            if gate:
+                value = ns.get(section, _EMPTY).get(key)
+                keep(float(value) if value else 0.0)
             else:
-                raw[g.id] = None
+                keep(None)
         cand.raw = raw
-        cand.tiebreak = cand.ns["team"]["map_win_mean"]
+        cand.tiebreak = ns["team"]["map_win_mean"]
         return cand
 
     @staticmethod
@@ -134,13 +192,11 @@ class Solver:
 
     # --- the reference: one scale per board -------------------------------------
 
-    def reference(self, size=REFERENCE_SIZE):
-        """A seeded sample of random legal sixes for this board, prepared:
-        what every heuristic is normalised against. Deterministic for a given
-        map, side, enemies and bans, and independent of the locked picks
-        and the pool, so every call on one board shares a scale."""
-        if self._reference is not None:
-            return self._reference
+    def sample(self, size=REFERENCE_SIZE):
+        """A seeded sample of random legal sixes for this board, unprepared.
+        Deterministic for a given map, side, enemies and bans, and independent
+        of the locked picks and the pool, so every call on one board shares a
+        scale - and any process draws the same list and can take a slice."""
         rng = random.Random("%d|%s|%s|%s|%s" % (        # a str seed is stable across processes
             REFERENCE_SEED, self.m.id if self.m else 0, self.side,
             ",".join(str(i) for i in sorted(h.id for h in self.red)),
@@ -159,58 +215,116 @@ class Solver:
                 if cand.key in seen:
                     continue
                 seen.add(cand.key)
-                out.append(self.prepare(cand))
-        self._reference = [c for c in out if not c.violations]
+                out.append(cand)
+        return out
+
+    def reference(self, size=REFERENCE_SIZE):
+        """The sample prepared, minus what the hard limits refuse: what every
+        heuristic is normalised against."""
+        if self._reference is None:
+            self._reference = [c for c in (self.prepare(c) for c in self.sample(size))
+                               if not c.violations]
         return self._reference
+
+    def reference_bounds(self, index=0, count=1):
+        """{heuristic id: (min, max)} over one slice of the sample, leaving out
+        the heuristics the slice never valued. The slices partition the
+        sample, so merging their lows and highs gives what one process
+        freezes."""
+        prepared = [c for c in (self.prepare(c) for c in self.sample()[index::count])
+                    if not c.violations]
+        out = {}
+        for i, g in enumerate(self.heuristics):
+            values = [c.raw[i] for c in prepared if c.raw[i] is not None]
+            if values:
+                out[g.id] = (min(values), max(values))
+        return out
 
     def freeze_bounds(self):
         """Bounds per heuristic from the reference sample."""
-        for g in self.heuristics:
-            values = [c.raw[g.id] for c in self.reference() if c.raw.get(g.id) is not None]
+        reference = self.reference()
+        for i, g in enumerate(self.heuristics):
+            values = [c.raw[i] for c in reference if c.raw[i] is not None]
             self.bounds[g.id] = (min(values), max(values)) if values else (0.0, 0.0)
+        self._freeze_norms()
+
+    def adopt_bounds(self, bounds):
+        """Bounds frozen elsewhere for this same board: another process's slice
+        of the search, or an earlier solver on the same map, side, enemies and
+        bans. The sample is seeded, so it draws the same numbers wherever it
+        runs; taking them saves drawing it again."""
+        self.bounds = dict(bounds)
+        self._freeze_norms()
+
+    def _freeze_norms(self):
+        """One tuple per heuristic for the scoring loop: the strategy, the
+        reference low, the reference spread (None where the sample never
+        moved: everything then normalises to 0.5), its weight and whether it
+        minimises."""
+        self._norm = [(g, lo, hi - lo if hi > lo else None, g.weight,
+                       g.direction == "minimize")
+                      for g, (lo, hi) in ((g, self.bounds.get(g.id, (0.0, 0.0)))
+                                          for g in self.heuristics)]
 
     def score(self, cand, detail=True):
         """Score with the frozen bounds; with detail, fill the breakdown too."""
         total, contributions = 0.0, []
         sc = cand.scope
-        for h in self.limits:
-            sc["params"] = h.params_section
-            applies = self._holds(h, sc)
-            ok = bool(h.require.eval(sc)) if applies else True
-            penalty = float(h.penalty.eval(sc)) if (h.soft and applies and not ok) else 0.0
+        held = [None] * self.gate_slots
+        for h, applies, slot in self._limits:
+            if applies is None:
+                applies = held[slot]
+                if applies is None:
+                    sc["params"] = h.params_section
+                    applies = held[slot] = bool(h.when.eval(sc))
+            ok, penalty = True, 0.0
+            if applies:
+                sc["params"] = h.params_section
+                ok = bool(h.require.eval(sc))
+                if h.soft and not ok:
+                    penalty = float(h.penalty.eval(sc))
             total -= penalty
             if detail:
                 contributions.append({"id": h.id, "kind": "constraint", "form": "limit",
                                       "applies": applies, "ok": ok, "weighted": -penalty,
                                       "metric": h.require.source})
-        for g in self.heuristics:
-            raw = cand.raw.get(g.id)
+        for raw, (g, lo, span, weight, minimize) in zip(cand.raw, self._norm, strict=True):
             if raw is None:
                 if detail:
                     contributions.append({"id": g.id, "kind": "heuristic",
                                           "form": "heuristic", "applies": False, "raw": None,
                                           "norm": 0.0, "weighted": 0.0, "metric": g.metric})
                 continue
-            lo, hi = self.bounds.get(g.id, (raw, raw))
-            if hi > lo:
-                norm = (raw - lo) / (hi - lo)
-                norm = min(1.0, max(0.0, norm))
+            if span is not None:
+                norm = (raw - lo) / span
+                if norm > 1.0:            # the candidate sits outside the sample
+                    norm = 1.0
+                elif norm < 0.0:
+                    norm = 0.0
             else:
                 norm = 0.5
-            if g.direction == "minimize":
+            if minimize:
                 norm = 1.0 - norm
-            weighted = g.weight * norm
+            weighted = weight * norm
             total += weighted
             if detail:
                 contributions.append({"id": g.id, "kind": "heuristic", "form": "heuristic",
                                       "applies": True, "raw": raw, "norm": norm,
                                       "weighted": weighted, "metric": g.metric,
-                                      "spread": hi > lo})
-        for r in self.scored_constraints:
-            sc["params"] = r.params_section
-            applies = self._holds(r, sc)
-            bonus = float(r.bonus.eval(sc)) if (applies and r.bonus is not None) else 0.0
-            penalty = float(r.penalty.eval(sc)) if (applies and r.penalty is not None) else 0.0
+                                      "spread": span is not None})
+        for r, applies, slot in self._scored:
+            if applies is None:
+                applies = held[slot]
+                if applies is None:
+                    sc["params"] = r.params_section
+                    applies = held[slot] = bool(r.when.eval(sc))
+            bonus = penalty = 0.0
+            if applies:
+                sc["params"] = r.params_section
+                if r.bonus is not None:
+                    bonus = float(r.bonus.eval(sc))
+                if r.penalty is not None:
+                    penalty = float(r.penalty.eval(sc))
             weighted = r.weight * (bonus - penalty)
             total += weighted
             if detail:
@@ -251,9 +365,12 @@ class Solver:
         return pools
 
     def enumerate(self):
+        """Every legal six around the locked picks, as a list of heroes. A six's
+        roles fix its shape and the pools hold neither the locked picks nor the
+        bans, so no two of these are the same set. Lazy: a slice of the search
+        builds candidates for its own positions and walks past the rest."""
         pools = self.pools()
         locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLE_COUNT}
-        seen, out = set(), []
         for t, d, s in self.shapes():
             need = {"tank": t - len(locked_by_role["tank"]),
                     "damage": d - len(locked_by_role["damage"]),
@@ -261,33 +378,41 @@ class Solver:
             choices = [list(itertools.combinations(pools[r], need[r]))
                        for r in ("tank", "damage", "support")]
             for combo in itertools.product(*choices):
-                heroes = list(self.locked) + [h for part in combo for h in part]
-                cand = Candidate(heroes)
-                if cand.key in seen:
-                    continue
-                seen.add(cand.key)
-                out.append(cand)
-        return out
+                yield self.locked + [h for part in combo for h in part]
 
     # --- the search -------------------------------------------------------------------
 
-    def solve(self, top=5, refine=True):
-        """The best sixes, each prepared, scored and slimmed in one pass so a
-        search of thousands holds only verdicts; the top are hydrated."""
-        self.freeze_bounds()
-        candidates = self.enumerate()
-        self.considered = len(candidates)
-        feasible = []
-        for c in candidates:
-            self.prepare(c)
-            if not c.violations:
-                feasible.append(self.slim(self.score(c, detail=False)))
+    def sweep(self, index=0, count=1):
+        """Every `count`-th candidate of the enumeration, from `index`:
+        prepared, scored and slimmed, so a search of thousands holds only
+        verdicts. -> (the whole field's size, the feasible ones of this
+        slice). The slices of one field partition it, so any split of the
+        work reaches the same set."""
+        feasible, size = [], 0
+        for heroes in self.enumerate():
+            if size % count == index:
+                cand = self.prepare(Candidate(heroes))
+                if not cand.violations:
+                    feasible.append(self.slim(self.score(cand, detail=False)))
+            size += 1
+        return size, feasible
+
+    def rank(self, feasible, top=5, refine=True):
+        """The best sixes of a swept field, refined and hydrated. The order is
+        the _rank_key's alone, so it does not depend on how the sweep was
+        split."""
         if not feasible:
             return []
         feasible.sort(key=self._rank_key)
         if refine:
             feasible = self.refine(feasible, max(top, 3))
         return [self.hydrate(c) for c in feasible[:top]]
+
+    def solve(self, top=5, refine=True):
+        """The best sixes, in this process."""
+        self.freeze_bounds()
+        self.considered, feasible = self.sweep()
+        return self.rank(feasible, top, refine)
 
     @staticmethod
     def _rank_key(c):
@@ -361,17 +486,18 @@ def legal_shapes(catalog, locked_counts=None):
     return out
 
 
-def evaluate_comp(world, m, red, heroes, catalog, pool_size=6, bans=(), side=""):
-    """Score one full six against the field the solver would search."""
-    solver = Solver(world, m, red, [], catalog, pool_size, bans, side)
-    solver.freeze_bounds()                    # the same reference scale as infer
-    field = solver.enumerate()
-    solver.considered = len(field)
-    feasible = []
-    for c in field:
-        solver.prepare(c)
-        if not c.violations:
-            feasible.append(solver.slim(solver.score(c, detail=False)))
+def evaluate_comp(world, m, red, heroes, catalog, pool_size=6, bans=(), side="",
+                  swept=None):
+    """Score one full six against the field the solver would search. `swept`
+    takes a (solver, field size, feasible) swept elsewhere - the same board's
+    optimal search, which sweeps the same field."""
+    if swept is None:
+        solver = Solver(world, m, red, [], catalog, pool_size, bans, side)
+        solver.freeze_bounds()                # the same reference scale as infer
+        solver.considered, feasible = solver.sweep()
+    else:
+        solver, size, feasible = swept
+        solver.considered = size
     target = solver.score(solver.prepare(Candidate(heroes)))
     feasible.sort(key=Solver._rank_key)
     rank = 1 + sum(1 for c in feasible if c.score > target.score + 1e-9)

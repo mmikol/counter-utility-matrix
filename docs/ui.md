@@ -1,16 +1,17 @@
 # The UI LAYER - `ui/`
 
-The board in front of you, and the facts behind it. Every click - a map,
-a side, a ban, a hero on either roster - becomes a request, the database
-is read, and three things come back: every fact about that board, the
-optimal six for both seats with the current picks scored, and the
-playbook as it sits on disk. This layer reads; its one write, a
-heuristic's weight stored from its slider, is handed to the data layer's
-`tune` tool. It owns FACTS, the left-hand side of the equation in
-[architecture.md](architecture.md): for each domain, the independent facts
-(one selection's own row, which no other selection changes) and the
-dependent ones (that selection joined with others - `map_meta` is heroes ⋈
-maps ⋈ meta, `counters` and `synergies` are heroes ⋈ heroes, the team
+The board, and the facts behind it. Every click - a map, a side, a ban, a
+hero on either roster - becomes a request; the database is read; back
+come every fact about that board, the optimal six for both seats with the
+current picks scored, and the playbook as it sits on disk. This layer
+reads; its one write, a heuristic's weight stored from its slider, is
+handed to the data layer's `tune` tool.
+
+It owns FACTS, the left-hand side of the equation in
+[architecture.md](architecture.md): for each domain, the independent
+facts (one selection's own row, which no other selection changes) and the
+dependent ones (that selection joined with others - `map_meta` is heroes
+⋈ maps ⋈ meta, `counters` and `synergies` are heroes ⋈ heroes, the team
 facts aggregate the six, the matchup facts compare the twelve, the ban
 facts join a banned hero with both teams' counters). A join belongs to
 every domain it touches, and every selection added opens new joins.
@@ -52,8 +53,8 @@ the scripts have no constant to keep in step with the Python.
 | route | serves |
 | --- | --- |
 | `/` | the board: map selector, attack/defense switch (Escort and Hybrid maps), the bans bar, the red and blue rosters grouped by role with the announced hero at the end, and three panels - **comps**, **facts**, **playbook** |
-| `/static/<file>` | `board.css`, `comps.js`, `playbook.js`, `board.js` - the stylesheet and the scripts, nothing else |
-| `/api/roster` | every hero (role, subrole, portrait, icon, status) and every map (mode, sided or not) - what the rosters are built from |
+| `/static/<file>` | `board.css`, `board.js`, `comps.js`, `playbook.js` - stylesheets and scripts, nothing else |
+| `/api/roster` | every hero (role, subrole, portrait, status, release day), every map (mode, top style, sided or not), the role icons, and the patches newer than the rates |
 | `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
 | `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, red's likely starting comp, the fight odds, the game plan and the shapes the limits allow |
 | `/api/strategies` | the strategies catalog: every constraint, heuristic and assumption with its kind, form, frontmatter and body |
@@ -66,10 +67,10 @@ Every request opens its own connection and loads a fresh World, so a
 ## `static/` - the board's look and behaviour
 
 `board.js`, loaded last because it calls the other two, keeps one piece
-of state - the map, the side, the bans, the red picks, the blue picks - in
-`localStorage`, so a reload mid-game keeps the board. A click on a
-portrait toggles that hero on that team (a banned hero cannot be picked; a
-hero on one team cannot be on the other); a change debounces, then
+of state - the map, the side, the bans, the red picks, the blue picks -
+in `localStorage`, so a reload mid-game keeps the board. A click on a
+portrait toggles that hero on that team (a banned hero cannot be picked;
+a hero on one team cannot be on the other); a change debounces, then
 fetches facts and inference together.
 
 **The rosters.** One tile renderer draws the red roster, the blue roster
@@ -82,34 +83,33 @@ the hard limits allow, a click on a dimmed tile is refused with a note
 rather than sent, and both teams are held to it, since a limit is the
 game's form and not blue's alone. A hero the roster carries as
 **announced** - one the wiki knows ahead of release, with its role,
-subrole, health, kit and release day - sits in its role column as the same
-tile, dimmed, tagged "coming soon", its portrait when the wiki has one and
-a silhouette otherwise, with no click handler: it never enters the state,
-is never sent as a pick, and the solver never fields it. Blizzard listing
-the hero flips it to released and the tile comes alive on the next
-refresh.
+subrole, health, kit and release day - sits in its role column as the
+same tile, dimmed, tagged "coming soon", its portrait when the wiki has
+one and a silhouette otherwise, with no click handler: it never enters
+the state, is never sent as a pick, and the solver never fields it.
+Blizzard listing the hero flips it to released and the tile comes alive
+on the next refresh.
 
 **The bans bar.** Collapsed by default: a header with the count and the
-current bans as small portraits (click one to un-ban). Clicking the header
-opens the picker - the five slots (two red, two blue, the lobby's) above
-the same portrait grid the rosters use. A click on a tile bans that hero,
-which leaves both rosters and the search; a click on a banned tile or on
-its slot un-bans it; at five, the rest dim.
+current bans as small portraits (click one to un-ban). Clicking the
+header opens the picker - the five slots (two red, two blue, the lobby's)
+above the same portrait grid the rosters use. A click on a tile bans that
+hero, which leaves both rosters and the search; a click on a banned tile
+or on its slot un-bans it; at five, the rest dim.
 
 **The comps panel** answers at every stage of a draft. On top, the game
 plan in prose: the ground, the side, what to play, what red's picks mean
 and which of the six answer them, the family to stay in, and what it
 rests on. Below, two seats. Blue's optimal counter to current picks
 (left) is solved against red's revealed picks - or their likely starting
-comp until they reveal one - and never against blue's own picks, so it
-never collapses into what you hold. Red's most likely starting comp
-(right) is a two-two-two filled slot by slot with the hero the map's pick
-rates and the authored synergies make likeliest, past the bans; static
-for the board, no strategy read. Neither seat carries a score: each is
-its side's reference. Under a seat's cards sit the search's numbers
-(candidates, seconds, the lean), the strategies satisfied - one bar per
-strategy, headed by the count met, greyed where one did not apply - and
-the alternatives.
+comp until they reveal one - and never against blue's own picks. Red's
+most likely starting comp (right) is a two-two-two filled slot by slot
+with the hero the map's pick rates and the authored synergies make
+likeliest, past the bans; static for the board, no strategy read. Neither
+seat carries a score: each is its side's reference. Under a seat's cards
+sit the search's numbers (candidates, seconds, the lean), the strategies
+satisfied - one bar per strategy, headed by the count met, greyed where
+one did not apply - and the alternatives.
 
 **The scores** are the picks'. The badge above each picker is that seat's
 comp as a share of its own optimal - blue's picks against blue's optimal,
@@ -126,14 +126,14 @@ engine's reason in the badge's tooltip. Each box has a *clear*; *clear
 all* in the header empties the map, the side, the bans and both teams,
 and leaves the weights.
 
-**The suggestions.** Blue's empty slots carry the fill - the best six that
-keeps what you have locked, the optimal six before any pick - each a click
-from locking; a tile shows the hero alone, its reasons in the tooltip and
-on the comps tab.
+**The suggestions.** Blue's empty slots carry the fill - the best six
+that keeps what you have locked, the optimal six before any pick - each a
+click from locking; a tile shows the hero alone, its reasons in the
+tooltip and on the comps tab.
 
 **The facts panel** filters by text and by scope and says how many it
-holds beside the filter - "464 facts", or "12 of 464 facts" under a
-filter; the tab carries no number.
+holds beside the filter ("12 of 464 facts" under a filter); the tab
+carries no number.
 
 **The playbook panel** renders the catalog in three groups in the
 equation's order, a row of anchors at the top, each group headed by its
@@ -154,8 +154,8 @@ browser's setting is dropped. Only heuristics have a weight to set.
 GitHub (`COUNTER_MATRIX_REPO_URL` overrides the address). It keeps only
 the short-lived flashes - a banned pick, a full team, a refused pick.
 There is no footer: the facts panel says how many facts the board holds,
-the rates' capture date is a fact, and a patch newer than the rates raises
-the warning box under the header.
+the rates' capture date is a fact, and a patch newer than the rates
+raises the warning box under the header.
 
 `board.css` is the game's look: dark navy surfaces on a faint diagonal
 stripe, Bebas Neue for headings and labels, a gold accent for what
@@ -191,12 +191,12 @@ a change here changes both. Four registries, each key with a one-line
 meaning (`registry()` lists them all, and [inference.md](inference.md)
 prints them as the vocabulary a strategy may reference):
 
-| group | count | examples |
-| --- | --- | --- |
-| `team.*` | 92 | shape (`tanks`, `damage`, `supports`, `shape_flags`), sustain (`heal_peak_total`, `heal_ratio`), damage (`dps_floor`, `burst_max`), durability (`pool_total`, `squish_count`), tools (`mobility_count`, `cc_count`, `hitscan`, `antiheal`, `barrier_count`), coverage of the enemy (`coverage_share`), cohesion (`synergy_score`), map fit (`map_specialists`, `map_strategy_hits`), style (`style_lean`) |
-| `matchup.*` | 21 | the differences and ratios between the two teams: `dps_diff`, `burst_vs_heal`, `tempo_diff`, `ult_threat`, `style_lean_red` |
-| `map.*` | 7 | `known`, `mode`, `sided`, `side`, `style_top`, `style_margin`, `stages` |
-| `world.*` | 2 | `heal_bench`, `roster_size` |
+| group | examples |
+| --- | --- |
+| `team.*` (also read as `enemy.*`) | shape (`tanks`, `damage`, `supports`, `shape_flags`), sustain (`heal_peak_total`, `heal_ratio`), damage (`dps_floor`, `burst_max`), durability (`pool_total`, `squish_count`), tools (`mobility_count`, `cc_count`, `hitscan`, `antiheal`, `barrier_count`), coverage of the enemy (`coverage_share`), cohesion (`synergy_score`), map fit (`map_specialists`, `map_strategy_hits`), style (`style_lean`) |
+| `matchup.*` | the differences and ratios between the two teams: `dps_diff`, `burst_vs_heal`, `tempo_diff`, `ult_threat`, `style_lean_red` |
+| `map.*` | `known`, `mode`, `sided`, `side`, `style_top`, `style_margin`, `stages` |
+| `world.*` | `heal_bench`, `roster_size` |
 
 `team_metrics(world, heroes, map, enemies)` computes a team's numbers
 (with `lean=True` for the solver, which skips the descriptive strings);
@@ -204,8 +204,9 @@ prints them as the vocabulary a strategy may reference):
 `world_metrics(world)` the rest; `namespace(...)` bundles them as the
 `team`, `enemy`, `matchup`, `map` and `world` sections a strategy's
 expression reads. `expected_picks` is red's likely six from the data
-alone. `TEAM_SIZE` (six, 6v6 Open Queue), `SIDED_MODES` (Escort, Hybrid),
-`SIDES`, `is_sided` and `opposite` live here too.
+alone. `TEAM_SIZE` (six, 6v6 Open Queue), `MAX_BANS` (five),
+`SIDED_MODES` (Escort, Hybrid), `SIDES`, `is_sided` and `opposite` live
+here too.
 
 ### `engine.py` - the FactSet
 

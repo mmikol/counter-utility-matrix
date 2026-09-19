@@ -93,16 +93,15 @@ def _board(query):
 
 def api_roster(cx):
     world = model.load(cx)
-    heroes = [{"name": h.name, "slug": h.slug, "role": h.role, "subrole": h.subrole,
-               "pool": h.pool, "portrait": h.portrait, "status": h.status,
-               "release_date": str(h.release_date) if h.release_date else None,
-               "subrole_icon": (world.subrole_passives.get(h.subrole) or (None, None, None))[2]}
+    heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
+               "portrait": h.portrait, "status": h.status,
+               "release_date": str(h.release_date) if h.release_date else None}
               for h in world.heroes_by_role()]
     maps = [{"name": m.name, "mode": m.mode, "style": m.style_top,
              "sided": (m.mode or "") in SIDED_MODES}
             for m in world.maps_sorted()]
     return {"heroes": heroes, "maps": maps, "role_icons": world.role_icons,
-            "snapshots": world.snapshots, "newer_patches": world.newer_patches}
+            "newer_patches": world.newer_patches}
 
 
 def api_facts(cx, query):
@@ -231,17 +230,15 @@ def view_board():
     return (HEAD + "<title>Counter Utility Matrix</title><main>"
             "<header class='top'><h1>Counter <span>Utility Matrix</span></h1>"
             "<div class='mapsel'><select id='mapsel'></select><span class='mode' id='mode'></span>"
-            "<span class='sideseg' id='sideseg' title='blue"
-            " attacks or defends; red gets the other side'>"
+            "<span class='sideseg' id='sideseg' title=\"blue's side;"
+            " red gets the other\">"
             "<button data-side='attack'>attack</button><button data-side='defense'>defense</button>"
             "</span>"
             "<button id='clearall' title='the map, the side, the bans and both teams'>"
             "clear all</button>"
             "<span class='flash' id='flash'></span></div>"
-            "<span class='links'><a class='mathlink' href='/math' title='the"
-            " equation and how the pieces fit'>the math</a>"
-            "<a class='gh' href='%s' target='_blank' rel='noopener'"
-            " title='the repository on GitHub'>%s GitHub</a>"
+            "<span class='links'><a class='mathlink' href='/math'>the math</a>"
+            "<a class='gh' href='%s' target='_blank' rel='noopener'>%s GitHub</a>"
             "</span>"
             "</header>"
             "<div class='bans' id='bans'><div class='banhead' id='banhead'"
@@ -249,23 +246,22 @@ def view_board():
             "<h3>bans</h3><span class='bancount' id='bancount'>"
             "</span><span class='banmini' id='banmini'></span>"
             "<span class='caret'>&#9656;</span></div>"
-            "<div class='banbody' id='banbody'><div class='slots' id='banslots'></div>"
+            "<div class='banbody'><div class='slots' id='banslots'></div>"
             "<div class='roles' id='banroster'></div></div></div>"
             "<div class='warnbox' id='vintage' style='display:none'></div>"
             "<div class='momentum' id='momentum'></div>"
             "<div class='teams'>"
             "<section class='team blue'><h2>blue team <span class='tscore' id='bluescore'"
-            " title=\"your picks so far, as a share of blue's optimal\">"
+            " title=\"your picks as a share of blue's optimal\">"
             "</span>"
-            "<button class='clearteam' data-clear='blue' title='clear every blue pick'>"
-            "clear</button>"
+            "<button class='clearteam' data-clear='blue'>clear</button>"
             "</h2>"
             "<div class='slots' id='blueslots'></div><div class='roles' id='blueroster'>"
             "</div></section>"
             "<section class='team red'><h2>red team <span class='tscore' id='redscore'"
-            " title=\"their picks so far, as a share of their best counter to yours\">"
+            " title=\"their picks as a share of their best counter to yours\">"
             "</span>"
-            "<button class='clearteam' data-clear='red' title='clear every red pick'>clear</button>"
+            "<button class='clearteam' data-clear='red'>clear</button>"
             "</h2>"
             "<div class='slots' id='redslots'></div><div class='roles' id='redroster'>"
             "</div></section>"

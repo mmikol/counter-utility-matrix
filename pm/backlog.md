@@ -1,14 +1,8 @@
 # Backlog
 
-What is worth doing next, why, and what it would cost - kept by the
-maintainer skill: a run marks an item done with its commit, adds what a
-check or a lesson suggests, and drops what no longer applies. Items are
-ordered by payoff over blast radius; the first is the one to pick up.
-
-## In progress
-
-Nothing - main holds everything and every feature branch is deleted; the
-next feature opens its own branch.
+What is worth doing next, why, and what it would cost. Ordered by payoff
+over blast radius; the first is the one to pick up. The maintainer skill
+keeps it current.
 
 ## Next
 
@@ -20,12 +14,12 @@ next feature opens its own branch.
   the `tune` tool writes when the call names a map, mirrored in the
   strategies export; the catalog applies the map's set over the file's
   defaults when the solver is built for that map (`catalog.weighted`
-  already layers a session's slider values the same way, so the map's
-  set is one more layer under the sliders); the playbook tab shows the
-  map's values when a map is chosen and the file's when none is, and the
-  board result names which set it was scored under. Cost: two days - a
-  migration, the tool's `map` argument, the layering, the tab, the
-  facts line that names the set - and a test that the same six scores
+  already layers a session's slider values the same way, so the map's set
+  is one more layer under the sliders); the playbook tab shows the map's
+  values when a map is chosen and the file's when none is, and the board
+  result names which set it was scored under. Cost: two days - a
+  migration, the tool's `map` argument, the layering, the tab, the facts
+  line that names the set - and a test that the same six scores
   differently under two maps' sets.
 - **The fact engine's dependent variables.** The equation is stated per
   domain (a selection's own row, then its joins) and the math page says
@@ -40,8 +34,8 @@ next feature opens its own branch.
   toggle calls with hero names matched the way the roster spells them
   (Lúcio, Soldier: 76, D.Va, Wrecking Ball), a mis-hear is refused with
   the flash the board already has, and a badge shows the microphone is
-  live; off by default, a button in the header turns it on. Cost: a
-  day, half of it the name matching; nothing leaves the browser.
+  live; off by default, a button in the header turns it on. Cost: a day,
+  half of it the name matching; nothing leaves the browser.
 - **Simulation and mathematical proving.** Two ways to check what the
   score claims. (a) A fight simulation from the kits' own numbers -
   damage and healing per second, pools, ranges, cooldowns - that plays a
@@ -57,31 +51,26 @@ next feature opens its own branch.
   the tests, a day for the page.
 - **Weights that learn on their own.** The user wants them to, with the
   sliders as the manual override. Learning needs a signal, and the one it
-  had - recorded comps with a win or loss - was removed on the user's
-  word. Two ways back, to decide with the user: (a) a minimal outcome
-  record, one row per board with won or lost and the weights in force,
-  and a `fit` that nudges each heuristic's weight toward the
-  contributions that won (a logistic fit over the contribution vectors,
-  capped per step, every change a tuning-log line with "fit" as its
-  reason); or (b) no recording: fit the weights so that the solver's
-  per-hero contribution ranks agree with each hero's published win rate
-  on the map, a weaker signal the data already holds. Cost: (a) two days
-  including the record and its tool; (b) a day.
-- **Memoize the per-hero parts of the metrics.** Thousands of candidate
-  sixes share the same heroes; `compute.team_metrics` rebuilds each
-  hero's pool, kit sums and keyword sets for every candidate, and that
-  preparation is most of a solve now that scoring is slim. Cheaper than
-  any parallelism and compounds with it. Cost: a day; risk: none to the
-  answer if the memo is keyed on the hero and the map.
-- **Split candidate scoring across the workers inside one solve.** After
-  the memo. The world and the catalog have to reach the workers (the
-  world pickles in 6 ms; the catalog's compiled expressions do not, so
-  workers load it from the files). Cost: two days; risk: moderate, the
-  reference sample and the refine step must stay identical.
-- **A pool of pre-loaded workers in the inference service.** The servers
-  accept requests concurrently but share one GIL, so two people clicking
-  at once queue up. Matters the day a team uses the board together. Cost:
-  a day once the per-board pool exists; risk: memory per worker.
+  had was removed on the user's word. Two ways back, to decide with the
+  user: (a) a minimal outcome record, one row per board with won or lost
+  and the weights in force, and a `fit` that nudges each heuristic's
+  weight toward the contributions that won (a logistic fit over the
+  contribution vectors, capped per step, every change a tuning-log line
+  with "fit" as its reason); or (b) no recording: fit the weights so that
+  the solver's per-hero contribution ranks agree with each hero's
+  published win rate on the map, a weaker signal the data already holds.
+  Cost: (a) two days including the record and its tool; (b) a day.
+- **Memoize the per-hero parts of the metrics.** `compute.team_metrics`
+  rebuilds each hero's pool, kit sums and keyword sets for every
+  candidate and is ~41% of a sequential board. A per-world term table
+  measured 3x on the function, ~5% on a board. Cost: a day; risk: none to
+  the answer if the memo is keyed on the hero and the map.
+- **Shard the local search by seed.** The countered case's refine is the
+  last serial block (~0.12 s). The result set holds; the reported
+  `considered` count depends on seed order and would change.
+- **A strict dead-CSS test.** The test word-matches class names, so a dead
+  compound selector passes (`.hcard .legend` did). Needs an exception list
+  for the four classes built by concatenation.
 - **Fetch the sources concurrently, one polite pace per host.** Blizzard,
   the wiki and the counter site can be pulled at the same time while each
   keeps its delay; the database writes keep their order (heroes before
@@ -99,13 +88,13 @@ next feature opens its own branch.
 
 ## Fact engine: more dependent variables
 
-The facts today: 127 kinds on a full board - about 60 independent (one
-hero, one map, the meta, the bans), the rest intersections (hero x map,
-hero x enemy, hero x ally, the team, the matchup). What the data can
-still yield, best first:
+About half the fact kinds on a full board are independent (one hero, one
+map, the meta, the bans); the rest are intersections (hero x map, hero x
+enemy, hero x ally, the team, the matchup). What the data can still
+yield, best first:
 
 - **Mend the tags the playbook review found.** Five reviewers reading
-  244 rules against the kit data found the vocabulary misleading in
+  243 rules against the kit data found the vocabulary misleading in
   places, and every rule on those keys inherits it: `team.range_max`
   takes the largest range on any ability or ultimate, so Cassidy reads
   200 m, Orisa 180 and Widowmaker 20 - the weapon's range is the number a
@@ -127,7 +116,7 @@ still yield, best first:
 - **Tag every fact independent or dependent.** Each fact kind names the
   tables it joins (none for an independent one); the facts tab shows the
   tag and the board's counts by kind, so the equation's two terms are
-  visible per board. Cost: half a day; 127 kinds to classify once.
+  visible per board. Cost: half a day.
 - **Pairwise numbers, blue pick against red pick.** One-shot: whose
   biggest hit meets whose pool. Time to kill: pool over damage floor,
   each way. Out-range: whose longest reach exceeds whose. All from
@@ -149,7 +138,6 @@ still yield, best first:
 - **Side-specific team facts.** On attack, the engage tools and anti-heal
   the team brings; on defense, its deployables and barriers. A side
   constraint would read these; a fact should state them. Cost: an hour.
-
 - **What the community says and no metric measures.** Building the
   community playbook left these unexpressed, each said by several voices:
   a rush archetype and speed boost (Lúcio, Juno); peel as its own tool
@@ -169,6 +157,12 @@ counters table is a list).
 
 ## Done
 
+- **Every search split across a worker pool** - `scrub` branch. Static
+  guards evaluated once per solver, shared guards once per candidate,
+  sections as attribute lookups; the reference sample and the enumeration
+  sliced across `max(6, min(cores, 12))` spawned workers, verdicts only
+  crossing. A board 1.6-2.1 s -> 0.3-0.5 s, sequential 1.7x, answers
+  byte-identical.
 - **The community's rules are the playbook** - `community-playbook`
   branch. Three hundred mined from reddit (r/OverwatchUniversity,
   r/Competitiveoverwatch, r/Overwatch: 172 threads and 11,800 comments
@@ -178,13 +172,13 @@ counters table is a list).
   against each other and 62 went as duplicates behind aliased metrics or
   cancelling pairs, ten guards and dials were retuned and five bodies
   rewritten: 238 rules and the user's five assumptions, a citation for
-  every one in `inference/README.md`. The user's five hand-built rules
-  were removed on their word; the queue's two-tank cap returned as a
-  quoted rule. Under 300 rules a board peaked at 1.8 GB and
-  died in its 1 GiB container: the solver now scores every candidate
-  slim (score and tie-break only) and hydrates the winners' breakdowns,
-  so a board peaks at 150 MB and solves in about 5 seconds instead of
-  1.5 - the memoization item below is the rest of the way back.
+  every one in `inference/README.md`. The user's hand-built rules were
+  removed on their word; the queue's two-tank cap returned as a quoted
+  rule. Under 300 rules a board peaked at 1.8 GB and died in its 1 GiB
+  container: the solver now scores every candidate slim (score and
+  tie-break only) and hydrates the winners' breakdowns, so a board peaks
+  at 150 MB and solves in about 5 seconds instead of 1.5 - the
+  memoization item above is the rest of the way back.
 - **Maintenance, end to end** - `maintain` branch. Five parallel passes
   (the three layers, the docs and skills, the root and infrastructure):
   dead code, dead styling and stale comments out, the docs shorter and
@@ -193,8 +187,6 @@ counters table is a list).
   then the older migrations' comments rewritten as history, the board's
   last helper text removed, the launch configs named for the project,
   and `--cov` defined once in pyproject.
-- **Never five supports** - `b00aafd`. The playbook's second hard limit,
-  `require: team.supports <= 4`; the roster refuses the fifth.
 - **The look is the game's again** - `fe32e70`. Dark surfaces, Bebas
   Neue, a gold accent, red and blue for the sides.
 - **Six debts cleared** - `debt` branch. The suite reads the map notes
@@ -206,12 +198,6 @@ counters table is a list).
   (comps, playbook, board). Found on the way: the derive prompt anchored
   its style on rule ids the playbook no longer holds - it now falls back
   to one file per form.
-- **The playbook is the user's own rules** - `team-headers` branch.
-  `inference/strategies/` holds the rules built one at a time (the
-  two-tank limit, hitscan cover against fliers, the counters with a
-  grain of salt, optimal play); the 38-rule playbook it replaced is the
-  tests' reference at `tests/fixtures/playbook/`, and no experiment
-  ships.
 - **Red's likely picks from the map and the meta** - `team-headers`
   branch. `compute.expected_picks`: their revealed picks, then the
   most-picked heroes on the map, within the queue's two-tank limit; the
@@ -221,8 +207,7 @@ counters table is a list).
   heuristics have one; 1 to 10 to the hundredth with a number box for the
   exact figure; the file's weight is the inferred default and a reset; a
   setting rides with the board request (`weight=id:value`, `weights` on
-  the `board` tool) and never touches the file; every result names the
-  weights it was scored under.
+  the `board` tool) and never touches the file.
 - **Unscored, never 100 / 100** - `0c10dd7`. A playbook with no scoring
   term ties every legal six at zero; the board now says so.
 - **The roster holds to the playbook's shape limits** - `d1b0718`.

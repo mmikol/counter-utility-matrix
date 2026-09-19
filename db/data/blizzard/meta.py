@@ -66,8 +66,8 @@ def parse_filter_options(html, select_id):
 
 # --- store ---------------------------------------------------------------------
 
-# ~280 sequential pages is more load than the source will take. Slower here
-# is faster overall, because being cut off costs the whole stage.
+# ~40 sequential pages is more load than the source will take at speed.
+# Slower here is faster overall: being cut off costs the whole stage.
 REQUEST_DELAY = 5.0
 REQUEST_TIMEOUT = 90
 RETRIES = 6

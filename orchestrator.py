@@ -2,8 +2,8 @@
 
     python orchestrator.py            run: everything below, then leave the app up
     python orchestrator.py up         build the image, start the containers, wait -
-                                      the data container pulls every source and
-                                      ingests it when the database is empty or stale
+                                      the data container builds the database when
+                                      it is empty or stale
     python orchestrator.py agents     Claude Code, headless, on the /refresh skill:
                                       refresh the data, complete the drafts,
                                       re-infer with restraint, regenerate the docs
@@ -12,12 +12,10 @@
     python orchestrator.py test       the test suite inside the image, with the coverage bar
     python orchestrator.py down       stop everything (the database volume stays)
 
-Everything the board uses at game time is deterministic - the database
-and the strategy files. The agents run beforehand, on the host, on the
-subscription (the claude CLI, signed in once), never at game time; when
-the CLI is absent the run still brings the stack up and says what it
-skipped. Nothing beyond the standard library and inference.derive. Exit code 0
-means everything answered.
+The agents run on the host, on the subscription (the claude CLI, signed in
+once); without the CLI the run still brings the stack up and says so. Nothing
+beyond the standard library and inference.derive. Exit code 0 means everything
+answered.
 """
 
 import json
@@ -33,21 +31,16 @@ URLS = {"data": "http://localhost:8020/health",
         "ui": "http://localhost:8017/api/roster"}
 ROOT = os.path.dirname(os.path.abspath(__file__))
 BOARD = "http://localhost:8017"
-# one board solved through the service before the stack is called ready: the
-# playbook's size decides the solver's memory and time, and only the container
-# (1 GiB, a read-only root) can say whether it holds
+# one board solved through the service before the stack is called ready: only
+# the container (1 GiB, a read-only root) shows whether this playbook fits its
+# memory and time
 PROBE = "http://localhost:8019/board?map=King%27s%20Row&red=Zarya&red=Pharah&side=attack"
 
 
-def sh(*args, check=True, capture=False, timeout=None):
-    result = subprocess.run(list(args), text=True, timeout=timeout,
-                            stdout=subprocess.PIPE if capture else None,
-                            stderr=subprocess.STDOUT if capture else None)
-    if check and result.returncode:
-        raise SystemExit("error: %s exited %d%s" % (
-            " ".join(args), result.returncode,
-            "\n" + result.stdout[-2000:] if capture and result.stdout else ""))
-    return result.stdout if capture else ""
+def sh(*args):
+    result = subprocess.run(list(args))
+    if result.returncode:
+        raise SystemExit("error: %s exited %d" % (" ".join(args), result.returncode))
 
 
 def get_json(url, timeout=10):
@@ -87,7 +80,7 @@ def probe():
 
 
 def verdict(h):
-    """(ok, [lines]) from the health map - the checks that matter."""
+    """(ok, [lines]) from the health map."""
     lines, ok = [], True
     data = h.get("data")
     if not data or data.get("status") != "ok":
@@ -235,12 +228,12 @@ def status():
 
 # The agents' run may call exactly these tools - the ones the /refresh skill
 # names - on either server, and no built-in tool at all: no shell, no file
-# edits, no web. Least privilege is what makes a headless run safe to schedule.
+# edits, no web.
 AGENT_TOOL_NAMES = ("db_status", "strategies", "tuning_log", "metrics", "facts", "infer",
                     "query", "sync_all", "pull_rates", "pull_counters", "load_authored",
                     "infer_strategy", "tune", "db_docs", "export_csv")
 # A refresh pull fetches dozens of pages at a polite pace: minutes, not the
-# seconds a tool call is given by default. The run's client waits this long.
+# seconds a tool call is given by default.
 AGENT_TOOL_TIMEOUT_MS = str(45 * 60 * 1000)
 AGENT_TOOLS = ",".join("mcp__%s__%s" % (server, name)
                        for server in ("counter-utility-matrix-docker", "counter-utility-matrix")
@@ -261,9 +254,8 @@ def agents_command(claude=None):
 
 
 def agents():
-    """The agents' run: refresh the database, complete the drafts, re-infer with
-    restraint, regenerate the docs. Runs on the host, on the subscription;
-    schedule it with cron or launchd."""
+    """The agents' run, on the host, on the subscription; schedule it with cron
+    or launchd."""
     print("agents: Claude Code, headless, on the /refresh skill (minutes)...")
     try:
         command = agents_command()
@@ -278,8 +270,7 @@ def agents():
     said = (done.stdout.strip() + "\n" + done.stderr.strip()).strip()
     if done.returncode != 0 and ("Not logged in" in said or "/login" in said):
         print("agents: skipped - the claude CLI is not signed in; run `%s login` once on"
-              " this machine (the stack is up; drafts stay pending, weights stay as they are)"
-              % command[0])
+              " this machine (the stack is up; drafts stay pending)" % command[0])
         return 0
     print(said)
     if done.returncode != 0:
@@ -288,8 +279,7 @@ def agents():
 
 
 def run():
-    """Pull, ingest, infer, serve: the stack up, the agents' run when the CLI is
-    here, and the app left running for the user."""
+    """The stack up, the agents' run when the CLI is here, the app left running."""
     code = up()
     if code:
         return code
@@ -300,7 +290,7 @@ def run():
             return code
     else:
         print("agents: skipped - no claude CLI signed in on this host (the stack is up;"
-              " drafts stay pending, weights stay as they are)")
+              " drafts stay pending)")
     print("\nthe app is up: %s" % BOARD)
     return 0
 
@@ -321,7 +311,7 @@ def refresh():
 
 def test():
     """The suite inside the image: coverage writes to the tmpfs (the root is
-    read-only), and the shipped playbook is used whatever experiment .env names."""
+    read-only); the shipped playbook is used whatever .env names."""
     sh("docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage",
        "-e", "COUNTER_MATRIX_STRATEGIES=", "data",
        "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--cov")

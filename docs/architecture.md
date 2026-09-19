@@ -1,6 +1,7 @@
 # How it fits together
 
-Three layers over one database, each a folder at the root, each with its own document in `docs/`.
+Three layers over one database, each a folder at the root, each with its
+own document in `docs/`.
 
 ```
 DATA           = HEROES ∪ MAPS ∪ META              the tables, as pulled and set
@@ -14,11 +15,10 @@ STRATEGIES     = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS   the playbook: mark
 COMP           = ARGMAX[ STRATEGIES( FACTS ) ]            the solver searches, the agent argues
 ```
 
-Everything is free to run - no accounts, no keys, no API billing. The
-board is a local page and the solver is deterministic; the model work
-(comps in chat, strategies inferred from prose, the refresh that tunes
-with a reason) runs in Claude Code on your subscription, before a game,
-never during one.
+No accounts, no keys, no API billing. The board is a local page and the
+solver is deterministic; the model work (comps in chat, strategies
+inferred from prose, the refresh that tunes with a reason) runs in Claude
+Code on your subscription, before a game, never during one.
 
 ## The folders
 
@@ -27,7 +27,7 @@ never during one.
 | `db/` | **DATA LAYER** - pulls every source, cleans it, stores it; the MCP server that is the one door to everything; the schema, its migrations and the embedded cluster | [db.md](db.md) |
 | `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet | [ui.md](ui.md) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints, heuristics and assumptions in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
-| `tests/` | one folder per layer (`tests/db`, `tests/ui`, `tests/inference`) and `tests/fixtures/playbook/`: nineteen of the former shipped rules, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the user's own rules and the community's hundred. `pytest -q` runs them, skipping what needs a built database when there is none | |
+| `tests/` | one folder per layer (`tests/db`, `tests/ui`, `tests/inference`) and `tests/fixtures/playbook/`, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the community's rules and the user's assumptions. `pytest -q` runs them, skipping what needs a built database when there is none | |
 | `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain` | [skills.md](skills.md) |
 | `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
 | `.github/workflows/` | `ci.yml`: lint and the tests that need no built database, on pushes to `main` and on pull requests | |
@@ -50,7 +50,7 @@ flowchart LR
         DBT["db_* · query · export_csv"]
     end
 
-    subgraph PG["PostgreSQL - 36 tables"]
+    subgraph PG["PostgreSQL"]
         HEROES["HEROES<br/>roster, kits, stats,<br/>keywords, portraits"]
         MAPS["MAPS"]
         META["META<br/>dated snapshots"]
@@ -88,24 +88,20 @@ solver scores are the same function; its one write, a heuristic's weight
 stored from the board, is handed to the data layer's `tune` tool. The
 inference layer reads the facts, never the tables.
 
-The equation is the repo's term sheet - the name is the definition, and
-the math page heads it "The Counter Utility Matrix". The data layer owns
-DATA. The UI layer's fact engine owns FACTS: for one board, every domain
-yields independent facts (a selection's own row - a hero's kit, rates and
-style; the map's mode and note; the meta's vintage) and dependent ones
-(the selection joined with others: the hero on this map, against each
-enemy, beside each ally, the six aggregated, the twelve compared, a banned
-hero against both teams' counters). A join belongs to every domain it
-touches, so the dependent facts are where the domains' fact sets
-intersect, and every selection added opens new joins. The inference layer
-owns STRATEGIES - three kinds of file: a *constraint* (a limit, hard
-unless soft, or a scored adjustment while a condition holds), a
-*heuristic* (a metric weighed, maximised or minimised) and an *assumption*
-(prose taken as given, shown, never scored) - and the argmax:
-`STRATEGIES( FACTS )` is the score the solver maximises, and the agent (a
+The equation divides the layers. The data layer owns DATA. The UI layer's
+fact engine owns FACTS: per domain, the independent facts (a selection's
+own row - a hero's kit, rates and style; the map's mode and note; the
+meta's vintage) and the dependent ones (that selection joined with
+others: the hero on this map, against each enemy, beside each ally, the
+six aggregated, the twelve compared, a banned hero against both teams'
+counters). The inference layer owns STRATEGIES - three kinds of file: a
+*constraint* (a limit, hard unless soft, or a scored adjustment while a
+condition holds), a *heuristic* (a metric weighed, maximised or
+minimised), an *assumption* (prose taken as given, never scored) - and
+the argmax. The solver maximises `STRATEGIES( FACTS )`; the agent (a
 Claude Code session on `/comp`) reads the same facts and strategies and
-reconciles them where arithmetic cannot. The UI numbers the facts F1.. and
-the playbook's record below them S1.., so both are citable and neither is
+reconciles them where arithmetic cannot. Facts are numbered F1.., the
+playbook's record below them S1.., so both are citable and neither is
 mistaken for the other.
 
 ## The files
@@ -152,12 +148,26 @@ flowchart LR
     SEN --> DBC
 ```
 
-The containers share one network; only `data` and `refresher` ever open
-a connection out. `docker-entrypoint.sh` takes the role as its argument
+The containers share one network; only `data` and `refresher` ever open a
+connection out. `docker-entrypoint.sh` takes the role as its argument
 (`data`, `inference`, `ui`, `refresh`, `sentry`); the others wait until
 the data layer reports the database current, and compose's healthchecks
 order the start the same way. [security.md](security.md) has the rest of
 the measures.
+
+Settings, from the environment or `.env` (the refresh times are in [db.md](db.md)):
+
+| setting | default | meaning |
+| --- | --- | --- |
+| `COUNTER_MATRIX_STRATEGIES` | empty | a playbook folder other than `inference/strategies/` |
+| `COUNTER_MATRIX_WORKERS` | `max(6, min(cores, 12))` | the solver's worker processes |
+| `COUNTER_MATRIX_PARALLEL` | `1` | `0`: every board in one process |
+| `COUNTER_MATRIX_UI_HOST`, `COUNTER_MATRIX_UI_PORT` | `127.0.0.1`, `8017` | where the board listens |
+| `COUNTER_MATRIX_INFERENCE_HOST`, `COUNTER_MATRIX_INFERENCE_PORT` | `127.0.0.1`, `8019` | where the inference service listens |
+| `COUNTER_MATRIX_MCP_TOKEN` | unset | bearer token the MCP server requires over HTTP |
+| `COUNTER_MATRIX_AUDIT` | `db/raw/audit.jsonl` | the MCP server's audit log |
+| `COUNTER_MATRIX_SENTRY_EVERY` | `30` | seconds between sentry sweeps |
+| `COUNTER_MATRIX_CLAUDE` | the `claude` on `PATH` | the CLI the agents and `derive` run |
 
 Local-only works identically: without `DATABASE_URL`, everything runs in
 one process against the embedded pgserver cluster at `db/psql/cluster` -
@@ -167,9 +177,9 @@ tools, same facts, same strategies.
 ## The skills
 
 Open the repo in a [Claude Code](https://claude.com/claude-code) session
-and the `.claude/skills/` are yours; each is a playbook over the MCP tools.
-One line each here; [skills.md](skills.md) documents them, [mcp.md](mcp.md)
-the servers and every tool.
+and the `.claude/skills/` are yours; each is a playbook over the MCP
+tools. [skills.md](skills.md) documents them, [mcp.md](mcp.md) the
+servers and every tool.
 
 | skill | does |
 | --- | --- |
@@ -183,17 +193,18 @@ the servers and every tool.
 | `/refresh` | the agents' run, the one `orchestrator.py agents` executes headless: refresh, complete drafts, re-infer with restraint, regenerate, report |
 | `/maintain` | the repo's maintainer: lint and tests three ways, docs current, stale names, dead code, layout, security posture, a report |
 
-No API key, no per-token bill: the skills run on your subscription.
+The skills run on your subscription; no API key, no per-token bill.
 
 ## Scope, honestly
 
-Open Queue Competitive is the target; no source publishes Open Queue
-rates, so META is Competitive Role Queue on console (Americas), stated on
-every snapshot fact rather than assumed away. Rates carry the patch and
-season they were captured under, and the board warns when patches shipped
-since. Judgements (counters, synergies, playstyles) are tier- and
+6v6 Open Queue Competitive is the target: six picks a side in any mix of
+roles, at most two tanks. No source publishes Open Queue rates, so META
+is Competitive Role Queue on console (Americas), stated on every snapshot
+fact rather than assumed away. Rates carry the patch and season they were
+captured under, and the board warns when patches shipped since.
+Judgements (counters, synergies, playstyles) are tier- and
 region-agnostic by design, and a table is a table: every row carries its
 source, and that is the only distinction drawn between measured, judged
-and hand-written data. Players are assumed to play optimally - the
-ground rule every skill holds a comp to ([skills.md](skills.md)), so a
-strategy encodes the game, never a lobby's habits.
+and hand-written data. Players are assumed to play optimally - the ground
+rule every skill holds a comp to ([skills.md](skills.md)), so a strategy
+encodes the game, never a lobby's habits.

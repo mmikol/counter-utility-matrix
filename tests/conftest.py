@@ -6,11 +6,10 @@ Three kinds of test:
     invariant    properties the built database must hold
     validation   our data against a third party's published figures
 
-Only the first runs anywhere. The other two default to the repo's own build
-at db/psql/cluster - the same database `python -m db.mcp call db_rebuild` produces -
-and skip themselves when there is nothing there, so `pytest` on a fresh clone
-is still green. COUNTER_MATRIX_LOCAL_SERVER or DATABASE_URL override the target;
-COUNTER_MATRIX_NO_DATABASE=1 runs the suite the way CI does, with no database.
+The last two default to the repo's own build at db/psql/cluster, the database
+`python -m db.mcp call db_rebuild` produces, and skip themselves when it is
+absent. COUNTER_MATRIX_LOCAL_SERVER or DATABASE_URL override the target;
+COUNTER_MATRIX_NO_DATABASE=1 runs the suite with no database, as CI does.
 """
 
 import os
@@ -38,8 +37,7 @@ def _dsn():
 def dsn(db):
     """The connection string the suite runs against, password included (a
     connection's own `info.dsn` drops it). It rides on `db` so it skips the
-    same way: an embedded cluster with no tables is not a database to test
-    against."""
+    same way."""
     return _dsn()
 
 

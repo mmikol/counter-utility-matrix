@@ -216,8 +216,7 @@ def test_mcp_posts_a_tool_call_and_reads_the_text(monkeypatch):
 
 
 def test_readiness_solves_one_board_through_the_service(monkeypatch):
-    """The probe is what tells a playbook too big for the container from one
-    that fits: a six back means ready, anything else means not."""
+    """A six back from the probe means ready, anything else means not."""
     calls = []
     six = {"blue": {"blue": ["D.Va", "Winston", "Cassidy", "Genji", "Ana", "Brigitte"]}}
     monkeypatch.setattr(orchestrator, "get_json", lambda url, timeout=10: calls.append(url) or six)

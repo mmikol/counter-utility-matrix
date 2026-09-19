@@ -22,8 +22,8 @@ function bars(contribs) {
 function meaning(d) {
   var n = typeof d.normalized === 'number' ? Math.round(d.normalized) : null;
   if (n === null) return '';
-  if (d.seat === 'red') return 'their picks reach ' + n + '% of the score of their best possible counter to yours';
-  return 'your picks reach ' + n + '% of the score of the best six for this board';
+  if (d.seat === 'red') return 'their picks reach ' + n + '% of their best counter to yours';
+  return 'your picks reach ' + n + '% of the best six for this board';
 }
 
 /* the comps panel: the game plan, the fight odds strip above the boxes, the two
@@ -48,7 +48,7 @@ function renderInf() {
     return "<span class='mbar " + side + "' title='" + esc(tip) + "'><span class='side'>" + side + "</span><span class='trk'><span class='fill' style='width:" +
       (odds !== null ? odds : typeof value === 'number' ? value : 0) + "%'></span></span><span class='val'>" + word + '</span></span>';
   };
-  el('momentum').innerHTML = "<span class='lbl' title='each side\'s comp as a share of the best six it could field here - the higher bar holds the fight'>fight odds</span>" +
+  el('momentum').innerHTML = "<span class='lbl' title='each side\'s comp as a share of the best six it could field here'>fight odds</span>" +
     "<span class='mbars'>" + bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current) + '</span>';
   /* neither seat carries a score: red's is what they are likely to field, from
      the map and the meta alone, and blue's is the reference every comp is
@@ -64,7 +64,7 @@ function renderInf() {
     if (!r) return ['', ''];
     var why = r.scoring === false ? (r.unscored || '')
             : held ? meaning(cur)
-            : 'no ' + who + ' picks yet: the six suggested is this seat\'s optimal, 100 by definition';
+            : 'no ' + who + ' picks yet: the suggested six is this seat\'s optimal, 100';
     return [figure(r), why];
   };
   var b = badge(d.current, d.blue, 'blue'), r = badge(d.red_current, d.red, 'red');

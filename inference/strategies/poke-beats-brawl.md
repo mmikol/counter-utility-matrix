@@ -7,6 +7,7 @@ bonus: params.EDGE
 params:
   EDGE: 1
 ---
+
 # Poke beats brawl
 
-A poke lean against a brawl lean is the favourable side of the triangle. The brawl has to cross open ground to reach anyone and lacks the range to make the crossing cheap, so a poke six wins the approach every fight. The bonus lands while poke is our majority style and brawl is red's.
+A poke lean against a brawl lean is the favourable side of the triangle. The brawl has to cross open ground to reach anyone and lacks the range to make the crossing cheap. The bonus lands while poke is our majority style and brawl is red's.

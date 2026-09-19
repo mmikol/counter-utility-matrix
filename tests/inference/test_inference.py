@@ -597,24 +597,22 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
 
 @pytest.mark.invariant
 def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(world, monkeypatch):
-    """Blue's optimal and red's counter run in two workers, the fill in the
-    parent; the answer is byte-for-byte the sequential one, the board's
-    weight overrides included (a worker loads the playbook from its files)."""
+    """Every search is cut into slices across the pool and merged here; the
+    answer is byte-for-byte the sequential one, the board's weight overrides
+    included (a worker loads the playbook from its files)."""
     from inference import engine
     if not engine.parallel_available():
         pytest.skip("one core, or COUNTER_MATRIX_PARALLEL=0")
-    assert engine.warm() == engine.WORKERS
+    assert engine.warm() == engine.WORKERS >= 6
     weights = {h.id: 10.0 if h.weight < 10 else 0.5
                for h in catalog.load() if h.kind == "heuristic"}
     split = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                          side="attack", weights=weights)
-    assert split["blue"].catalog and not hasattr(split["blue"], "solver")   # crossed the boundary
     assert split["blue"].to_dict()["weights"] == weights         # the override reached the worker
     monkeypatch.setattr(engine, "PARALLEL", False)
     assert not engine.parallel_available()
     straight = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                             side="attack", weights=weights)
-    assert hasattr(straight["blue"], "solver")
 
     def timeless(b):
         d = engine.board_dict(b)

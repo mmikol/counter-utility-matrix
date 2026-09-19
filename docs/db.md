@@ -1,12 +1,10 @@
 # The DATA LAYER - `db/`
 
 Pull every source, clean it, store it in Postgres, and serve the tools
-that do so. This layer owns `DATA = HEROES ∪ MAPS ∪ META`: what the
-sources say about the heroes, the maps and the meta, pulled and set - the
-tables a board's facts are derived from. Any data in the database is just
-data: every row carries a `source_id`, and that is the only distinction
-drawn between what was measured, what was judged and what was written by
-hand.
+that do so. This layer owns `DATA = HEROES ∪ MAPS ∪ META`: the tables a
+board's facts are derived from. Every row carries a `source_id`, and that
+is the only distinction drawn between what was measured, what was judged
+and what was written by hand.
 
 **One door.** The MCP tools in `mcp/tools.py` are the only way in. A
 Claude Code session calls them over MCP, the `refresher` container calls
@@ -20,8 +18,7 @@ a shell calls them the same way:
 .venv/bin/python -m db.mcp call pull_rates '{"refresh": true}'
 ```
 
-The root's `orchestrator.py` drives the same tools for the whole stack;
-there is no per-module script to keep in step with them.
+The root's `orchestrator.py` drives the same tools for the whole stack.
 
 ## Layout
 
@@ -94,7 +91,7 @@ The servers, the transport and the full tool reference are in
 | --- | --- |
 | `__init__.py` | Where the database is (`DATABASE_URL`, or the embedded cluster at `db/psql/cluster`); how a source registers the `sources` row its rows carry; how names look up ids; what a capture is stamped with (now, the current patch and season); the CSV export and its `EXPORT.json` mark naming the database it came from. Knows no particular source or table. |
 | `schema.py` | Applies migrations and records them in the `schema_migrations` ledger; `pending` says which files the database has not seen; `rebuild` drops everything and reapplies; `generate_docs` writes the ER diagrams and the data dictionary at the end of this document from the live schema. |
-| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` outcomes (dropped by `014`), `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `014` the recorded tables dropped, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
+| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
 | `cluster/` | The embedded Postgres cluster `pgserver` creates on first touch (gitignored). The compose stack uses its own `postgres` container instead, reachable from the host through `./docker-db`. |
 
 ### `data/authored/` - what we write
@@ -263,9 +260,9 @@ document is written by hand.
 ### Entity relationship diagrams
 
 <!-- generated:erd -->
-Five domains. Three are the authoritative data the sources are pulled
-for - which hero (HEROES), on which map (MAPS), performing how well
-(META) - the DATA a board's facts are derived from. Every domain
+Five domains. Three hold the data the sources are pulled for: which
+hero (HEROES), on which map (MAPS), performing how well (META).
+Every domain
 yields independent facts (a selection's own row) and dependent ones
 (the selection joined with others: map_meta is heroes ⋈ maps ⋈ meta,
 counters and synergies are heroes ⋈ heroes), and a join belongs to
@@ -283,9 +280,9 @@ STRATEGIES  = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS
 COMP        = ARGMAX[ STRATEGIES( FACTS ) ]
 ```
 
-Every table also carries `source_id` → `sources` and a `cao` timestamp.
-Those edges are left off - they would connect `sources` to all 36 tables
-and obscure everything else.
+Every table but `sources` and `schema_migrations` also carries
+`source_id` → `sources` and a `cao` timestamp. Those edges are left off -
+they would connect `sources` to 34 tables and obscure everything else.
 
 #### HEROES
 
@@ -419,9 +416,10 @@ erDiagram
 <!-- generated:dictionary -->
 Generated from the live schema (`python -m db.mcp call db_docs`).
 
-Every table carries two columns omitted from the lists below, because they
-are on all of them: `source_id` (which source the row came from, see
-`sources`) and `cao` — "current as of", when that row was read.
+Two columns are omitted from the lists below: `source_id` (which source the
+row came from, see `sources`) and `cao` — "current as of", when that row
+was read. Every table but `sources` and `schema_migrations` carries both;
+`sources` carries `cao` alone and `schema_migrations` neither.
 
 | domain | tables |
 | --- | --- |

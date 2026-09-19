@@ -15,12 +15,12 @@ A strategy file:
     weight: 3
     when: enemy.size >= 1     # optional guard, either kind
     ---
-    prose: what it means, why it is weighted this way, how to read it
+    prose: what it means and why
 
-Three kinds. A HEURISTIC names a numeric fact key (`metric`) that is
-min-max normalised against a seeded reference sample of legal sixes for
-the board and weighted; `direction` says which end is good. A CONSTRAINT
-takes one of two forms, read off its frontmatter (`form`):
+A HEURISTIC names a numeric fact key (`metric`), min-max normalised
+against a seeded reference sample of legal sixes for the board and
+weighted; `direction` says which end is good. A CONSTRAINT takes one of
+two forms, read off its frontmatter (`form`):
 
     limit    `require: <expr>` must hold. Hard by default - a comp that
              fails is discarded; `soft: true` with `penalty: <number>`
@@ -28,17 +28,16 @@ takes one of two forms, read off its frontmatter (`form`):
     scored   `bonus: <expr>` and/or `penalty: <expr>`: the solver adds
              `weight x (bonus - penalty)` while `when` holds.
 
-An ASSUMPTION is prose by definition: what the solver takes as given and
-the /comp session holds a comp to (players play optimally, say); it
-carries nothing to score and is never a draft.
+An ASSUMPTION is prose: what the solver takes as given and the /comp
+session holds a comp to (players play optimally, say). It carries nothing
+to score and is never a draft.
 
 A constraint or heuristic with only a name, a kind and prose - no metric,
 no expression - is a DRAFT: it loads, it is shown and served, the solver
 ignores it, and the `/strategy` skill infers the rest (a heuristic's
 metric, direction and weight; a constraint's limit or bonus/penalty and
 params) from the prose and writes it through `infer_strategy` - or turns
-it into an assumption when nothing measurable captures it. Nothing here
-derives a formula on its own.
+it into an assumption when nothing measurable captures it.
 
 `params:` (an indented block of NAME: number) are the dials an expression
 reads as params.NAME - tuning is editing the file.
@@ -106,7 +105,7 @@ def parse_frontmatter(text):
     """'---\\nkey: value\\n---\\nbody' -> (meta, body). Flat keys plus one
     level of indented mapping (params:)."""
     if not text.startswith("---"):
-        raise CatalogError("no frontmatter (the file must open with ---)")
+        raise CatalogError("no frontmatter: the file must open with ---")
     end = text.find("\n---", 3)
     if end < 0:
         raise CatalogError("unterminated frontmatter")
@@ -154,7 +153,8 @@ class Strategy:
             raise CatalogError("%s: weight must be within 0..10" % hid)
         self.soft = bool(meta.get("soft", False))
         self.params = dict((meta.get("params") or {}).items())
-        self.params_section = Section(self.params)
+        self.params_section = Section({k: 0 if v is None else v
+                                       for k, v in self.params.items()})
         try:
             self.when = compile_expr(str(meta["when"])) if "when" in meta else None
             self.require = compile_expr(str(meta["require"])) if "require" in meta else None
@@ -178,7 +178,7 @@ class Strategy:
         if self.kind == "assumption" and (self.metric or self.require is not None
                                           or self.bonus is not None or self.penalty is not None
                                           or self.when is not None):
-            raise CatalogError("%s: an assumption is prose; it carries nothing to score" % self.id)
+            raise CatalogError("%s: an assumption carries nothing to score" % self.id)
         if self.kind == "heuristic" and (self.require is not None or self.bonus is not None):
             raise CatalogError("%s: a heuristic weighs a metric;"
                                " require/bonus belong to a constraint"
@@ -191,7 +191,7 @@ class Strategy:
         if self.require is not None and self.soft and self.penalty is None:
             raise CatalogError("%s: a soft limit needs penalty:" % self.id)
         if self.require is None and self.soft:
-            raise CatalogError("%s: soft: only means something with require:" % self.id)
+            raise CatalogError("%s: soft: needs require:" % self.id)
         for expr in (self.when, self.require, self.bonus, self.penalty):
             if expr is None:
                 continue
@@ -206,8 +206,8 @@ class Strategy:
 
     @property
     def form(self):
-        """heuristic, a constraint's form (limit, scored), assumption (prose by
-        definition), or draft (name, kind and prose only - awaiting /strategy)."""
+        """heuristic, a constraint's form (limit, scored), assumption, or draft
+        (name, kind and prose only - awaiting /strategy)."""
         if self.kind == "assumption":
             return "assumption"
         if self.kind == "heuristic" and self.metric:
@@ -379,8 +379,8 @@ def render(catalog):
 def write_docs(catalog, path=DOCS_PATH):
     """The catalog and the vocabulary, generated into docs/inference.md
     between its <!-- generated:catalog --> markers - from the shipped
-    playbook only: while an experiment is in force the docs keep describing
-    the real one, and this returns None."""
+    playbook only: while another folder is in force the docs keep describing
+    the shipped one, and this returns None."""
     from db.psql.schema import embed
     if STRATEGIES_DIR != SHIPPED_DIR:
         return None

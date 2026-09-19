@@ -37,7 +37,7 @@ weight. An <b>assumption</b> is prose: shown, never scored.</p>
 <p><b>COMP</b>: of every legal six, the one the function scores highest on this board.
 Deterministic: the same board gives the same six.</p>
 <h2 id='function'>The function: STRATEGIES( FACTS )</h2>
-<p>One candidate six in, one number out. It reads the facts as a namespace: <code>team</code>,
+<p>One six in, one number out. The facts are its namespace: <code>team</code>,
 <code>enemy</code>, <code>matchup</code>, <code>map</code>, <code>world</code> - the facts tab's
 own numbers.</p>
 <p>A hard limit that fails removes the six; a soft one subtracts its penalty. A heuristic
@@ -54,12 +54,11 @@ score(x) = &Sigma; heuristics h     w_h &middot; norm_h( metric_h(x) )
 norm_h(v) = clamp( (v &minus; min_ref) / (max_ref &minus; min_ref), 0, 1 )
             and 1 &minus; that when h minimises</pre>
 <p id='what-100-means'><b>What 100 means.</b> Each seat's best six on this board is its optimal,
-100. The badge above a picker is that seat's picks as a share of its optimal. 100 is as good as
-the best six under this playbook here, not a win probability. A seat with nothing to score
-against reads <i>unscored</i>; the reason is on hover.</p>
+100. The badge above a picker is that seat's picks as a share of its optimal under this
+playbook, not a win probability. A seat with nothing to score against reads <i>unscored</i>;
+the reason is on hover.</p>
 <p id='fight-odds'><b>Fight odds.</b> Blue's share over the sum of both shares; red's is the
-rest. They split 100. With one seat unscored the bars show the shares alone. Not a fitted
-probability.</p>
+rest. With one seat unscored the bars show the shares alone. Not a fitted probability.</p>
 <p id='argmax'><b>The argmax.</b> Each role's pool is cut to six by a fixed prior (map win rate,
 answers, exposure, synergy with the locked picks, style fit). Every legal shape is filled around
 the locked picks, each six is scored, and a local search swaps same-role heroes while the score
@@ -92,8 +91,8 @@ are the one door. A sentry watches the strategy files and the audit log.</p>
 compiled once and whitelisted; no model, no network.</p>
 <p><b>The board</b> (<code>ui/</code>): the facts of one board and the inference layer's answer
 at each stage of a draft. It never calls a language model.</p>
-<p><b>Claude</b>: offline, on your word. Refreshes the sources, derives a strategy's mathematics
-from its prose, tunes weights. <code>/comp</code> is the same solver in chat.</p>
+<p><b>Claude</b>: runs when you ask. Refreshes the sources, derives a strategy's mathematics from
+its prose, tunes weights. <code>/comp</code> is the same solver in chat.</p>
 <p class='legend'><code>docs/architecture.md</code>, <code>docs/db.md</code>,
 <code>docs/inference.md</code>.</p>
 </article>

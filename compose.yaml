@@ -1,30 +1,28 @@
 # python orchestrator.py  ->  one container per layer, and a guard:
 #
-#   db          PostgreSQL (the database)
-#   data        DATA LAYER: builds the database when it is empty or stale
-#               (from the bind-mounted page caches), then serves the MCP server over HTTP
-#               at http://localhost:8020/mcp - the door a Claude Code session
-#               opens (.mcp.json, server "counter-utility-matrix-docker")
+#   db          PostgreSQL
+#   data        DATA LAYER: builds the database from the bind-mounted page
+#               caches when it is empty or stale, then serves the MCP server at
+#               http://localhost:8020/mcp (.mcp.json, server
+#               "counter-utility-matrix-docker")
 #   inference   INFERENCE ENGINE: http://localhost:8019, reading the strategy
 #               files live
 #   ui          UI LAYER: the board at http://localhost:8017
 #   refresher   the data layer's clock: rates and counters daily at
 #               COUNTER_MATRIX_REFRESH_AT (05:00 container time; set TZ), every
-#               source weekly, and right away on start when the caches are a
-#               day old
+#               source weekly, and on start when the caches are a day old
 #   sentry      the guard: quarantines a strategy file that will not load or
 #               reads like an instruction, flags instruction-like text in the
-#               inputs and the database, watches the door's audit log; its
-#               report is what `orchestrator.py status` prints
+#               inputs and the database, watches the MCP audit log; its report
+#               is what `orchestrator.py status` prints
 #
-# Every container runs as an unprivileged user on a read-only root
-# filesystem with every capability dropped and no new privileges, on one
-# network. What keeps a container off the internet is that its code opens
-# no connection out: only data and refresher fetch, from three fixed hosts.
-# Every published port binds to 127.0.0.1. No keys, no accounts. Set
-# COUNTER_MATRIX_MCP_TOKEN (in .env) to require a bearer token at the door.
-# One image, built once (by `data`), shared by every container; each
-# container mounts only what it reads, read-only unless it writes there.
+# Every container runs as an unprivileged user on a read-only root filesystem
+# with every capability dropped and no new privileges, on one network. Only
+# data and refresher open a connection out, to three fixed hosts. Every
+# published port binds to 127.0.0.1. No keys, no accounts.
+# COUNTER_MATRIX_MCP_TOKEN (in .env) requires a bearer token on the MCP server.
+# One image, built once by `data`, shared by every container; each container
+# mounts only what it reads, read-only unless it writes there.
 
 name: counter-utility-matrix
 
@@ -85,8 +83,8 @@ services:
 
   data:
     <<: *app
-    deploy:                          # the suite runs here: pytest plus the board's two
-      resources:                     # solver workers, side by side, need the headroom
+    deploy:                          # the suite runs here: pytest plus the board's
+      resources:                     # solver workers
         limits:
           memory: 2g
           pids: 256
@@ -119,6 +117,11 @@ services:
 
   inference:
     <<: *app
+    deploy:                          # the solver's worker pool: ~70 MB a worker, twelve at most
+      resources:
+        limits:
+          memory: 2g
+          pids: 256
     command: ["inference"]
     volumes: &reader_mounts       # the playbook, read-only; everything else comes from the database
       - ./inference/strategies:/app/inference/strategies:ro

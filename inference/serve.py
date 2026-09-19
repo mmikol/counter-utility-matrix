@@ -8,8 +8,8 @@
     GET  /evaluate?map=&side=&red=&blue=&ban=   a full six scored against the field
     GET  /strategies                   the catalog
 
-The same functions ui/board.py calls in-process when no INFERENCE_URL is set;
-standard library only.
+The same functions ui/board.py calls in-process when no INFERENCE_URL is set.
+http.server, no web framework.
 """
 
 import argparse

@@ -23,9 +23,8 @@ def catalog_copy(tmp_path):
 # --- tuning --------------------------------------------------------------------------
 
 def test_a_strategy_is_three_sentences_at_most(catalog_copy):
-    """The user's rule: the add tool refuses a fourth sentence, counts a code
-    span as one token and the title line as none, and the playbook's own
-    files keep to it."""
+    """The add tool refuses a fourth sentence, counts a code span as one token
+    and the title line as none; the playbook's own files keep to it."""
     assert tune.sentences("# Title\n\nOne. Two! Three?") == 3
     assert tune.sentences("One `require: a == 2.` two.") == 1
     assert tune.sentences("One (as noted). Two \"quoted.\" Three.") == 3
@@ -284,8 +283,8 @@ def test_an_experiment_playbook_is_chosen_by_the_environment(monkeypatch, tmp_pa
     monkeypatch.setenv("COUNTER_MATRIX_STRATEGIES", str(experiment))
     chosen = catalog.strategies_dir()
     assert chosen == str(experiment)
-    two = catalog.load(chosen)
-    assert {h.id for h in two} == {"open-queue-tanks"}
+    one = catalog.load(chosen)
+    assert {h.id for h in one} == {"open-queue-tanks"}
     monkeypatch.setattr(catalog, "STRATEGIES_DIR", chosen)
-    assert catalog.write_docs(two, path=str(tmp_path / "never.md")) is None
+    assert catalog.write_docs(one, path=str(tmp_path / "never.md")) is None
     assert not (tmp_path / "never.md").exists()

@@ -16,10 +16,10 @@ Fields: weight, direction, soft, when, require, bonus, penalty, metric,
 kind, category, params.NAME. The edited (or new) file is loaded through
 the catalog before it is written, so a metric that does not exist or an
 expression that does not parse is refused and nothing changes. Every
-accepted change is one line in inference/strategies/tuning-log.md - the
-audit trail of how the brain came to be. The log lives beside the files on
-purpose: the compose stack bind-mounts that directory, so a change made
-through a container lands on the host and in git like the file it changed.
+accepted change is one line in inference/strategies/tuning-log.md. The log
+lives beside the files: the compose stack bind-mounts that directory, so a
+change made through a container lands on the host and in git with the file
+it changed.
 """
 
 import os
@@ -162,22 +162,21 @@ def _stamp():
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ")
 
 
-def _where(directory, log_path):
+def _where(directory):
+    """The playbook in force and its log: (directory, log path)."""
     directory = directory or catalog_module.STRATEGIES_DIR
-    return directory, log_path or os.path.join(directory, "tuning-log.md")
+    return directory, os.path.join(directory, "tuning-log.md")
 
 
 def _document(directory, loaded):
-    """The catalog document follows the files - for the real playbook only,
-    never for a test's copy."""
+    """The catalog document follows the files, for the shipped playbook only."""
     if os.path.abspath(directory) == os.path.abspath(catalog_module.STRATEGIES_DIR):
         catalog_module.write_docs(loaded)
 
 
-def tune(hid, field, value, reason, directory=None, by="claude-code-session",
-         log_path=None):
+def tune(hid, field, value, reason, directory=None, by="claude-code-session"):
     """Apply one change -> {"id", "field", "old", "new", "line"}."""
-    directory, log_path = _where(directory, log_path)
+    directory, log_path = _where(directory)
     if not reason or not reason.strip():
         raise TuneError("a tuning change needs a reason")
     if not ID_RE.fullmatch(hid or ""):
@@ -200,10 +199,10 @@ def tune(hid, field, value, reason, directory=None, by="claude-code-session",
     return {"id": hid, "field": field, "old": old, "new": _format(value), "line": line}
 
 
-def complete(hid, fields, reason, directory=None, by="claude-code-session", log_path=None):
+def complete(hid, fields, reason, directory=None, by="claude-code-session"):
     """Set several frontmatter fields at once - what /strategy infers for a
     draft - validated as a whole, logged as one line -> {"id", "form", "set", "line"}."""
-    directory, log_path = _where(directory, log_path)
+    directory, log_path = _where(directory)
     if not reason or not reason.strip():
         raise TuneError("an inferred strategy needs a reason")
     if not ID_RE.fullmatch(hid or ""):
@@ -231,7 +230,7 @@ def complete(hid, fields, reason, directory=None, by="claude-code-session", log_
             "line": line}
 
 
-MAX_SENTENCES = 3          # the user's rule: a strategy's description is three sentences at most
+MAX_SENTENCES = 3          # a strategy's prose is three sentences at most
 _SENTENCE_END = re.compile(r"[.!?](?:[\"')\]`]*)(?:\s|$)")
 
 
@@ -243,10 +242,10 @@ def sentences(body):
 
 
 def add(hid, name, kind, body, fields=None, reason="", directory=None,
-        by="claude-code-session", log_path=None, category="general"):
+        by="claude-code-session", category="general"):
     """A new strategy file from its name, kind, prose and (inferred) fields,
     validated through the catalog before it exists -> {"id", "form", "path", "line"}."""
-    directory, log_path = _where(directory, log_path)
+    directory, log_path = _where(directory)
     if not ID_RE.fullmatch(hid or ""):
         raise TuneError("id must be lowercase-kebab, got %r" % hid)
     if kind not in catalog_module.KINDS:
@@ -260,7 +259,8 @@ def add(hid, name, kind, body, fields=None, reason="", directory=None,
                         % (MAX_SENTENCES, sentences(body)))
     path = os.path.join(directory, hid + ".md")
     if os.path.exists(path):
-        raise TuneError("%r exists; tune or infer_strategy changes it, delete is a human's" % hid)
+        raise TuneError("%r exists; tune or infer_strategy changes it, deleting it is manual"
+                        % hid)
     pairs = [(f, _coerce(f, v)) for f, v in _flatten(fields)]
     body = body.strip("\n")
     if not body.startswith("#"):

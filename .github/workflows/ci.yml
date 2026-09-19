@@ -1,14 +1,12 @@
 # Lint and test on every push to main and every pull request.
 #
-# CI never builds the database: a build scrapes Blizzard and the wiki - slow,
-# flaky, and unkind to the sources on every push. The tests that need one
-# (marked `invariant`) skip themselves when db/psql/cluster is absent
-# (tests/conftest.py; COUNTER_MATRIX_NO_DATABASE=1 reproduces this locally),
-# so what runs here is ruff and every test that needs no database: the pure
-# ones, the MCP protocol tests, which spawn the server without a database,
-# and the documentation tests. Coverage is reported without the bar; the
-# runs with a database - the local one and `orchestrator.py test` inside
-# the image - enforce the 75% that pyproject.toml sets.
+# CI never builds the database: a build scrapes Blizzard and the wiki, slow and
+# unkind to the sources on every push. Tests marked `invariant` skip themselves
+# when db/psql/cluster is absent (tests/conftest.py; COUNTER_MATRIX_NO_DATABASE=1
+# reproduces that locally), so what runs here is ruff plus every test that needs
+# no database. Coverage is reported without the bar; the runs with a database -
+# the local one and `orchestrator.py test` inside the image - enforce the 75%
+# pyproject.toml sets.
 
 name: ci
 
@@ -34,6 +32,6 @@ jobs:
       - name: Lint (ruff)
         run: python -m ruff check db ui inference tests orchestrator.py
 
-      - name: Tests (pure + protocol; db-bound tests skip without a built cluster)
+      - name: Tests (db-bound tests skip without a built cluster)
         run: >-
           python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=0

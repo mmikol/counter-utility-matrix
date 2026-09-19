@@ -86,9 +86,6 @@ def parse_stages(text):
     if not section:
         return []
     body = section.group(1)
-    cut = re.search(r'^===', body, re.M)
-    if cut:
-        body = body[:cut.start()]
     stages = []
     for line in body.splitlines():
         if not line.startswith('*') or line.startswith('**'):

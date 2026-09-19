@@ -32,15 +32,21 @@ NAMESPACES = ("team", "enemy", "matchup", "map", "world", "params")
 
 
 class Section:
-    """A namespace dict read by attribute: missing keys and None read 0."""
-    __slots__ = ("_d",)
+    """A namespace read by attribute: a key it lacks reads 0.
 
-    def __init__(self, d):
-        self._d = d
+    The dict becomes the instance's own __dict__, so `team.tanks` in a
+    compiled expression is a plain attribute lookup and not a call - the
+    solver makes millions of them. The values are the namespace's own:
+    compute fills every key it declares with a number, a name or a list,
+    never None."""
+
+    def __init__(self, values):
+        self.__dict__ = values
 
     def __getattr__(self, key):
-        value = self._d.get(key)
-        return 0 if value is None else value
+        if key.startswith("__"):
+            raise AttributeError(key)
+        return 0
 
 
 class Scope(dict):
@@ -60,16 +66,18 @@ class Expr:
     def __init__(self, source):
         self.source = source.strip()
         try:
-            self.tree = ast.parse(self.source, mode="eval").body
+            tree = ast.parse(self.source, mode="eval").body
         except SyntaxError as error:
             raise ExprError("%r: %s" % (self.source, error.msg)) from error
-        self.names = sorted(self._collect_names(self.tree))
+        self.names = sorted(self._collect_names(tree))
         for name in self.names:
             if any(part.startswith("_") for part in name.split(".")):
                 raise ExprError("%r: underscore names are not allowed" % name)
-        self._check(self.tree)
-        self._guard(self.tree, 0)
-        self.code = compile(ast.Expression(body=self.tree), "<strategy>", "eval")
+        self._check(tree)
+        self._guard(tree, 0)
+        # the code object is what a candidate is evaluated against; the tree
+        # is dropped, so a playbook keeps no syntax trees in any worker
+        self.code = compile(ast.Expression(body=tree), "<strategy>", "eval")
 
     def __repr__(self):
         return "Expr(%r)" % self.source

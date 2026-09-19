@@ -1,8 +1,8 @@
 """Pull + clean + store: overwatch.blizzard.com - the roster.
 
 The roster page carries every hero's role, subrole and portrait, and the
-role and subrole icons the UI layer draws; each hero page carries an
-abilities carousel and a perks section. Blizzard publishes prose only - no
+role and subrole filter icons; each hero page carries an abilities carousel
+and a perks section. Blizzard publishes prose only - no
 numbers, no map data - and omits some abilities outright, so weapons,
 stats, the missing abilities and the maps come from the wiki.
 """
@@ -65,8 +65,8 @@ def parse_subroles(soup):
 
 
 def parse_icons(soup):
-    """{'roles': {code: url}, 'subroles': {code: url}} - the icons the
-    game's own role filter draws, so the UI layer can draw the same."""
+    """{'roles': {code: url}, 'subroles': {code: url}} - the icons the site's
+    own role and subrole filters draw. The board draws the role ones."""
     roles, subroles = {}, {}
     for option in soup.select("option.role[data-role]"):
         url = _style_url(option)

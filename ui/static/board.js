@@ -77,11 +77,11 @@ function toggle(team, name) {
   if (st.bans.indexOf(name) >= 0) { flash(name + ' is banned this match'); return; }
   var arr = st[team], at = arr.indexOf(name);
   if (at >= 0) arr.splice(at, 1);
-  else if (arr.length >= TEAM) { flash((team === 'red' ? 'red' : 'blue') + ' already has ' + TEAM + ' - click a lit hero to free the slot'); return; }
+  else if (arr.length >= TEAM) { flash(team + ' already has ' + TEAM); return; }
   else {
     var h = hero(name), cap = h ? roleCap(team, h.role) : null;
     if (cap !== null && roleCounts(team)[h.role] >= cap) {
-      flash('the playbook allows at most ' + cap + ' ' + h.role + (cap === 1 ? '' : 's') + ' - free one for ' + name); return;
+      flash('the playbook allows at most ' + cap + ' ' + h.role + (cap === 1 ? '' : 's')); return;
     }
     arr.push(name);
   }
@@ -96,7 +96,7 @@ function toggleBan(name) {
     ['red', 'blue'].forEach(function (team) {          /* a banned hero cannot be picked */
       var i = st[team].indexOf(name); if (i >= 0) st[team].splice(i, 1);
     });
-  } else { flash(BANS + ' bans already - click a banned hero or its slot to free one'); return; }
+  } else { flash(BANS + ' bans already'); return; }
   save(); paint(); refresh();
 }
 
@@ -262,7 +262,7 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   if (!d.maps.some(function (m) { return m.name === st.map; })) st.map = '';
   buildTeam('red'); buildTeam('blue'); buildBanPicker(); paint();
   if (d.newer_patches && d.newer_patches.length) { var w = el('vintage'); w.style.display = 'block';
-    w.textContent = d.newer_patches.length + ' patch(es) shipped since the rates were captured (newest ' + d.newer_patches[0][0] + ') - rates are pre-patch; run pull_rates'; }
+    w.textContent = d.newer_patches.length + ' patch(es) since the rates were captured (newest ' + d.newer_patches[0][0] + ') - run pull_rates'; }
   el('mapsel').onchange = function () { st.map = this.value; save(); paint(); refresh(); };
   el('filter').oninput = renderFacts;
   var chips = el('chips'); chips.innerHTML = SCOPES.map(function (s) { return "<button class='chip on' data-scope='" + s + "'>" + s + '</button>'; }).join('');

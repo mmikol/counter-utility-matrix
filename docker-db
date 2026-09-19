@@ -4,11 +4,9 @@
 #     ./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'
 #     ./docker-db .venv/bin/python -m pytest -q
 #
-# Every entry point honors DATABASE_URL, so this one export is the whole
-# bridge; the port is the one compose.yaml publishes for the db service.
-# The container builds the database on `docker compose up` (the entrypoint
-# builds it when empty or stale); this script is how host-side tools - the
-# MCP server a Claude Code session drives, the board, the tests - read what
-# Docker built.
+# Every entry point honors DATABASE_URL; the port is the one compose.yaml
+# publishes for the db service. Host-side tools - the MCP server a Claude Code
+# session drives, the board, the tests - read the database Docker built this
+# way.
 export DATABASE_URL="postgresql://overwatch:${POSTGRES_PASSWORD:-overwatch}@localhost:5433/overwatch"
 exec "$@"

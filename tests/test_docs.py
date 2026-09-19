@@ -1,8 +1,6 @@
-"""The documentation is part of the code: every link resolves, every skill is
-a real skill naming real tools, the root overview names what is at the root,
-and the sections db_docs generates are what the code generates today - so a
-change to a tool, a strategy or the schema that forgets to regenerate fails
-here, not in a reader's hands. Pure, except the schema check."""
+"""Every link resolves, every skill names real tools, the root overview names
+what is at the root, and the sections db_docs generates match what the code
+generates today. Pure, except the schema check."""
 
 import json
 import os
@@ -17,8 +15,8 @@ DOCS = os.path.join(ROOT, "docs")
 SKILLS = os.path.join(ROOT, ".claude", "skills")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 
-# two of these read the checkout itself - the git index, the .claude folder -
-# which the Docker image deliberately leaves out; there they skip, not fail
+# the git index and the .claude folder are not in the Docker image; the two
+# tests that read them skip there, not fail
 needs_git = pytest.mark.skipif(
     not os.path.isdir(os.path.join(ROOT, ".git")) or not shutil.which("git"),
                                reason="needs the git checkout")

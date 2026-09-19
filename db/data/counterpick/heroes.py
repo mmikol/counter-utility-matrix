@@ -17,9 +17,9 @@ ignored.
 The site's own field names invert its column labels - the key `counters` is
 displayed as "Countered by" - so the tooltips are what settle the direction:
 "Countered by" lists heroes to pick *against* this one, and "Counters" lists
-heroes to avoid picking against it. They are read that way here, and the two
-are kept separately because the site does not treat them as inverses: of 354
-pairings, 114 appear in one direction only.
+heroes to avoid picking against it. They are read that way here. Both columns
+normalise to (hero, countered_by) and the union of the two is stored: the site
+does not publish them as exact inverses.
 """
 
 import re
@@ -130,8 +130,8 @@ def run(connection, cache_dir=None, session=None, log=print):
         raise CounterpickError("no 'all' competitive tier; pull the rates first")
     tier_id = all_tier[0]
 
-    # The playbook halves are judgements and the site's current page is the
-    # whole truth about them - reloaded wholesale.
+    # Counters and best maps are judgements, and the site's current page is
+    # the whole truth about them - reloaded wholesale.
     cursor.execute("DELETE FROM counters")
     cursor.execute("DELETE FROM map_strategy")
 

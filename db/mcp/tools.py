@@ -1,12 +1,10 @@
-"""The tools the data layer serves - and, through the same door, the board
-tools of the user and inference layers.
+"""The tools the data layer serves, and - through the same door - the board
+tools of the UI and inference layers.
 
 Every pull_* tool is pull -> clean -> store for one source and domain: that
-domain's run() in its source package under data/. `sync_all` runs them in
-dependency order.
-Nothing here is a static script: a session (or the refresher, or a shell
-through `python -m db.mcp call`) decides what to pull, when, and reads
-the summary back. There is no other door.
+domain's run() in its source package under db/data/. `sync_all` runs them in
+dependency order. A session, the refresher or a shell (`python -m db.mcp
+call`) decides what to pull and when, and reads the summary back.
 """
 
 import json
@@ -168,8 +166,8 @@ def pull_patches(ctx, refresh=False):
 
 
 @tool("pull_rates", "Blizzard's win/pick/ban rates as a NEW dated snapshot,"
-      " by rank tier and by map (Competitive Role Queue, console,"
-      " Americas). Slow when uncached: ~40 pages at a polite pace.",
+      " by rank tier and by map (Competitive Role Queue - the page offers no"
+      " Open Queue - console, Americas). Slow when uncached: ~40 pages, 5s apart.",
       REFRESH)
 def pull_rates(ctx, refresh=False):
     return _summary("pull_rates: snapshot stored", _pull(
@@ -186,7 +184,7 @@ def pull_playstyles(ctx, refresh=False):
 @tool("pull_counters", "counterpick.gg: who answers whom, each hero's best"
       " maps, and its own rates under a separate snapshot.", REFRESH)
 def pull_counters(ctx, refresh=False):
-    return _summary("pull_counters: playbook stored", _pull(
+    return _summary("pull_counters: counters stored", _pull(
         ctx, "counterpick", "db.data.counterpick.heroes", refresh))
 
 
@@ -200,8 +198,7 @@ AUTHORED_INPUTS = ("seasons", "synergies", "archetypes", "map_playstyle", "strat
 
 @tool("load_authored", "Store the inputs we write instead of fetch: seasons,"
       " synergies, comp archetypes, map playstyles, and the mirror of the"
-      " strategies catalog (the playbook's constraints, heuristics and assumptions)."
-      " Whole-truth reloads.",
+      " strategies catalog. Whole-truth reloads.",
       {"only": {"type": "array", "items": {"type": "string",
                                             "enum": list(AUTHORED_INPUTS)},
                 "description": "a subset to reload (default: all)"}})
@@ -232,9 +229,8 @@ def load_authored(ctx, only=None):
 
 
 @tool("sync_all", "Every pull_* tool in dependency order, then the authored"
-      " inputs, then the CSV mirror: the whole database from its sources."
-      " On a populated database this is an update (entities refresh in"
-      " place, rates append a snapshot).", REFRESH)
+      " inputs, then the CSV mirror. On a populated database this is an"
+      " update: entities refresh in place, rates append a snapshot.", REFRESH)
 def sync_all(ctx, refresh=False):
     results = {}
     for name, _ in PULLS:
@@ -243,7 +239,7 @@ def sync_all(ctx, refresh=False):
     ctx.log("=== load_authored ===")
     results["load_authored"] = run_tool(ctx, "load_authored")[1]
     results["export_csv"] = run_tool(ctx, "export_csv")[1]
-    return "sync_all: %d pulls + playbook + export done" % len(PULLS), results
+    return "sync_all: %d pulls + authored inputs + export done" % len(PULLS), results
 
 
 # --- the database's life ----------------------------------------------------
@@ -288,8 +284,8 @@ def db_init(ctx):
     from db.psql import schema
     with ctx.connect() as cx:
         if schema.table_count(cx):
-            raise ToolError("the database already has tables; db_rebuild is"
-                            " the tool that starts over")
+            raise ToolError("the database already has tables; db_rebuild"
+                            " starts over")
         schema.apply(cx, schema.read_migrations(), quiet=True)
         n = schema.table_count(cx)
     return "db_init: %d tables, no data" % n, {"tables": n}
@@ -309,8 +305,8 @@ def db_migrate(ctx):
             % (len(names), ": " + ", ".join(names) if names else ""), {"applied": names})
 
 
-@tool("db_rebuild", "Drop everything, reapply the migrations and run sync_all."
-      " The ground truth for structural change.", REFRESH)
+@tool("db_rebuild", "Drop everything, reapply the migrations and run"
+      " sync_all.", REFRESH)
 def db_rebuild(ctx, refresh=False):
     from db.psql import schema
     with ctx.connect() as cx:
@@ -320,8 +316,7 @@ def db_rebuild(ctx, refresh=False):
             {"dropped": len(dropped), "sync": results})
 
 
-@tool("export_csv", "Refresh db/raw/*.csv - one CSV per table, the"
-      " database's mirror.")
+@tool("export_csv", "Refresh db/raw/*.csv: one CSV per table.")
 def export_csv(ctx):
     with ctx.connect() as cx:
         counts = psql.export(cx)
@@ -363,14 +358,14 @@ def db_docs(ctx):
         text = schema.generate_docs(cx)
     paths = [p for p in (catalog.write_docs(catalog.load()), write_tool_docs()) if p]
     if catalog.STRATEGIES_DIR != catalog.SHIPPED_DIR:
-        ctx.log("db_docs: an experiment playbook is in force (%s); the catalog section"
+        ctx.log("db_docs: another playbook folder is in force (%s); the catalog section"
                 " of docs/inference.md was left as the shipped playbook" % catalog.STRATEGIES_DIR)
     return text + "; wrote " + ", ".join(os.path.relpath(p, ROOT) for p in paths), {}
 
 
 READ_ONLY_STARTS = ("select", "with", "explain", "show", "table", "values")
-# Belt to the reader role's braces: names that reach the file system or the
-# network from inside SQL, refused before the database sees them.
+# Names that reach the file system or the network from inside SQL, refused
+# before the database sees them. The reader role below is the second guard.
 SQL_DENIED = re.compile(r"\b(pg_read_file|pg_read_binary_file|pg_ls_dir|pg_stat_file|"
                         r"lo_import|lo_export|lo_get|lo_put|pg_execute_server_program|"
                         r"dblink|pg_sleep|pg_terminate_backend|pg_cancel_backend|"
@@ -383,7 +378,7 @@ MAX_CELL = 2000                        # characters per cell
 
 def reader_dsn(dsn):
     """The same database, connected as the reader: a non-superuser session
-    cannot SET ROLE its way back up, whatever the SQL says."""
+    cannot SET ROLE back up."""
     parts = psycopg.conninfo.conninfo_to_dict(dsn)
     parts["user"] = READER_ROLE
     parts["password"] = READER_ROLE
@@ -497,7 +492,7 @@ def facts_tool(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines")
 
 
 def _clamp(pool, top=5):
-    """The search is bounded: a pool past twelve per role is a million sixes."""
+    """Bounds on the search: pool 2..12 per role, top 1..20."""
     return max(2, min(int(pool or 6), 12)), max(1, min(int(top or 5), 20))
 
 
@@ -546,9 +541,9 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
       " (blue's own picks never constrain it), red's best"
       " counter to yours, both current comps scored on those scales, your picks"
       " against red's best counter, your locked picks with the empty slots filled,"
-      " the fight odds (each seat's share of its own optimal, and the two pitted"
-      " against each other), the game plan in prose, the shapes the playbook's"
-      " limits allow - what the roster enforces as you pick - and red's likely six"
+      " the fight odds (each seat's share of its own optimal, and the two against"
+      " each other), the game plan in prose, the shapes the playbook's limits"
+      " allow, and red's likely six"
       " from the data alone (a two-two-two from the map's pick rates and the"
       " authored synergies, past the bans; static for the board, no strategy read).",
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
@@ -573,7 +568,7 @@ def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6, weights
 
 @tool("strategies", "The inference layer's catalog - STRATEGIES = CONSTRAINTS ∪ HEURISTICS"
       " ∪ ASSUMPTIONS: every markdown strategy with its kind (constraint, heuristic or"
-      " assumption), a constraint's form (limit, scored, prose), metric, direction, weight"
+      " assumption), a constraint's form (limit, scored, draft), metric, direction, weight"
       " and expressions.")
 def strategies_tool(ctx):
     from inference import catalog
@@ -581,7 +576,7 @@ def strategies_tool(ctx):
     pending = [h.id for h in cat if h.pending]
     text = catalog.render(cat)
     if catalog.STRATEGIES_DIR != catalog.SHIPPED_DIR:
-        text = "playbook in force: %s (an experiment; the shipped one is %s)\n\n%s" % (
+        text = "playbook in force: %s (the shipped one is %s)\n\n%s" % (
             os.path.relpath(catalog.STRATEGIES_DIR, ROOT),
             os.path.relpath(catalog.SHIPPED_DIR, ROOT), text)
     if pending:
@@ -592,7 +587,7 @@ def strategies_tool(ctx):
 @tool("tune", "Change one strategy's frontmatter - its weight, a params dial, or"
       " a when/require/bonus/penalty expression - validated through the"
       " catalog before it is written, mirrored into the database, and logged"
-      " with the reason in inference/tuning-log.md.",
+      " with the reason in inference/strategies/tuning-log.md.",
       {"id": {"type": "string", "description": "the strategy's id (its filename)"},
        "field": {"type": "string", "description": "weight | direction | soft | when |"
                                                   " require | bonus | penalty | metric |"
@@ -642,7 +637,6 @@ STRATEGY_FIELDS = {
                 "description": "constraints: an expression (or a number with soft) subtracted"},
     "params": {"type": "object",
                "description": "NAME: number dials the expressions read as params.NAME"},
-    "prose": {"type": "boolean", "description": "true: a ground rule with nothing to score"},
     "category": {"type": "string"},
 }
 
@@ -679,7 +673,7 @@ def add_strategy(ctx, id, name, kind, body, reason="", **fields):
 
 @tool("infer_strategy", "Complete a draft (or rewrite a strategy's scoring): set several"
       " frontmatter fields at once - metric/direction/weight, when/require/bonus/"
-      "penalty, params, prose - validated as a whole, mirrored, logged as one line.",
+      "penalty, params - validated as a whole, mirrored, logged as one line.",
       dict({"id": {"type": "string"},
             "reason": {"type": "string", "description": "how the fields follow from the prose"}},
            **STRATEGY_FIELDS),

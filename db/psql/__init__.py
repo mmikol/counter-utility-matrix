@@ -81,8 +81,8 @@ def current_season(cursor):
 # --- the CSV mirror ------------------------------------------------------
 
 def table_names(connection):
-    """Every table in the database, from the catalog - a hand-kept list
-    drifts, and the table it forgets is exactly the stale one."""
+    """Every table in the database, read from the catalog rather than a
+    hand-kept list, which drifts."""
     return [
         row[0]
         for row in connection.execute(

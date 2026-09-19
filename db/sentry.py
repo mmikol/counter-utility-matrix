@@ -1,6 +1,4 @@
-"""The sentry: a guard that runs beside the containers and keeps the two
-things a bad input could reach - the playbook and the door - in a state
-the solver and the agents can trust.
+"""The sentry: the guard over the playbook and the door.
 
 Every COUNTER_MATRIX_SENTRY_EVERY seconds (30):
 
@@ -12,8 +10,7 @@ Every COUNTER_MATRIX_SENTRY_EVERY seconds (30):
                    session. A file whose prose carries instruction-like text
                    ("ignore previous instructions", a shell command, a
                    credential, a script tag, a base64 blob) is quarantined
-                   the same way: a strategy tells the solver how to score,
-                   it does not tell an agent what to do.
+                   the same way.
     the inputs     the same scan over the authored CSVs and the free text in
                    the database (descriptions, notes, strategy bodies);
                    those are flagged, not removed - a person decides
@@ -167,7 +164,7 @@ def check_database(dsn=None):
                                          % (table, column, why))
                             break
             return flags
-    except Exception as error:      # the sentry reports, it never dies
+    except Exception as error:      # a scan failure is a flag, not a crash
         return ["database not scanned: %s" % type(error).__name__]
 
 
@@ -240,7 +237,7 @@ def run_forever(every=EVERY, log=print, sleep=time.sleep):
     while True:
         try:
             offset = run_once(log=log, offset=offset).get("audit_offset", 0)
-        except Exception as error:      # the guard reports; it does not fall over
+        except Exception as error:      # a failed pass is logged, the loop goes on
             log("sentry: pass failed: %s: %s" % (type(error).__name__, error))
         sleep(every)
 

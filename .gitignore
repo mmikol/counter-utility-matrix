@@ -14,15 +14,14 @@ __pycache__/
 .cache-wiki/
 .cache-counterpick/
 /db/psql/cluster/
-pgdata/
 
 # the CSV mirror (scraped text and rates) and any stray export. The authored
-# inputs are the exception: they cannot be re-fetched, the repo is their home.
+# inputs are the exception: they cannot be re-fetched.
 db/raw/
 *.csv
 !db/data/authored/*.csv
 
-# what the sentry set aside: a person looks first, never a commit
+# what the sentry set aside; never committed
 *.md.quarantined
 
 # the bearer token, the uid/gid override

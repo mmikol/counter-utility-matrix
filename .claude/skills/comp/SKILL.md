@@ -53,9 +53,8 @@ shows). Prefer whichever is connected; they expose the same tools.
    optimum and say why, or improve on it and say why - a user's stated
    problem ("we lose the first fight") can outweigh a heuristic the solver
    weighted; the result's "ground rules to reconcile against" are the
-   assumptions to hold it to. Stay inside the limits (at most two tanks,
-   at most four supports), keep the locked picks, and respect CAUTION
-   facts.
+   assumptions to hold it to. Stay inside the limits (at most two tanks),
+   keep the locked picks, and respect CAUTION facts.
 5. Answer in chat, tersely: the playstyle, six picks each with one line of
    why and its [F#] tags, then a short overall argument. Note the vintage
    warning if the facts opened with one.
@@ -64,8 +63,8 @@ shows). Prefer whichever is connected; they expose the same tools.
 
 ## Ground rules
 
-- Exactly six picks, at most two tanks, at most four supports, only
-  heroes in the roster (the `roster` tool lists it).
+- Exactly six picks, at most two tanks, only heroes in the roster (the
+  `roster` tool lists it).
 - Every pick cites the facts that genuinely justify it - no padding.
 - Rates are Competitive Role Queue on console (Americas): a stated proxy
   for Open Queue. Lean on them for direction, not decimals;

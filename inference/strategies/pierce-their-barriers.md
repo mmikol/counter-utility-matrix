@@ -7,6 +7,7 @@ direction: maximize
 weight: 0.5
 when: matchup.barrier_need >= 1200
 ---
+
 # Pierce what they hide behind
 
-Against a comp that holds a choke behind barriers, damage that ignores the barrier reaches the supports standing behind it: Moira's beam passes the shield, a grenade lobbed over it lands on the backline, and Zenyatta's orbs take an angle the barrier does not cover. Piercing damage is the alternative to breaking the barrier first. Measured as the count of picks whose kit ignores barriers, read while red fields 1200 or more barrier health.
+Against a comp that holds a choke behind barriers, damage that ignores the barrier reaches the supports standing behind it: Moira's beam passes the shield, a grenade lobbed over it lands on the backline, and Zenyatta's orbs take an angle the barrier does not cover. Measured as the count of picks whose kit ignores barriers, read while red fields 1200 or more barrier health.

@@ -11,11 +11,12 @@ current blue picks as they stand.
 """
 
 import concurrent.futures
+import hashlib
 import multiprocessing
 import os
+import pickle
 import threading
 import time
-import types
 
 from inference import catalog as catalog_module
 from inference.solver import Candidate, Solver, evaluate_comp, legal_shapes
@@ -102,22 +103,6 @@ class Result:
                                for h in catalog if h.kind == "assumption"]
         # drafts: name, kind and prose only - shown, not scored, until /strategy
         self.pending = [h.id for h in catalog if h.pending]
-
-    def __getstate__(self):
-        """What crosses a process boundary: everything but the solver (its
-        reference sample and bounds stay with the worker that used them) and
-        the catalog's compiled expressions - a strategy's id, name, kind, form,
-        weight, softness and the source of its `when` is all a result needs of
-        it afterwards (the weights it was scored under; whether the playbook
-        scores at all; what a waiting strategy waits for)."""
-        state = dict(self.__dict__)
-        state.pop("solver", None)
-        state["catalog"] = [types.SimpleNamespace(
-            id=h.id, name=h.name, kind=h.kind, pending=h.pending, form=h.form,
-            weight=h.weight, soft=h.soft,
-            when=types.SimpleNamespace(source=h.when.source) if h.when else None)
-            for h in self.catalog]
-        return state
 
     def to_dict(self, include_facts=False):
         cited = {}
@@ -298,9 +283,11 @@ def _side(m, side):
 
 
 def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=None,
-          bans=(), side="", seat="blue"):
+          bans=(), side="", seat="blue", solved=None):
     """The optimal six for `seat` around its locked picks (`blue`) against
-    the other seat's revealed picks (`red`), on `side` of a sided map."""
+    the other seat's revealed picks (`red`), on `side` of a sided map.
+    `solved` takes a (solver, ranked) the caller already has - a board's
+    search, run across the worker pool - instead of searching here."""
     started = time.time()
     catalog = catalog or catalog_module.load()
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
@@ -309,8 +296,11 @@ def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=Non
         raise ValueError("more than %d %s picks" % (TEAM_SIZE, seat))
     result = Result("infer", m.name if m else None, [h.name for h in red_h], [],
                     [h.name for h in blue_h], catalog, [h.name for h in bans_h], side, seat)
-    solver = Solver(world, m, red_h, blue_h, catalog, pool_size, bans_h, side)
-    ranked = solver.solve(top=max(top, 1) + 1)
+    if solved is not None:
+        solver, ranked = solved
+    else:
+        solver = Solver(world, m, red_h, blue_h, catalog, pool_size, bans_h, side)
+        ranked = solver.solve(top=max(top, 1) + 1)
     if not ranked:
         raise ValueError("no composition satisfies the limits around the"
                          " locked %s picks - relax a constraint in inference/strategies/"
@@ -329,9 +319,10 @@ def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=Non
 
 
 def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
-             bans=(), side="", seat="blue"):
+             bans=(), side="", seat="blue", swept=None):
     """A full six for `seat`, scored and ranked against the field the solver
-    would have searched."""
+    would have searched. `swept` takes that field from a search the caller
+    already ran on this board."""
     started = time.time()
     catalog = catalog or catalog_module.load()
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
@@ -343,7 +334,7 @@ def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
                     [h.name for h in blue_h], [], catalog, [h.name for h in bans_h], side,
                     seat)
     target, field, rank, solver = evaluate_comp(world, m, red_h, blue_h, catalog,
-                                                pool_size, bans_h, side)
+                                                pool_size, bans_h, side, swept)
     fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans,
                                side)
     _fill(result, target, fs, solver)
@@ -356,13 +347,14 @@ def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
 
 
 def current(world, blue_result, map_name=None, red=(), blue=(), catalog=None, bans=(),
-            side="", pool_size=6, seat="blue"):
+            side="", pool_size=6, seat="blue", swept=None):
     """`seat`'s current picks (`blue`, from that seat's perspective) as they
     stand against the other seat's (`red`): a full six is evaluated against
     the field; a partial team is scored with the bounds of the optimal
     search it came from, and says so."""
     if len(blue) == TEAM_SIZE:
-        return evaluate(world, map_name, red, blue, pool_size, catalog, bans, side, seat)
+        return evaluate(world, map_name, red, blue, pool_size, catalog, bans, side, seat,
+                        swept)
     started = time.time()
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
@@ -425,8 +417,8 @@ def _momentum(cur, red_cur, countered, blue_r=None, red_r=None):
     out = {"blue": n, "red": m, "countered": k,
            "partial": bool((cur.blue and cur.partial) or (red_cur.blue and red_cur.partial))}
     # fight odds: the two shares pitted against each other - each side's share of
-    # the two shares' sum, so the pair reads as a split of 100 and the higher bar
-    # holds the fight; defined only when both seats score
+    # the two shares' sum, so the pair reads as a split of 100; defined only when
+    # both seats score
     out["odds"] = ({"blue": round(100.0 * n / (n + m)), "red": 100 - round(100.0 * n / (n + m))}
                    if n is not None and m is not None and n + m > 0 else None)
     short = lambda why: "unscored: " + why.split(": ", 1)[-1]   # noqa: E731
@@ -618,26 +610,48 @@ def _plan(world, m, side, bans, red_h, blue_r):
     return "\n".join(lines)
 
 
-# --- the board's independent solves, in parallel ---------------------------
+# --- the board's search, split across workers ------------------------------
 #
 # CPython holds the GIL for this pure-Python work, so parallelism means
-# processes: a small pool of workers, started once per process and kept, each
-# handed the world (0.6 MB, a few ms to pickle) and the names on a board. Blue's
-# optimal and red's counter do not depend on each other; each worker also
-# scores that seat's current comp, which needs the solver's scale and so stays
-# where the solver is. The parent solves the fill meanwhile and the countered
-# case after. Off with COUNTER_MATRIX_PARALLEL=0, on one core, or with a
-# catalog the caller supplied (a worker loads the playbook from its files).
+# processes: a pool of workers, spawned once and kept - the servers that call
+# this are threaded, and forking a threaded process is unsafe. Each search
+# runs in three rounds, a slice per worker: the reference sample, for the low
+# and high each heuristic takes on this board; the enumeration, prepared and
+# scored against those bounds; then one worker ranks and refines the merged
+# field. Only verdicts cross - hero ids, score, tie-break - and slices
+# partition their round, so nothing depends on how the work was split.
+#
+# The board runs four searches. Blue's and red's go first. The fill is blue's
+# board (same map, side, enemies and bans), so it takes blue's bounds and
+# draws no sample of its own; the countered case follows red's six. A full
+# six is ranked against the field its seat's search already swept.
+#
+# The world crosses as bytes pickled once and cached per worker; so is the
+# playbook, reread when a file changes. Off with COUNTER_MATRIX_PARALLEL=0,
+# on one core, or with a catalog the caller supplied (a worker loads the
+# playbook from its files).
 
 PARALLEL = os.environ.get("COUNTER_MATRIX_PARALLEL", "1").lower() not in ("0", "no", "false")
-WORKERS = 2
+WORKER_CEILING = 12          # a worker holds about 70 MB, and past a dozen slices the
+                             # rounds' own overhead eats what a finer slice saves
+
+
+def _worker_count():
+    """Six workers, or one per core where there are more, capped at
+    WORKER_CEILING. COUNTER_MATRIX_WORKERS overrides."""
+    override = os.environ.get("COUNTER_MATRIX_WORKERS", "").strip()
+    if override.isdigit() and int(override) > 0:
+        return int(override)
+    return max(6, min(os.cpu_count() or 1, WORKER_CEILING))
+
+
+WORKERS = _worker_count()
 _pool = None
 _pool_lock = threading.Lock()
 
 
 def _workers():
-    """The pool, created on first use. Spawned, not forked: the servers that
-    call this are threaded, and forking a threaded process is unsafe."""
+    """The pool, created on first use. Spawned, not forked."""
     global _pool
     with _pool_lock:
         if _pool is None:
@@ -655,29 +669,199 @@ def _drop_workers():
 
 
 def parallel_available(catalog=None):
-    """Whether board() splits its solves across workers here."""
+    """Whether board() splits its search across workers here."""
     return PARALLEL and catalog is None and (os.cpu_count() or 1) > 1
 
 
-def warm():
-    """Start the workers now, so the first board does not pay for it. Returns
-    the number started, 0 when the board runs sequentially here."""
+def warm(world=None):
+    """Start the workers now, so the first board does not pay for it: they
+    read the playbook, and take a copy of the world when one is given.
+    Returns the number started, 0 when the board runs sequentially here."""
     if not parallel_available():
         return 0
-    pool = _workers()
-    futures = [pool.submit(os.getpid) for _ in range(WORKERS)]
+    pool = _workers()                          # more tasks than workers, so each gets one
+    args = _world_blob(world) if world is not None else (None, None)
+    futures = [pool.submit(_prime, *args) for _ in range(WORKERS * 3)]
     concurrent.futures.wait(futures)
     return WORKERS
 
 
-def _seat(world, map_name, enemy, own, top, pool_size, bans, side, seat, weights=None):
-    """One seat, in a worker: its optimal six against the enemy's revealed picks,
-    and its own picks scored on that optimal's scale."""
-    catalog = catalog_module.weighted(catalog_module.load(), weights)
-    optimal = infer(world, map_name, enemy, [], top, pool_size, catalog, bans, side, seat)
-    cur = current(world, optimal, map_name, enemy, own, catalog, bans, side, pool_size, seat)
-    _finish(cur, optimal.score)
-    return optimal, cur
+def _prime(token=None, data=None):
+    """In a worker: read the playbook and hold the world, so the first slice
+    does not."""
+    _playbook()
+    if token is not None:
+        _world(token, data)
+    return os.getpid()
+
+
+# --- what crosses the boundary ---------------------------------------------
+
+_blob_lock = threading.Lock()
+_blob = (None, None, None)              # the world, its token, its bytes
+
+
+def _world_blob(world):
+    """The world pickled once for a run of tasks: the bytes, and their digest
+    as the token the workers cache it under - a server loads a fresh world per
+    request, and the same rows keep the workers' copy. The world is held here
+    too, so the identity check cannot be fooled by a later object at the same
+    address."""
+    global _blob
+    with _blob_lock:
+        held, token, data = _blob
+        if held is not world:
+            data = pickle.dumps(world, pickle.HIGHEST_PROTOCOL)
+            token = hashlib.sha1(data, usedforsecurity=False).hexdigest()
+            _blob = (world, token, data)
+        return token, data
+
+
+_held_world = (None, None)              # in a worker: the token and the world
+_held_playbook = (None, None)           # in a worker: the files' stamp and the catalog
+
+
+def _world(token, data):
+    global _held_world
+    if _held_world[0] != token:
+        _held_world = (token, pickle.loads(data))
+    return _held_world[1]
+
+
+def _playbook():
+    """The playbook, read once per worker and again whenever a file changes."""
+    global _held_playbook
+    directory = catalog_module.STRATEGIES_DIR
+    stamp = sorted((e.name, e.stat().st_mtime_ns, e.stat().st_size)
+                   for e in os.scandir(directory)
+                   if e.name.endswith(".md")) if os.path.isdir(directory) else None
+    if stamp is None or _held_playbook[0] != stamp:
+        _held_playbook = (stamp, catalog_module.load(directory))
+    return _held_playbook[1]
+
+
+def _verdict(cand):
+    """A candidate as the pool ships it: who is in it, what it scored, how it
+    breaks a tie. Everything else is rebuilt where it is needed."""
+    return (tuple(h.id for h in cand.heroes), cand.score, cand.tiebreak)
+
+
+def _revive(world, verdict):
+    ids, score, tiebreak = verdict
+    cand = Candidate([world.heroes[i] for i in ids])
+    cand.score, cand.tiebreak, cand.raw = score, tiebreak, None
+    return cand
+
+
+def _solver(world, catalog, spec):
+    map_name, enemy, locked, pool_size, bans, side = spec
+    m, red_h, locked_h, bans_h = world.resolve(map_name, enemy, locked, bans)
+    return Solver(world, m, red_h, locked_h, catalog, pool_size, bans_h, _side(m, side))
+
+
+def _bounds(token, data, spec, weights, index, count):
+    """One slice of the reference sample, in a worker: the low and high it
+    sees for each heuristic."""
+    world = _world(token, data)
+    solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
+    return solver.reference_bounds(index, count)
+
+
+def _widen(bounds, part):
+    for hid, (lo, hi) in part.items():
+        seen = bounds.get(hid)
+        bounds[hid] = (min(lo, seen[0]), max(hi, seen[1])) if seen else (lo, hi)
+    return bounds
+
+
+def _sweep(token, data, spec, weights, bounds, index, count):
+    """One slice of one search, in a worker."""
+    world = _world(token, data)
+    solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
+    solver.adopt_bounds(bounds)
+    size, feasible = solver.sweep(index, count)
+    return size, [_verdict(c) for c in feasible]
+
+
+def _rank(token, data, spec, weights, bounds, verdicts, top):
+    """The tail of a split search, in a worker: the merged field ranked and
+    refined. -> (the winners, how many candidates refining added)."""
+    world = _world(token, data)
+    solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
+    solver.adopt_bounds(bounds)
+    ranked = solver.rank([_revive(world, v) for v in verdicts], top)
+    return [_verdict(c) for c in ranked], solver.considered
+
+
+class _Split:
+    """One search, split across the pool, a round at a time: the reference
+    sample, then the enumeration, then the tail. A caller starts several and
+    walks them through the rounds together, so the pool stays full."""
+
+    def __init__(self, pool, world, catalog, spec, weights, top, slices, bounds=None):
+        self.pool, self.world, self.catalog = pool, world, catalog
+        self.spec, self.weights, self.top = spec, weights, top
+        self.bounds, self.size, self.verdicts = bounds, 0, []
+        self.token, self.data = _world_blob(world)
+        self.count = slices
+        self.scale = None if bounds is not None else [
+            pool.submit(_bounds, self.token, self.data, spec, weights, i, slices)
+            for i in range(slices)]
+        self.slices = self.tail = None
+
+    def sweep(self):
+        """Take the scale the slices drew, and send the enumeration out."""
+        if self.scale is not None:
+            self.bounds = {}
+            for future in self.scale:
+                _widen(self.bounds, future.result())
+        self.slices = [self.pool.submit(_sweep, self.token, self.data, self.spec,
+                                        self.weights, self.bounds, i, self.count)
+                       for i in range(self.count)]
+
+    def merge(self):
+        """Collect the slices and send the merged field off to be ranked."""
+        self.verdicts = []
+        for future in self.slices:
+            self.size, part = future.result()
+            self.verdicts.extend(part)
+        self.tail = self.pool.submit(_rank, self.token, self.data, self.spec,
+                                     self.weights, self.bounds, self.verdicts, self.top)
+
+    def _solver(self):
+        solver = _solver(self.world, self.catalog, self.spec)
+        solver.adopt_bounds(self.bounds)
+        return solver
+
+    def solved(self):
+        """(solver, ranked), as Solver.solve() would have returned them."""
+        winners, refined = self.tail.result()
+        solver = self._solver()
+        solver.considered = self.size + refined
+        return solver, [solver.hydrate(_revive(self.world, v)) for v in winners]
+
+    def swept(self):
+        """(solver, field size, every feasible candidate), as Solver.sweep()
+        would have left them: what a six is ranked against."""
+        return (self._solver(), self.size,
+                [_revive(self.world, v) for v in self.verdicts])
+
+
+COUNTERED_POOL = 4          # a what-if: a smaller field is enough
+
+
+def _countered(world, map_name, blue, red_optimal, catalog, bans, side, pool_size, top,
+               solved=None, swept=None):
+    """Blue's picks against red's optimal six: how they hold if red answers
+    perfectly."""
+    hypothetical = min(pool_size, COUNTERED_POOL)
+    against = infer(world, map_name, red_optimal, [], top, hypothetical, catalog, bans,
+                    side, "blue", solved=solved)
+    result = current(world, against, map_name, red_optimal, blue, catalog, bans, side,
+                     hypothetical, swept=swept)
+    result.kind = "countered"
+    _finish(result, against.score)
+    return result
 
 
 def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
@@ -728,21 +912,66 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
                       catalog, bans, side, seat="red")
     expected.picks = [dict(p, evidence=[]) for p in likely]
     enemy = list(red) if red else expected.blue
-    fill = None
+    blue_list, bans_list = list(blue), list(bans)
+    wants_fill = 0 < len(blue_list) < TEAM_SIZE
+    fill = countered = None
     if parallel:
         try:
             pool = _workers()
-            seats = [pool.submit(_seat, world, map_name, enemy, list(blue), top, pool_size,
-                                 list(bans), side, "blue", weights),
-                     pool.submit(_seat, world, map_name, list(blue), list(red), top, pool_size,
-                                 list(bans), opposite(side), "red", weights)]
-            if 0 < len(blue) < TEAM_SIZE:              # the fill, here, meanwhile
+            want = max(top, 1) + 1
+            half = max(1, WORKERS // 2)
+            rest = max(1, WORKERS - half)
+            blue_split = _Split(pool, world, catalog,
+                                (map_name, enemy, [], pool_size, bans_list, side),
+                                weights, want, half)
+            red_split = _Split(pool, world, catalog,
+                               (map_name, blue_list, [], pool_size, bans_list,
+                                opposite(side)), weights, want, rest)
+            blue_split.sweep()
+            red_split.sweep()
+            # the fill is blue's board, so it takes blue's scale and draws none
+            fill_split = _Split(pool, world, catalog,
+                                (map_name, enemy, blue_list, pool_size, bans_list, side),
+                                weights, want, half, blue_split.bounds) if wants_fill else None
+            if fill_split is not None:
+                fill_split.sweep()
+            blue_split.merge()
+            red_split.merge()
+            blue_r = infer(world, map_name, enemy, [], top, pool_size, catalog, bans,
+                           side, "blue", solved=blue_split.solved())
+            red_r = infer(world, map_name, blue_list, [], top, pool_size, catalog, bans,
+                          opposite(side), "red", solved=red_split.solved())
+            countered_split = _Split(
+                pool, world, catalog,
+                (map_name, red_r.blue, [], min(pool_size, COUNTERED_POOL), bans_list, side),
+                weights, want, rest) if (blue_list and red_r.blue) else None
+            if countered_split is not None:
+                countered_split.sweep()
+            if fill_split is not None:
+                fill_split.merge()
+            if countered_split is not None:
+                countered_split.merge()
+            # a full six is ranked against the field its seat's search just swept
+            cur = current(world, blue_r, map_name, enemy, blue, catalog, bans, side,
+                          pool_size, swept=blue_split.swept()
+                          if len(blue_list) == TEAM_SIZE else None)
+            _finish(cur, blue_r.score)             # 100 is blue's optimal, whatever you hold
+            red_cur = current(world, red_r, map_name, blue, red, catalog, bans,
+                              opposite(side), pool_size, "red",
+                              swept=red_split.swept() if len(red) == TEAM_SIZE else None)
+            _finish(red_cur, red_r.score)
+            if fill_split is not None:
                 fill = infer(world, map_name, enemy, blue, top, pool_size, catalog, bans,
-                             side, "blue")
-            (blue_r, cur), (red_r, red_cur) = seats[0].result(), seats[1].result()
+                             side, "blue", solved=fill_split.solved())
+            if countered_split is not None:
+                countered = _countered(world, map_name, blue, red_r.blue, catalog, bans,
+                                       side, pool_size, top, countered_split.solved(),
+                                       countered_split.swept()
+                                       if len(blue_list) == TEAM_SIZE else None)
         except concurrent.futures.process.BrokenProcessPool:
             _drop_workers()                          # a worker died: this board, sequentially
             parallel = False
+            fill = countered = None
     if not parallel:
         blue_r = infer(world, map_name, enemy, [], top, pool_size, catalog, bans, side, "blue")
         red_r = infer(world, map_name, blue, [], top, pool_size, catalog, bans, opposite(side),
@@ -752,17 +981,12 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
         red_cur = current(world, red_r, map_name, blue, red, catalog, bans, opposite(side),
                           pool_size, "red")
         _finish(red_cur, red_r.score)
-    countered = None
-    if blue and red_r.blue:
-        hypothetical = min(pool_size, 4)           # a what-if: a smaller field is enough
-        against = infer(world, map_name, red_r.blue, [], top, hypothetical, catalog, bans,
-                        side, "blue")
-        countered = current(world, against, map_name, red_r.blue, blue, catalog, bans, side,
-                            hypothetical)
-        countered.kind = "countered"
-        _finish(countered, against.score)
-    if fill is None and 0 < len(blue) < TEAM_SIZE:
-        fill = infer(world, map_name, enemy, blue, top, pool_size, catalog, bans, side, "blue")
+        if blue_list and red_r.blue:
+            countered = _countered(world, map_name, blue, red_r.blue, catalog, bans, side,
+                                   pool_size, top)
+        if wants_fill:
+            fill = infer(world, map_name, enemy, blue, top, pool_size, catalog, bans, side,
+                         "blue")
     if fill is not None:
         fill.kind = "fill"
         _finish(fill, blue_r.score)                # how close the best completion comes

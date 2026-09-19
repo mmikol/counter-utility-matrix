@@ -2,10 +2,10 @@
 
 [![ci](https://github.com/mmikol/counter-utility-matrix/actions/workflows/ci.yml/badge.svg)](https://github.com/mmikol/counter-utility-matrix/actions/workflows/ci.yml)
 
-Optimal Overwatch 2 team compositions: a database pulled from the sources,
-a board that turns every pick into facts, and a deterministic solver over
-a markdown playbook of constraints, heuristics and assumptions. Free to
-run - no accounts, no keys, no API billing.
+Optimal Overwatch 2 team compositions: a database pulled from the
+sources, a board that turns every pick into facts, and a deterministic
+solver over a markdown playbook of constraints, heuristics and
+assumptions. No accounts, no keys, no API billing.
 
 ## Install
 
@@ -24,10 +24,10 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python orchestrator.py
 ```
 
-The stack comes up, one container per layer (the first time, the data
-container pulls every source and builds the database: minutes, at a pace
-the sources can bear); the agents run headless on the `/refresh` skill;
-the app is left running:
+The stack comes up, one container per layer; the agents run headless on
+the `/refresh` skill; the app is left running. The first start pulls
+every source and builds the database, which takes minutes at a polite
+pace.
 
 | | |
 | --- | --- |
@@ -58,8 +58,8 @@ Without Docker:
 ```
 
 Open the repo in a Claude Code session and the skills are there: `/up`,
-`/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`,
-`/maintain`.
+`/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`,
+`/refresh`, `/maintain`.
 
 ## License
 
@@ -72,8 +72,8 @@ and the hero portraits remain their owners'.
 
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) - how the three layers fit: the folders, the root files, the diagrams, the skills, the scope
-- [docs/db.md](docs/db.md) - the DATA LAYER: the sources, the tools, the schema with its ER diagrams and data dictionary, the refresh, the mirror
+- [docs/architecture.md](docs/architecture.md) - the three layers, the folders, the root files, the diagrams, the scope
+- [docs/db.md](docs/db.md) - the DATA LAYER: the sources, the tools, the schema, the refresh, the mirror
 - [docs/ui.md](docs/ui.md) - the UI LAYER: the board, its endpoints, the facts behind it
 - [docs/inference.md](docs/inference.md) - the INFERENCE LAYER: the strategy files, the solver, the tuning loop, the deriver, the catalog
 - [docs/skills.md](docs/skills.md) - the nine skills a Claude Code session runs here

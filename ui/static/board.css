@@ -261,6 +261,5 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .hcard .wrow .wreset:disabled, .hcard .wrow .wstore:disabled { opacity:.35; cursor:default; }
 .hcard b { font-family:"Bebas Neue",Impact,sans-serif; font-size:18px; letter-spacing:.05em; }
 .hcard .meta { font-family:ui-monospace,monospace; font-size:11.5px; color:var(--muted); margin:4px 0; overflow-wrap:anywhere; }
-.hcard .legend { overflow-wrap:anywhere; }
 .hcard p { margin:6px 0 0; color:#c9d0db; font-size:12.5px; }
 .legend { color:var(--muted); font-size:12px; margin:6px 0 0; }

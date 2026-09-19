@@ -19,17 +19,14 @@ from db import ROOT
 
 MIGRATIONS_DIR = os.path.join(ROOT, "db", "psql", "migrations")
 
+# Which domain the data dictionary files a table under, keyed by the migration
+# that last created it. A migration that creates no surviving table needs no
+# entry; a table with none falls to "foundation".
 DOC_DOMAIN = {"001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES",
               "003_maps.sql": "MAPS", "004_meta.sql": "META",
-              "005_playbook.sql": "PLAYBOOK", "006_inference.sql": "INFERENCE",
-              "007_three_layers.sql": "PLAYBOOK",
+              "005_playbook.sql": "PLAYBOOK",
               "008_schema_migrations.sql": "foundation",
-              "009_outcomes.sql": "INFERENCE",
-              "010_constraints_and_heuristics.sql": "INFERENCE",
-              "011_reader_role.sql": "foundation", "012_reader_login.sql": "foundation",
-              "013_assumptions.sql": "INFERENCE", "014_no_recorded.sql": "INFERENCE",
-              "015_announced_heroes.sql": "HEROES",
-              "016_playbook_of_record.sql": "INFERENCE"}
+              "010_constraints_and_heuristics.sql": "INFERENCE"}
 
 
 class SchemaError(Exception):
@@ -176,9 +173,9 @@ def generate_docs(connection, path=None):
                 seen.append(line)
         return sorted(seen)
 
-    erd = ["Five domains. Three are the authoritative data the sources are pulled",
-           "for - which hero (HEROES), on which map (MAPS), performing how well",
-           "(META) - the DATA a board's facts are derived from. Every domain",
+    erd = ["Five domains. Three hold the data the sources are pulled for: which",
+           "hero (HEROES), on which map (MAPS), performing how well (META).",
+           "Every domain",
            "yields independent facts (a selection's own row) and dependent ones",
            "(the selection joined with others: map_meta is heroes ⋈ maps ⋈ meta,",
            "counters and synergies are heroes ⋈ heroes), and a join belongs to",
@@ -192,9 +189,10 @@ def generate_docs(connection, path=None):
            "FACTS       = FACTS(HEROES) ∪ FACTS(MAPS) ∪ FACTS(META)",
            "STRATEGIES  = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS",
            "COMP        = ARGMAX[ STRATEGIES( FACTS ) ]", "```", "",
-           "Every table also carries `source_id` → `sources` and a `cao` timestamp.",
-           "Those edges are left off - they would connect `sources` to all %d tables"
-           % len(tables), "and obscure everything else.", ""]
+           "Every table but `sources` and `schema_migrations` also carries",
+           "`source_id` → `sources` and a `cao` timestamp. Those edges are left off -",
+           "they would connect `sources` to %d tables and obscure everything else."
+           % (len(tables) - 2), ""]
     for d in ("HEROES", "MAPS", "META", "PLAYBOOK", "INFERENCE"):
         erd += ["#### %s" % d, "", "```mermaid", "erDiagram",
                 *edges(lambda c, d=d: dom.get(c) == d), "```", ""]
@@ -204,9 +202,10 @@ def generate_docs(connection, path=None):
     embed(path, "erd", "\n".join(erd))
 
     dd = ["Generated from the live schema (`python -m db.mcp call db_docs`).", "",
-          "Every table carries two columns omitted from the lists below, because they",
-          "are on all of them: `source_id` (which source the row came from, see",
-          "`sources`) and `cao` — \"current as of\", when that row was read.", "",
+          "Two columns are omitted from the lists below: `source_id` (which source the",
+          "row came from, see `sources`) and `cao` — \"current as of\", when that row",
+          "was read. Every table but `sources` and `schema_migrations` carries both;",
+          "`sources` carries `cao` alone and `schema_migrations` neither.", "",
           "| domain | tables |", "| --- | --- |"]
     for d in ("foundation", "HEROES", "MAPS", "META", "PLAYBOOK", "INFERENCE"):
         dd.append("| **%s** | %s |" % (d, " · ".join(

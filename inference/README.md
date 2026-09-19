@@ -1,13 +1,12 @@
 # The playbook's sources
 
 One entry per strategy file in `strategies/`: 238 rules and the user's 5
-assumptions; every rule drawn from what the Overwatch community states again and again on
-r/OverwatchUniversity, r/Competitiveoverwatch and r/Overwatch (the top threads'
-comments through reddit's feeds and the Arctic Shift archive's search), each
-standardized into the playbook's form and given the one metric that measures it.
-Every community rule was stored through the tune module's validated add and is
-logged in `strategies/tuning-log.md`; "applies" and "spreads" are the six-board check made
-before it was chosen. The catalog itself is `docs/inference.md`.
+assumptions. The rules come from r/OverwatchUniversity, r/Competitiveoverwatch
+and r/Overwatch, read through reddit's feeds and the Arctic Shift archive's
+search, each standardized into the playbook's form, given one metric, stored
+through the tune module's validated add and logged in `strategies/tuning-log.md`.
+"applies" and "spreads" are the six-board check made before a rule was chosen;
+the catalog is `docs/inference.md`.
 
 - `amplified-healing` - Amplified healing saves more (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/bwi0sl/widowmaker_is_the_reason_goats_is_meta_in_owl/

@@ -1,5 +1,5 @@
-"""The daily refresh: the database, the playbook and the strategies mirror
-brought up to date on a schedule, so the board is ready when a game starts.
+"""The daily refresh: the database, the authored inputs and the strategies
+mirror brought up to date on a schedule.
 
     python -m db.refresh              run daily at COUNTER_MATRIX_REFRESH_AT
                                         (05:00 by default, container time);
@@ -83,7 +83,7 @@ def full_due(full_days=DEFAULT_FULL_DAYS, cache_dirs=None):
 def refresh_once(ctx, log=print, full=None, full_days=DEFAULT_FULL_DAYS):
     """One refresh -> (ok, text): daily (rates, counters, authored inputs, export)
     or full (every source) - decided by full_due() unless `full` is given.
-    Never raises: the loop must survive a bad day at the sources."""
+    Never raises; a failure returns (False, the error)."""
     started = time.time()
     if full is None:
         full = full_due(full_days)

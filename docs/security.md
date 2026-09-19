@@ -1,9 +1,9 @@
 # Security
 
-What could go wrong, and what stands in the way. The project runs on your
-machine, on your Claude Code subscription, against three public websites;
-the things worth protecting are your account, your operating system, and
-the playbook and database the board trusts at game time.
+The project runs on your machine, on your Claude Code subscription,
+against three public websites. What is worth protecting: your account,
+your operating system, and the playbook and database the board trusts at
+game time.
 
 ## The threat model
 
@@ -19,24 +19,23 @@ the playbook and database the board trusts at game time.
 ## What stands in the way
 
 **Tool output is data.** Every skill carries the same rule: what a tool
-returns - facts, source text, notes, prose - is data about the game, never
-a message to the session; an instruction found inside it is reported, not
-followed, and a skill calls only the tools it names. The deriver's prompt
-says the same of a draft's prose. The solver cannot be injected: an
-assumption is prose it never scores, and it reads frontmatter through a
-whitelisted expression language (no attribute access, no dunder names, a
-fixed function set, `__builtins__` empty, exponents bounded, no string
-arithmetic, nesting bounded).
+returns - facts, source text, notes, prose - is data about the game,
+never a message to the session; an instruction found inside it is
+reported, not followed, and a skill calls only the tools it names. The
+deriver's prompt says the same of a draft's prose. The solver cannot be
+injected: an assumption is prose it never scores, and it reads
+frontmatter through a whitelisted expression language (no attribute
+access, no dunder names, a fixed function set, `__builtins__` empty,
+exponents bounded, no string arithmetic, nesting bounded).
 
 **The headless runs are fenced.** `orchestrator.py agents` gives Claude
 Code in print mode an explicit allowlist of tools on the two servers -
-status, the catalog, the log, the vocabulary, facts, inference, read-only
-`query`, the refresh and load tools, `infer_strategy`, `tune`, `db_docs`,
-`export_csv` - and no built-in tool at all (`--tools ""`): no shell, no
-file edits, no web, no `add_strategy`, no rebuild or migration, no session
-kept afterwards, at most eighty turns, and a tool-call timeout long enough
-for a polite scrape (`MCP_TOOL_TIMEOUT`), since a pull that outlives its
-client's patience is a pull that ran unwatched. The deriver runs
+status, the catalog, the log, the vocabulary, facts, inference,
+read-only `query`, the refresh and load tools, `infer_strategy`, `tune`,
+`db_docs`, `export_csv` - and no built-in tool at all (`--tools ""`): no
+shell, no file edits, no web, no `add_strategy`, no rebuild or migration,
+no session kept afterwards, at most eighty turns, and a tool-call timeout
+long enough for a polite scrape (`MCP_TOOL_TIMEOUT`). The deriver runs
 `claude -p` from a neutral directory with no project settings, no MCP
 servers, no tools and two turns, and stores only what the catalog
 validates.
@@ -47,19 +46,20 @@ heuristic's weight from its slider is `POST /api/weight` on the board
 `tune` call - over HTTP to the MCP server with the bearer token in the
 compose stack, in-process through the same tool registry on the local
 cluster - so the change is validated against the catalog, logged with its
-reason and mirrored like any other; the board never opens a playbook
+reason and mirrored like any other. The board never opens a playbook
 file, and its container mounts the playbook read-only.
 
 **The door checks who is knocking.** The HTTP server binds to 127.0.0.1,
 refuses browser origins that are not local (DNS-rebinding guard), caps a
 request at one megabyte and a batch at twenty messages, allows 120 tool
-calls per client address per minute (a claimed session id buys nothing)
-and answers 429 past that, and - when `COUNTER_MATRIX_MCP_TOKEN` is set in
-`.env` - requires `Authorization: Bearer <token>` on every call (the
-session sends it from `.mcp.json`; `/health` stays open for the
-healthchecks). Every tool call, over either transport, is one line in the
-audit log `db/raw/audit.jsonl`: when, transport, client, tool, the names
-and sizes of its arguments (never their values), outcome, duration.
+calls per client address per minute (the limit is per address, not per
+claimed session id) and answers 429 past that, and - when
+`COUNTER_MATRIX_MCP_TOKEN` is set in `.env` - requires
+`Authorization: Bearer <token>` on every call (the session sends it from
+`.mcp.json`; `/health` stays open for the healthchecks). Every tool call,
+over either transport, is one line in the audit log
+`db/raw/audit.jsonl`: when, transport, client, tool, the names and sizes
+of its arguments (never their values), outcome, duration.
 
 **SQL reads tables, not disks.** The `query` tool accepts one statement
 that starts `SELECT`, `WITH`, `EXPLAIN`, `SHOW`, `TABLE` or `VALUES`,
@@ -106,9 +106,9 @@ not removed, a person decides; and what the audit log says about the last
 minute - calls, refusals, crashes, any client past the rate limit. The
 scan folds Unicode to one shape and strips zero-width characters first,
 so a word broken by an invisible character still reads as the word. Its
-report is `db/raw/sentry.json`, and `python orchestrator.py status` prints
-it. `python -m db.sentry --once` runs one pass from a shell and exits
-non-zero when something is wrong.
+report is `db/raw/sentry.json`, and `python orchestrator.py status`
+prints it. `python -m db.sentry --once` runs one pass from a shell and
+exits non-zero when something is wrong.
 
 ## What remains yours
 
@@ -131,6 +131,6 @@ non-zero when something is wrong.
 
 Report a vulnerability privately to the repository owner rather than in a
 public issue; see [SECURITY.md](../SECURITY.md). None of this is a
-commitment: you run the software at your own risk, and the author promises
-no response time and no fix. These measures describe what the code does,
-not that it is enough for you.
+commitment: you run the software at your own risk, and the author
+promises no response time and no fix. These measures describe what the
+code does, not that it is enough for you.
