@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.lifelines
 direction: maximize
-weight: 0.5
+weight: 0.25
 when: team.hps_ratio < 0.7
 ---
 

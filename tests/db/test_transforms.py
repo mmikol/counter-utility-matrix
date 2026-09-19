@@ -59,6 +59,20 @@ def test_units_never_contain_a_slash():
             assert not (num and "/" in num) and not (den and "/" in den)
 
 
+
+def test_unicode_minus_reads_as_a_minus():
+    # Symmetra's turret slow is written with U+2212; it stored a NULL once.
+    [(value, num, den, _window, _cond, text)] = parse_measurements(
+        "\u221215% per turret", default_unit="percent")
+    assert (value, num, den, text) == (-15.0, "percent", None, "-15% per turret")
+
+
+def test_bare_per_second_is_a_rate_of_the_stats_own_unit():
+    # Death Blossom's "185/s" stored as a flat 185 hp once.
+    [(value, num, den, window, *_)] = parse_measurements(
+        "185/s per enemy", default_unit="hp")
+    assert (value, num, den, window) == (185.0, "hp", "seconds", 1)
+
 # --- name matching across sources ---------------------------------------
 
 def test_name_key_reconciles_source_spellings():
@@ -126,3 +140,32 @@ def test_an_upcoming_article_yields_the_announcement_and_a_released_one_does_not
     assert parse_announcement(UPCOMING.replace("| role = Support", "")) is None  # no role, no row
     undated = parse_announcement(UPCOMING.replace("on October 6, 2026", "soon"))
     assert undated and undated["release_date"] is None
+
+
+# --- the article supplement ------------------------------------------------------------
+
+KIT_ARTICLE = """{{Ability details
+| ability_name = Healing Kasa
+| heal = {{tt|90|3.6 every 0.04 seconds}} (1st bounce)<br>{{tt|30|1.2 every 0.04 seconds}} (self)%s
+| aoe = 3 meters
+}}
+{{Ability details
+| ability_name = Healing Kasa (old)
+| heal = 45
+| aoe = 9 meters
+}}
+""" % ('<ref name = "video">2026-02-16,[https://example.org/watch?v=1 How to play].'
+       " ''YouTube''</ref>")
+
+
+def test_supplement_reads_heal_and_skips_a_retired_block(tmp_path):
+    from db.data.wiki.heroes import supplement_from_wikitext
+    (tmp_path / "Mizuki.wikitext").write_text(KIT_ARTICLE, encoding="utf-8")
+    extra, _profile = supplement_from_wikitext(None, "Mizuki", str(tmp_path))
+    # "(old)" shares the live block's key and comes last: it overwrote it once
+    assert set(extra) == {"healing kasa"}
+    stats = {code: value for code, (value, _raw) in extra["healing kasa"].items()}
+    assert stats == {"heal": "90 (1st bounce); 30 (self)", "aoe": "3 meters"}
+    rows = parse_measurements(stats["heal"], "hp")
+    assert [(m[0], m[1], m[4]) for m in rows] == [
+        (90.0, "hp", "1st bounce"), (30.0, "hp", "self")]

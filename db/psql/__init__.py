@@ -27,9 +27,19 @@ def default_dsn():
     explicit = os.environ.get("DATABASE_URL")
     if explicit:
         return explicit
+    import json
+
     import pgserver
 
-    return pgserver.get_server(DEFAULT_DB_DIR).get_uri()
+    try:
+        return pgserver.get_server(DEFAULT_DB_DIR).get_uri()
+    except json.JSONDecodeError:
+        # pgserver keeps its client pids in a file it rewrites without a lock; many
+        # processes starting at once can leave it empty. An empty list is what it means
+        handles = os.path.join(DEFAULT_DB_DIR, ".handle_pids.json")
+        with open(handles, "w", encoding="utf-8") as handle:
+            handle.write("[]")
+        return pgserver.get_server(DEFAULT_DB_DIR).get_uri()
 
 
 def lookup_ids(cursor, table, name_column, id_column):

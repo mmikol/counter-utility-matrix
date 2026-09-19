@@ -28,6 +28,8 @@ FLIGHT_KEYWORDS = ("flight", "strong flight")
 CLEANSE_KEYWORDS = ("lesser cleanse", "greater cleanse", "perfect cleanse")
 AREA_KEYWORDS = ("area of effect", "shockwave")     # a ground or cone wave is tagged shockwave
 ALLY_QUALIFIERS = ("target ally", "targets")
+# an area row: it lands on the body, never the head
+SPLASH_RE = re.compile(r"explosion|splash", re.I)
 # a flat damage figure that is a sum, not one hit
 SUMMED_RE = re.compile(r"\b(dot|over time|total|if all|both|maximum)\b", re.I)
 # a rate with its reload folded in, as the wiki words it beside the firing rate
@@ -192,6 +194,24 @@ def _rate(kit, code, per_shot):
     return firing * lasts / (lasts + max(reloads))
 
 
+def _dual_rate(guns):
+    """Two guns fired together from one magazine, hp/s with the reload in; None
+    unless exactly two publish a 'simultaneous fire' row and the same magazine."""
+    pair = [w for w in guns
+            if any("simultaneous fire" in (s.condition or "")
+                   for c in ("damage_falloff_range", "spread") for s in w.stats.get(c, ()))]
+    firing = [w.plain_stat("dps") for w in pair]
+    shots = [w.max_stat("fire_rate") for w in pair]
+    ammo = {w.max_stat("ammo") for w in pair}
+    reloads = [s.value for w in pair for s in w.stats.get("reload_time", ())
+               if s.value and not s.condition]
+    if len(pair) != 2 or not (all(firing) and all(shots) and reloads) or len(ammo) != 1 \
+            or not min(ammo):
+        return None
+    lasts = ammo.pop() / sum(shots)
+    return sum(firing) * lasts / (lasts + max(reloads))
+
+
 def _reach(kit):
     """How far a damaging kit piece fights, in metres: its published range, or
     the end of its damage falloff. None when it publishes neither."""
@@ -241,7 +261,6 @@ class Hero:
         fought = [k for k in base if k.name not in OFF_FIGHT]
         self.pool = self.health + self.shield + self.armor
         self.keywords = set().union(*(k.keywords for k in base)) if base else set()
-
         def flat(kit, code):
             """The rows in hit points: not a rate, not a percent."""
             return [s for s in kit.stats.get(code, ()) if s.value is not None
@@ -258,11 +277,29 @@ class Hero:
         def kind(weapon):
             return (weapon.extra.get("weapon_type") or "").lower()
 
+        def typed(kit, text):
+            """The wiki's Type field names it: one shot_type row a type."""
+            return any((s.text or "").strip().lower() == text
+                       for s in kit.stats.get("shot_type", ()))
+
+        # armor an ability's form wears (Nemesis Form), by the form's uptime. Kept
+        # apart from the base row: `armor` and `pool` stay what the hero spawns with
+        self.form_armor = 0.0
+        for kit in base:
+            wait, lasts = kit.max_stat("cooldown"), kit.max_stat("duration")
+            share = lasts / (lasts + wait) if wait and lasts else 1.0
+            if kit.kind == "ability":
+                self.form_armor += sum(s.value * share for s in flat(kit, "armor")
+                                       if s.condition != "allies")
+
         # --- damage: the weapon the hero fights with, sustained ------------------
         steady = [w for w in self.weapons if w.name not in FORM_GATED]
         held = [w for w in steady if w.extra.get("slot") in PRIMARY_SLOTS and damages(w)]
         rates = [r for r in (_rate(w, "dps", "damage") for w in (held or steady)) if r]
-        self.dps = max(rates) if rates else 0.0
+        # both chainguns at once. The kit puts simultaneous-fire falloff at 10-20 m:
+        # the dual rate and the single gun's 40 m reach are different fire modes
+        dual = _dual_rate([w for w in steady if damages(w)])
+        self.dps = max([*rates, dual or 0.0])
 
         # --- burst: the biggest single hit, a headshot where one counts ---------
         hits = []
@@ -282,7 +319,17 @@ class Hero:
                     continue                      # the rate over its duration, not a hit
                 if any(one and stat.value > one and stat.value % one == 0 for one in singles):
                     continue                      # five orbs at once: not one hit
-                hits.append(stat.value * (crit if crits else 1.0))
+                splash = SPLASH_RE.search(stat.condition or "")
+                hits.append(stat.value * (crit if crits and not splash else 1.0))
+        # a cast that throws several pieces and publishes only the one piece (Sticky
+        # Bombs: "25, explosion, enemy", six of them): the cast is the pieces together
+        for kit in base:
+            rows = flat(kit, "damage")
+            pieces = kit.max_stat("pellets") or 1
+            if (kit.kind == "ability" and pieces >= 2 and rows
+                    and all(s.condition and not SUMMED_RE.search(
+                        "%s %s" % (s.condition, s.text or "")) for s in rows)):
+                hits.append(pieces * max(s.value for s in rows if "self" not in s.condition))
         self.burst = max(hits) if hits else 0.0
 
         # --- healing: a rate (hp/s) and a cast (hp) are two quantities; what
@@ -307,6 +354,21 @@ class Hero:
             if casts:
                 (own_cast if mine else team_cast).append(max(casts))
             own_cast.extend(selfs)
+            # an own heal that runs for a duration is also a cast: 150 a second for
+            # 3 s is 450, "100 over 3 seconds" is 100
+            runs = kit.max_stat("duration") or 0.0
+            if mine and kit.kind != "weapon":
+                own_cast.extend(s.value if s.den_value not in (None, 1.0) else s.per_second * runs
+                                for c in ("hps", "heal") for s in kit.stats.get(c, ())
+                                if s.per_second)
+            # a share of the damage dealt, for a duration on a cooldown, is the held
+            # weapon's rate over it. An ability that deals its own damage heals off
+            # that, which publishes no rate: unknown is not a number
+            shares = [s.value / 100.0 for s in kit.stats.get("heal", ())
+                      if s.value is not None and s.unit_num == "percent"
+                      and (s.condition == "self" or (mine and not s.condition))]
+            if shares and runs and kit.max_stat("cooldown") and not damages(kit):
+                own_cast.append(max(shares) * self.dps * runs)
         self.hps = max(team_rate or [0.0])
         self.peak_heal = max(team_cast or [0.0])
         self.self_hps = max(own_rate or [0.0])
@@ -352,7 +414,8 @@ class Hero:
         # each weapon once, whatever its configs
         area = {}                                 # piece -> does it damage
         for k in fights:
-            if k.keywords & set(AREA_KEYWORDS) \
+            # tagged, or a damaging piece typed Area of effect with no tag (Trailblazer)
+            if (k.keywords & set(AREA_KEYWORDS) or (damages(k) and typed(k, "area of effect"))) \
                     and not (k.kind == "weapon" and not k.extra and self.weapons):
                 piece = k.extra.get("weapon", k.name)
                 area[piece] = area.get(piece, False) or damages(k)
@@ -399,8 +462,10 @@ class Hero:
             or (k.kind in ("ability", "ultimate")
                 and any((s.value or 0) < 0 for s in k.stats.get("mspeed_slow", ())))})
         moves = [a for a in base if a.kind in ("ability", "passive")]
+        # tagged as movement, or typed Movement with no tag (Siphon Blaster, Roll)
         self.mobility_tools = sorted({k.name for k in moves
-                                      if k.keywords & set(MOBILITY_KEYWORDS)})
+                                      if k.keywords & set(MOBILITY_KEYWORDS)
+                                      or typed(k, "movement")})
         self.flyer = any(k.keywords & set(FLIGHT_KEYWORDS) for k in moves)
         # a save is a tool, not a passive: Eject! leaves the mech, it saves no one
         tools = [k for k in base if k.kind != "passive"] + [
@@ -424,19 +489,29 @@ class Hero:
         self.ult = ults[0] if ults else None
 
         def ult_hit(u):
-            """One cast's damage: the flat figure, a total published over a window
-            ("90 over 0.3 seconds"), a per-second rate over its duration, or a
-            shot fired at its rate for the duration (no more shots than the ammo)."""
+            """One cast's damage: a flat figure times the cast's published charges, a
+            total published over a window ("90 over 0.3 seconds"), a per-second rate
+            over its duration, a shot fired at its rate for the duration (no more
+            shots than the ammo), or a shot on its own cooldown, fired once and
+            again each time it returns."""
             rows = [s for c in ("damage", "dps") for s in u.stats.get(c, ()) if s.per_second]
             over = [s.value for s in rows if s.den_value not in (None, 1.0)]
             rate = max([s.per_second for s in rows if s.den_value in (None, 1.0)] or [0.0])
-            whole = [] if u.stats.get("dps") else [s.value for s in flat(u, "damage")]
+            whole = [] if u.stats.get("dps") else [s.value * (u.plain_stat("charges") or 1)
+                                                   for s in flat(u, "damage")]
             lasts = u.plain_stat("duration") or 0.0
             shots = [s.per_second for s in u.stats.get("fire_rate", ()) if s.per_second]
             hits = [s.value for s in flat(u, "damage") if "self" not in (s.condition or "")]
             fired = 0.0
             if not rows and shots and lasts and hits:
                 fired = max(hits) * min(max(shots) * lasts, u.max_stat("ammo") or math.inf)
+            # "cooldown 2.5 s (heavy round)" beside "175 (heavy round direct hit)"
+            timed = [(s.value, w.value) for w in u.stats.get("cooldown", ())
+                     if w.value and w.condition
+                     for s in flat(u, "damage")
+                     if w.condition in (s.condition or "") and "self" not in s.condition]
+            if timed and lasts and not rows and not shots:
+                fired = max(hit * (1 + math.floor(lasts / wait)) for hit, wait in timed)
             return max([*whole, *over, rate * lasts, fired, 0.0])
 
         self.ult_damage_raw = max([ult_hit(u) for u in ults] or [0.0])

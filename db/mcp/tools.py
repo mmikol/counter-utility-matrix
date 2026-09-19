@@ -569,6 +569,32 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
     return result.rendered(), result.to_dict()
 
 
+@tool("reach", "Can the playbook ever pick this hero? A board that suits it - one of"
+      " its maps, a red it answers, up to two bans of the rivals holding its seat - on"
+      " which it is in the optimal six; with none, the closest it came. A hero that"
+      " cannot be reached is one the facts or the strategies cannot see.",
+      {"hero": {"type": "string", "description": "a released hero (any spelling)"}},
+      ["hero"])
+def reach_tool(ctx, hero):
+    from inference import reach
+    from ui.facts import model
+    with ctx.connect() as cx:
+        world = model.load(cx)
+    try:
+        found = reach.search(world, hero)
+    except ValueError as error:
+        raise ToolError(str(error)) from error
+    where = "%s%s against %s" % (found["map"], " " + found["side"] if found["side"] else "",
+                                 ", ".join(found["red"]) or "the likely six")
+    if found["bans"] is None:
+        return ("%s is never the optimal pick within two bans; closest on %s, %.2f behind"
+                % (found["hero"], where, found["gap"])), found
+    return ("%s is optimal on %s%s: %s" % (
+        found["hero"], where,
+        ", with %s banned" % ", ".join(found["banned"]) if found["banned"] else "",
+        ", ".join(found["six"]))), found
+
+
 @tool("board", "The whole board at any stage of the draft (no map, a map, a side,"
       " bans, red's picks as they reveal): blue's optimal six as the best counter"
       " to red's selection - to their likely six until they reveal a pick"

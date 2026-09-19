@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.heal_peak_max
 direction: maximize
-weight: 0.5
+weight: 0.75
 ---
 
 # Carry one big burst heal

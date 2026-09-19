@@ -4,7 +4,7 @@ kind: heuristic
 category: durability
 metric: team.armor_total
 direction: maximize
-weight: 0.5
+weight: 0.75
 when: enemy.hitscan >= 3
 ---
 # Armor eats hitscan spam

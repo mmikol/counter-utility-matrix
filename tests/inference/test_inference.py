@@ -750,3 +750,49 @@ def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(wor
                            catalog=scratch).to_dict()
     assert all(not c["applies"] and c["weighted"] == 0
                for c in pair["contributions"] if c["id"].startswith("solo-"))
+
+
+@pytest.mark.invariant
+def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path):
+    """One slot at a time, a pair worth nothing apart is never met: each partner
+    alone only costs. The playbook here pays one authored pair, the two
+    lowest-standing heroes of their roles, outside the pools. The best six holds
+    both, with the locked pick, the ban and the shape kept; the pair step off,
+    the search stops short of it."""
+    import copy
+
+    from inference import solver as solver_module
+    (tmp_path / "shape.md").write_text(
+        "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and"
+        " team.damage == 2 and team.supports == 2\n---\nx\n", "utf-8")
+    rule = "---\nname: %s\nkind: heuristic\ndirection: maximize\nmetric: %s\nweight: %s\n---\nx\n"
+    (tmp_path / "winning.md").write_text(rule % ("Winning", "team.win_mean", 1), "utf-8")
+    (tmp_path / "together.md").write_text(rule % ("Together", "team.synergy_edges", 0.75), "utf-8")
+    scratch = catalog.load(str(tmp_path))
+    locked, banned = [world.hero("Reinhardt")], [world.hero("Mercy")]
+
+    def solver_on(w):
+        return solver_module.Solver(w, None, [], locked, scratch, pool_size=3, bans=banned)
+
+    alone = copy.copy(world)                   # the same roster, no authored pair yet
+    alone.synergies, alone.partners = {}, {}
+    before = solver_on(alone)
+    before.solve(top=1)
+    last = {r: sorted((h for h in world.heroes.values() if h.role == r and h.released
+                       and h not in locked and h not in banned), key=before._pool_key)[::-1]
+            for r in ("tank", "damage", "support")}
+    for a, b in ((last["support"][0], last["support"][1]), (last["tank"][0], last["damage"][0])):
+        paired = copy.copy(world)
+        paired.synergies = {frozenset((a.id, b.id)): (1.0, "scratch")}
+        paired.partners = {a.id: {b.id: (1.0, "scratch")}, b.id: {a.id: (1.0, "scratch")}}
+        solver = solver_on(paired)
+        top = solver.solve(top=1)[0]
+        pooled = {h.id for pool in solver.pools().values() for h in pool}
+        assert a.id not in pooled and b.id not in pooled      # the sweep never saw either
+        assert {a.name, b.name, "Reinhardt"} <= set(top.names) and "Mercy" not in top.names
+        assert sorted(h.role for h in top.heroes) == ["damage"] * 2 + ["support"] * 2 + ["tank"] * 2
+        assert any(c["id"] == "together" and c["raw"] == 1 for c in top.contributions)
+        single = solver_on(paired)
+        single._pairs = list                   # the pair step off
+        short = single.solve(top=1)[0]
+        assert not {a.name, b.name} & set(short.names) and short.score < top.score

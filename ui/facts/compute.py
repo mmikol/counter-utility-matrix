@@ -27,7 +27,7 @@ ROLE_COUNT = {"tank": "tanks", "damage": "damage", "support": "supports"}   # ro
 SPECIALIST_DELTA = 2.5
 RANK_SENSITIVE = 6.0
 TREND_POINTS = 1.5
-FLIER_REACH = 35.0        # metres a hitscan weapon must publish to answer a flier
+FLIER_REACH = 30.0        # metres a hitscan weapon must publish to answer a flier
 
 TEAM_METRICS = OrderedDict([
     # shape
@@ -44,10 +44,11 @@ TEAM_METRICS = OrderedDict([
     ("archetype_deviation",
      "picks over the map's top-style archetype role slots (0 without a map)"),
     # durability
-    ("pool_total", "team effective HP: sum of health + shield + armor"),
+    ("pool_total", "team effective HP: sum of health + shield + armor, plus a form's armor by"
+                   " its uptime"),
     ("pool_min", "the weakest pick's pool - focus fire finds the minimum"),
     ("weakest", "who holds the smallest pool"),
-    ("armor_total", "summed armor"), ("armor_share", "armor / pool"),
+    ("armor_total", "summed armor, a form's by its uptime"), ("armor_share", "armor / pool"),
     ("shield_total", "summed recharging shields"), ("shield_share", "shields / pool"),
     ("squish_count", "picks at or under %d pool" % SQUISHY_POOL),
     ("squishies", "the picks at or under %d pool" % SQUISHY_POOL),
@@ -96,6 +97,7 @@ TEAM_METRICS = OrderedDict([
     ("mobility_count", "picks with a movement or evasive ability"),
     ("mobility_tools", "the movement tools"),
     ("flyers", "picks that fly or hover"),
+    ("light_flyers", "picks that fly or hover, tanks aside"),
     ("barrier_hp", "summed barrier health the team fields"),
     ("barrier_count", "picks with a barrier"),
     ("barrier_piercers", "picks whose kit ignores barriers"),
@@ -155,7 +157,7 @@ MATCHUP_METRICS = OrderedDict([
     ("exposure_share", "share of blue answered by red"),
     ("double_covered", "red picks answered twice over"),
     ("dive_pressure", "red picks with a movement tool"),
-    ("flyers", "red picks that fly"),
+    ("flyers", "red picks that fly, tanks aside"),
     ("barrier_need", "barrier health red fields"),
     ("antiheal_need", "red supports' summed peak heal"),
     ("ult_threat", "red's summed damage-ultimate ceiling"),
@@ -293,10 +295,10 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["archetype_deviation"] = dev
 
     pools = [h.pool for h in heroes]
-    t["pool_total"] = sum(pools)
+    t["pool_total"] = sum(pools) + sum(h.form_armor for h in heroes)
     t["pool_min"] = min(pools) if pools else 0
     t["weakest"] = min(heroes, key=lambda h: h.pool).name if heroes else ""
-    t["armor_total"] = sum(h.armor for h in heroes)
+    t["armor_total"] = sum(h.armor + h.form_armor for h in heroes)
     t["armor_share"] = t["armor_total"] / t["pool_total"] if t["pool_total"] else 0.0
     t["shield_total"] = sum(h.shield for h in heroes)
     t["shield_share"] = t["shield_total"] / t["pool_total"] if t["pool_total"] else 0.0
@@ -355,6 +357,7 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["mobility_tools"] = [] if lean else ["%s: %s" % (h.name, ", ".join(h.mobility_tools))
                                            for h in heroes if h.mobility_tools]
     t["flyers"] = sum(1 for h in heroes if h.flyer)
+    t["light_flyers"] = sum(1 for h in heroes if h.flyer and h.role != "tank")
     t["barrier_hp"] = sum(h.barrier_hp for h in heroes)
     t["barrier_count"] = sum(1 for h in heroes if h.barrier_hp)
     t["barrier_piercers"] = sum(1 for h in heroes if h.pierces_barrier)
@@ -461,7 +464,7 @@ def _largest_component(adjacency):
 def red_matchup(red_t):
     """The matchup metrics red alone decides: the same for every blue six on
     a board."""
-    return {"dive_pressure": red_t["mobility_count"], "flyers": red_t["flyers"],
+    return {"dive_pressure": red_t["mobility_count"], "flyers": red_t["light_flyers"],
             "barrier_need": red_t["barrier_hp"], "antiheal_need": red_t["heal_peak_supports"],
             "ult_threat": red_t["ult_damage_total"], "style_lean_red": red_t["style_lean"]}
 

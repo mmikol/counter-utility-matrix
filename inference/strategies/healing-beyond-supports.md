@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.lifelines
 direction: maximize
-weight: 0.75
+weight: 0.5
 ---
 # Healing beyond the supports
 

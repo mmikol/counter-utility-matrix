@@ -129,6 +129,7 @@ inference/
   expr.py          the expression language the frontmatter uses
   solver.py        enumerate, prune, normalise, score, refine
   engine.py        infer(), evaluate(), board(): the solver plus citations
+  reach.py         a board on which a hero is the optimal pick
   tune.py          one validated, logged edit to a strategy file; add and complete
   derive.py        the engine asking the model for a draft's frontmatter
   serve.py         the HTTP service the compose stack's ui container calls
@@ -140,6 +141,7 @@ inference/
 | `expr.py` | A safe subset of Python expressions: the AST is checked once, compiled, and evaluated over a scope whose missing keys read as zero, so a metric that does not apply to a board never crashes a score. |
 | `solver.py` | For a board: every role shape the hard limits allow around the locked picks; per-role pools of released heroes (an announced hero waits for its release) ranked by standing (a hero's mean score across the reference sixes it is in, plus 0.5 per locked partner), the prior breaking ties and ranking alone when nothing has scored; every candidate prepared (namespace, limit check, raw metric values), scored with the frozen bounds and slimmed to its score and tie-break, so a search of thousands holds only verdicts; local search from the best six sixes and the best of every shape, swapping any open slot for any same-role released hero on the roster; the winners hydrated again with their breakdown. The bounds come from a seeded reference sample of legal sixes for that map, side, enemy and bans, so `infer`, `evaluate` and the current comp share one scale and a score means the same thing across calls. |
 | `engine.py` | `infer` (the optimal six around the locked picks), `evaluate` (a full six ranked against the field), `current` (the picks as they stand, partial or full), and `board`: at any stage of a draft, blue's optimal as the counter to red's selection, red's optimal as their counter to blue's, both current comps scored on those scales, blue's picks against red's best counter, blue's locked picks with the empty slots filled, red's likely starting comp, the fight odds, the game plan in prose, and the shapes the playbook's limits allow. Its four searches - blue's optimal, red's counter, the fill, the countered case - are each split across a pool of spawned workers in four rounds: the reference sample, the sample again for each hero's standing (its mean score across the reference sixes it is in, which ranks each role's pool of six), the enumeration, then the ranking and the local search from the best six sixes and the best of every shape. Only verdicts cross (hero ids, score, tie-break) and slices partition their round, so the answer does not depend on the split. The pool is `max(6, min(cores, 12))` workers; `COUNTER_MATRIX_WORKERS` overrides; `COUNTER_MATRIX_PARALLEL=0`, a single core or a caller-supplied catalog keeps it in one process; a dead worker means that board runs sequentially and the pool is rebuilt. Each result carries the picks with reasons and `[F#]` citations into the board's FactSet, the score breakdown per strategy, alternatives, and the assumptions as "ground rules to reconcile against". |
+| `reach.py` | Every hero is the right pick somewhere: for a hero, a board that suits it (its maps, a red it answers, a side, up to two bans of the rivals holding its seat) on which it is in the optimal six, or the closest it came. The `reach` tool runs it; `tests/fixtures/reach.json` records a board per released hero and the suite checks none is lost. A hero no board seats is one the facts or the strategies cannot see. |
 | `tune.py` | `tune(id, field, value, reason)`: one frontmatter edit; `add(id, name, kind, prose, fields, reason)`: a new file from what the user gave and what `/strategy` inferred; `complete(id, fields, reason)`: a draft's frontmatter in one step. Each is validated by loading the catalog with the new text, then written, re-mirrored and logged. |
 | `derive.py` | `derive()`: for every draft, the prompt (the three inputs, the vocabulary, one finished file of each form for style), `claude -p` on the subscription, the JSON answer through `tune.complete`, one retry carrying the catalog's objection; at most ten drafts a run. `available()` says whether the CLI is here. |
 | `serve.py` | `/board`, `/infer`, `/evaluate`, `/strategies`, `/health` - the same functions, over HTTP, for a board that runs in another container. |
@@ -534,7 +536,7 @@ A comp needs enough sustained damage to finish what it starts; healing alone hol
 
 ##### Damage ultimates punish squishies (`damage-ults-punish-squishies`, damage)
 
-`maximize team.dmg_ults` - ultimates that carry a damage figure. weight 0.5; when `enemy.squish_count >= 4 and enemy.pool_total <= 1800`
+`maximize team.dmg_ults` - ultimates that carry a damage figure. weight 0.25; when `enemy.squish_count >= 4 and enemy.pool_total <= 1800`
 
 When red seats four or more picks at 250 pool or under and 1,800 total pool or less, every damage ultimate on our side ends a fight outright. One good ultimate wins a fight off a single kill, and a full Earthshatter or Blizzard on a squishy backline is a wipe. Ultimates carrying a damage figure are counted, read while red fields four or more squishies on 1,800 pool or less.
 
@@ -648,13 +650,13 @@ Against a red that fields 2,050 or more summed hit points, steady fire does not 
 
 ##### Armor eats hitscan spam (`armor-eats-hitscan-spam`, durability)
 
-`maximize team.armor_total` - summed armor. weight 0.5; when `enemy.hitscan >= 3`
+`maximize team.armor_total` - summed armor, a form's by its uptime. weight 0.75; when `enemy.hitscan >= 3`
 
 Hitscan guns deal their damage as many small instances, and armor takes 7 off every one of them up to half, so a Soldier: 76, Tracer or Bastion line loses a large share of its output into an armored comp. Three or more hitscan picks on red is the case where armor is worth the most. Measured as our summed armor, read while 3 or more red picks have a hitscan weapon.
 
 ##### Armor is extra health (`armor-is-extra-health`, durability)
 
-`maximize team.armor_total` - summed armor. weight 0.5
+`maximize team.armor_total` - summed armor, a form's by its uptime. weight 0.5
 
 Armor points are worth more than the health they replace, because every hit into them is reduced before it lands. 100 armor equals about 162 health against ordinary fire, and Brigitte's team-wide armor is why GOATS walked through snipers. Summed armor across the six is measured.
 
@@ -696,7 +698,7 @@ A brawl six walks into the fight as one, and its weakest pick walks in too. A su
 
 ##### Brawl wears armor (`brawl-wears-armor`, durability)
 
-`maximize team.armor_total` - summed armor. weight 0.25, a need; when `team.style_lean == 'brawl'`
+`maximize team.armor_total` - summed armor, a form's by its uptime. weight 0.25, a need; when `team.style_lean == 'brawl'`
 
 A brawl six walks into the enemy's fire and stays there, so it wants the health that fire chews slowest. Armor cuts every small hit at the close range brawl chooses, which is why the tanks that win a face to face fight carry it. Measured as summed armor across the team, read only while brawl is the majority style.
 
@@ -708,7 +710,7 @@ Against a red team whose biggest hit deletes a squishy outright, the picks that 
 
 ##### Field more hit points (`field-more-hit-points`, durability)
 
-`maximize team.pool_total` - team effective HP: sum of health + shield + armor. weight 0.5
+`maximize team.pool_total` - team effective HP: sum of health + shield + armor, plus a form's armor by its uptime. weight 0.5
 
 More hit points on the six is more damage absorbed before the first death, and the first death decides most fights. Tank-heavy lines win because they stand in the open and survive the poke that sends a 250-pool pick back to spawn, so a low-pool comp has to trade perfectly to match them. Health, shield and armor summed across the six is measured.
 
@@ -720,7 +722,7 @@ Against a red whose damage floor is 635 or more per second, the six is only as d
 
 ##### A held point needs its tank (`held-point-needs-tank`, durability)
 
-`maximize team.pool_total` - team effective HP: sum of health + shield + armor. weight 0.25; when `map.stages >= 3`
+`maximize team.pool_total` - team effective HP: sum of health + shield + armor, plus a form's armor by its uptime. weight 0.25; when `map.stages >= 3`
 
 On Control and Flashpoint the team holds a point for as long as it can, and losing the tank first on a held point is called a huge disadvantage. Health, shield and armor summed across the six is measured, read on maps with 3 or more stages.
 
@@ -762,19 +764,19 @@ When red carries a ranged one-shot, every open crossing is a headshot, and the c
 
 ##### A solo tank needs armor (`solo-tank-needs-armor`, durability)
 
-`maximize team.armor_total` - summed armor. weight 0.75, a need; when `team.tanks <= 1`
+`maximize team.armor_total` - summed armor, a form's by its uptime. weight 0.75, a need; when `team.tanks <= 1`
 
 When one tank holds the front alone, the comp needs the armor to stand under focus. Orisa held a solo-tank front through triple damage because she could not be focused down, and armor is the pool type that shrugs off the spam a lone front line eats. The summed armor across the six is read, only while the six carries at most one tank.
 
 ##### Brawl maps reward durability (`brawl-maps-reward-durability`, map)
 
-`maximize team.pool_total` - team effective HP: sum of health + shield + armor. weight 0.5; when `map.style_top == 'brawl'`
+`maximize team.pool_total` - team effective HP: sum of health + shield + armor, plus a form's armor by its uptime. weight 0.5; when `map.style_top == 'brawl'`
 
 In corridors and chokes the fight is decided by who lasts longer in each other's face. A brawl map gives no room to disengage, so the comp with more health, armor and shield to spend up close wins the scrum. Summed effective hit points across the six is the measure, read on maps whose rewarded style is brawl.
 
 ##### Bring the map's specialists (`bring-map-specialists`, map)
 
-`maximize team.map_specialists` - picks running 2.5+ points over their own baseline here. weight 0.75; when `map.known == 1`
+`maximize team.map_specialists` - picks running 2.5+ points over their own baseline here. weight 0.5; when `map.known == 1`
 
 A hero who runs well above their own average on this map is a specialist worth building around. Some kits fit one map far better than their own average shows, a Widowmaker on Circuit Royal, a Lúcio on Ilios, and the map rates catch the gap. Picks running 2.5 points or more over their own baseline win rate on the selected map are counted.
 
@@ -924,7 +926,7 @@ A brawl six wins by denying a diver's mobility once it lands, so it needs the st
 
 ##### Brawl outlasts a dive (`brawl-outlasts-dive`, matchup)
 
-`maximize team.pool_total` - team effective HP: sum of health + shield + armor. weight 0.5; when `matchup.style_lean_red == 'dive'`
+`maximize team.pool_total` - team effective HP: sum of health + shield + armor, plus a form's armor by its uptime. weight 0.5; when `matchup.style_lean_red == 'dive'`
 
 Brawl beats dive: a dive comp trades durability for mobility, so a team that groups up with a big health pool and swings back is not killed in the seconds the dive has before its cooldowns end. Reinhardt with Brigitte and Lúcio gives a Winston dive nothing to land on. Measured as the team's summed effective health, read only while red's majority playstyle is dive.
 
@@ -984,7 +986,7 @@ A six assembled to answer most of red's picks is only worth playing if red canno
 
 ##### Answered answers are no answers (`countered-answers-are-none`, matchup)
 
-`minimize team.exposure_edges` - (pick, enemy) counter edges: enemies answering picks. weight 0.75; when `enemy.size >= 1`
+`minimize team.exposure_edges` - (pick, enemy) counter edges: enemies answering picks. weight 0.5; when `enemy.size >= 1`
 
 An answer that red already counters is not an answer: the pick meant to solve one enemy spends the match dodging another. Every counter to GOATS could be shut down by a swap to Widowmaker, and the ladder's version is the swap that counters the enemy tank but is countered by several others on their team. Measured as the total of counter edges from revealed red picks onto ours, kept low once red reveals a pick.
 
@@ -1032,9 +1034,9 @@ A Pharah or Echo is contested by hitscan and by almost nothing else, so a red wi
 
 ##### Hitscan answers their fliers (`hitscan-answers-their-fliers`, matchup)
 
-`maximize team.hitscan_reach` - hitscan picks whose weapon publishes a reach of 35 m or more. weight 2; when `matchup.flyers >= 1`
+`maximize team.hitscan_reach` - hitscan picks whose weapon publishes a reach of 30 m or more. weight 2; when `matchup.flyers >= 1`
 
-A Pharah or an Echo in the air is contested by hitscan and by almost nothing else: a Reaper and a Symmetra cannot touch an aerial pick at all. Of the 42 counter edges onto the four heroes who fly, 33 come from hitscan heroes, who are 21 of the 53 on the roster. Measured as our hitscan picks whose weapon reaches 35 m or more, read while red fields a pick that flies.
+A Pharah or an Echo in the air is contested by hitscan and by almost nothing else: a Reaper and a Symmetra cannot touch an aerial pick at all. Of the 35 counter edges onto the three heroes who stay in the air, 32 come from hitscan heroes, who are 21 of the 53 on the roster. Measured as our hitscan picks whose weapon reaches 30 m or more, read while red fields a pick that flies, tanks aside.
 
 ##### An invulnerability survives the dive (`invuln-against-dive`, matchup)
 
@@ -1314,7 +1316,7 @@ Counter-swapping lands on tanks more than any other role, so a six with two tank
 
 ##### Attackers arrive with ultimates (`attackers-arrive-with-ults`, side)
 
-`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 0.25; when `map.side == 'attack'`
+`maximize team.ult_damage_total` - summed max damage across the team's damage ultimates. weight 0.5; when `map.side == 'attack'`
 
 Attackers need one won fight to take the point and they choose when to take it, so they arrive with the ultimates the defence has to answer. The community expects the attackers to have ults on the second or third push and to blow them each time the defence sets up. The summed maximum damage across the team's damage ultimates is the measure, read on the attacking side.
 
@@ -1356,7 +1358,7 @@ Against a red whose damage floor is heavy, the support line has to heal at or ab
 
 ##### Big saves for big hits (`big-saves-big-hits`, sustain)
 
-`maximize team.heal_peak_max` - the biggest single heal a teammate can receive. weight 0.25; when `enemy.burst_max >= 300`
+`maximize team.heal_peak_max` - the biggest single heal a teammate can receive. weight 0.5; when `enemy.burst_max >= 300`
 
 When red carries a 300-damage hit, the heal that matters is the one large enough to bring a target back from the edge in one press. A Baptiste or Ana line is picked into high burst because a burst heal undoes a hit that a beam only chases, and Lifeweaver with Brigitte is two weak burst heals into a bursty red. The biggest single heal on the six is measured, read while red's biggest single hit is 300 or more.
 
@@ -1380,19 +1382,19 @@ When red's damage ultimates add up to 1,800 or more, the fight that matters is t
 
 ##### Healing beyond the supports (`healing-beyond-supports`, sustain)
 
-`maximize team.lifelines` - picks carrying any healing at all, their own and lifesteal included. weight 0.75
+`maximize team.lifelines` - picks carrying any healing at all, their own and lifesteal included. weight 0.5
 
 A pick that can heal itself or a neighbour lightens the support line's load. Roadhog, Mauga, Mei and Reaper carry their own sustain, so the supports spend less on them and more on the picks that have none, while a comp whose tanks cannot sustain themselves feeds and drains its healers. The number of picks carrying any healing figure at all, in any role, is measured.
 
 ##### Self-heal covers thin support (`lifelines-cover-thin-heals`, sustain)
 
-`maximize team.lifelines` - picks carrying any healing at all, their own and lifesteal included. weight 0.5, a need; when `team.hps_ratio < 0.7`
+`maximize team.lifelines` - picks carrying any healing at all, their own and lifesteal included. weight 0.25, a need; when `team.hps_ratio < 0.7`
 
 A six whose supports heal below the roster's bench needs its other picks to carry their own sustain. The CTF guide warns that heal output can be low when tanks have no self-sustain. Measured as the count of picks carrying any healing at all, read while the supports' sustained healing is under 0.7 of the roster's two-support bench.
 
 ##### Carry one big burst heal (`peak-single-save`, sustain)
 
-`maximize team.heal_peak_max` - the biggest single heal a teammate can receive. weight 0.5
+`maximize team.heal_peak_max` - the biggest single heal a teammate can receive. weight 0.75
 
 Every comp wants one support whose single heal is big enough to undo a hit at once. Slow or passive healing tops a target off between fights, while the burst heal is what keeps a tank standing through the stomp: Mercy's Flash Heal gives 120 to a low-health target (60 otherwise), Baptiste 100, Ana 90, Kiriko 80, while Lúcio, Mizuki, Moira, Illari and Zenyatta have no cast heal. The biggest single heal figure on the six is measured.
 
@@ -1404,7 +1406,7 @@ When five or more red picks carry a damage ultimate, at least one fight a round 
 
 ##### Self-heal is effective HP (`self-heal-effective-hp`, sustain)
 
-`maximize team.heal_peak_total` - summed biggest single heal per pick, its own self-heal included. weight 0.25
+`maximize team.heal_peak_total` - summed biggest single heal per pick, its own self-heal included. weight 0.75
 
 Every kit that heals adds effective hit points that no enemy sees on the bar. Baptiste's regen burst makes him 350 effective HP in a duel, and Roadhog's Take a Breather returns 450 on top of his pool, so two sixes with the same summed pool are not equally hard to kill. Summed biggest single heal per pick, its own self-heal included, is measured.
 
@@ -1548,7 +1550,7 @@ When red fields 1,200 or more barrier HP the fight waits for ultimates, so the s
 
 ##### Count the cooldowns (`count-the-cooldowns`, tempo)
 
-`maximize team.cooldown_count` - cooldowns counted. weight 0.75
+`maximize team.cooldown_count` - cooldowns counted. weight 0.5
 
 A six with more abilities on cooldown has more to trade and more to bait, and the fight is decided by who has cooldowns left. A Wrecking Ball that draws a Flashbang, a Sleep Dart and a Biotic Grenade and rolls out has spent one cooldown for three, while a Hazard with his spent loses to any tank. Cooldowns counted across every ability on the six are measured.
 
@@ -1682,10 +1684,10 @@ the `team.*` metrics computed for the red side.
 | `team.style_lean` (text) | the playstyle a strict majority of picks carry, else none |
 | `team.style_fit` | share of picks tagged with the map's rewarded style (0 without a map) |
 | `team.archetype_deviation` | picks over the map's top-style archetype role slots (0 without a map) |
-| `team.pool_total` | team effective HP: sum of health + shield + armor |
+| `team.pool_total` | team effective HP: sum of health + shield + armor, plus a form's armor by its uptime |
 | `team.pool_min` | the weakest pick's pool - focus fire finds the minimum |
 | `team.weakest` (text) | who holds the smallest pool |
-| `team.armor_total` | summed armor |
+| `team.armor_total` | summed armor, a form's by its uptime |
 | `team.armor_share` | armor / pool |
 | `team.shield_total` | summed recharging shields |
 | `team.shield_share` | shields / pool |
@@ -1702,7 +1704,7 @@ the `team.*` metrics computed for the red side.
 | `team.dmg_ults` | ultimates that carry a damage figure |
 | `team.ult_cost_mean` | mean ultimate charge cost where published |
 | `team.hitscan` | picks with a hitscan weapon or ability |
-| `team.hitscan_reach` | hitscan picks whose weapon publishes a reach of 35 m or more |
+| `team.hitscan_reach` | hitscan picks whose weapon publishes a reach of 30 m or more |
 | `team.projectile` | picks whose weapons are projectile |
 | `team.beam` | picks with a damaging beam |
 | `team.melee` | picks with a melee weapon |
@@ -1733,6 +1735,7 @@ the `team.*` metrics computed for the red side.
 | `team.mobility_count` | picks with a movement or evasive ability |
 | `team.mobility_tools` (text) | the movement tools |
 | `team.flyers` | picks that fly or hover |
+| `team.light_flyers` | picks that fly or hover, tanks aside |
 | `team.barrier_hp` | summed barrier health the team fields |
 | `team.barrier_count` | picks with a barrier |
 | `team.barrier_piercers` | picks whose kit ignores barriers |
@@ -1783,7 +1786,7 @@ the `team.*` metrics computed for the red side.
 | `matchup.exposure_share` | share of blue answered by red |
 | `matchup.double_covered` | red picks answered twice over |
 | `matchup.dive_pressure` | red picks with a movement tool |
-| `matchup.flyers` | red picks that fly |
+| `matchup.flyers` | red picks that fly, tanks aside |
 | `matchup.barrier_need` | barrier health red fields |
 | `matchup.antiheal_need` | red supports' summed peak heal |
 | `matchup.ult_threat` | red's summed damage-ultimate ceiling |

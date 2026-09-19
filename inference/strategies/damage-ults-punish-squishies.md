@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.dmg_ults
 direction: maximize
-weight: 0.5
+weight: 0.25
 when: enemy.squish_count >= 4 and enemy.pool_total <= 1800
 ---
 # Damage ultimates punish squishies

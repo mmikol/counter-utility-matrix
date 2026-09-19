@@ -267,10 +267,18 @@ STAT_UNITS = {
 STAT_DEFAULT_DENOMINATOR = {"dps": "seconds", "hps": "seconds"}
 
 # Declared on Template:Ability details but not registered as Cargo fields.
+# `heal` is registered, but Cargo returns it empty for some abilities
+# (Mizuki's Healing Kasa); the merge fills only what Cargo left empty.
 SUPPLEMENT_FIELDS = (
     "ignores_matrix", "ignores_deflect", "ignores_window", "ignores_barrier",
-    "ignores_boost", "aoe", "view_angle",
+    "ignores_boost", "aoe", "view_angle", "heal",
 )
+
+# A retired kit's block: "Teleporter (old)". ability_key() drops the
+# parenthetical, so it would overwrite the live block of the same name.
+RETIRED_BLOCK_RE = re.compile(r"\(old\)\s*$", re.I)
+# A citation is not part of the value.
+REF_RE = re.compile(r"<ref\b[^>]*/>|<ref\b[^>]*>.*?</ref>", re.I | re.S)
 
 
 def supplement_from_wikitext(session, hero_name, cache_dir):
@@ -284,11 +292,11 @@ def supplement_from_wikitext(session, hero_name, cache_dir):
     for block in markup.find_templates(text, r"Ability[ _]details"):
         params = markup.parse_params(block)
         name = markup.wikitext_to_text(params.get("ability_name", ""))
-        if not name:
+        if not name or RETIRED_BLOCK_RE.search(name):
             continue
         stats = {}
         for code in SUPPLEMENT_FIELDS:
-            value = markup.wikitext_to_text(params.get(code, ""))
+            value = markup.wikitext_to_text(REF_RE.sub("", params.get(code, "")))
             if value:
                 stats[code] = (value, params[code])
         if stats:

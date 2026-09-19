@@ -65,6 +65,8 @@ RATE_UNITS = {
     "swings/s": ("swings", "seconds"), "swings/sec": ("swings", "seconds"),
     "swing/s": ("swings", "seconds"),
     "hp/s": ("hp", "seconds"), "dps": ("hp", "seconds"),
+    # "185/s": the unit on top is the stat's own
+    "/s": (None, "seconds"),
 }
 
 
@@ -179,6 +181,8 @@ def parse_measurements(value_text, default_unit=None):
     """
     if not value_text:
         return []
+    # the wiki sometimes writes a minus as U+2212
+    value_text = value_text.replace("\u2212", "-")
 
     measurements = []
     for part in SPLIT_RE.split(value_text):

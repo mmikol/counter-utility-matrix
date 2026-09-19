@@ -65,6 +65,52 @@ def test_wiki_kits_pull_from_the_cache_and_keep_the_announced(ctx):
     assert isinstance(data["announced"], list)
 
 
+KIT_ROWS = """
+    select h.name, a.name, k.code, s.value::float, s.unit_numerator,
+           s.unit_denominator, s.condition
+    from ability_stats s join abilities a using (ability_id)
+    join heroes h using (hero_id) join stat_keys k using (stat_key_id)
+    where (h.name, a.name, k.code) in (('Symmetra', 'Sentry Turret', 'mspeed_slow'),
+        ('Mizuki', 'Healing Kasa', 'heal'), ('Reaper', 'Death Blossom', 'damage'),
+        ('Symmetra', 'Teleporter', 'ult_req'), ('Symmetra', 'Photon Barrier', 'cooldown'))
+    order by h.name, a.name, s.value desc"""
+
+
+class _ReadThenRolledBack(_RolledBack):
+    """Reads the kit rows the pull wrote, then rolls back like the rest."""
+
+    def __init__(self, connection, seen):
+        super().__init__(connection)
+        self._seen = seen
+
+    def __exit__(self, *exc):
+        if exc[0] is None:
+            self._seen.extend(self._connection.execute(KIT_ROWS).fetchall())
+        return super().__exit__(*exc)
+
+
+@needs_caches
+def test_wiki_kits_store_the_numbers_the_pages_publish(db, dsn):
+    seen = []
+
+    class Reading(tools.Context):
+        def connect(self):
+            return _ReadThenRolledBack(psycopg.connect(self.dsn), seen)
+
+    tools.run_tool(Reading(dsn=dsn), "pull_kits")
+    assert seen == [
+        # Cargo's heal is empty for Kasa; the article supplies it
+        ("Mizuki", "Healing Kasa", "heal", 90.0, "hp", None, "1st bounce"),
+        ("Mizuki", "Healing Kasa", "heal", 70.0, "hp", None, "2nd bounce"),
+        ("Mizuki", "Healing Kasa", "heal", 50.0, "hp", None, "3rd bounce"),
+        ("Mizuki", "Healing Kasa", "heal", 30.0, "hp", None, "self"),
+        # "185/s per enemy" is a rate
+        ("Reaper", "Death Blossom", "damage", 185.0, "hp", "seconds", None),
+        # written with U+2212; no row from the retired "(old)" blocks
+        ("Symmetra", "Sentry Turret", "mspeed_slow", -15.0, "percent", None, None),
+    ]
+
+
 @needs_caches
 def test_wiki_maps_patches_and_playstyles_pull_from_the_cache(ctx):
     text, data = tools.run_tool(ctx, "pull_maps")

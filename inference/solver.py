@@ -22,9 +22,11 @@
     rank       sorted by score, then tie-break, then names - a total order, so
                the answer does not depend on how the sweep was split
     refine     local search from the best six sixes and the best of every shape:
-               swap any slot for any same-role hero on the roster, keep improvements
+               swap any slot for any same-role hero on the roster, keep improvements;
+               then bring each authored pair into the best sixes two slots at once
 """
 
+import heapq
 import itertools
 import random
 
@@ -36,6 +38,8 @@ from ui.facts.compute import ROLE_COUNT, TEAM_SIZE
 REFERENCE_SIZE = 1200
 PARTNER_POINTS = 0.5              # a locked partner's worth when ranking a pool
 SEEDS = 6                         # the local search's starts, whatever `top` asks for
+SHAPE_REACH = 4.0                 # a shape starts too when its best six is this close
+PAIR_TRIES = 800                  # the most new sixes one refine scores bringing pairs in
 NEED_BUDGET = 2.0                 # the most one guarded state can cost
 REFERENCE_SEED = 20260913
 
@@ -491,48 +495,106 @@ class Solver:
         """Local search: swap any open slot for any same-role hero. A swap keeps
         the shape, so the starts are the best SEEDS of the field and the best
         six of every shape in it: an off-shape six can win only if its own
-        shape was searched."""
+        shape was searched. Then the best SEEDS sixes try each authored pair
+        brought in two slots at once, and the swaps run on from any that gained:
+        partners that pay only together are never met one swap at a time."""
         known = {c.key: c for c in ranked}
-        locked_ids = {h.id for h in self.locked}
-        roster = sorted(self.world.heroes.values(), key=lambda h: h.id)
         starts, shapes = list(ranked[:SEEDS]), set()
-        for cand in ranked:
+        floor = ranked[0].score - SHAPE_REACH if ranked else 0.0
+        for cand in ranked:                   # sorted: the first of a shape is its best
+            if cand.score < floor:
+                break                         # a swap or two will not make this up
             shape = tuple(sorted(h.role for h in cand.heroes))
             if shape not in shapes:
                 shapes.add(shape)
                 if cand not in starts:
                     starts.append(cand)
+        roster = [h for h in sorted(self.world.heroes.values(), key=lambda h: h.id)
+                  if h.released and h.id not in self.banned]    # announced heroes wait here too
         for seed in starts:
-            current = seed
-            while True:
-                best = current
-                for index, hero in enumerate(current.heroes):
-                    if hero.id in locked_ids:
-                        continue
-                    for other in roster:
-                        if (other.role != hero.role or other.id in current.key
-                                or other.id in self.banned or not other.released):
-                            continue                  # announced heroes wait here too
-                        heroes = list(current.heroes)
-                        heroes[index] = other
-                        cand = Candidate(heroes)
-                        if cand.key in known:
-                            cand = known[cand.key]
-                        else:
-                            self.prepare(cand)
-                            self.considered += 1
-                            if cand.violations:
-                                continue
-                            self.slim(self.score(cand, detail=False))
-                            known[cand.key] = cand
-                        if cand.score > best.score + 1e-9:
-                            best = cand
-                if best is current:
-                    break
-                current = best
+            self._climb(seed, roster, known)
+        pairs = self._pairs()
+        if pairs:
+            spent = self.considered + PAIR_TRIES          # best six first, until it is spent
+            for seed in heapq.nsmallest(SEEDS, known.values(), key=self._rank_key):
+                paired = self._bring_pair(seed, pairs, known, spent)
+                if paired is not seed:
+                    self._climb(paired, roster, known)
         out = list(known.values())
         out.sort(key=self._rank_key)
         return out
+
+    def _try(self, heroes, known):
+        """The six prepared, scored and slimmed once; None where a hard limit
+        refuses it."""
+        cand = Candidate(heroes)
+        if cand.key in known:
+            return known[cand.key]
+        self.prepare(cand)
+        self.considered += 1
+        if cand.violations:
+            return None
+        known[cand.key] = self.slim(self.score(cand, detail=False))
+        return cand
+
+    def _climb(self, seed, roster, known):
+        """Single-slot swaps from one six until none improves it."""
+        locked_ids = {h.id for h in self.locked}
+        current = seed
+        while True:
+            best = current
+            for index, hero in enumerate(current.heroes):
+                if hero.id in locked_ids:
+                    continue
+                for other in roster:
+                    if other.role != hero.role or other.id in current.key:
+                        continue
+                    heroes = list(current.heroes)
+                    heroes[index] = other
+                    cand = self._try(heroes, known)
+                    if cand is not None and cand.score > best.score + 1e-9:
+                        best = cand
+            if best is current:
+                return current
+            current = best
+
+    def _pairs(self):
+        """The authored synergy pairs this board can field, in id order."""
+        heroes = self.world.heroes
+        out = []
+        for a, b in sorted(tuple(sorted(pair)) for pair in self.world.synergies
+                           if len(pair) == 2):
+            a, b = heroes.get(a), heroes.get(b)
+            if (a is not None and b is not None and a.released and b.released
+                    and a.id not in self.banned and b.id not in self.banned):
+                out.append((a, b))
+        return out
+
+    def _bring_pair(self, seed, pairs, known, spent):
+        """Each pair with neither partner in the six, seated in two open slots of
+        their own roles, until `considered` reaches `spent`. -> the best six met,
+        the seed itself where none beat it."""
+        locked_ids = {h.id for h in self.locked}
+        open_slots = {}
+        for index, hero in enumerate(seed.heroes):
+            if hero.id not in locked_ids:
+                open_slots.setdefault(hero.role, []).append(index)
+        best = seed
+        for a, b in pairs:
+            if a.id in seed.key or b.id in seed.key:
+                continue                      # one swap reaches these
+            if self.considered >= spent:
+                break
+            for i in open_slots.get(a.role, ()):
+                for j in open_slots.get(b.role, ()):
+                    if i == j or (a.role == b.role and i > j):
+                        continue              # the same six, seated the other way round
+                    heroes = list(seed.heroes)
+                    heroes[i], heroes[j] = a, b
+                    cand = self._try(heroes, known)
+                    if cand is not None and cand.score > best.score + 1e-9:
+                        best = cand
+        return best
 
 
 def legal_shapes(catalog, locked_counts=None):

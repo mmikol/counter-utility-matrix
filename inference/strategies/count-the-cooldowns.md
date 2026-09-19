@@ -4,7 +4,7 @@ kind: heuristic
 category: tempo
 metric: team.cooldown_count
 direction: maximize
-weight: 0.75
+weight: 0.5
 ---
 # Count the cooldowns
 

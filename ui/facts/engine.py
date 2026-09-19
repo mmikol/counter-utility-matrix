@@ -291,9 +291,11 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
                " the kit is the wiki's preview and there are no rates" % (
                    name, " (releases %s)" % h.release_date if h.release_date else ""),
                value=str(h.release_date) if h.release_date else None, source="heroes", team=team)
-    fs.add("hero", name, "hero.pool", "%s pool: %d (%d health, %d shield, %d armor)"
-           % (name, h.pool, h.health, h.shield, h.armor), value=h.pool, unit="hp",
-           source="heroes", team=team)
+    fs.add("hero", name, "hero.pool", "%s pool: %d (%d health, %d shield, %d armor)%s"
+           % (name, h.pool, h.health, h.shield, h.armor,
+              ", %g more armor from its forms, time-averaged" % h.form_armor
+              if getattr(h, "form_armor", 0) else ""),
+           value=h.pool, unit="hp", source="heroes", team=team)
     passive = world.subrole_passives.get(h.subrole)
     if passive:
         fs.add("hero", name, "hero.passive", "%s's %s passive: %s"

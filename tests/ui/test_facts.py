@@ -39,8 +39,14 @@ def test_kit_rows_are_read_in_their_own_units(world):
     # EMP a damage ultimate that adds no hit points
     reaper, mauga, sombra = world.hero("Reaper"), world.hero("Mauga"), world.hero("Sombra")
     assert reaper.self_heal == 0 and reaper.lifesteal == pytest.approx(0.3)
-    assert mauga.peak_heal == 0 and mauga.self_heal == 0 and mauga.lifesteal == 1.0
-    assert world.hero("Junker Queen").self_heal == 0
+    assert mauga.peak_heal == 0 and mauga.self_hps == 0 and mauga.lifesteal == 1.0
+    # an own heal that runs for a duration is also a cast: a share of the held rate
+    # for Overdrive's 3 s, a rate for its longest duration, "100 over 3 seconds".
+    # A passive's share has no duration; Siphon Blaster heals off its own damage
+    assert mauga.self_heal == pytest.approx(mauga.dps * 3.0)
+    assert world.hero("Junker Queen").self_heal == 100 and world.hero("Mei").self_heal == 250
+    assert world.hero("Roadhog").self_heal == 450 and world.hero("Emre").self_heal == 30
+    assert world.hero("Domina").self_heal == 0
     assert world.hero("Sigma").overhealth == 400 and mauga.overhealth == 150
     assert world.hero("Lifeweaver").overhealth == 100 == world.hero("Brigitte").overhealth
     assert sombra.dmg_ult and sombra.ult_damage == 0 and sombra.dmg_amp == 0
@@ -54,10 +60,16 @@ def test_kit_rows_are_read_in_their_own_units(world):
     # an ultimate fired at its rate for its duration, under the roster's cap
     assert world.hero("Pharah").ult_damage == world.ult_cap
     assert 130 < world.hero("Venture").ult_damage < world.ult_cap
+    # three charges of 180; a 175 heavy round on a 2.5 s cooldown, four in 8.8 s
+    assert world.hero("Shion").ult_damage == 540
+    assert world.hero("Emre").ult_damage == 700
+    assert world.hero("Bastion").ult_damage == 550 and world.hero("Genji").ult_damage > 900
     # sustained rates: the reload in the row's text, the swing the rate counts,
     # the magazine's share where no reload figure is usable
     assert world.hero("Zenyatta").dps == pytest.approx(108.7)
-    assert world.hero("Mauga").dps == pytest.approx(62.24)
+    # both chainguns off one magazine: 138.88 for 8.64 s of every 10.64
+    assert world.hero("Mauga").dps == pytest.approx(112.78, abs=0.01)
+    assert world.hero("Mauga").hitscan_range == 40
     assert world.hero("Wuyang").dps == pytest.approx(128.21)
     assert world.hero("Vendetta").dps == pytest.approx(53.1)
     cat = world.hero("Jetpack Cat")
@@ -72,6 +84,13 @@ def test_the_weapon_a_hero_fights_with_sets_its_kind_and_reach(world):
     assert torb.self_heal == 0 and torb.self_hps == 0
     assert ramattra.melee and ramattra.pierces_barrier and ramattra.dps == 100
     assert ramattra.max_range == 0 and world.hero("Anran").max_range == 0
+    # Nemesis Form's 275 armor for 8 s of every 16: the form's, not the base row's.
+    # An ultimate's armor (Rally) stays out
+    assert ramattra.form_armor == 137.5 and ramattra.armor == 100 and ramattra.pool == 375
+    assert [h.name for h in world.heroes.values() if h.form_armor] == ["Ramattra"]
+    t = compute.team_metrics(world, [ramattra])
+    assert t["armor_total"] == 237.5 and t["pool_total"] == 512.5 and t["weakest"] == "Ramattra"
+    assert t["armor_share"] == pytest.approx(237.5 / 512.5)
     assert world.hero("Mei").max_range == 12 and world.hero("Sojourn").max_range == 60
     dmon, dva = world.hero("D.Mon"), world.hero("D.Va")
     assert dmon.max_range == 4 and dmon.dps == pytest.approx(91.2) and dmon.ult_damage == 125
@@ -88,10 +107,22 @@ def test_tools_are_counted_once_and_for_what_they_do(world):
     assert counts == {"Sigma": 3, "Junkrat": 4, "Pharah": 3, "Freja": 2, "Reinhardt": 1,
                       "Doomfist": 3, "Mauga": 3}
     assert world.hero("Baptiste").aoe_count == 3 and world.hero("Baptiste").aoe_damage == 0
+    # a damaging piece typed Area of effect counts without the tag; a piece that
+    # deals no damage (Defense Matrix, Kinetic Grasp) does not
+    area = {n: (world.hero(n).aoe_count, world.hero(n).aoe_damage)
+            for n in ("Sierra", "Orisa", "Emre", "Lúcio", "Jetpack Cat", "D.Va", "Sigma")}
+    assert area == {"Sierra": (2, 2), "Orisa": (2, 2), "Emre": (3, 3), "Lúcio": (4, 1),
+                    "Jetpack Cat": (3, 2), "D.Va": (2, 2), "Sigma": (3, 3)}
     assert world.hero("Junkrat").aoe_damage == 4
     assert world.hero("Soldier: 76").cc_tools == [] and world.hero("Emre").cc_tools == []
     assert "Concussion Mine" in world.hero("Junkrat").cc_tools
     assert world.hero("Sierra").mobility_tools == ["Anchor Drone"]
+    # typed Movement with no movement tag; a speed buff alone is not one
+    assert world.hero("Emre").mobility_tools == ["Siphon Blaster"]
+    assert "Roll" in world.hero("Wrecking Ball").mobility_tools
+    assert "Commanding Shout" not in world.hero("Junker Queen").mobility_tools
+    assert "Nemesis Form" not in world.hero("Ramattra").mobility_tools
+    assert sum(1 for h in world.heroes.values() if h.released and h.mobility_tools) == 39
     assert world.hero("Zarya").deployables == []
     assert world.hero("Baptiste").invuln_tools == ["Immortality Field"]
     doomfist = world.hero("Doomfist")
@@ -109,6 +140,13 @@ def test_tools_are_counted_once_and_for_what_they_do(world):
     assert t["burst_ranged"] == world.hero("Widowmaker").burst
     assert compute.team_metrics(world, [world.hero("Reinhardt")])["burst_ranged"] == 0
     assert t["hitscan"] == 3 and t["hitscan_reach"] == 1            # Widowmaker's 70 m
+    # 30 m answers a flier (Shion's pistols), 25 m does not
+    assert compute.FLIER_REACH == 30 and world.hero("Shion").hitscan_range == 30
+    reach = compute.team_metrics(world, [world.hero(n) for n in
+                                         ("Shion", "Wrecking Ball", "Junker Queen", "Cassidy")])
+    assert reach["hitscan"] == 4 and reach["hitscan_reach"] == 2
+    # an explosion does not crit: Freja's bolt is 35 to the head, 75 flat
+    assert world.hero("Freja").burst == 75
     assert "enemy.team_saves" in compute.registry()
 
 
@@ -174,6 +212,13 @@ def test_metrics_cover_the_registry_exactly(world):
     assert set(ns["map"]) == set(compute.MAP_METRICS)
     assert ns["team"]["tanks"] == 1 and ns["team"]["supports"] == 1
     assert ns["enemy"]["flyers"] == 1                     # Pharah
+    # a flying tank is a flier, not one hitscan is picked to answer
+    dva, pharah = world.hero("D.Va"), world.hero("Pharah")
+    red = compute.team_metrics(world, [dva, pharah])
+    assert red["flyers"] == 2 and red["light_flyers"] == 1
+    assert compute.red_matchup(red)["flyers"] == 1
+    assert compute.red_matchup(compute.team_metrics(world, [dva]))["flyers"] == 0
+    assert compute.registry()["matchup.flyers"] == "red picks that fly, tanks aside"
     assert ns["team"]["coverage"] >= 1                    # Reinhardt answers Zarya
     for key in compute.TEXT_METRICS:
         prefix, name = key.split(".")
