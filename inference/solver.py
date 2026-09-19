@@ -6,9 +6,11 @@
                scale and a score means the same thing across calls. The seed
                is a string, so every process draws the same list and any of
                them can prepare a slice of it.
+    standing   each hero's mean score across the reference sixes it is in:
+               the playbook's own ranking of the roster on this board
     enumerate  every shape the hard limits allow, filled around the locked
-               picks from a per-role pool ranked by a cheap prior (six per
-               role by default)
+               picks from a per-role pool ranked by standing (six per role by
+               default)
     sweep      a slice of the enumeration prepared, scored and slimmed. The
                slices partition the field, so the search splits across
                processes.
@@ -16,6 +18,7 @@
                charge), heuristics normalise and weigh, scored constraints add;
                assumptions are the agent's. A `when` reading only the enemy, the
                map and the world is settled once per board, not once per candidate.
+               A heuristic guarded on the six's own state is a need: see score().
     rank       sorted by score, then tie-break, then names - a total order, so
                the answer does not depend on how the sweep was split
     refine     local search from the best few: swap any slot for any
@@ -25,11 +28,14 @@
 import itertools
 import random
 
+from inference.catalog import BOARD_SECTIONS
 from inference.expr import scope
 from ui.facts import compute
 from ui.facts.compute import ROLE_COUNT, TEAM_SIZE
 
 REFERENCE_SIZE = 1200
+PARTNER_POINTS = 0.5              # a locked partner's worth when ranking a pool
+SEEDS = 6                         # the local search's starts, whatever `top` asks for
 NEED_BUDGET = 2.0                 # the most one guarded state can cost
 REFERENCE_SEED = 20260913
 
@@ -37,7 +43,7 @@ SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size",
               "team.open_slots"}
 
 # the namespaces that do not change across the candidates of one board
-STATIC_SECTIONS = ("enemy", "map", "world", "params")
+STATIC_SECTIONS = BOARD_SECTIONS
 
 _EMPTY = {}
 
@@ -89,6 +95,7 @@ class Solver:
         self.bounds = {}                     # heuristic id -> (min, max)
         self.considered = 0
         self._reference = None               # the sample, once drawn
+        self._standing = {}                  # hero id -> mean reference score, once read
         # each strategy paired with its gate - True or False where `when` is
         # settled for the whole board, None where the candidate decides it -
         # and with the slot it shares with every strategy guarded the same way
@@ -212,8 +219,10 @@ class Solver:
             REFERENCE_SEED, self.m.id if self.m else 0, self.side,
             ",".join(str(i) for i in sorted(h.id for h in self.red)),
             ",".join(str(i) for i in sorted(self.banned))))
-        by_role = {r: [h for h in self.world.heroes.values()
-                       if h.role == r and h.released and h.id not in self.banned]
+        by_role = {r: sorted((h for h in self.world.heroes.values()    # by id: the draw must
+                              if h.role == r and h.released           # not hang on a
+                              and h.id not in self.banned),           # query's row order
+                             key=lambda h: h.id)
                    for r in ROLE_COUNT}
         shapes = legal_shapes(self.catalog)
         out, seen = [], set()
@@ -252,20 +261,50 @@ class Solver:
         return out
 
     def freeze_bounds(self):
-        """Bounds per heuristic from the reference sample."""
+        """Bounds per heuristic from the reference sample, then each hero's
+        standing in it."""
         reference = self.reference()
         for i, g in enumerate(self.heuristics):
             values = [c.raw[i] for c in reference if c.raw[i] is not None]
             self.bounds[g.id] = (min(values), max(values)) if values else (0.0, 0.0)
         self._freeze_norms()
+        self.adopt_standing(self._tally(reference))
 
-    def adopt_bounds(self, bounds):
-        """Bounds frozen elsewhere for this same board: another process's slice
-        of the search, or an earlier solver on the same map, side, enemies and
-        bans. The sample is seeded, so it draws the same numbers wherever it
-        runs; taking them saves drawing it again."""
+    def adopt_bounds(self, bounds, standing=None):
+        """Bounds (and standing) frozen elsewhere for this same board: another
+        process's slice of the search, or an earlier solver on the same map,
+        side, enemies and bans. The sample is seeded, so it draws the same
+        numbers wherever it runs; taking them saves drawing it again."""
         self.bounds = dict(bounds)
         self._freeze_norms()
+        if standing is not None:
+            self.adopt_standing(standing)
+
+    # --- standing: the playbook's own ranking of the roster --------------------
+
+    def _tally(self, prepared):
+        """{hero id: [summed score in millionths, sixes]} over prepared reference
+        sixes. Whole numbers, so slices add up the same in any order."""
+        tally = {}
+        for cand in prepared:
+            points = round(self.score(cand, detail=False).score * 1e6)
+            for h in cand.heroes:
+                seen = tally.setdefault(h.id, [0, 0])
+                seen[0] += points
+                seen[1] += 1
+        return tally
+
+    def reference_standing(self, index=0, count=1):
+        """One slice of the sample scored under the frozen bounds -> its tally."""
+        return self._tally([c for c in (self.prepare(c) for c in self.sample()[index::count])
+                            if not c.violations])
+
+    def adopt_standing(self, tally):
+        """A hero's standing: the mean score of the reference sixes it is in -
+        how the playbook in force rates it on this board, red and the map
+        included. It ranks each role's pool, so the heroes searched in full
+        are the ones the strategies favour, not the ones a side formula does."""
+        self._standing = {hid: total / n for hid, (total, n) in tally.items() if n}
 
     def _freeze_norms(self):
         """One tuple per heuristic for the scoring loop: the strategy, the
@@ -364,7 +403,8 @@ class Solver:
                                            for r in ROLE_COUNT})
 
     def prior(self, h):
-        """A cheap ranking to cut each role's pool before enumeration."""
+        """The ranking that cut the pools before the playbook ranked them
+        itself: still the tie-break, and the whole ranking when nothing scores."""
         base = h.map_win(self.m.id) if self.m is not None and h.map_win(self.m.id) \
             is not None else (h.win if h.win is not None else 50.0)
         answers = sum(1 for e in self.red if self.world.counters_of(e.id, h.id))
@@ -380,9 +420,18 @@ class Solver:
         for role in ROLE_COUNT:
             heroes = [h for h in self.world.heroes.values()      # announced heroes wait
                       if h.role == role and h.released and h.id not in locked_ids]
-            heroes.sort(key=self.prior, reverse=True)
+            heroes.sort(key=self._pool_key)
             pools[role] = heroes[:self.pool_size]
         return pools
+
+    def _pool_key(self, h):
+        """Standing first, a point for each locked partner; then the old prior,
+        then the name."""
+        standing = self._standing.get(h.id)
+        if standing is not None:
+            standing += PARTNER_POINTS * 1e6 * sum(
+                1 for a in self.locked if self.world.synergy(a.id, h.id))
+        return (-(standing if standing is not None else float("-inf")), -self.prior(h), h.name)
 
     def enumerate(self):
         """Every legal six around the locked picks, as a list of heroes. A six's
@@ -425,7 +474,7 @@ class Solver:
             return []
         feasible.sort(key=self._rank_key)
         if refine:
-            feasible = self.refine(feasible, max(top, 3))
+            feasible = self.refine(feasible)
         return [self.hydrate(c) for c in feasible[:top]]
 
     def solve(self, top=5, refine=True):
@@ -438,19 +487,29 @@ class Solver:
     def _rank_key(c):
         return (-c.score, -c.tiebreak, c.names)
 
-    def refine(self, ranked, seeds):
-        """Local search: swap any open slot for any same-role hero."""
+    def refine(self, ranked):
+        """Local search: swap any open slot for any same-role hero. A swap keeps
+        the shape, so the starts are the best SEEDS of the field and the best
+        six of every shape in it: an off-shape six can win only if its own
+        shape was searched."""
         known = {c.key: c for c in ranked}
         locked_ids = {h.id for h in self.locked}
-        improved_any = False
-        for seed in list(ranked[:seeds]):
+        roster = sorted(self.world.heroes.values(), key=lambda h: h.id)
+        starts, shapes = list(ranked[:SEEDS]), set()
+        for cand in ranked:
+            shape = tuple(sorted(h.role for h in cand.heroes))
+            if shape not in shapes:
+                shapes.add(shape)
+                if cand not in starts:
+                    starts.append(cand)
+        for seed in starts:
             current = seed
             while True:
                 best = current
                 for index, hero in enumerate(current.heroes):
                     if hero.id in locked_ids:
                         continue
-                    for other in self.world.heroes.values():
+                    for other in roster:
                         if (other.role != hero.role or other.id in current.key
                                 or other.id in self.banned or not other.released):
                             continue                  # announced heroes wait here too
@@ -470,10 +529,10 @@ class Solver:
                             best = cand
                 if best is current:
                     break
-                current, improved_any = best, True
+                current = best
         out = list(known.values())
         out.sort(key=self._rank_key)
-        return out if improved_any else ranked
+        return out
 
 
 def legal_shapes(catalog, locked_counts=None):

@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: matchup.range_diff
 direction: maximize
-weight: 0.5
+weight: 0.25
 when: enemy.size >= 1
 ---
 

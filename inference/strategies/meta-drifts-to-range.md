@@ -4,7 +4,7 @@ kind: heuristic
 category: meta
 metric: team.range_median
 direction: maximize
-weight: 0.75
+weight: 0.25
 ---
 
 # The meta drifts toward range

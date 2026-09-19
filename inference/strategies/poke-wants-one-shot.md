@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.burst_max
 direction: maximize
-weight: 1
+weight: 0.25
 when: team.style_lean == 'poke'
 ---
 

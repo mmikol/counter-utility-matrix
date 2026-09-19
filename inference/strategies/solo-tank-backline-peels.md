@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.cc_count
 direction: maximize
-weight: 1
+weight: 0.75
 when: team.tanks <= 1
 ---
 

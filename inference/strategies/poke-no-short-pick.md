@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.range_min
 direction: maximize
-weight: 1
+weight: 0.25
 when: team.style_lean == 'poke'
 ---
 

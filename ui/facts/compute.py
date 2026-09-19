@@ -55,7 +55,8 @@ TEAM_METRICS = OrderedDict([
     ("dps_floor",
      "summed published per-second damage figures (a floor: misses and healing ignored)"),
     ("dps_count", "picks whose kit publishes a per-second damage figure"),
-    ("burst_max", "the biggest single damage figure on the team"),
+    ("burst_max", "the biggest single hit on the team, a headshot where one counts"),
+    ("one_shots", "picks whose biggest hit, not a melee swing, kills a 250-pool hero"),
     ("burst_hero", "who holds the biggest single hit"),
     ("ult_damage_total", "summed max damage across the team's damage ultimates"),
     ("dmg_ults", "ultimates that carry a damage figure"),
@@ -68,14 +69,16 @@ TEAM_METRICS = OrderedDict([
     ("range_max", "the longest range on the team"), ("range_min", "the shortest longest-range"),
     ("dmg_amp", "picks that amplify someone's damage"),
     # sustain
-    ("hps_floor", "summed published per-second healing figures"),
-    ("heal_peak_total", "summed peak single heal across all picks, any role"),
-    ("heal_peak_supports", "summed peak single heal across the supports"),
-    ("heal_peak_max", "the biggest single heal on the team"),
+    ("hps_floor", "summed sustained healing onto teammates, hp per second, reloads in"),
+    ("heal_peak_total", "summed biggest single heal per pick, its own self-heal included"),
+    ("heal_peak_supports", "summed biggest single heal (one cast, hp) across the supports"),
+    ("heal_peak_max", "the biggest single heal a teammate can receive"),
     ("heal_ratio", "support heal peak / the roster's two-support bench"),
+    ("hps_supports", "summed sustained healing across the supports, hp per second"),
+    ("hps_ratio", "support sustained healing / the roster's two-support bench"),
     ("heal_amp", "picks that amplify healing"), ("antiheal", "picks with anti-heal"),
     ("cleanse", "picks with a cleanse"), ("invuln", "picks with an invulnerability"),
-    ("lifelines", "picks carrying any healing at all"),
+    ("lifelines", "picks carrying any healing at all, their own included"),
     # tempo and tools
     ("cooldown_median", "median cooldown across every ability on the team"),
     ("cooldown_count", "cooldowns counted"),
@@ -164,6 +167,7 @@ MAP_METRICS = OrderedDict([
 
 WORLD_METRICS = OrderedDict([
     ("heal_bench", "2 x the median peak heal across the support roster"),
+    ("hps_bench", "2 x the median sustained healing across the support roster"),
     ("roster_size", "heroes in the roster"),
 ])
 
@@ -262,10 +266,10 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     counts = Counter(s for h in heroes for s in h.styles)
     t["style_counts"] = dict(counts)
     t["style_top"] = sorted(counts, key=lambda s: (-counts[s], s))[0] if counts else ""
-    lean = [s for s, c in counts.items() if c > n / 2.0]
+    majority = [s for s, c in counts.items() if c > n / 2.0]
     # ties fall to the alphabetically first style: the answer must not depend on
     # the order a set of names happens to iterate in (hash randomisation)
-    t["style_lean"] = sorted(lean, key=lambda s: (-counts[s], s))[0] if lean else ""
+    t["style_lean"] = sorted(majority, key=lambda s: (-counts[s], s))[0] if majority else ""
     map_style = m.style_top if m is not None else None
     t["style_fit"] = (sum(1 for h in heroes if map_style in h.styles) / n
                       if n and map_style else 0.0)
@@ -291,6 +295,7 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["dps_count"] = sum(1 for h in heroes if h.dps)
     burst = max(heroes, key=lambda h: h.burst) if heroes else None
     t["burst_max"] = burst.burst if burst else 0.0
+    t["one_shots"] = sum(1 for h in heroes if h.burst >= SQUISHY_POOL and not h.melee)
     t["burst_hero"] = burst.name if burst else ""
     t["ult_damage_total"] = sum(h.ult_damage for h in heroes)
     t["dmg_ults"] = sum(1 for h in heroes if h.dmg_ult)
@@ -308,16 +313,19 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
 
     supports = [h for h in heroes if h.role == "support"]
     t["hps_floor"] = sum(h.hps for h in heroes)
-    t["heal_peak_total"] = sum(h.peak_heal for h in heroes)
+    t["heal_peak_total"] = sum(max(h.peak_heal, h.self_heal) for h in heroes)
     t["heal_peak_supports"] = sum(h.peak_heal for h in supports)
     t["heal_peak_max"] = max([h.peak_heal for h in heroes] or [0.0])
     t["heal_ratio"] = (t["heal_peak_supports"] / world.heal_bench
                        if world.heal_bench else 0.0)
+    t["hps_supports"] = sum(h.hps for h in supports)
+    t["hps_ratio"] = t["hps_supports"] / world.hps_bench if world.hps_bench else 0.0
     t["heal_amp"] = sum(1 for h in heroes if h.heal_amp)
     t["antiheal"] = sum(1 for h in heroes if h.antiheal < 0)
     t["cleanse"] = sum(1 for h in heroes if h.cleanse_tools)
     t["invuln"] = sum(1 for h in heroes if h.invuln_tools)
-    t["lifelines"] = sum(1 for h in heroes if h.peak_heal)
+    t["lifelines"] = sum(1 for h in heroes
+                         if h.peak_heal or h.hps or h.self_heal or h.self_hps)
 
     cds = [c for h in heroes for c in h.cooldowns]
     t["cooldown_median"] = _median(cds)
@@ -488,7 +496,8 @@ def map_metrics(m, side=""):
 
 
 def world_metrics(world):
-    return {"heal_bench": world.heal_bench, "roster_size": len(world.heroes)}
+    return {"heal_bench": world.heal_bench, "hps_bench": world.hps_bench,
+            "roster_size": len(world.heroes)}
 
 
 def namespace(world, m, red, blue, side=""):
@@ -511,6 +520,14 @@ TEXT_METRICS = {
     "matchup.style_lean_red", "matchup.style_lean_blue",
     "map.style_top", "map.mode", "map.side",
 }
+TEXT_METRICS |= {n.replace("team.", "enemy.", 1) for n in TEXT_METRICS if n.startswith("team.")}
+
+# team metrics that read the other side. The solver builds red's metrics once,
+# facing no one, so as enemy.* these would all read zero: not offered
+VERSUS_KEYS = frozenset((
+    "coverage", "coverage_share", "unanswered", "answer_edges", "exposure_edges",
+    "exposed_count", "exposed", "safe_count", "net_edges", "double_covered",
+    "banproof_coverage"))
 
 
 def registry():
@@ -520,5 +537,7 @@ def registry():
                           ("matchup", MATCHUP_METRICS), ("map", MAP_METRICS),
                           ("world", WORLD_METRICS)):
         for key, description in table.items():
+            if prefix == "enemy" and key in VERSUS_KEYS:
+                continue
             out["%s.%s" % (prefix, key)] = description
     return out

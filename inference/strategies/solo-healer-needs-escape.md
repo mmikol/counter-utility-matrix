@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.mobility_count
 direction: maximize
-weight: 0.75
+weight: 0.25
 when: team.supports <= 1
 ---
 

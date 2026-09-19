@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.dps_floor
 direction: maximize
-weight: 1.5
+weight: 1
 ---
 # Damage seals the kills
 

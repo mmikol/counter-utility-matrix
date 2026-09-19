@@ -209,8 +209,8 @@ def test_the_page_is_a_shell_over_static_files():
     assert "the playbook allows at most" in script
     assert ".tile.capped" in board.static_file("board.css")[0].decode()
     # a heuristic's weight is a slider under its card; the setting rides with each request
-    assert "function weightRow" in script and "type='range' min='1' max='10' step='0.01'" in script
-    assert "type='number' class='wval' min='1' max='10' step='0.01'" in script
+    assert "function weightRow" in script and "type='range' min='0' max='10' step='0.01'" in script
+    assert "type='number' class='wval' min='0' max='10' step='0.01'" in script
     assert "q.push('weight=' + " in script and "st.weights" in script
     assert "function setWeight" in script
     assert "h.form === 'heuristic' ? weightRow(h)" in script     # only heuristics have weights

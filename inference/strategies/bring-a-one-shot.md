@@ -1,11 +1,10 @@
 ---
 name: Bring a one-shot
-kind: heuristic
+kind: constraint
 category: damage
-metric: team.burst_max
-direction: maximize
 weight: 1
+bonus: min(team.one_shots, 1) * 0.5
 ---
 # Bring a one-shot
 
-A comp carries one pick whose single hit can delete a 250-pool target, because a kill nobody can react to is the fastest way to win a fight. Widowmaker, Hanzo and Roadhog get value that steady damage never does, since steady damage is healed while the burst is not. The biggest single damage figure on the six is measured.
+A comp carries one pick whose single hit kills a 250-pool target. Widowmaker, Hanzo and Zenyatta get value that steady damage never does, since steady damage is healed while the burst is not. The first pick whose biggest ranged hit kills a 250-pool hero is rewarded 0.5, and further ones add nothing.

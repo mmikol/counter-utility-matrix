@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.dps_floor
 direction: maximize
-weight: 1
+weight: 0.25
 when: team.supports >= 3
 ---
 

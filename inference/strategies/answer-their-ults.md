@@ -4,9 +4,9 @@ kind: heuristic
 category: matchup
 metric: matchup.ult_answers
 direction: maximize
-weight: 1
-when: matchup.ult_threat >= 600
+weight: 0.75
+when: matchup.ult_threat >= 1500
 ---
 # Invulnerability answers their ultimates
 
-A comp facing heavy damage ultimates survives them with invulnerabilities and cleanses, not with health. A double gravity and double bomb kills nobody inside a sound barrier or a transcendence, and the answer fires once and covers the team. Measured as our invulnerabilities plus cleanses, read while red's summed damage-ultimate ceiling is 600 or more.
+A comp facing heavy damage ultimates survives them with invulnerabilities and cleanses, not with health. A double bomb kills nobody inside a transcendence or under a suzu, and the answer fires once and covers the team. Measured as our invulnerabilities plus cleanses, read while red's summed damage-ultimate ceiling is 1,500 or more.

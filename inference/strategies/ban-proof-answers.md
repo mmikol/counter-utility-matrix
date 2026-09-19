@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.banproof_coverage
 direction: maximize
-weight: 0.75
+weight: 0.25
 ---
 # Answers that survive the ban
 

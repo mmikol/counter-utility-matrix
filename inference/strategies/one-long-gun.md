@@ -5,7 +5,6 @@ category: damage
 metric: team.range_max
 direction: maximize
 weight: 0.25
-when: enemy.size >= 0
 ---
 
 # One long gun

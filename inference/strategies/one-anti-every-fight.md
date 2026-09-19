@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.antiheal
 direction: maximize
-weight: 1
+weight: 0.75
 ---
 
 # One anti-heal every fight

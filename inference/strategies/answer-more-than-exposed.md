@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: matchup.net_edges
 direction: maximize
-weight: 1
+weight: 0.75
 ---
 # Answer more than they answer
 

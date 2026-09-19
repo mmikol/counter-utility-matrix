@@ -4,7 +4,7 @@ kind: heuristic
 category: durability
 metric: matchup.pool_diff
 direction: maximize
-weight: 1
+weight: 0.5
 when: team.style_lean == 'brawl' and matchup.style_lean_red == 'brawl'
 ---
 # Bigger ball wins the brawl

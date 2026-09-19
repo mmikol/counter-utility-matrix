@@ -4,8 +4,9 @@ kind: heuristic
 category: damage
 metric: team.aoe_count
 direction: maximize
-weight: 0.75
+weight: 0.5
+when: matchup.style_lean_red == 'brawl'
 ---
 # Area damage punishes grouping
 
-Damage that hits an area is worth more than its number against a team that stands together. A brawl or bunker line holds by grouping, and splash from Junkrat and Ashe's dynamite punishes it while single-target damage picks one target and gets healed. Kit pieces tagged area of effect are counted across the six.
+Damage that hits an area is worth more than its number against a team that stands together. A brawl line holds by grouping, and splash from Junkrat and Ashe's dynamite punishes it while single-target damage picks one target and gets healed. Kit pieces tagged area of effect are counted across the six, read while red's majority style is brawl.

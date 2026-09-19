@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.map_win_mean
 direction: maximize
-weight: 2
+weight: 0.25
 when: map.known == 1
 ---
 

@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.heal_peak_supports
 direction: maximize
-weight: 1
+weight: 0.5
 ---
 
 # Supports must heal in chunks

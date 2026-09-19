@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.dmg_ults
 direction: maximize
-weight: 1
+weight: 0.25
 when: team.style_lean == 'brawl'
 ---
 # Brawl stacks fight-winning ultimates

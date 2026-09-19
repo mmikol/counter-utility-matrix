@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.deployables
 direction: minimize
-weight: 0.5
+weight: 0.25
 when: map.known == 1 and map.sided == 0
 ---
 

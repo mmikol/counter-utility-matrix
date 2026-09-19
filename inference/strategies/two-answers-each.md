@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: matchup.double_covered
 direction: maximize
-weight: 0.5
+weight: 0.75
 ---
 
 # Answer their key picks twice

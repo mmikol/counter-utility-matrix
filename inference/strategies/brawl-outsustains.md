@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.hps_floor
 direction: maximize
-weight: 1.5
+weight: 0.25
 when: team.style_lean == 'brawl'
 ---
 # Brawl wins by outlasting

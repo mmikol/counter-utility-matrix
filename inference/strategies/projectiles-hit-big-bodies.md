@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.projectile
 direction: maximize
-weight: 0.75
+weight: 1
 when: enemy.size >= 4 and enemy.squish_count <= 3
 ---
 

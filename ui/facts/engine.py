@@ -298,15 +298,19 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
                source="subroles", team=team)
     # traits read off the kit's own numbers and keywords
     traits = [
-        ("hero.dps", "%s publishes %g damage per second at best" % (name, h.dps), h.dps, "hp/s")
+        ("hero.dps", "%s's weapon sustains %g damage per second" % (name, h.dps), h.dps, "hp/s")
         if h.dps else None,
         ("hero.burst", "%s's biggest single hit: %g" % (name, h.burst), h.burst, "hp")
         if h.burst else None,
         ("hero.heal_peak", "%s's biggest single heal: %g" % (name, h.peak_heal),
          h.peak_heal, "hp") if h.peak_heal else None,
-        ("hero.hps", "%s heals %g per second at best" % (name, h.hps), h.hps, "hp/s")
+        ("hero.hps", "%s sustains %g healing per second on teammates" % (name, h.hps), h.hps,
+         "hp/s")
         if h.hps else None,
-        ("hero.range", "%s's longest published range: %gm" % (name, h.max_range),
+        ("hero.self_heal", "%s heals itself: %g a cast, %g per second"
+         % (name, h.self_heal, h.self_hps), max(h.self_heal, h.self_hps), "hp")
+        if (h.self_heal or h.self_hps) else None,
+        ("hero.range", "%s's weapon reaches %gm" % (name, h.max_range),
          h.max_range, "m") if h.max_range else None,
         ("hero.cooldown_median", "%s's median cooldown: %gs across %d abilities"
          % (name, h.median_cooldown, len(h.cooldowns)), h.median_cooldown, "s")

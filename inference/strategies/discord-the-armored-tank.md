@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.dmg_amp
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.armor_total >= 300
 ---
 # Discord the armored tank

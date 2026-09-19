@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.range_median
 direction: maximize
-weight: 1.5
+weight: 1
 when: team.style_lean == 'poke'
 ---
 # Poke needs reach

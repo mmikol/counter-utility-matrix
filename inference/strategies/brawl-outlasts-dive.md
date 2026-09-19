@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.pool_total
 direction: maximize
-weight: 1
+weight: 0.5
 when: matchup.style_lean_red == 'dive'
 ---
 # Brawl outlasts a dive

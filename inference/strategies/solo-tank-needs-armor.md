@@ -4,7 +4,7 @@ kind: heuristic
 category: durability
 metric: team.armor_total
 direction: maximize
-weight: 1
+weight: 0.75
 when: team.tanks <= 1
 ---
 # A solo tank needs armor

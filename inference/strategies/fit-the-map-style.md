@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.style_fit
 direction: maximize
-weight: 2
+weight: 2.5
 when: map.known == 1
 ---
 # Pick into what the map rewards

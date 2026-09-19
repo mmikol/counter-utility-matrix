@@ -9,4 +9,4 @@ when: enemy.barrier_count >= 2
 ---
 # Bunkers fall to ultimates
 
-A red with two barriers is a bunker, and the community's answer to a bunker is not to shoot the barrier but to wait for the ultimates that go around or through it. Death Blossom, Dragonstrike, RIP-Tire and Barrage each carry a damage ceiling that no barrier's health absorbs in the second it lands. Measured as the summed maximum damage across our damage ultimates, read while 2 or more red picks carry a barrier.
+A red with two barriers is beaten by the ultimates that go around or through them, not by shooting the barriers. Dragonstrike and Death Blossom pass through or around a barrier; the summed figure also counts Deadeye and Self-Destruct, which a barrier blocks. Measured as the summed maximum damage across our damage ultimates, read while 2 or more red picks carry a barrier.

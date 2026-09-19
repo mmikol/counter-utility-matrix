@@ -2,12 +2,12 @@
 name: Big saves answer many ultimates
 kind: heuristic
 category: sustain
-metric: team.heal_peak_max
+metric: matchup.ult_answers
 direction: maximize
 weight: 0.5
-when: enemy.dmg_ults >= 4
+when: enemy.dmg_ults >= 5
 ---
 
 # Big saves answer many ultimates
 
-When four or more red picks carry a damage ultimate, at least one fight a round is decided by whether a team-wide save meets the stack. Transcendence is the save the community remembers stopping four ultimates at once, and a big save is what turns a Tire, a Nano-Visor and a Graviton into a survived fight. Measured as the biggest single heal on the team, read while 4 or more red picks carry a damage ultimate.
+When five or more red picks carry a damage ultimate, at least one fight a round is decided by whether a save meets the stack. Transcendence is the save the community remembers stopping four ultimates at once. Measured as blue's picks with an invulnerability plus picks with a cleanse, ultimates included, read while 5 or more red picks carry a damage ultimate.

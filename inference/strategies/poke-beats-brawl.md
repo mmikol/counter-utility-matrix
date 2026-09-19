@@ -5,7 +5,7 @@ category: matchup
 when: team.style_lean == 'poke' and matchup.style_lean_red == 'brawl'
 bonus: params.EDGE
 params:
-  EDGE: 1
+  EDGE: 0.5
 ---
 
 # Poke beats brawl

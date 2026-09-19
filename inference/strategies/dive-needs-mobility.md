@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.mobility_count
 direction: maximize
-weight: 2
+weight: 1.25
 when: team.style_lean == 'dive'
 ---
 # A dive comp moves as one

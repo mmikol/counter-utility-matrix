@@ -4,10 +4,10 @@ kind: heuristic
 category: matchup
 metric: team.range_min
 direction: maximize
-weight: 1
-when: enemy.range_median >= 30
+weight: 0.25
+when: enemy.range_median >= 40
 ---
 
 # Lift the shortest gun
 
-When red's typical pick reaches 30 m or more, our shortest gun spends the fight unable to trade. Reinhardt has one of the lowest effective ranges in the game and everyone who outranges him has the advantage until the gap is closed. The shortest of the picks' longest published ranges is measured, read while red's median reach is 30 m or more.
+When red's typical pick reaches 40 m or more, our shortest gun spends the fight unable to trade. Reinhardt has one of the lowest effective ranges in the game and everyone who outranges him has the advantage until the gap is closed. The shortest of the picks' longest published ranges is measured, read while red's median reach is 40 m or more.

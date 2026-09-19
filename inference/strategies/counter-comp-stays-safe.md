@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: matchup.exposure_share
 direction: minimize
-weight: 1
+weight: 0.75
 when: enemy.size >= 1
 ---
 # A counter comp must be safe

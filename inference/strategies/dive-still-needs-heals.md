@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.hps_floor
 direction: maximize
-weight: 1
+weight: 0.75
 when: team.style_lean == 'dive'
 ---
 # Dive still needs forward healing

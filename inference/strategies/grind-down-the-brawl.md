@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.dps_floor
 direction: maximize
-weight: 0.75
+weight: 0.5
 when: matchup.style_lean_red == 'brawl'
 ---
 # Grind the brawl down

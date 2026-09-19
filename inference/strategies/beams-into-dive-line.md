@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.beam
 direction: maximize
-weight: 1
+weight: 0.75
 when: matchup.style_lean_red == 'dive'
 ---
 # Beams through a dive tank line

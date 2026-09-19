@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: matchup.coverage_share
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.size >= 5
 ---
 

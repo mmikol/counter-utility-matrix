@@ -4,7 +4,7 @@ kind: heuristic
 category: durability
 metric: team.pool_total
 direction: maximize
-weight: 0.75
+weight: 0.5
 ---
 # Field more hit points
 

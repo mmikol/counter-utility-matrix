@@ -4,7 +4,7 @@ kind: heuristic
 category: tempo
 metric: team.ult_cost_mean
 direction: minimize
-weight: 0.5
+weight: 0.25
 when: map.side == 'attack'
 ---
 # Attackers need ultimates back fast

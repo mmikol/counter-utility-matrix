@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.map_strategy_hits
 direction: maximize
-weight: 0.5
+weight: 0.25
 when: map.known == 1
 ---
 # The counterpick lists know their maps

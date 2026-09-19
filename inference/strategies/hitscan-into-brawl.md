@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.hitscan
 direction: maximize
-weight: 1
+weight: 0.75
 when: matchup.style_lean_red == 'brawl'
 ---
 # Hitscan into brawl

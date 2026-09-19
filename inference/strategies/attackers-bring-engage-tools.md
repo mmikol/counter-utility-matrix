@@ -4,7 +4,7 @@ kind: heuristic
 category: side
 metric: team.mobility_count
 direction: maximize
-weight: 1.5
+weight: 0.75
 when: map.side == 'attack'
 ---
 # Attackers bring engage tools

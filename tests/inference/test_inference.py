@@ -355,8 +355,11 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     # no picks at all: blue's seat counters red's likely six, the optimal is the
     # reference (100), and the verdict is the plain "no picks yet"
     empty = engine.board_dict(engine.board(world, None, [], [], catalog=scratch))
-    assert empty["momentum"]["verdict"] == "no picks yet on either side"
     assert empty["blue"]["normalized"] == 100 and empty["blue"]["unscored"] is None
+    if any(world.hero(name).flyer for name in empty["expected"]["blue"]):
+        assert empty["momentum"]["verdict"] == "no picks yet on either side"
+    else:                         # the likely six fields no flier: the one rule waits here too
+        assert "waits for matchup.flyers >= 1" in empty["momentum"]["verdict"]
     assert empty["blue"]["red"] == empty["expected"]["blue"]           # countering the likely six
     flying = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
                                             ["Reinhardt", "Cassidy"], catalog=scratch))
@@ -446,9 +449,14 @@ def test_scores_share_one_scale_per_board(world):
     # seeded reference sample, so the same six scores the same everywhere
     from inference import engine
     fix = catalog.load(FIXTURE_PLAYBOOK)       # a rich playbook: alternatives fall below the best
-    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], catalog=fix)
+    # no lock: evaluate ranks a six against the whole unlocked field, and the best six
+    # that keeps a locked pick need not be the best of that field
+    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], catalog=fix)
     e = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"], r.blue, catalog=fix)
     assert abs(r.score - e.score) < 1e-9 and e.rank == 1
+    held = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], catalog=fix)
+    again = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"], held.blue, catalog=fix)
+    assert "Ana" in held.blue and abs(held.score - again.score) < 1e-9
     assert r.to_dict()["normalized"] == 100 and e.to_dict()["normalized"] == 100
     assert all(0 <= a["normalized"] <= 100 for a in r.alternatives)
     assert r.alternatives[0]["score"] < r.score        # below the optimum, if only by a hair

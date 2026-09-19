@@ -4,7 +4,7 @@ kind: heuristic
 category: synergy
 metric: team.isolated_count
 direction: minimize
-weight: 1
+weight: 0.25
 when: team.style_lean == 'dive'
 ---
 # Dive supports must partner the divers

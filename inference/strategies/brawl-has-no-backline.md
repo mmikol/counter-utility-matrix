@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.range_max
 direction: minimize
-weight: 0.5
+weight: 0.75
 when: team.style_lean == 'brawl'
 ---
 # Brawl has no backline

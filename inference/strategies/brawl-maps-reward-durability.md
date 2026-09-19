@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.pool_total
 direction: maximize
-weight: 1
+weight: 0.5
 when: map.style_top == 'brawl'
 ---
 # Brawl maps reward durability

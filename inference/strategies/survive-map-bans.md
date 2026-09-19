@@ -4,7 +4,7 @@ kind: heuristic
 category: meta
 metric: team.map_availability
 direction: maximize
-weight: 1.5
+weight: 0.5
 when: map.known == 1
 ---
 

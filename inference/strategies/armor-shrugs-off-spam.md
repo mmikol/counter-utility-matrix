@@ -4,7 +4,7 @@ kind: heuristic
 category: durability
 metric: team.armor_share
 direction: maximize
-weight: 0.75
+weight: 0.25
 ---
 # Armor shrugs off spam
 

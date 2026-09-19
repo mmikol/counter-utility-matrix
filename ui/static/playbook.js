@@ -1,15 +1,15 @@
 /* the playbook tab: the groups, the cards, the weight sliders and their store;
    loaded before board.js, which calls into it */
-/* a heuristic's weight is the user's to set: a slider under its card, 1 to 10
-   to the hundredth (1.02, 9.99), with a number box for the exact figure,
+/* a heuristic's weight is the user's to set: a slider under its card, 0 to 10
+   to the hundredth (0.25, 9.99), with a number box for the exact figure,
    starting at the weight the file infers; a setting rides with every board
    request (weight=id:value) and never touches the file. Only heuristics have
    weights to set - a scored constraint's stays its own. */
 function weightRow(h) {
   var set = st.weights && st.weights.hasOwnProperty(h.id), v = set ? st.weights[h.id] : h.weight;
   return "<div class='wrow' data-id='" + esc(h.id) + "' data-inferred='" + h.weight + "'>" +
-    "<span class='wlbl'>weight</span><input type='range' min='1' max='10' step='0.01' value='" + v + "' aria-label='weight of " + esc(h.name) + "'>" +
-    "<input type='number' class='wval' min='1' max='10' step='0.01' value='" + v + "' aria-label='exact weight of " + esc(h.name) + "'>" +
+    "<span class='wlbl'>weight</span><input type='range' min='0' max='10' step='0.01' value='" + v + "' aria-label='weight of " + esc(h.name) + "'>" +
+    "<input type='number' class='wval' min='0' max='10' step='0.01' value='" + v + "' aria-label='exact weight of " + esc(h.name) + "'>" +
     "<span class='wbreak'></span>" +
     "<button class='wreset' " + (set ? '' : 'disabled') + ">reset</button>" +
     "<button class='wstore' " + (set ? '' : 'disabled') + " title='write this weight into the heuristic&#39;s file'>store</button></div>";
@@ -71,7 +71,7 @@ function renderPlaybook(d) {
     store.onclick = function () { storeWeight(id, clampWeight(val.value), store); };
   });
   function card(h) {
-    var meta = h.form === 'heuristic' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight
+    var meta = h.form === 'heuristic' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight + (h.need ? ' · need' : '')
              : h.form === 'limit' ? 'require ' + h.require + (h.soft ? ' · soft, penalty ' + h.penalty : ' · hard') + (h.when ? ' · when ' + h.when : '')
              : h.form === 'scored' ? [h.when ? 'when ' + h.when : '', h.bonus ? 'bonus ' + h.bonus : '', h.penalty ? 'penalty ' + h.penalty : ''].filter(Boolean).join(' · ') + ' · weight ' + h.weight
              : h.form === 'draft' ? 'draft - name, kind and prose only; not scored'

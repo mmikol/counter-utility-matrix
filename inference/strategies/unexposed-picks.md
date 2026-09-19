@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.safe_count
 direction: maximize
-weight: 1
+weight: 0.25
 ---
 
 # Field picks they cannot answer

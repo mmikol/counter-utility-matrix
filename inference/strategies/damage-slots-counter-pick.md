@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.answer_edges
 direction: maximize
-weight: 0.5
+weight: 0.25
 when: team.damage >= 3 and enemy.size >= 1
 ---
 # Damage slots are the counter-pick slots

@@ -4,9 +4,9 @@ kind: heuristic
 category: damage
 metric: team.ult_damage_total
 direction: maximize
-weight: 1
+weight: 0.5
 ---
 
 # Damage ultimates win fights
 
-Damage ultimates are the go-buttons that end a fight outright. A team without them wins neutral on picks alone, while a Graviton Surge with a wipe behind it, a Dragonblade or an Earthshatter decides the fight the moment it lands. The summed maximum damage across the six's damage ultimates is measured.
+Damage ultimates are the go-buttons that end a fight outright. A team without them wins neutral on picks alone, while a Self-Destruct, a Dragonblade or a Deadeye decides the fight the moment it lands. The summed maximum damage across the six's damage ultimates is measured.

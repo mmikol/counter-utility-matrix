@@ -15,12 +15,24 @@ from db.data.names import name_key
 ROLES = ("tank", "damage", "support")
 
 # Keyword families the wiki tags abilities with. Read verbatim from the
-# keywords column; nothing here is guessed from prose.
-CC_KEYWORDS = ("stun", "sleep", "immobilize", "hinder", "knockback",
-               "self knockback", "freeze", "hack")
-MOBILITY_KEYWORDS = ("movement", "strong movement", "evasive", "flight")
-CLEANSE_KEYWORDS = ("lesser cleanse", "greater cleanse")
-FLIGHT_RE = re.compile(r"\b(fly|flies|flight|hover|airborne|soar)\w*", re.I)
+# keywords column; nothing here is guessed from prose. The wiki writes a
+# keyword as `family;;qualifier` ("area of effect;;spherical", "invulnerable;;
+# targets"): a Kit keeps the family in `keywords` and the whole atom in `atoms`.
+CC_KEYWORDS = ("stun", "sleep", "immobilize", "hinder", "knockback", "knockdown",
+               "hacked")
+MOBILITY_KEYWORDS = ("movement", "strong movement", "evasive", "flight", "strong flight")
+FLIGHT_KEYWORDS = ("flight", "strong flight")
+CLEANSE_KEYWORDS = ("lesser cleanse", "greater cleanse", "perfect cleanse")
+ALLY_QUALIFIERS = ("target ally", "targets")
+# a flat damage figure that is a sum, not one hit
+SUMMED_RE = re.compile(r"\b(dot|over time|total|if all|both)\b", re.I)
+# a rate with its reload folded in, as the wiki words it beside the firing rate
+RELOAD_RE = re.compile(r"reload|overall|recharge", re.I)
+NUMBER_RE = re.compile(r"(\d+(?:\.\d+)?)(?:\s*-\s*(\d+(?:\.\d+)?))?")
+PRIMARY_SLOTS = ("primary_fire", "hip_fire", "default")
+# weapon forms held for seconds on a cooldown, or out of the hero's fighting
+# form: not the weapon the hero fights with (authored; the wiki has no field)
+FORM_GATED = ("Configuration: Assault", "Light Gun")
 SQUISHY_POOL = 250
 
 
@@ -67,34 +79,83 @@ class Stat:
 
 class Kit:
     """An ability, a weapon config or a perk: a named thing with stats."""
-    __slots__ = ("description", "extra", "keywords", "kind", "name", "stats")
+    __slots__ = ("atoms", "description", "extra", "keywords", "kind", "name", "stats")
 
     def __init__(self, name, kind, description="", keywords=""):
         self.name, self.kind, self.description = name, kind, description
-        self.keywords = {k.strip().lower() for k in (keywords or "").split("::")
-                         if k.strip()}
+        self.atoms = {k.strip().lower() for k in (keywords or "").split("::") if k.strip()}
+        self.keywords = {a.split(";;")[0].strip() for a in self.atoms}
         self.stats = defaultdict(list)
         self.extra = {}
+
+    def qualifiers(self, family):
+        """The qualifiers the wiki hangs on one keyword family here."""
+        return {a.split(";;", 1)[1].strip() for a in self.atoms
+                if ";;" in a and a.split(";;")[0].strip() == family}
+
+    @property
+    def for_allies(self):
+        """Tagged as landing on a teammate."""
+        return any(q in ALLY_QUALIFIERS for a in self.atoms if ";;" in a
+                   for q in [a.split(";;", 1)[1].strip()])
+
+    def plain_stat(self, code):
+        """The largest value published without a condition; with none, the
+        largest of all - "300 default, 750 during Rally" is 300."""
+        rows = [s for s in self.stats.get(code, ()) if s.value is not None]
+        plain = [s.value for s in rows if not s.condition or s.condition == "default"]
+        return max(plain) if plain else (max(s.value for s in rows) if rows else None)
 
     def max_stat(self, code):
         values = [s.value for s in self.stats.get(code, ()) if s.value is not None]
         return max(values) if values else None
 
-OPEN_REACH = 50.0       # metres credited to a weapon that publishes no limit
 MIN_FALLOFF = 10.0      # a "falloff range" under this is a splash radius, not a reach
 
 
-def _reach(weapon):
-    """How far a weapon fights: its published range or the end of its damage
-    falloff; a projectile that publishes neither reaches as far as it flies
-    in a second, OPEN_REACH at most; anything else with no limit, OPEN_REACH."""
-    falloff = weapon.max_stat("damage_falloff_range") or 0.0
-    published = [v for v in (weapon.max_stat("range"),
+def _number(text):
+    """The first figure in a line of the wiki's prose; of a range, its top."""
+    found = NUMBER_RE.search(text or "")
+    return float(found.group(2) or found.group(1)) if found else None
+
+
+def _rate(kit, code, per_shot):
+    """One kit piece's sustained rate for `code` (dps or hps), hp/s: the
+    published rate with its reload where the wiki gives one, else the firing
+    rate, else one `per_shot` times the fire rate. None when nothing says."""
+    plain, variants, loaded = [], [], []
+    for stat in kit.stats.get(code, ()):
+        value = stat.value if stat.value is not None else _number(stat.text)
+        if value is None:
+            continue
+        note = "%s %s" % (stat.condition or "", stat.text or "")
+        with_reload = _number(stat.condition) if RELOAD_RE.search(stat.condition or "") \
+            else (value if RELOAD_RE.search(note) else None)
+        if with_reload is not None and with_reload <= value:
+            loaded.append(with_reload)
+        elif stat.condition and not RELOAD_RE.search(stat.condition):
+            variants.append(value)               # "variant 2", "at full charge"
+        else:
+            plain.append(value)
+    if loaded:
+        return min(loaded)
+    if plain:
+        return max(plain)
+    if variants:
+        return statistics.median_low(variants)
+    rate = kit.max_stat("fire_rate")
+    shots = [s.value for s in kit.stats.get(per_shot, ())
+             if s.value is not None and s.unit_den is None]
+    return max(shots) * rate if shots and rate else None
+
+
+def _reach(kit):
+    """How far a damaging kit piece fights, in metres: its published range, or
+    the end of its damage falloff. None when it publishes neither."""
+    falloff = kit.max_stat("damage_falloff_range") or 0.0
+    published = [v for v in (kit.plain_stat("range"),
                              falloff if falloff >= MIN_FALLOFF else None) if v]
-    if published:
-        return max(published)
-    speed = weapon.max_stat("pspeed")
-    return min(OPEN_REACH, speed) if speed else OPEN_REACH
+    return max(published) if published else None
 
 
 class Hero:
@@ -124,79 +185,154 @@ class Hero:
     # --- derived scalars, computed once the kit and rates are loaded ------
 
     def finish(self):
-        kits = self.abilities + self.weapons + self.perks
+        """The hero's numbers, from the kit rows. Three kit sets:
+            base   weapons, abilities and passives - what the hero brings every fight
+            ults   the ultimates - their numbers are their own (ult_*), and they
+                   count toward the tools a team plans its big fights around
+                   (crowd control, area damage, saves, overhealth, anti-heal)
+            perks  one of two choices a tier: never a baseline number
+        """
+        ults = [a for a in self.abilities if a.kind == "ultimate"]
+        base = self.weapons + [a for a in self.abilities if a.kind != "ultimate"]
+        fights = base + ults
         self.pool = self.health + self.shield + self.armor
-        self.keywords = set().union(*(k.keywords for k in kits)) if kits else set()
+        self.keywords = set().union(*(k.keywords for k in base)) if base else set()
 
-        def kit_max(code, among=None):
-            values = [k.max_stat(code) for k in (among or kits)]
-            values = [v for v in values if v is not None]
-            return max(values) if values else None
+        def flat(kit, code):
+            return [s for s in kit.stats.get(code, ()) if s.value is not None
+                    and s.unit_den is None]
 
-        # what the hero does fight after fight: an ultimate's numbers are its
-        # own (ult_damage, the ult facts), not the hero's healing, damage or burst
-        steady = [k for k in kits if k.kind != "ultimate"]
-        heal_values = [k.max_stat(c) for k in steady for c in ("heal", "hps")]
-        heal_values = [v for v in heal_values if v is not None]
-        self.peak_heal = max(heal_values) if heal_values else 0.0
-        # a published healing rate over one derived from a tick ("90 per 0.3 s")
-        rates = [s.per_second for k in steady for s in k.stats.get("hps", ()) if s.per_second]
-        self.hps = max(rates or [s.per_second for k in steady for s in k.stats.get("heal", ())
-                                 if s.per_second] or [0.0])
-        self.dps = max([s.per_second for k in steady for c in ("dps", "damage")
-                        for s in k.stats.get(c, ()) if s.per_second] or [0.0])
-        burst = [s.value for k in steady for s in k.stats.get("damage", ())
-                 if s.value is not None and s.unit_den is None]
-        self.burst = max(burst) if burst else 0.0
-        self.max_range = max([r for r in map(_reach, self.weapons) if r] or [0.0])
+        def damages(kit):
+            return bool(kit.stats.get("damage") or kit.stats.get("dps"))
+
+        # --- damage: the weapon the hero fights with, sustained ------------------
+        steady = [w for w in self.weapons if w.name not in FORM_GATED]
+        held = [w for w in steady if w.extra.get("slot") in PRIMARY_SLOTS and damages(w)]
+        rates = [r for r in (_rate(w, "dps", "damage") for w in (held or steady)) if r]
+        self.dps = max(rates) if rates else 0.0
+
+        # --- burst: the biggest single hit, a headshot where one counts ---------
+        hits = []
+        for kit in base:
+            tick = max([s.per_second for s in kit.stats.get("damage", ()) if s.per_second]
+                       or [0.0])
+            lasts = kit.max_stat("duration") or 0.0
+            crit = kit.max_stat("headshot_mod") or 1.0
+            crits = (kit.max_stat("headshot") or 0) >= 1 and (kit.max_stat("pellets") or 1) < 2
+            singles = [s.value for s in flat(kit, "damage") if not s.condition]
+            for stat in flat(kit, "damage"):
+                if SUMMED_RE.search(stat.condition or ""):
+                    continue
+                if tick and lasts and abs(stat.value - tick * lasts) < 0.5:
+                    continue                      # the rate over its duration, not a hit
+                volley = any(one and stat.value > one and stat.value % one == 0
+                             for one in singles)  # five orbs at once: no one headshot
+                hits.append(stat.value * (crit if crits and not volley else 1.0))
+        self.burst = max(hits) if hits else 0.0
+
+        # --- healing: a rate (hp/s) and a cast (hp) are two quantities; what
+        #     lands on teammates is the team's, the rest is the hero's own -------
+        team_rate, team_cast, own_rate, own_cast = [], [], [], []
+        for kit in base:
+            mine = not (self.role == "support" or kit.for_allies
+                        or "deployable" in kit.keywords)
+            rate = _rate(kit, "hps", "heal") if kit.kind == "weapon" else None
+            if rate is None:
+                per = [s for c in ("hps", "heal") for s in kit.stats.get(c, ())
+                       if s.per_second and s.condition != "self"]
+                rate = max(s.per_second for s in per) if per else None
+                wait = kit.max_stat("cooldown")
+                lasts = kit.max_stat("duration")
+                if rate and wait and lasts:       # up for `lasts` of every lasts + wait
+                    rate *= lasts / (lasts + wait)
+            casts = [s.value for s in flat(kit, "heal") if s.condition != "self"]
+            selfs = [s.value for s in flat(kit, "heal") if s.condition == "self"]
+            if rate:
+                (own_rate if mine else team_rate).append(rate)
+            if casts:
+                (own_cast if mine else team_cast).append(max(casts))
+            own_cast.extend(selfs)
+        self.hps = max(team_rate or [0.0])
+        self.peak_heal = max(team_cast or [0.0])
+        self.self_hps = max(own_rate or [0.0])
+        self.self_heal = max(own_cast or [0.0])
+
+        # --- reach: the weapons' published limits. A weapon that publishes none
+        #     says nothing, and the hero stays out of the range metrics: unknown is
+        #     not a number ------------------------------------------------------------
+        known = [r for r in map(_reach, [w for w in steady if damages(w)]) if r]
+        self.max_range = max(known) if known else 0.0
+
         cds = [s.value for k in self.abilities for s in k.stats.get("cooldown", ())
                if s.value is not None]
         self.cooldowns = sorted(cds)
         self.median_cooldown = statistics.median(cds) if cds else None
         self.weapon_kinds = set()
-        for w in self.weapons:
+        for w in steady:
             t = (w.extra.get("weapon_type") or "").lower()
             if t:
                 self.weapon_kinds.add(
                     "hitscan" if "hitscan" in t else "beam" if "beam" in t
                     else "melee" if "melee" in t else "projectile")
-        self.hitscan = "hitscan" in self.weapon_kinds or "hitscan" in self.keywords
-        self.beam = "beam" in self.weapon_kinds or "beam" in self.keywords
+        guns = set().union(*(k.keywords for k in base if k.kind == "weapon")) \
+            if base else set()
+        self.hitscan = "hitscan" in self.weapon_kinds or "hitscan" in guns
+        self.beam = "beam" in self.weapon_kinds or "beam" in guns
         self.melee = "melee" in self.weapon_kinds
-        self.aoe_count = sum(1 for k in kits if "area of effect" in k.keywords)
-        self.barrier_hp = kit_max("barrier_health") or 0.0
+        self.aoe_count = sum(1 for k in fights if "area of effect" in k.keywords)
+        barriers = [k.plain_stat("barrier_health") for k in base]
+        barriers += [k.plain_stat("health") for k in base
+                     if k.keywords & {"barrier", "bubble"} and not k.stats.get("barrier_health")]
+        self.barrier_hp = max([b for b in barriers if b] or [0.0])
         self.pierces_barrier = any(
-            (k.max_stat("ignores_barrier") or 0) >= 1 or "ignore barrier" in k.keywords
-            or "barrier piercing" in k.keywords for k in kits)
-        self.overhealth = kit_max("overhealth") or 0.0
-        mods = [s.value for k in kits for s in k.stats.get("healing_mod", ())
+            damages(k) and ("barrier piercing" in k.keywords
+                            or ((k.max_stat("ignores_barrier") or 0) >= 1
+                                and not k.for_allies)) for k in base)
+        self.overhealth = max([s.value for k in fights for s in flat(k, "overhealth")]
+                              or [0.0])
+        mods = [s.value for k in fights for s in k.stats.get("healing_mod", ())
                 if s.value is not None]
         self.antiheal = min([m for m in mods if m < 0] or [0.0])
         self.heal_amp = max([m for m in mods if m > 0] or [0.0])
-        amps = [s.value for k in kits for s in k.stats.get("damage_amp", ())
-                if s.value is not None and s.value > 0]
+        amps = [s.value for k in fights for s in k.stats.get("damage_amp", ())
+                if s.value is not None and s.value > 0 and not s.condition]
         self.dmg_amp = max(amps) if amps else 0.0
-        # crowd control: tagged as such, or an ABILITY that knocks back -
-        # a weapon's knockback stat is recoil physics, not peel
-        self.cc_tools = sorted({k.name for k in kits
-                                if k.keywords & set(CC_KEYWORDS)
-                                or (k.kind in ("ability", "ultimate")
-                                    and k.stats.get("kbspeed"))})
-        self.mobility_tools = sorted({k.name for k in self.abilities
+        # crowd control: tagged as such, an ability that slows, or an ABILITY
+        # that knocks an enemy back - a weapon's knockback stat is recoil, and a
+        # movement tool's is the hero's own flight
+        self.cc_tools = sorted({
+            k.name for k in fights
+            if k.keywords & set(CC_KEYWORDS)
+            or (k.kind in ("ability", "ultimate") and damages(k) and k.stats.get("kbspeed")
+                and not k.keywords & set(MOBILITY_KEYWORDS))
+            or (k.kind in ("ability", "ultimate")
+                and any((s.value or 0) < 0 for s in k.stats.get("mspeed_slow", ())))})
+        moves = [a for a in base if a.kind in ("ability", "passive")]
+        self.mobility_tools = sorted({k.name for k in moves
                                       if k.keywords & set(MOBILITY_KEYWORDS)})
-        self.flyer = any("flight" in k.keywords or FLIGHT_RE.search(k.description or "")
-                         for k in self.abilities)
-        self.cleanse_tools = sorted({k.name for k in kits
+        self.flyer = any(k.keywords & set(FLIGHT_KEYWORDS) for k in moves)
+        # a save is a tool, not a passive: Eject! leaves the mech, it saves no one
+        tools = [k for k in base if k.kind != "passive"] + [
+            u for u in ults if u.for_allies or u.stats.get("heal") or u.stats.get("hps")]
+        self.cleanse_tools = sorted({k.name for k in tools
                                      if k.keywords & set(CLEANSE_KEYWORDS)})
-        self.invuln_tools = sorted({k.name for k in kits
-                                    if "invulnerable" in k.keywords})
-        self.deployables = sorted({k.name for k in kits if "deployable" in k.keywords})
-        ults = [a for a in self.abilities if a.kind == "ultimate"]
+        self.invuln_tools = sorted({k.name for k in tools if "invulnerable" in k.keywords})
+        self.deployables = sorted({k.name for k in base if "deployable" in k.keywords})
         self.ult = ults[0] if ults else None
-        self.ult_damage = max([u.max_stat("damage") or 0.0 for u in ults] or [0.0])
-        costs = [u.max_stat("ult_req") for u in ults]
-        costs = [c for c in costs if c]
-        self.ult_cost = min(costs) if costs else None
+
+        def ult_hit(u):
+            """One cast's damage: the flat figure, or a rate over its duration."""
+            rate = max([s.per_second for c in ("damage", "dps") for s in u.stats.get(c, ())
+                        if s.per_second] or [0.0])
+            whole = [] if u.stats.get("dps") else [s.value for s in flat(u, "damage")]
+            return max([*whole, rate * (u.plain_stat("duration") or 0.0), 0.0])
+
+        self.ult_damage_raw = max([ult_hit(u) for u in ults] or [0.0])
+        self.ult_damage = self.ult_damage_raw          # capped by World.settle_ults
+        strongest = max(ults, key=ult_hit) if ults else None
+        costs = [c for c in (u.max_stat("ult_req") for u in ults) if c]
+        self.ult_cost = ((strongest.max_stat("ult_req") if strongest else None)
+                         or (max(costs) if costs else None))
         self.dmg_ult = self.ult_damage > 0
         tiers = [w for w in self.by_tier.values() if w[0] is not None]
         self.rank_spread = (max(t[0] for t in tiers) - min(t[0] for t in tiers)) \
@@ -252,6 +388,8 @@ class World:
         self.subrole_passives = {}              # subrole -> its passive's description
         self.role_icons = {}
         self.heal_bench = 0.0
+        self.hps_bench = 0.0         # 2 x the median sustained healing across the supports
+        self.ult_cap = 0.0           # the largest single figure an ultimate publishes
         self.catalog_counts = {}     # the strategies mirror: kind -> count
         self.playbook = ""           # the folder the mirror came from, when not the shipped one
 
@@ -506,4 +644,15 @@ def load(cx):
     supports = [h.peak_heal for h in w.heroes.values()
                 if h.role == "support" and h.peak_heal]
     w.heal_bench = 2 * statistics.median(supports) if supports else 0.0
+    rates = [h.hps for h in w.heroes.values() if h.role == "support" and h.hps]
+    w.hps_bench = 2 * statistics.median(rates) if rates else 0.0
+    # one ultimate's damage is worth, at most, the largest single figure one
+    # publishes: a beam held for twenty seconds is not seven Self-Destructs
+    flat_ults = [s.value for h in w.heroes.values() for u in h.abilities
+                 if u.kind == "ultimate" for s in u.stats.get("damage", ())
+                 if s.value is not None and s.unit_den is None]
+    w.ult_cap = max(flat_ults) if flat_ults else 0.0
+    for hero in w.heroes.values():
+        if w.ult_cap:
+            hero.ult_damage = min(hero.ult_damage_raw, w.ult_cap)
     return w

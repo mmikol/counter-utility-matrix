@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.dmg_ults
 direction: maximize
-weight: 0.75
+weight: 0.5
 when: map.style_top == 'brawl'
 ---
 # Brawl maps stack win conditions

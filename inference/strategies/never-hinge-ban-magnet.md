@@ -4,7 +4,7 @@ kind: heuristic
 category: meta
 metric: team.max_ban_rate
 direction: minimize
-weight: 1
+weight: 0.25
 ---
 
 # Never hinge on a ban magnet

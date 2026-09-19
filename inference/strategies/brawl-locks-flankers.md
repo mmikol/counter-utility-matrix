@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.cc_count
 direction: maximize
-weight: 1
+weight: 0.75
 when: team.style_lean == 'brawl'
 ---
 # Brawl locks down flankers

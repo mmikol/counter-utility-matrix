@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.squish_count
 direction: minimize
-weight: 1
+weight: 0.5
 when: team.damage >= 3
 ---
 # Third damage picks must be sturdy

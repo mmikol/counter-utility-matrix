@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.win_mean
 direction: maximize
-weight: 1
+weight: 0.5
 when: enemy.size >= 4
 ---
 

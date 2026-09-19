@@ -4,7 +4,7 @@ kind: heuristic
 category: meta
 metric: team.win_mean
 direction: maximize
-weight: 1.5
+weight: 0.25
 ---
 
 # Play what wins right now

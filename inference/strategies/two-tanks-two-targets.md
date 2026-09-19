@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.exposed_count
 direction: minimize
-weight: 1
+weight: 0.25
 when: team.tanks >= 2
 ---
 

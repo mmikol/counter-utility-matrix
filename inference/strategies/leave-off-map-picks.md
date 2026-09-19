@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.map_offmap
 direction: minimize
-weight: 1
+weight: 0.25
 when: map.known == 1
 ---
 

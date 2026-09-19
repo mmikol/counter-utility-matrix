@@ -64,9 +64,13 @@ def _waiting(result):
     waiting = []
     for c in result.contributions:
         h = by_id.get(c["id"])
-        if h is None or c["applies"]:
+        if h is None:
             continue
-        waiting.append("%s waits for %s" % (h.name, h.when.source) if h.when else h.name)
+        if c["applies"] and h.form != "limit":   # terms apply: the best is just not above zero
+            return ("unscored on this board - the optimal six scores %.2f, not above zero,"
+                    " so no comp is a share of it" % best)
+        if not c["applies"]:
+            waiting.append("%s waits for %s" % (h.name, h.when.source) if h.when else h.name)
     return ("unscored on this board - no scoring strategy applies yet"
             + (": " + "; ".join(waiting) if waiting else ""))
 
@@ -615,15 +619,16 @@ def _plan(world, m, side, bans, red_h, blue_r):
 # CPython holds the GIL for this pure-Python work, so parallelism means
 # processes: a pool of workers, spawned once and kept - the servers that call
 # this are threaded, and forking a threaded process is unsafe. Each search
-# runs in three rounds, a slice per worker: the reference sample, for the low
-# and high each heuristic takes on this board; the enumeration, prepared and
-# scored against those bounds; then one worker ranks and refines the merged
-# field. Only verdicts cross - hero ids, score, tie-break - and slices
+# runs in four rounds, a slice per worker: the reference sample, for the low
+# and high each heuristic takes on this board; the sample again, scored under
+# those bounds, for each hero's standing, which ranks the pools; the
+# enumeration, prepared and scored; then one worker ranks and refines the
+# merged field. Only verdicts cross - hero ids, score, tie-break - and slices
 # partition their round, so nothing depends on how the work was split.
 #
 # The board runs four searches. Blue's and red's go first. The fill is blue's
 # board (same map, side, enemies and bans), so it takes blue's bounds and
-# draws no sample of its own; the countered case follows red's six. A full
+# standing and draws no sample of its own; the countered case follows red's six. A full
 # six is ranked against the field its seat's search already swept.
 #
 # The world crosses as bytes pickled once and cached per worker; so is the
@@ -767,6 +772,23 @@ def _bounds(token, data, spec, weights, index, count):
     return solver.reference_bounds(index, count)
 
 
+def _standing(token, data, spec, weights, bounds, index, count):
+    """One slice of the reference sample scored under the merged bounds, in a
+    worker: each hero's tally in it."""
+    world = _world(token, data)
+    solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
+    solver.adopt_bounds(bounds)
+    return solver.reference_standing(index, count)
+
+
+def _add(tally, part):
+    for hid, (total, n) in part.items():
+        seen = tally.setdefault(hid, [0, 0])
+        seen[0] += total
+        seen[1] += n
+    return tally
+
+
 def _widen(bounds, part):
     for hid, (lo, hi) in part.items():
         seen = bounds.get(hid)
@@ -774,21 +796,21 @@ def _widen(bounds, part):
     return bounds
 
 
-def _sweep(token, data, spec, weights, bounds, index, count):
+def _sweep(token, data, spec, weights, bounds, standing, index, count):
     """One slice of one search, in a worker."""
     world = _world(token, data)
     solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
-    solver.adopt_bounds(bounds)
+    solver.adopt_bounds(bounds, standing)
     size, feasible = solver.sweep(index, count)
     return size, [_verdict(c) for c in feasible]
 
 
-def _rank(token, data, spec, weights, bounds, verdicts, top):
+def _rank(token, data, spec, weights, bounds, standing, verdicts, top):
     """The tail of a split search, in a worker: the merged field ranked and
     refined. -> (the winners, how many candidates refining added)."""
     world = _world(token, data)
     solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
-    solver.adopt_bounds(bounds)
+    solver.adopt_bounds(bounds, standing)
     ranked = solver.rank([_revive(world, v) for v in verdicts], top)
     return [_verdict(c) for c in ranked], solver.considered
 
@@ -798,10 +820,12 @@ class _Split:
     sample, then the enumeration, then the tail. A caller starts several and
     walks them through the rounds together, so the pool stays full."""
 
-    def __init__(self, pool, world, catalog, spec, weights, top, slices, bounds=None):
+    def __init__(self, pool, world, catalog, spec, weights, top, slices, bounds=None,
+                 standing=None):
         self.pool, self.world, self.catalog = pool, world, catalog
         self.spec, self.weights, self.top = spec, weights, top
         self.bounds, self.size, self.verdicts = bounds, 0, []
+        self.standing, self.tallies = standing, None
         self.token, self.data = _world_blob(world)
         self.count = slices
         self.scale = None if bounds is not None else [
@@ -809,14 +833,29 @@ class _Split:
             for i in range(slices)]
         self.slices = self.tail = None
 
-    def sweep(self):
-        """Take the scale the slices drew, and send the enumeration out."""
+    def rank_roster(self):
+        """Take the scale the slices drew, and send the sample out again to be
+        scored under it: each hero's standing, which ranks the pools."""
         if self.scale is not None:
             self.bounds = {}
             for future in self.scale:
                 _widen(self.bounds, future.result())
-        self.slices = [self.pool.submit(_sweep, self.token, self.data, self.spec,
-                                        self.weights, self.bounds, i, self.count)
+            self.scale = None
+        if self.standing is None and self.tallies is None:
+            self.tallies = [self.pool.submit(_standing, self.token, self.data, self.spec,
+                                             self.weights, self.bounds, i, self.count)
+                            for i in range(self.count)]
+
+    def sweep(self):
+        """Take the standing, and send the enumeration out."""
+        self.rank_roster()
+        if self.tallies is not None:
+            self.standing = {}
+            for future in self.tallies:
+                _add(self.standing, future.result())
+            self.tallies = None
+        self.slices = [self.pool.submit(_sweep, self.token, self.data, self.spec, self.weights,
+                                        self.bounds, self.standing, i, self.count)
                        for i in range(self.count)]
 
     def merge(self):
@@ -825,12 +864,12 @@ class _Split:
         for future in self.slices:
             self.size, part = future.result()
             self.verdicts.extend(part)
-        self.tail = self.pool.submit(_rank, self.token, self.data, self.spec,
-                                     self.weights, self.bounds, self.verdicts, self.top)
+        self.tail = self.pool.submit(_rank, self.token, self.data, self.spec, self.weights,
+                                     self.bounds, self.standing, self.verdicts, self.top)
 
     def _solver(self):
         solver = _solver(self.world, self.catalog, self.spec)
-        solver.adopt_bounds(self.bounds)
+        solver.adopt_bounds(self.bounds, self.standing)
         return solver
 
     def solved(self):
@@ -927,12 +966,15 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
             red_split = _Split(pool, world, catalog,
                                (map_name, blue_list, [], pool_size, bans_list,
                                 opposite(side)), weights, want, rest)
+            blue_split.rank_roster()
+            red_split.rank_roster()
             blue_split.sweep()
             red_split.sweep()
             # the fill is blue's board, so it takes blue's scale and draws none
             fill_split = _Split(pool, world, catalog,
                                 (map_name, enemy, blue_list, pool_size, bans_list, side),
-                                weights, want, half, blue_split.bounds) if wants_fill else None
+                                weights, want, half, blue_split.bounds,
+                                blue_split.standing) if wants_fill else None
             if fill_split is not None:
                 fill_split.sweep()
             blue_split.merge()

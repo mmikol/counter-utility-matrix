@@ -4,7 +4,7 @@ kind: heuristic
 category: tempo
 metric: team.cooldown_median
 direction: minimize
-weight: 1
+weight: 0.5
 when: team.style_lean == 'dive'
 ---
 # Dive runs on cooldowns

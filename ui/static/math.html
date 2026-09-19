@@ -45,28 +45,31 @@ normalises its metric to 0..1 against 1,200 random legal sixes for the board (se
 side, enemies and bans), flips it when minimising, and multiplies by its weight. A heuristic
 guarded on the six's own state (<code>team.*</code>, or a <code>matchup.*</code> blue decides) is
 a <i>need</i>: met in full it costs nothing, unmet it costs its weight, so entering the guarded
-state never pays. Needs on one guard cost 2 together at most. A scored
+state never pays. A scored
 constraint adds bonus minus penalty while its <code>when</code> holds. An assumption adds
 nothing.</p>
 <pre class='eq'>for one six x, with every hard limit holding:
 
 score(x) = &Sigma; heuristics h     w_h &middot; norm_h( metric_h(x) )
-         + &Sigma; needs n          w_n &middot; ( norm_n( metric_n(x) ) &minus; 1 )
+         + &Sigma; needs n          s_n &middot; w_n &middot; ( norm_n( metric_n(x) ) &minus; 1 )
          + &Sigma; scored r         w_r &middot; ( bonus_r(x) &minus; penalty_r(x) )
          &minus; &Sigma; soft limits l    penalty_l(x)
 
 norm_h(v) = clamp( (v &minus; min_ref) / (max_ref &minus; min_ref), 0, 1 )
-            and 1 &minus; that when h minimises</pre>
+            and 1 &minus; that when h minimises
+            min_ref, max_ref: over the reference sixes h's guard holds on
+            max_ref = min_ref: a reward reads 0.5, a need costs nothing
+s_n       = min( 1, 2 / &Sigma; w over the needs on n's guard ): one state costs 2 at most</pre>
 <p id='what-100-means'><b>What 100 means.</b> Each seat's best six on this board is its optimal,
-100. The badge above a picker is that seat's picks as a share of its optimal under this
+100. An optimal at or below zero has no share to give: every other comp reads <i>unscored</i>. The badge above a picker is that seat's picks as a share of its optimal under this
 playbook, not a win probability. A seat with nothing to score against reads <i>unscored</i>;
 the reason is on hover.</p>
 <p id='fight-odds'><b>Fight odds.</b> Blue's share over the sum of both shares; red's is the
 rest. With one seat unscored the bars show the shares alone. Not a fitted probability.</p>
-<p id='argmax'><b>The argmax.</b> Each role's pool is cut to six by a fixed prior (map win rate,
-answers, exposure, synergy with the locked picks, style fit). Every legal shape is filled around
-the locked picks, each six is scored, and a local search swaps same-role heroes while the score
-rises. Ties break by mean map win rate, then by name.</p>
+<p id='argmax'><b>The argmax.</b> Each role's pool is the six heroes of highest standing: a
+hero's mean score across the reference sixes it is in, plus 0.5 per locked partner. Every legal
+shape is filled around the locked picks, each six is scored, and a local search swaps same-role
+heroes while the score rises, from the best six sixes and the best of every shape. Ties break by mean map win rate, then by name.</p>
 <p><b>When nothing scores</b>: every legal six is zero, the board reads <i>unscored</i>, and the
 optimal is the tie-break alone.</p>
 <h2 id='board'>The board</h2>

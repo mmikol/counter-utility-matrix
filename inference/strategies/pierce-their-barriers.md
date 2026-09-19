@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.barrier_piercers
 direction: maximize
-weight: 0.5
+weight: 0.25
 when: matchup.barrier_need >= 1200
 ---
 

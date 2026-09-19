@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.barrier_count
 direction: minimize
-weight: 0.75
+weight: 0.5
 when: enemy.beam >= 2
 ---
 

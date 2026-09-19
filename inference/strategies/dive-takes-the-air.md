@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.flyers
 direction: maximize
-weight: 0.75
+weight: 0.5
 when: team.style_lean == 'dive'
 ---
 # Dive takes the high ground

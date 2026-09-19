@@ -69,6 +69,10 @@ NOT_STRATEGIES = ("README.md", "tuning-log.md")     # markdown that lives beside
 KIND_ORDER = {k: i for i, k in enumerate(KINDS)}
 
 
+# the namespaces one board settles for every candidate six
+BOARD_SECTIONS = ("enemy", "map", "world", "params")
+
+
 class CatalogError(ValueError):
     file = None         # the strategy file at fault, when one is
 
@@ -237,9 +241,19 @@ class Strategy:
                 parts.append("%s: %s" % (label, expr.source))
         return "; ".join(parts)
 
+    @property
+    def need(self):
+        """A heuristic guarded on the six's own state: the solver charges what it
+        misses (weight x (norm - 1)) instead of paying what it has. Guards on red
+        or the map - red's matchup keys included - leave it a reward."""
+        from ui.facts.compute import RED_MATCHUP
+        return (self.form == "heuristic" and self.when is not None
+                and any(n.split(".", 1)[0] not in BOARD_SECTIONS and n not in RED_MATCHUP
+                        for n in self.when.names))
+
     def to_dict(self):
         return {"id": self.id, "name": self.name, "kind": self.kind, "form": self.form,
-                "pending": self.pending,
+                "pending": self.pending, "need": self.need,
                 "category": self.category, "direction": self.direction,
                 "metric": self.metric, "weight": self.weight, "soft": self.soft,
                 "when": self.when.source if self.when else None,

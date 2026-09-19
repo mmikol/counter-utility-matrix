@@ -4,7 +4,7 @@ kind: heuristic
 category: synergy
 metric: team.synergy_score
 direction: maximize
-weight: 1
+weight: 0.25
 when: team.tanks >= 2
 ---
 

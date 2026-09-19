@@ -4,7 +4,7 @@ kind: heuristic
 category: durability
 metric: team.shield_total
 direction: maximize
-weight: 0.5
+weight: 0.75
 ---
 
 # Shield points regrow

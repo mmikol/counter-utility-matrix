@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.dmg_amp
 direction: maximize
-weight: 1
+weight: 0.75
 ---
 # Amplify the damage
 

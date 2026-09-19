@@ -4,7 +4,7 @@ kind: heuristic
 category: meta
 metric: team.availability
 direction: maximize
-weight: 0.75
+weight: 0.25
 when: team.synergy_edges >= 1
 ---
 

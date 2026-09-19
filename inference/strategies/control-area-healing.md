@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.aoe_count
 direction: maximize
-weight: 0.5
+weight: 0.25
 when: map.mode == 'Control'
 ---
 # Control rewards area healing

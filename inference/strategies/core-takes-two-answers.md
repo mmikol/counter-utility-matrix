@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.double_covered
 direction: maximize
-weight: 0.75
+weight: 0.5
 when: enemy.core_size >= 3
 ---
 # One pick cannot answer a core
