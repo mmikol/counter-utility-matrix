@@ -34,6 +34,92 @@ def test_world_loads_the_whole_roster_with_kit_numbers(world):
     assert world.heal_bench > 0
 
 
+def test_kit_rows_are_read_in_their_own_units(world):
+    # a percent is not hit points: lifesteal is a share, overhealth its published cap,
+    # EMP a damage ultimate that adds no hit points
+    reaper, mauga, sombra = world.hero("Reaper"), world.hero("Mauga"), world.hero("Sombra")
+    assert reaper.self_heal == 0 and reaper.lifesteal == pytest.approx(0.3)
+    assert mauga.peak_heal == 0 and mauga.self_heal == 0 and mauga.lifesteal == 1.0
+    assert world.hero("Junker Queen").self_heal == 0
+    assert world.hero("Sigma").overhealth == 400 and mauga.overhealth == 150
+    assert world.hero("Lifeweaver").overhealth == 100 == world.hero("Brigitte").overhealth
+    assert sombra.dmg_ult and sombra.ult_damage == 0 and sombra.dmg_amp == 0
+    assert compute.team_metrics(world, [reaper, mauga])["lifelines"] == 2
+    # a sum, a volley and a window's total are not one hit or a rate
+    hazard = world.hero("Hazard")
+    assert hazard.burst == 75 and hazard.ult_damage == 90
+    assert world.hero("Ramattra").burst == 65
+    assert world.hero("Zenyatta").burst == 100 and world.hero("Widowmaker").burst >= 250
+    assert compute.team_metrics(world, [world.hero("Zenyatta")])["one_shots"] == 0
+    # an ultimate fired at its rate for its duration, under the roster's cap
+    assert world.hero("Pharah").ult_damage == world.ult_cap
+    assert 130 < world.hero("Venture").ult_damage < world.ult_cap
+    # sustained rates: the reload in the row's text, the swing the rate counts,
+    # the magazine's share where no reload figure is usable
+    assert world.hero("Zenyatta").dps == pytest.approx(108.7)
+    assert world.hero("Mauga").dps == pytest.approx(62.24)
+    assert world.hero("Wuyang").dps == pytest.approx(128.21)
+    assert world.hero("Vendetta").dps == pytest.approx(53.1)
+    cat = world.hero("Jetpack Cat")
+    assert cat.dps == pytest.approx(87.18, abs=0.01) and cat.hps == pytest.approx(cat.dps)
+
+
+def test_the_weapon_a_hero_fights_with_sets_its_kind_and_reach(world):
+    winston, torb, ramattra = (world.hero(n) for n in ("Winston", "Torbjörn", "Ramattra"))
+    assert not winston.hitscan and winston.beam and winston.max_range == 8
+    assert winston.burst == 60 and winston.pierces_barrier
+    assert not torb.melee and not torb.pierces_barrier and torb.max_range == 0
+    assert torb.self_heal == 0 and torb.self_hps == 0
+    assert ramattra.melee and ramattra.pierces_barrier and ramattra.dps == 100
+    assert ramattra.max_range == 0 and world.hero("Anran").max_range == 0
+    assert world.hero("Mei").max_range == 12 and world.hero("Sojourn").max_range == 60
+    dmon, dva = world.hero("D.Mon"), world.hero("D.Va")
+    assert dmon.max_range == 4 and dmon.dps == pytest.approx(91.2) and dmon.ult_damage == 125
+    assert dva.burst == 25 and dva.cc_tools == [] and dmon.cc_tools == ["Surging Strike"]
+    # a healing beam is not a beam; a kick is not a barrier piercer
+    assert not world.hero("Mercy").beam and not world.hero("Illari").beam
+    assert world.hero("Moira").beam
+    assert not world.hero("Zenyatta").pierces_barrier
+
+
+def test_tools_are_counted_once_and_for_what_they_do(world):
+    counts = {n: world.hero(n).aoe_count for n in
+              ("Sigma", "Junkrat", "Pharah", "Freja", "Reinhardt", "Doomfist", "Mauga")}
+    assert counts == {"Sigma": 3, "Junkrat": 4, "Pharah": 3, "Freja": 2, "Reinhardt": 1,
+                      "Doomfist": 3, "Mauga": 3}
+    assert world.hero("Baptiste").aoe_count == 3 and world.hero("Baptiste").aoe_damage == 0
+    assert world.hero("Junkrat").aoe_damage == 4
+    assert world.hero("Soldier: 76").cc_tools == [] and world.hero("Emre").cc_tools == []
+    assert "Concussion Mine" in world.hero("Junkrat").cc_tools
+    assert world.hero("Sierra").mobility_tools == ["Anchor Drone"]
+    assert world.hero("Zarya").deployables == []
+    assert world.hero("Baptiste").invuln_tools == ["Immortality Field"]
+    doomfist = world.hero("Doomfist")
+    assert doomfist.cleanse_tools == [] and doomfist.invuln_tools == []
+    assert 2.5 not in world.hero("Emre").cooldowns
+    # what lands on a teammate, apart from what saves only its owner
+    picks = [world.hero(n) for n in ("Kiriko", "Reaper", "Venture", "Baptiste", "Mercy", "Moira")]
+    t = compute.team_metrics(world, picks)
+    assert t["cleanse"] == 4 and t["team_cleanse"] == 1            # Protection Suzu alone
+    assert t["invuln"] == 6 and t["team_saves"] == 3               # Suzu, the Field, Resurrect
+    assert world.hero("Zenyatta").team_cleanse_tools == ["Transcendence"]
+    t = compute.team_metrics(world, [world.hero(n) for n in
+                                     ("Reinhardt", "Ana", "Widowmaker", "Tracer", "Winston")])
+    assert t["burst_max"] == 300 and t["burst_hero"] == "Reinhardt"
+    assert t["burst_ranged"] == world.hero("Widowmaker").burst
+    assert compute.team_metrics(world, [world.hero("Reinhardt")])["burst_ranged"] == 0
+    assert t["hitscan"] == 3 and t["hitscan_reach"] == 1            # Widowmaker's 70 m
+    assert "enemy.team_saves" in compute.registry()
+
+
+def test_an_announced_hero_sets_no_roster_wide_figure(world):
+    import statistics
+    out = [h for h in world.heroes.values() if h.released and h.role == "support"]
+    assert world.heal_bench == 2 * statistics.median(h.peak_heal for h in out if h.peak_heal)
+    assert world.hps_bench == 2 * statistics.median(h.hps for h in out if h.hps)
+    assert world.ult_cap == max(h.ult_damage for h in world.heroes.values() if h.released)
+
+
 def test_names_resolve_across_spellings(world):
     assert world.hero("lucio").name == "Lúcio"
     assert world.hero("D.VA").name == "D.Va"

@@ -138,8 +138,9 @@ carries no number.
 **The playbook panel** renders the catalog in three groups in the
 equation's order, a row of anchors at the top, each group headed by its
 count (an empty one says so), every card edged in its kind's colour, the
-badge its kind alone, the meta line its form. Under each heuristic a
-slider for its weight - 1 to 10 to the hundredth, a number box for the
+badge its kind alone, the meta line its form - a heuristic's: direction,
+metric, weight, *need* where it is one, its `when`. Under each heuristic a
+slider for its weight - 0 to 10 to the hundredth, a number box for the
 exact figure, the file's weight as the inferred default, a reset. A
 setting is kept in the browser, rides with every board request as
 `weight=<id>:<value>`, is applied by the solver for that board only (each
@@ -175,10 +176,14 @@ and condition - keywords, the latest and previous rates, the per-map and
 per-tier rates, counters both ways, best maps, playstyles), the maps
 (mode, stages, playstyle fit), the meta snapshots and the patches newer
 than the capture, synergies and partners, archetypes, the catalog's
-shape. `Hero.finish()` derives what the kit implies - peak damage and
-healing per second, burst, mobility and crowd-control tools, hitscan,
-flight, anti-heal, cleanse, barrier, effective HP - so the metrics read
-fields, not SQL. `resolve(map, red, blue, bans)` turns names into objects
+shape. `Hero.finish()` derives the hero's numbers from weapons, abilities
+and passives; ultimates add tools only, perks nothing. dps: the held
+weapon, sustained, reload in. burst: the biggest single hit, a headshot
+where one counts. hps and peak heal: healing onto teammates, per second
+and per cast; self-heal apart. Reach: the weapons' published range or
+falloff; unknown stays out. Then mobility and crowd-control tools,
+hitscan, flight, anti-heal, cleanse, barrier, effective HP - so the
+metrics read fields, not SQL. `resolve(map, red, blue, bans)` turns names into objects
 through the same name matching the data layer uses, and refuses a banned
 pick, an unknown hero, or a hero on both teams. A test in `tests/ui`
 insists every data table is read here: a table nothing reads is not data.
@@ -193,10 +198,10 @@ prints them as the vocabulary a strategy may reference):
 
 | group | examples |
 | --- | --- |
-| `team.*` (also read as `enemy.*`) | shape (`tanks`, `damage`, `supports`, `shape_flags`), sustain (`heal_peak_total`, `heal_ratio`), damage (`dps_floor`, `burst_max`), durability (`pool_total`, `squish_count`), tools (`mobility_count`, `cc_count`, `hitscan`, `antiheal`, `barrier_count`), coverage of the enemy (`coverage_share`), cohesion (`synergy_score`), map fit (`map_specialists`, `map_strategy_hits`), style (`style_lean`) |
+| `team.*` (also read as `enemy.*`) | shape (`tanks`, `damage`, `supports`, `shape_flags`), sustain (`hps_supports`, `hps_ratio`, `heal_peak_max`), damage (`dps_floor`, `burst_max`, `one_shots`), durability (`pool_total`, `squish_count`), tools (`mobility_count`, `cc_count`, `hitscan`, `antiheal`, `barrier_count`), coverage of the enemy (`coverage_share`), cohesion (`synergy_score`), map fit (`map_specialists`, `map_strategy_hits`), style (`style_lean`) |
 | `matchup.*` | the differences and ratios between the two teams: `dps_diff`, `burst_vs_heal`, `tempo_diff`, `ult_threat`, `style_lean_red` |
 | `map.*` | `known`, `mode`, `sided`, `side`, `style_top`, `style_margin`, `stages` |
-| `world.*` | `heal_bench`, `roster_size` |
+| `world.*` | `heal_bench`, `hps_bench`, `roster_size` |
 
 `team_metrics(world, heroes, map, enemies)` computes a team's numbers
 (with `lean=True` for the solver, which skips the descriptive strings);
@@ -219,8 +224,8 @@ sentences so a person - or the `/comp` session - reads them as evidence:
 [F1]  blizzard rates captured 2026-09-13 under Patch 14.3 ...      meta
 [F7]  Widowmaker is banned: 2 red pick(s) it would have answered    bans
 [F12] King's Row is Hybrid; blue attacks, red defends              map
-[F40] Zarya (red): peak 190 dps, 200 barrier, ...                  hero
-[F210] blue team: 2 tanks, 2 damage, 2 supports ...                team
+[F40] Zarya's weapon sustains 95 damage per second                 hero
+[F210] blue team shape: 2 tank / 2 dps / 2 support                 team
 [F230] sustain war: red supports peak 165 heal vs 1 blue anti-heal matchup
 -- the playbook's record: what it holds - not facts --
 [S1]  a brawl comp wants 2 tank: ...                               playbook

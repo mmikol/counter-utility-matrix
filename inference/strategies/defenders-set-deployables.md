@@ -4,7 +4,7 @@ kind: heuristic
 category: side
 metric: team.deployables
 direction: maximize
-weight: 1.25
+weight: 1
 when: map.side == 'defense'
 ---
 # Defenders set deployables

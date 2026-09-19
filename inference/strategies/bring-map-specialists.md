@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.map_specialists
 direction: maximize
-weight: 0.5
+weight: 0.75
 when: map.known == 1
 ---
 # Bring the map's specialists

@@ -19,8 +19,9 @@ A strategy file:
 
 A HEURISTIC names a numeric fact key (`metric`), min-max normalised
 against a seeded reference sample of legal sixes for the board and
-weighted; `direction` says which end is good. A CONSTRAINT takes one of
-two forms, read off its frontmatter (`form`):
+weighted; `direction` says which end is good. Guarded on the six's own
+state it is a need: weight x (norm - 1). A CONSTRAINT takes one of two
+forms, read off its frontmatter (`form`):
 
     limit    `require: <expr>` must hold. Hard by default - a comp that
              fails is discarded; `soft: true` with `penalty: <number>`
@@ -379,7 +380,7 @@ def render(catalog):
     for h in catalog:
         head = "%-10s %-10s %-28s %-9s" % (h.kind, h.form, h.id, h.category)
         if h.form == "heuristic":
-            head += " %s %s x%g" % (h.direction, h.metric, h.weight)
+            head += " %s %s x%g%s" % (h.direction, h.metric, h.weight, " need" if h.need else "")
         elif h.form == "limit":
             head += " %s%s" % (h.expressions, " (soft)" if h.soft else "")
         elif h.form == "scored":
@@ -417,8 +418,9 @@ def write_docs(catalog, path=DOCS_PATH):
                 h.name, h.id, h.category, ", %s" % h.form if h.form != h.kind else ""))
             out.append("")
             if h.form == "heuristic":
-                out.append("`%s %s` - %s. weight %g%s" % (
+                out.append("`%s %s` - %s. weight %g%s%s" % (
                     h.direction, h.metric, reg.get(h.metric, ""), h.weight,
+                    ", a need" if h.need else "",
                     "; when `%s`" % h.when.source if h.when else ""))
             elif h.form == "limit":
                 out.append("`require %s`%s%s" % (

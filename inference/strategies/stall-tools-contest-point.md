@@ -4,7 +4,7 @@ kind: heuristic
 category: tempo
 metric: team.invuln
 direction: maximize
-weight: 0.5
+weight: 0.25
 when: map.stages >= 3
 ---
 

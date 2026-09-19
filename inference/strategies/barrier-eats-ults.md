@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.barrier_hp
 direction: maximize
-weight: 0.5
+weight: 0.25
 when: matchup.ult_threat >= 1500
 ---
 # A barrier eats the big ultimate

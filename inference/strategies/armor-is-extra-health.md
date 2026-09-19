@@ -4,7 +4,7 @@ kind: heuristic
 category: durability
 metric: team.armor_total
 direction: maximize
-weight: 0.25
+weight: 0.5
 ---
 # Armor is extra health
 

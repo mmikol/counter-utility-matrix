@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: matchup.ult_answers
 direction: maximize
-weight: 0.75
+weight: 0.5
 when: matchup.ult_threat >= 1500
 ---
 # Invulnerability answers their ultimates

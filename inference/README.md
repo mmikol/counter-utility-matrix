@@ -396,6 +396,9 @@ the catalog is `docs/inference.md`.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/1wck8j1/who_are_the_heroes_in_each_role_that_are_the_most/
+- `hitscan-answers-their-fliers` - Hitscan answers their fliers (heuristic). The claim of `fly-over-projectiles`, read from the other seat, and the counter table: 33 of the 42 counter edges onto the heroes who fly come from hitscan heroes.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w00w6m/can_someone_explain_team_comps_to_me_like_im_in/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1s13py2/why_do_people_get_absolutely_triggered_by_counter/
 - `hitscan-into-brawl` - Hitscan into brawl (heuristic). applies on 3/6 boards, spreads on 3.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w4j78i/when_is_it_best_to_use_hitscan_or_dive_in_game/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/

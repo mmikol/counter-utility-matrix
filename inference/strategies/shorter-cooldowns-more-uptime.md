@@ -4,7 +4,7 @@ kind: heuristic
 category: tempo
 metric: team.cooldown_median
 direction: minimize
-weight: 0.25
+weight: 0.5
 ---
 
 # Shorter cooldowns, more uptime

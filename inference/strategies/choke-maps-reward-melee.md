@@ -9,4 +9,4 @@ when: map.style_top == 'brawl'
 ---
 # Choke maps reward melee
 
-A brawl map has short sightlines and tight chokes, and the fight happens in someone's face, where a melee weapon does its full damage and a long gun does not. Reinhardt is the community's brawl tank because he swings his hammer at close quarters, and King's Row is his best map because it is flat. Picks with a melee weapon are counted, read where the map rewards brawl.
+A brawl map has short sightlines and tight chokes, and the fight happens in someone's face, where a melee weapon does its full damage and a long gun does not. Reinhardt is the community's brawl tank because he swings his hammer at close quarters, and the counterpick lists file King's Row among his best maps. Picks with a melee weapon are counted, read where the map rewards brawl.

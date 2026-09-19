@@ -4,7 +4,7 @@ kind: heuristic
 category: synergy
 metric: team.core_size
 direction: maximize
-weight: 0.25
+weight: 0.5
 when: team.style_lean == 'dive'
 ---
 # Dive is one connected core

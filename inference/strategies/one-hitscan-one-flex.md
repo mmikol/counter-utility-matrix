@@ -4,7 +4,7 @@ kind: heuristic
 category: shape
 metric: team.subrole_diversity
 direction: maximize
-weight: 0.5
+weight: 0.25
 ---
 
 # One hitscan, one flex

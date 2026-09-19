@@ -86,8 +86,8 @@ blue's own picks. The suggestion tiles are a second solve that keeps your locked
 optimal is solved as the scale for red's score and not shown.</p>
 <p id='weights'><b>The weights.</b> A heuristic's weight is the slider under its card. It stays
 in your browser and rides with every request until reset; the file's weight is the default.
-Store writes it to the file through the tune tool, with your reason. Only heuristics have a
-weight.</p>
+Store writes it to the file through the tune tool, logged. Only a heuristic's weight
+has a slider, 0 to 10; a scored constraint keeps its file's.</p>
 <h2 id='pieces'>How the pieces fit</h2>
 <pre class='eq'>sources → db/data (fetch) → db/psql (the database) → ui/facts (FACTS of a board)
                                                                     &darr;

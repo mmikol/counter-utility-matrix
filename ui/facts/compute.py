@@ -27,6 +27,7 @@ ROLE_COUNT = {"tank": "tanks", "damage": "damage", "support": "supports"}   # ro
 SPECIALIST_DELTA = 2.5
 RANK_SENSITIVE = 6.0
 TREND_POINTS = 1.5
+FLIER_REACH = 35.0        # metres a hitscan weapon must publish to answer a flier
 
 TEAM_METRICS = OrderedDict([
     # shape
@@ -58,13 +59,17 @@ TEAM_METRICS = OrderedDict([
     ("burst_max", "the biggest single hit on the team, a headshot where one counts"),
     ("one_shots", "picks whose biggest hit, not a melee swing, kills a 250-pool hero"),
     ("burst_hero", "who holds the biggest single hit"),
+    ("burst_ranged", "the biggest single hit from a pick that is not melee-only"),
     ("ult_damage_total", "summed max damage across the team's damage ultimates"),
     ("dmg_ults", "ultimates that carry a damage figure"),
     ("ult_cost_mean", "mean ultimate charge cost where published"),
     ("hitscan", "picks with a hitscan weapon or ability"),
+    ("hitscan_reach", "hitscan picks whose weapon publishes a reach of %g m or more"
+                      % FLIER_REACH),
     ("projectile", "picks whose weapons are projectile"),
-    ("beam", "picks with a beam"), ("melee", "picks with a melee weapon"),
-    ("aoe_count", "kit pieces tagged area of effect"),
+    ("beam", "picks with a damaging beam"), ("melee", "picks with a melee weapon"),
+    ("aoe_count", "kit pieces tagged area of effect or shockwave"),
+    ("aoe_damage", "kit pieces that damage an area"),
     ("range_median", "median of each pick's longest published range"),
     ("range_max", "the longest range on the team"), ("range_min", "the shortest longest-range"),
     ("dmg_amp", "picks that amplify someone's damage"),
@@ -77,8 +82,12 @@ TEAM_METRICS = OrderedDict([
     ("hps_supports", "summed sustained healing across the supports, hp per second"),
     ("hps_ratio", "support sustained healing / the roster's two-support bench"),
     ("heal_amp", "picks that amplify healing"), ("antiheal", "picks with anti-heal"),
-    ("cleanse", "picks with a cleanse"), ("invuln", "picks with an invulnerability"),
-    ("lifelines", "picks carrying any healing at all, their own included"),
+    ("cleanse", "picks with a cleanse"),
+    ("invuln", "picks with an invulnerability or a death-prevention"),
+    ("team_cleanse", "picks with a cleanse that lands on a teammate"),
+    ("team_saves", "picks with an invulnerability, death-prevention or cleanse that lands"
+                   " on a teammate"),
+    ("lifelines", "picks carrying any healing at all, their own and lifesteal included"),
     # tempo and tools
     ("cooldown_median", "median cooldown across every ability on the team"),
     ("cooldown_count", "cooldowns counted"),
@@ -109,7 +118,7 @@ TEAM_METRICS = OrderedDict([
     ("max_ban_hero", "who carries the highest ban rate"),
     ("rank_sensitive_count",
      "picks whose win rate swings %g+ points across ranks" % RANK_SENSITIVE),
-    ("trend_sum", "summed win-rate movement since the previous snapshot"),
+    ("trend_sum", "summed win-rate movement since the rates last changed"),
     # map
     ("map_known", "1 if a map is set"),
     ("map_win_mean", "mean win rate on the map (the all-ranks mean without a map)"),
@@ -163,11 +172,12 @@ MAP_METRICS = OrderedDict([
     ("style_margin", "top style score minus the runner-up"),
     ("mode", "the game mode"),
     ("stages", "stage count"),
+    ("bans", "bans already made in this match: a ban rate is a risk only before them"),
 ])
 
 WORLD_METRICS = OrderedDict([
-    ("heal_bench", "2 x the median peak heal across the support roster"),
-    ("hps_bench", "2 x the median sustained healing across the support roster"),
+    ("heal_bench", "2 x the median peak heal across the released supports"),
+    ("hps_bench", "2 x the median sustained healing across the released supports"),
     ("roster_size", "heroes in the roster"),
 ])
 
@@ -269,7 +279,10 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     majority = [s for s, c in counts.items() if c > n / 2.0]
     # ties fall to the alphabetically first style: the answer must not depend on
     # the order a set of names happens to iterate in (hash randomisation)
-    t["style_lean"] = sorted(majority, key=lambda s: (-counts[s], s))[0] if majority else ""
+    # and a six that is as much one style as another plays the one the map rewards
+    here = m.style_top if m is not None else None
+    t["style_lean"] = (sorted(majority, key=lambda s: (-counts[s], s != here, s))[0]
+                       if majority else "")
     map_style = m.style_top if m is not None else None
     t["style_fit"] = (sum(1 for h in heroes if map_style in h.styles) / n
                       if n and map_style else 0.0)
@@ -297,14 +310,17 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["burst_max"] = burst.burst if burst else 0.0
     t["one_shots"] = sum(1 for h in heroes if h.burst >= SQUISHY_POOL and not h.melee)
     t["burst_hero"] = burst.name if burst else ""
+    t["burst_ranged"] = max([h.burst for h in heroes if not h.melee_only] or [0.0])
     t["ult_damage_total"] = sum(h.ult_damage for h in heroes)
     t["dmg_ults"] = sum(1 for h in heroes if h.dmg_ult)
     t["ult_cost_mean"] = _mean([h.ult_cost for h in heroes])
     t["hitscan"] = sum(1 for h in heroes if h.hitscan)
+    t["hitscan_reach"] = sum(1 for h in heroes if h.hitscan_range >= FLIER_REACH)
     t["projectile"] = sum(1 for h in heroes if "projectile" in h.weapon_kinds)
     t["beam"] = sum(1 for h in heroes if h.beam)
     t["melee"] = sum(1 for h in heroes if h.melee)
     t["aoe_count"] = sum(h.aoe_count for h in heroes)
+    t["aoe_damage"] = sum(h.aoe_damage for h in heroes)
     ranges = [h.max_range for h in heroes if h.max_range]
     t["range_median"] = _median(ranges)
     t["range_max"] = max(ranges) if ranges else 0.0
@@ -324,8 +340,10 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["antiheal"] = sum(1 for h in heroes if h.antiheal < 0)
     t["cleanse"] = sum(1 for h in heroes if h.cleanse_tools)
     t["invuln"] = sum(1 for h in heroes if h.invuln_tools)
+    t["team_cleanse"] = sum(1 for h in heroes if h.team_cleanse_tools)
+    t["team_saves"] = sum(1 for h in heroes if h.save_tools)
     t["lifelines"] = sum(1 for h in heroes
-                         if h.peak_heal or h.hps or h.self_heal or h.self_hps)
+                         if h.peak_heal or h.hps or h.self_heal or h.self_hps or h.lifesteal)
 
     cds = [c for h in heroes for c in h.cooldowns]
     t["cooldown_median"] = _median(cds)
@@ -485,14 +503,14 @@ def opposite(side):
     return {"attack": "defense", "defense": "attack"}.get(side, "")
 
 
-def map_metrics(m, side=""):
+def map_metrics(m, side="", bans=0):
     if m is None:
         return {"known": 0, "sided": 0, "side": "", "style_top": "",
-                "style_margin": 0, "mode": "", "stages": 0}
+                "style_margin": 0, "mode": "", "stages": 0, "bans": bans}
     sided = 1 if is_sided(m) else 0
     return {"known": 1, "sided": sided, "side": side if sided else "",
             "style_top": m.style_top or "", "style_margin": m.style_margin,
-            "mode": m.mode or "", "stages": len(m.stages)}
+            "mode": m.mode or "", "stages": len(m.stages), "bans": bans}
 
 
 def world_metrics(world):
@@ -500,14 +518,14 @@ def world_metrics(world):
             "roster_size": len(world.heroes)}
 
 
-def namespace(world, m, red, blue, side=""):
+def namespace(world, m, red, blue, side="", bans=0):
     """The whole evaluation namespace for a board: {team, enemy, matchup,
     map, world} - `team` is blue's seat, `enemy` is red's, `side` blue's."""
     blue_t = team_metrics(world, blue, m, red)
     red_t = team_metrics(world, red, m, blue)
     return {"team": blue_t, "enemy": red_t,
             "matchup": matchup_metrics(blue_t, red_t),
-            "map": map_metrics(m, side), "world": world_metrics(world)}
+            "map": map_metrics(m, side, bans), "world": world_metrics(world)}
 
 
 # Metrics whose value is a name or a list, not a number: a heuristic may not

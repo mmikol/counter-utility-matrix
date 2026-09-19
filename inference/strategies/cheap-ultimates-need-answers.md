@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: matchup.ult_answers
 direction: maximize
-weight: 0.25
+weight: 0.5
 when: enemy.ult_cost_mean <= 2200 and enemy.size >= 3
 ---
 # Cheap ultimates need answers

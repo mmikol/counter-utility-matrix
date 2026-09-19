@@ -4,7 +4,7 @@ kind: heuristic
 category: damage
 metric: team.ult_damage_total
 direction: maximize
-weight: 0.5
+weight: 1
 ---
 
 # Damage ultimates win fights

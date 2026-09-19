@@ -4,7 +4,7 @@ kind: heuristic
 category: sustain
 metric: team.heal_peak_total
 direction: maximize
-weight: 0.5
+weight: 0.25
 ---
 # Self-heal is effective HP
 

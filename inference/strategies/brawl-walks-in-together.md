@@ -4,7 +4,7 @@ kind: heuristic
 category: durability
 metric: team.pool_min
 direction: maximize
-weight: 0.75
+weight: 0.5
 when: team.style_lean == 'brawl'
 ---
 # Brawl walks in together

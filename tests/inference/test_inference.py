@@ -548,6 +548,78 @@ def test_the_plan_reads_every_authored_map_note(world, kings_row_board):
     assert names == ["Winston", "D.Va", "Wrecking Ball"]
 
 
+def test_the_plan_says_nothing_the_board_contradicts(world):
+    """A mirror is told as one, a six solved before red reveals a pick names the
+    likely six it counters, "Above all" leaves out the shape every six pays and
+    a rule named for another style, and the family follows the style tags."""
+    from types import SimpleNamespace as Ns
+
+    from inference import engine
+    m = world.map("King's Row")
+    rules = [Ns(id="two-supports-hold", name="Two supports hold a six", kind="constraint",
+                category="shape", when=None),
+             Ns(id="dive-the-pocket", name="Dive the pocket", kind="constraint",
+                category="matchup", when=Expr("enemy.dmg_amp >= 2")),
+             Ns(id="brawl-maps", name="Brawl maps reward durability", kind="heuristic",
+                category="map", when=Expr("map.style_top == 'brawl'")),
+             Ns(id="poke-needs-reach", name="Poke needs reach", kind="heuristic",
+                category="shape", when=Expr("team.style_lean == 'poke'")),
+             Ns(id="unmet", name="An unmet need", kind="heuristic", category="general",
+                when=None)]
+    terms = [{"id": r.id, "applies": True, "weighted": 2.0} for r in rules[:4]]
+    terms.append({"id": "unmet", "applies": True, "weighted": -0.5, "need": True})
+    red_h = [world.hero("Reinhardt"), world.hero("Zarya")]
+    theirs = compute.team_metrics(world, red_h, m, [])
+    red_lean = theirs["style_lean"] or theirs["style_top"]
+    assert red_lean == "brawl"
+    six = Ns(playstyle="brawl", picks=[], catalog=rules, contributions=terms,
+             red=["Reinhardt", "Zarya"])
+    plan = engine._plan(world, m, "", [], red_h, six)                   # a mirror
+    assert "(Reinhardt, Zarya) lean brawl too: %s." % engine.SAME_LEAN["brawl"] in plan
+    assert engine.THEIR_LEAN["brawl"] not in plan
+    assert "Above all: brawl maps reward durability." in plan
+    six.playstyle = "poke"
+    plan = engine._plan(world, m, "", [], red_h, six)
+    assert "lean brawl: %s." % engine.THEIR_LEAN["brawl"] in plan
+    assert "but against this red the six leans poke" in plan
+    assert "Above all: brawl maps reward durability; poke needs reach." in plan
+    plan = engine._plan(world, m, "", [], [], six)                      # red has revealed nothing
+    assert "this red" not in plan and "but the six leans poke" in plan
+    assert "No red pick yet: the six counters their likely six (Reinhardt, Zarya)." in plan
+    tanks = engine._family(world, m, "brawl", "tank", " reinhardt zarya sigma", ["Zarya"])
+    alone = [h.name for h in world.heroes.values()
+             if h.role == "tank" and h.styles == {"brawl"} and h.released and h.name != "Zarya"]
+    assert "Reinhardt" in tanks and set(alone) <= set(tanks)
+    assert "Zarya" not in tanks and "Sigma" not in tanks             # banned; not tagged brawl
+    rates = [world.hero(n).map_win(m.id) or world.hero(n).win or 0.0 for n in tanks]
+    assert rates == sorted(rates, reverse=True)
+
+
+def test_the_rendered_breakdown_marks_a_need():
+    """A need reads at or below zero by design, so the breakdown says which
+    terms are needs; the flag rides to_dict() on each contribution."""
+    from inference import engine
+    r = engine.Result("evaluate", None, [], [], [], [])
+    r.contributions = [{"id": "a-reward", "applies": True, "weighted": 0.25, "need": False},
+                       {"id": "a-need", "applies": True, "weighted": -0.11, "need": True}]
+    assert "breakdown: a-reward +0.25 · a-need -0.11 (need)" in r.rendered()
+    assert [c["need"] for c in r.to_dict()["contributions"]] == [False, True]
+
+
+def test_a_metric_printed_inside_another_fact_cites_that_fact(world):
+    """team.range_max rides the range_median line and team.cleanse the invuln
+    line; a rule on either cites that fact, not its guard's."""
+    from inference import engine
+    from ui.facts import engine as facts_engine
+    six = ["Reinhardt", "Sigma", "Ashe", "Cassidy", "Ana", "Kiriko"]
+    fs = facts_engine.generate(world, "King's Row", ["Zarya"], six, [], "attack")
+    for metric, line in (("team.range_max", "team.range_median"), ("team.melee", "team.hitscan"),
+                         ("team.cleanse", "team.invuln"), ("team.dps_count", "team.dps_floor"),
+                         ("matchup.exposure_share", "matchup.coverage_share")):
+        fact = engine._cited_fact(fs, [metric, "team.style_top"])
+        assert fact is not None and fact.key == line, metric
+
+
 @pytest.mark.invariant
 def test_an_announced_hero_is_described_but_never_picked(world):
     from inference import engine

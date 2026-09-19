@@ -10,4 +10,4 @@ params:
 ---
 # Counter-pick on this map only
 
-An answer that runs under its own baseline on this map is a swap into a throw pick, so coverage is worth more once no pick of the six is off-map. The community's example is the tank who swaps to Zarya on Numbani, where she is bad, because red has the tank she is said to counter. Coverage share earns up to 0.5 points on a known map once red reveals a pick and no pick of the six runs 2.5 points or more under its own baseline there.
+An answer that runs under its own baseline on this map is a swap into a throw pick, so coverage is worth more once no pick of the six is off-map. The community's example is the tank who swaps to Zarya on Numbani, a map they call bad for her, because red has the D.Va she is said to counter. Coverage share earns up to 0.5 points on a known map once red reveals a pick and no pick of the six runs 2.5 points or more under its own baseline there.

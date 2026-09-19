@@ -9,4 +9,4 @@ params:
 ---
 # Half a comp each way fails
 
-A six with no majority playstyle fights as two half-teams. A brawl tank in front of a poke backline cannot peel what is dove and cannot swing on what is far away, so nobody's kit is used at its range. The penalty lands whenever no style is carried by a strict majority of the picks.
+A six with no majority playstyle fights as two half-teams. A brawl tank in front of a poke backline cannot peel what is dove and cannot swing on what is far away, so nobody's kit is used at its range. 1.5 points are charged once four or more picks are locked and no style is carried by a strict majority of them.

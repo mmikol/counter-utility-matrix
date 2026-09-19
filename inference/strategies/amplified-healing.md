@@ -8,4 +8,4 @@ weight: 0.5
 ---
 # Amplified healing saves more
 
-A kit that multiplies incoming healing raises the whole heal line for a few seconds at a time. Ana's grenade on her own team and Baptiste's matrix double what every other healer is already putting out. Picks that amplify healing are counted.
+A kit that multiplies incoming healing raises the whole heal line for a few seconds at a time. Ana's grenade and Wuyang's Guardian Wave add 50 percent to healing received, and Baptiste's matrix doubles healing dealt through it. Picks that amplify healing are counted.

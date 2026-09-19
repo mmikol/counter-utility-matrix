@@ -65,12 +65,26 @@ keeps it current.
   candidate and is ~41% of a sequential board. A per-world term table
   measured 3x on the function, ~5% on a board. Cost: a day; risk: none to
   the answer if the memo is keyed on the hero and the map.
-- **Kit numbers the wiki publishes unevenly.** Widowmaker's scoped shot
-  is not her burst, Lifeweaver's healing rate came from a tick, Orisa
-  publishes no falloff, Winston's alt fire reads as hitscan, anti-heal
-  is a count of two heroes. `ui/facts/model.py` now keeps ultimates out
-  of burst, healing and reach; the rest needs a per-weapon pass against
-  the game. Cost: two days.
+- **What the scrub left in the data layer.** Reaper's Death Blossom
+  reads 185 (a per-second rate stored flat: `db/data/wiki/measurements.py`
+  RATE_UNITS, then a kit pull); Domina's weapon publishes no rate (dps 0);
+  conditional cooldowns are mis-split for nine abilities; the Blizzard
+  snapshot is stamped with a season seven months old; the counter page's
+  payload carries a 7-9 rating and a reason for 336 of the 450 edges,
+  unscraped. Cost: two days.
+- **Facts no metric reads.** `ability_modifiers` holds speed, damage-taken
+  and healing-received buffs for thirty heroes; nothing in
+  `ui/facts/compute.py` reads `hero.modifiers`. Knockbacks as their own
+  count (Control's edges), damage beams apart from healing beams, area
+  healing apart from area damage. Cost: a day each.
+- **Off-shapes never win.** 2-1-3 and 2-3-1 land within 2-8 percent of the
+  best 2-2-2 and the benchmark endorses three-support holds and
+  three-damage attacks (57-79 percent of the optimal today). The shape
+  rules are scored constraints, which the fit does not touch. Cost: a day
+  to fit their dials to the benchmark's off-shape entries.
+- **One hero on most boards.** D.Mon is in 74 percent of optimal sixes on
+  the strength of the roster's highest win rate (58.2). A win rate on a
+  2.9-8.6 percent pick rate is a specialist's: weigh it by its sample.
 - **Shard the local search by seed.** The countered case's refine is the
   last serial block (~0.12 s). The result set holds; the reported
   `considered` count depends on seed order and would change.
@@ -163,6 +177,12 @@ counters table is a list).
 
 ## Done
 
+- **Facts audited, strategies weighed against them, weights fitted** -
+  `facts-and-weights` branch. Hero numbers rebuilt from the kit rows
+  (keywords, three kit sets, units), 111 synergy pairs, 238 strategies
+  reviewed against the database with 102 fixed, weights fitted to 117
+  community comps (held-out AUC 0.79 -> 0.86), a second scrub of 71
+  findings applied. Never-picked heroes 19 -> 9 of 53.
 - **Every search split across a worker pool** - `scrub` branch. Static
   guards evaluated once per solver, shared guards once per candidate,
   sections as attribute lookups; the reference sample and the enumeration

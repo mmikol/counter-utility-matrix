@@ -80,6 +80,9 @@ def _plain(value):
 
 PLAYBOOK_SCOPE = "playbook"
 PLAYBOOK_DIVIDER = "-- the playbook's record: what it holds - not facts --"
+# the support healing ratio under which the board flags a line: the playbook's
+# HEAL_MARGIN (two-light-healers-lose) and the lifelines-cover-thin-heals guard
+UNDER_HEALED = 0.7
 
 
 class FactSet:
@@ -307,8 +310,9 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
         ("hero.hps", "%s sustains %g healing per second on teammates" % (name, h.hps), h.hps,
          "hp/s")
         if h.hps else None,
-        ("hero.self_heal", "%s heals itself: %g a cast, %g per second"
-         % (name, h.self_heal, h.self_hps), max(h.self_heal, h.self_hps), "hp")
+        ("hero.self_heal", "%s heals itself: %s" % (name, ", ".join(
+            text % n for text, n in (("%g a cast", h.self_heal), ("%g per second", h.self_hps))
+            if n)), {"cast": h.self_heal, "per_second": h.self_hps}, None)
         if (h.self_heal or h.self_hps) else None,
         ("hero.range", "%s's weapon reaches %gm" % (name, h.max_range),
          h.max_range, "m") if h.max_range else None,
@@ -340,7 +344,7 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
         ("hero.deployables", "%s deploys: %s" % (name, ", ".join(h.deployables)),
          h.deployables, None) if h.deployables else None,
         ("hero.ult_damage", "%s's ultimate %s deals up to %g" % (name, h.ult.name, h.ult_damage),
-         h.ult_damage, "hp") if h.dmg_ult and h.ult else None,
+         h.ult_damage, "hp") if h.ult_damage and h.ult else None,
         ("hero.ult_cost", "%s's ultimate costs %g charge" % (name, h.ult_cost),
          h.ult_cost, "points") if h.ult_cost else None,
     ]
@@ -514,6 +518,11 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
         fs.add("team", team, "team." + key, text, value=t[key], unit=unit,
                source="derived:team." + key, team=team)
 
+    def listed(key, unit=None):
+        """A metric worded by its registry line, once compute carries it."""
+        if t.get(key):
+            add(key, "%s %s: %g" % (label, compute.TEAM_METRICS[key], t[key]), unit)
+
     add("size", "%s: %d pick%s locked (%s), %d slot%s open" % (
         label, t["size"], "" if t["size"] == 1 else "s", names, t["open_slots"],
         "" if t["open_slots"] == 1 else "s"))
@@ -549,34 +558,48 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
     if t["overhealth_total"]:
         add("overhealth_total", "%s overhealth: %g granted, outside the healing figures"
             % (label, t["overhealth_total"]), "hp")
-    add("dps_floor", "%s sustained damage floor: %g per second summed across the %d of %d"
-        " kits that publish a rate" % (label, t["dps_floor"], t["dps_count"], t["size"]), "hp/s")
+    add("dps_floor", "%s sustained damage: %g per second, held weapons summed, %d of %d"
+        " picks with a figure" % (label, t["dps_floor"], t["dps_count"], t["size"]), "hp/s")
     if t["burst_max"]:
         add("burst_max", "%s burst ceiling: %s's %g in one hit"
             % (label, t["burst_hero"], t["burst_max"]), "hp")
+    listed("burst_ranged", "hp")
+    if t["one_shots"]:
+        add("one_shots", "%s one-shots: %d pick(s) whose biggest hit, not a melee swing,"
+            " kills a %d pool" % (label, t["one_shots"], SQUISHY_POOL))
     add("dmg_ults", "%s damage-ult census: %d of %d ultimates carry damage, %g summed"
         % (label, t["dmg_ults"], t["size"], t["ult_damage_total"]))
     if t["ult_cost_mean"]:
         add("ult_cost_mean", "%s mean ultimate cost: %.0f charge" % (label, t["ult_cost_mean"]))
     add("hitscan", "%s damage identity: %d hitscan, %d projectile, %d beam, %d melee"
         % (label, t["hitscan"], t["projectile"], t["beam"], t["melee"]))
+    listed("hitscan_reach")
     if t["aoe_count"]:
         add("aoe_count", "%s area-damage volume: %d kit pieces tagged area of effect"
             % (label, t["aoe_count"]))
     if t["range_median"]:
-        add("range_median", "%s range profile: median longest reach %gm (from %gm to %gm)"
-            " - reads as %s" % (label, t["range_median"], t["range_min"], t["range_max"],
-                                "poke" if t["range_median"] >= 20 else "brawl"), "m")
+        add("range_median", "%s reach: median %gm across the %d of %d picks whose weapons"
+            " publish one (%gm to %gm) - reads as %s"
+            % (label, t["range_median"], sum(1 for h in heroes if h.max_range), t["size"],
+               t["range_min"], t["range_max"],
+               "poke" if t["range_median"] >= 20 else "brawl"), "m")
     if t["dmg_amp"]:
         add("dmg_amp", "%s damage amplification: %d pick(s) boost someone's damage"
             % (label, t["dmg_amp"]))
-    add("hps_floor", "%s healing floor: %g per second summed across published rates"
+    add("hps_floor", "%s healing onto teammates: %g per second summed across the picks"
         % (label, t["hps_floor"]), "hp/s")
     if t["supports"]:
-        add("heal_peak_supports", "%s healing supply: %g peak single heal across the"
-            " supports vs the roster's ~%.0f two-support bench (ratio %.2f)%s"
-            % (label, t["heal_peak_supports"], world.heal_bench, t["heal_ratio"],
-               " - UNDER-HEALED" if t["supports"] >= 2 and t["heal_ratio"] < 0.75 else ""))
+        add("hps_supports", "%s healing supply: %g per second sustained across the supports vs"
+            " the roster's ~%.0f two-support bench (ratio %.2f)%s"
+            % (label, t["hps_supports"], world.hps_bench, t["hps_ratio"],
+               " - UNDER-HEALED" if t["supports"] >= 2 and t["hps_ratio"] < UNDER_HEALED else ""),
+            "hp/s")
+        add("heal_peak_supports", "%s biggest single heals: %g summed across the supports vs"
+            " the roster's ~%.0f two-support bench (ratio %.2f)"
+            % (label, t["heal_peak_supports"], world.heal_bench, t["heal_ratio"]), "hp")
+    if t["heal_peak_total"]:
+        add("heal_peak_total", "%s single heals: %g summed, one cast per pick, self-heals"
+            " included" % (label, t["heal_peak_total"]), "hp")
     add("lifelines", "%s lifelines: %d of %d picks carry any healing"
         % (label, t["lifelines"], t["size"]))
     if t["heal_amp"]:
@@ -586,6 +609,8 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
     if t["cleanse"] or t["invuln"]:
         add("invuln", "%s defensive answers: %d invulnerability, %d cleanse"
             % (label, t["invuln"], t["cleanse"]))
+    listed("team_cleanse")
+    listed("team_saves")
     if t["cooldown_count"]:
         add("cooldown_median", "%s cooldown tempo: median %gs across %d cooldowns - %s"
             % (label, t["cooldown_median"], t["cooldown_count"],

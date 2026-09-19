@@ -21,8 +21,8 @@
                A heuristic guarded on the six's own state is a need: see score().
     rank       sorted by score, then tie-break, then names - a total order, so
                the answer does not depend on how the sweep was split
-    refine     local search from the best few: swap any slot for any
-               same-role hero on the roster, keep improvements
+    refine     local search from the best six sixes and the best of every shape:
+               swap any slot for any same-role hero on the roster, keep improvements
 """
 
 import itertools
@@ -90,7 +90,7 @@ class Solver:
         self.scored_constraints = [h for h in catalog if h.form == "scored"]
         # the red side's metrics do not change across candidates
         self.red_t = compute.team_metrics(world, self.red, m, ())
-        self.static = {"enemy": self.red_t, "map": compute.map_metrics(m, side),
+        self.static = {"enemy": self.red_t, "map": compute.map_metrics(m, side, len(self.banned)),
                        "world": compute.world_metrics(world)}
         self.bounds = {}                     # heuristic id -> (min, max)
         self.considered = 0

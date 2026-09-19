@@ -98,6 +98,13 @@ def test_facts_endpoint_returns_the_board(db):
     assert code == 200 and data["count"] > 300
     keys = {f["key"] for f in data["facts"]}
     assert "team.coverage" in keys and "matchup.net_edges" in keys
+    # UNDER-HEALED reads the supports' sustained healing, as the strategies do, not one cast
+    data, code = board.api_facts(db, {"blue": ["Mercy", "Brigitte"], "red": ["Ana", "Moira"]})
+    text = {(f["team"], f["key"]): f["text"] for f in data["facts"]}
+    assert text["blue", "team.hps_supports"].endswith(" - UNDER-HEALED")
+    assert "UNDER-HEALED" not in text["red", "team.hps_supports"]
+    assert not any("UNDER-HEALED" in text[side, "team.heal_peak_supports"]
+                   for side in ("blue", "red"))
     data, code = board.api_facts(db, {"red": ["Saitama"]})
     assert code == 400 and "Saitama" in data["error"]
     db.rollback()
@@ -123,6 +130,11 @@ def test_strategies_endpoint():
     assert len(data["strategies"]) == len(catalog.load()) and data["strategies"]
     assert data["playbook"] == catalog.playbook_name()
     assert json.dumps(data)
+    # a need is served with its guard, and the tool's listing marks it
+    needs = [h for h in data["strategies"] if h.get("need")]
+    assert needs and all(h["when"] for h in needs)
+    listing = catalog.render(catalog.load()).splitlines()
+    assert sum(line.endswith(" need") for line in listing) == len(needs)
 
 
 def test_bans_ride_the_query_string(db):
@@ -211,12 +223,15 @@ def test_the_page_is_a_shell_over_static_files():
     # a heuristic's weight is a slider under its card; the setting rides with each request
     assert "function weightRow" in script and "type='range' min='0' max='10' step='0.01'" in script
     assert "type='number' class='wval' min='0' max='10' step='0.01'" in script
+    assert "Math.min(10, Math.max(0, x))" in script              # the clamp reaches 0 too
     assert "q.push('weight=' + " in script and "st.weights" in script
     assert "function setWeight" in script
     assert "h.form === 'heuristic' ? weightRow(h)" in script     # only heuristics have weights
     assert "function storeWeight" in script and "fetch('/api/weight', { method: 'POST'" in script
     # the card is its kind, its name, its metric line and, for a heuristic, the weight row
     assert "(h.form === 'heuristic' ? weightRow(h) : '') + '</div>'" in script
+    # a heuristic's card says when it is a need and shows its guard
+    assert "(h.need ? ' · need' : '') + (h.when ? ' · when ' + h.when : '')" in script
     # the playbook is grouped by kind, in the equation's order, each group headed by its count alone
     kinds = script[script.index("var KINDS = ["):script.index("function renderPlaybook")]
     assert kinds.index("'constraint'") < kinds.index("'heuristic'") < kinds.index("'assumption'")
@@ -308,6 +323,9 @@ def test_storing_a_weight_is_a_tune_call_over_the_door(monkeypatch):
                 {"id": "healing-floor", "weight": 11}, {}, None):
         assert board.api_weight(bad)[1] == 400
     assert len(calls) == 2                                   # the refusals never knocked
+    for low in (0, 0.25):                                    # under 1 is a weight, 0 switches off
+        assert board.api_weight({"id": "healing-floor", "weight": low})[1] == 200
+        assert calls[-1][1]["value"] == low
 
 
 def test_storing_a_weight_locally_runs_the_tune_tool_in_process(db, dsn, tmp_path, monkeypatch):

@@ -32,7 +32,7 @@ function storeWeight(id, value, button) {
     })
     .catch(function (e) { flash('not stored: ' + e); button.disabled = false; button.textContent = 'store'; });
 }
-function clampWeight(x) { x = Math.round(+x * 100) / 100; return isNaN(x) ? null : Math.min(10, Math.max(1, x)); }
+function clampWeight(x) { x = Math.round(+x * 100) / 100; return isNaN(x) ? null : Math.min(10, Math.max(0, x)); }
 function setWeight(id, value, inferred) {
   if (!st.weights) st.weights = {};
   if (value === null || value === inferred) delete st.weights[id]; else st.weights[id] = value;
@@ -71,7 +71,7 @@ function renderPlaybook(d) {
     store.onclick = function () { storeWeight(id, clampWeight(val.value), store); };
   });
   function card(h) {
-    var meta = h.form === 'heuristic' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight + (h.need ? ' · need' : '')
+    var meta = h.form === 'heuristic' ? h.direction + ' ' + h.metric + ' · weight ' + h.weight + (h.need ? ' · need' : '') + (h.when ? ' · when ' + h.when : '')
              : h.form === 'limit' ? 'require ' + h.require + (h.soft ? ' · soft, penalty ' + h.penalty : ' · hard') + (h.when ? ' · when ' + h.when : '')
              : h.form === 'scored' ? [h.when ? 'when ' + h.when : '', h.bonus ? 'bonus ' + h.bonus : '', h.penalty ? 'penalty ' + h.penalty : ''].filter(Boolean).join(' · ') + ' · weight ' + h.weight
              : h.form === 'draft' ? 'draft - name, kind and prose only; not scored'

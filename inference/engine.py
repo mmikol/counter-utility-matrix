@@ -166,7 +166,8 @@ class Result:
         for p in self.picks:
             lines.append("  %-8s %-14s %s" % (p["role"], p["hero"] + ("*" if p["locked"] else ""),
                                             p["why"]))
-        parts = ["%s %+.2f" % (c["id"], c["weighted"]) for c in self.contributions
+        parts = ["%s %+.2f%s" % (c["id"], c["weighted"], " (need)" if c.get("need") else "")
+                 for c in self.contributions
                  if c.get("applies") and abs(c["weighted"]) >= 0.005]
         lines.append("  breakdown: " + " · ".join(parts))
         for i, alt in enumerate(self.alternatives, start=1):
@@ -253,6 +254,17 @@ FACT_ALIASES = {
     "team.damage": "team.tanks", "team.supports": "team.tanks",
     "team.barrier_count": "team.barrier_hp", "team.style_lean": "team.style_top",
     "matchup.ult_answers": "matchup.ult_threat",
+    "team.range_max": "team.range_median", "team.range_min": "team.range_median",
+    "team.melee": "team.hitscan", "team.projectile": "team.hitscan", "team.beam": "team.hitscan",
+    "team.armor_total": "team.armor_share", "team.shield_total": "team.shield_share",
+    "team.cleanse": "team.invuln", "team.team_cleanse": "team.invuln",
+    "team.team_saves": "team.invuln", "team.map_offmap": "team.map_specialists",
+    "team.safe_count": "team.exposed_count", "team.dps_count": "team.dps_floor",
+    "team.cooldown_count": "team.cooldown_median", "team.burst_ranged": "team.burst_max",
+    "team.hps_ratio": "team.hps_supports", "team.heal_peak_total": "team.lifelines",
+    "team.heal_peak_max": "matchup.heal_vs_burst",
+    "matchup.exposure_share": "matchup.coverage_share",
+    "matchup.double_covered": "team.double_covered",
 }
 
 
@@ -475,6 +487,12 @@ STYLE_PLAY = {
     "poke": "take the long sightlines, chip from range with healers who reach, and make them"
             " walk into damage",
 }
+SAME_LEAN = {
+    "dive": "both sides dive - peel for your backline first, then commit on theirs",
+    "brawl": "both sides fight at close range - the side that sustains longer and trades"
+             " ultimates better wins the ground",
+    "poke": "both sides chip from range - take the sightlines first and win the range trade",
+}
 THEIR_LEAN = {
     "dive": "expect them to commit on one of your backline - stay together, peel, and punish"
             " the divers as they land",
@@ -518,12 +536,28 @@ def _hero_names(world, text):
     return out
 
 
+def _family(world, m, style, role, roster, bans):
+    """A style's heroes in one role: the authored note's that carry the style
+    tag, plus any hero tagged with that style alone that the note misses;
+    released and unbanned, best win rate here first."""
+    noted = [world.hero(name) for name in _hero_names(world, roster)]
+    heroes = {h.name: h for h in noted if style in h.styles}
+    heroes.update((h.name, h) for h in world.heroes.values()
+                  if h.role == role and h.styles == {style})
+    out = {h.name for h in map(world.hero, bans) if h is not None}
+
+    def rate(h):
+        return (h.map_win(m.id) if m is not None else None) or h.win or 0.0
+    return [h.name for h in sorted(heroes.values(), key=lambda h: (-rate(h), h.name))
+            if h.released and h.name not in out]
+
+
 def _plan(world, m, side, bans, red_h, blue_r):
     """The game plan in prose - the ground, what to play on it, what red's
-    picks mean, the family of heroes to stay in when you stray from the
-    six, and what the six is built for - from the same facts and
-    strategies the solver scored, so that picks can be tailored toward
-    the optimal without matching it. Ends with what it rests on."""
+    picks mean (their likely six until one is revealed), the family of heroes
+    to stay in when you stray from the six, and what the six is built for -
+    from the same facts and strategies the solver scored, so that picks can be
+    tailored toward the optimal without matching it. Ends with what it rests on."""
     lines = []
     # the ground
     if m is None:
@@ -543,8 +577,9 @@ def _plan(world, m, side, bans, red_h, blue_r):
     if map_style and lean == map_style:
         read.append("The map rewards %s and the six leans into it: %s." % (lean, STYLE_PLAY[lean]))
     elif map_style and lean:
-        read.append("The map rewards %s, but against this red the six leans %s: %s."
-                    % (map_style, lean, STYLE_PLAY.get(lean, "play to its picks")))
+        read.append("The map rewards %s, but %sthe six leans %s: %s."
+                    % (map_style, "against this red " if red_h else "", lean,
+                       STYLE_PLAY.get(lean, "play to its picks")))
     elif lean:
         read.append("The six leans %s: %s." % (lean, STYLE_PLAY.get(lean, "play to its picks")))
     elif map_style:
@@ -558,8 +593,13 @@ def _plan(world, m, side, bans, red_h, blue_r):
         them = "Their %d pick%s%s (%s)" % (n, "" if n == 1 else "s",
                                             " so far" if n < TEAM_SIZE else "",
                                             ", ".join(h.name for h in red_h))
-        them += (" lean%s %s: %s." % ("s" if n == 1 else "", red_lean, THEIR_LEAN[red_lean])) \
-            if red_lean in THEIR_LEAN else " show%s no lean yet." % ("s" if n == 1 else "")
+        s = "s" if n == 1 else ""
+        if red_lean in THEIR_LEAN and red_lean == lean:
+            them += " lean%s %s too: %s." % (s, red_lean, SAME_LEAN[red_lean])
+        elif red_lean in THEIR_LEAN:
+            them += " lean%s %s: %s." % (s, red_lean, THEIR_LEAN[red_lean])
+        else:
+            them += " show%s no lean yet." % s
         answered = {}
         for p in blue_r.picks:
             for part in p["why"].split("; "):
@@ -578,6 +618,9 @@ def _plan(world, m, side, bans, red_h, blue_r):
             them += " Nobody in the six answers %s - respect %s." % (
                 _and(missing), "them" if len(missing) > 1 else "that pick")
         lines.append(them)
+    elif blue_r.red:
+        lines.append("No red pick yet: the six counters their likely six (%s)."
+                     % ", ".join(blue_r.red))
     # the family to stay in
     family = world.archetypes.get(lean) if lean else None
     if family:
@@ -587,15 +630,22 @@ def _plan(world, m, side, bans, red_h, blue_r):
             if not note:
                 continue
             desc, _, roster = note.partition(":")
-            names = _hero_names(world, roster) if roster else []
+            names = _family(world, m, lean, role, roster, bans)
             parts.append("%s: %s%s." % (plural.capitalize(), desc.strip(),
                                           " (%s)" % ", ".join(names) if names else ""))
         if parts:
             lines.append("If you stray from the six, stay in its family. " + " ".join(parts))
     # what it is built for
     names = {h.id: h.name for h in blue_r.catalog}
+    # not the shape every legal six pays, nor a rule named for another style
+    # ("Dive the pocket" on a poke six); a rule on the map's style is about the map
+    skip = {h.id for h in blue_r.catalog
+            if (h.kind == "constraint" and h.category == "shape")
+            or (h.name.split()[0].lower() in STYLE_PLAY and h.name.split()[0].lower() != lean
+                and not (h.when and "map.style_top" in h.when.names))}
     top = sorted((c for c in blue_r.contributions
-                  if c.get("applies") and c.get("weighted", 0) > 0.05),
+                  if c.get("applies") and c.get("weighted", 0) > 0.05
+                  and c["id"] not in skip),
                  key=lambda c: -c["weighted"])[:4]
     if top:
         lines.append("Above all: "

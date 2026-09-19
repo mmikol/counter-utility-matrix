@@ -4,7 +4,7 @@ kind: heuristic
 category: map
 metric: team.hitscan
 direction: maximize
-weight: 0.5
+weight: 0.75
 when: map.style_top == 'poke'
 ---
 

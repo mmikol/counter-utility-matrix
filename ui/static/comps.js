@@ -4,12 +4,12 @@
    lit when it applied to this comp, greyed when it did not (its guard unmet,
    or nothing to read); headed by the count satisfied */
 function bars(contribs) {
-  var mx = 0.01, met = contribs.filter(function (c) { return c.applies !== false && c.ok !== false; }).length;
+  var mx = 0.01, met = contribs.filter(function (c) { return c.applies !== false && c.ok !== false && !(c.need && (c.weighted || 0) < -1e-9); }).length;
   contribs.forEach(function (c) { mx = Math.max(mx, Math.abs(c.weighted || 0)); });
   var out = "<h4 class='barshead'>strategies satisfied <span class='n'>" + met + ' of ' + contribs.length + "</span></h4><div class='bars'>";
   contribs.forEach(function (c) {
     var w = Math.abs(c.weighted || 0) / mx * 100;
-    var detail = c.form === 'heuristic' ? (c.applies ? c.metric + ' = ' + (typeof c.raw === 'number' ? +c.raw.toFixed(2) : c.raw) + ' · norm ' + (+c.norm).toFixed(2) : 'not applicable here')
+    var detail = c.form === 'heuristic' ? (c.applies ? c.metric + ' = ' + (typeof c.raw === 'number' ? +c.raw.toFixed(2) : c.raw) + ' · norm ' + (+c.norm).toFixed(2) + (c.need ? ' · need: costs what it misses' : '') : 'not applicable here')
                : c.form === 'scored' ? (c.applies ? 'bonus ' + c.bonus + ' − penalty ' + c.penalty : 'condition not met')
                : (c.ok ? 'limit satisfied' : 'limit VIOLATED');
     out += "<div class='bar" + ((c.weighted || 0) < 0 ? ' neg' : '') + (c.applies === false ? ' off' : '') + "' title=\"" + esc(detail + (c.text ? ' - ' + c.text : '')) + "\"><span class='lbl'>" + esc(c.id) + (c.fact ? " <span class='ev'>" + c.fact + '</span>' : '') + "</span><span class='trk'><span class='fill' style='width:" + w.toFixed(1) + "%'></span></span><span class='val'>" + ((c.weighted || 0) >= 0 ? '+' : '') + (+(c.weighted || 0)).toFixed(2) + '</span></div>';

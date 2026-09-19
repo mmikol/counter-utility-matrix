@@ -4,7 +4,7 @@ kind: heuristic
 category: matchup
 metric: team.exposure_edges
 direction: minimize
-weight: 0.5
+weight: 0.75
 when: enemy.size >= 1
 ---
 # Answered answers are no answers

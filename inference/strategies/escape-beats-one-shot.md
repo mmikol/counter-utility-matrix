@@ -4,7 +4,7 @@ kind: heuristic
 category: durability
 metric: team.invuln
 direction: maximize
-weight: 0.75
+weight: 1
 when: enemy.burst_max >= 250
 ---
 # An escape beats the one-shot
