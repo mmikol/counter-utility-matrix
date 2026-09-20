@@ -5,6 +5,10 @@ against two public websites. What is worth protecting: your account,
 your operating system, and the playbook and database the board trusts at
 game time.
 
+The board is also published - see [deploy.md](deploy.md). That adds one
+threat and one defence, both below; everything else on this page is
+unchanged, because the tunnel names the board's port and no other.
+
 ## The threat model
 
 | threat | how it would arrive |
@@ -15,6 +19,7 @@ game time.
 | **files** | tools that write into the playbook: a path that escapes the folder, a file the catalog would refuse, an oversized body |
 | **the containers** | a compromised process inside one reaching the internet, escalating, or filling the host |
 | **your account** | the CLI signed in on the host, driven headless with tools |
+| **the published board** | the board answers on the internet over a Cloudflare Tunnel: a stranger reaching it, or reaching past it to a port the tunnel was never meant to carry |
 
 ## What stands in the way
 
@@ -52,6 +57,19 @@ compose stack, in-process through the same tool registry on the local
 cluster - so the change is validated against the catalog, logged with its
 reason and mirrored like any other. The board never opens a playbook
 file, and its container mounts the playbook read-only.
+
+**The perimeter is Access, and it names one port.** The published board
+sits behind Cloudflare Access: an unauthenticated request is answered
+at the edge with a redirect to a login and never reaches the tunnel, so
+no page, no fact and no strategy leaves the machine unasked. The policy
+is an allowlist of email addresses verified by a one-time PIN. The
+tunnel's ingress carries `countrix.app` and `www.countrix.app` to
+`localhost:8017` and answers everything else with a 404, so PostgreSQL,
+the inference service and - the one that matters - the MCP server with
+its writing tools are not published at all. The board is read-only
+there (`COUNTER_MATRIX_READ_ONLY`), so the one write it could offer is
+not on the internet either. The board itself still has no
+authentication of its own; Access is what stands in the way.
 
 **The door checks who is knocking.** The HTTP server binds to 127.0.0.1,
 refuses browser origins that are not local (DNS-rebinding guard), caps a

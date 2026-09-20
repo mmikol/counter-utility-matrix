@@ -36,7 +36,9 @@ pace.
 | the MCP server | http://localhost:8020/mcp |
 | PostgreSQL | localhost:5433 (`./docker-db <command>` points a host command at it) |
 
-Every port binds to 127.0.0.1. Without the `claude` CLI signed in, the
+Every port binds to 127.0.0.1 - a published board reaches the internet
+through a tunnel to one of them, never a binding of its own; see
+[docs/deploy.md](docs/deploy.md). Without the `claude` CLI signed in, the
 run still brings the stack up and says what it skipped. The other verbs:
 
 ```bash
@@ -79,3 +81,4 @@ portraits remain their owners'.
 - [docs/skills.md](docs/skills.md) - the skills a Claude Code session runs here
 - [docs/mcp.md](docs/mcp.md) - the two MCP servers and every tool they expose
 - [docs/security.md](docs/security.md) - the threat model and what stands in the way
+- [docs/deploy.md](docs/deploy.md) - the DEPLOYMENT: the tunnel, the door, the containers it runs
