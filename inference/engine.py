@@ -263,8 +263,8 @@ FACT_ALIASES = {
     "team.cooldown_count": "team.cooldown_median", "team.burst_ranged": "team.burst_max",
     "team.hps_ratio": "team.hps_supports", "team.heal_peak_total": "team.lifelines",
     "team.heal_peak_max": "matchup.heal_vs_burst",
+    # a fact key, not a metric: the matchup coverage fact states both shares
     "matchup.exposure_share": "matchup.coverage_share",
-    "matchup.double_covered": "team.double_covered",
 }
 
 

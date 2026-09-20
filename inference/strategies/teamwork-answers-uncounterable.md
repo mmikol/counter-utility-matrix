@@ -5,7 +5,7 @@ category: synergy
 metric: team.synergy_score
 direction: maximize
 weight: 0.25
-when: enemy.size >= 1 and matchup.coverage_share < 0.5
+when: enemy.size >= 1 and team.coverage_share < 0.5
 ---
 
 # Teamwork answers the uncounterable

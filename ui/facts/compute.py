@@ -155,10 +155,7 @@ MATCHUP_METRICS = OrderedDict([
     ("chew_time_theirs", "seconds of red's floor damage to chew blue's pool"),
     ("tempo_diff", "red median cooldown minus blue's (positive: blue cycles faster)"),
     ("range_diff", "blue median reach minus red's"),
-    ("net_edges", "blue answer edges minus blue exposure edges"),
-    ("coverage_share", "share of red answered by blue"),
     ("exposure_share", "share of blue answered by red"),
-    ("double_covered", "red picks answered twice over"),
     ("dive_pressure", "red picks with a movement tool"),
     ("flyers", "red picks that fly, tanks aside"),
     ("barrier_need", "barrier health red fields"),
@@ -166,7 +163,6 @@ MATCHUP_METRICS = OrderedDict([
     ("ult_threat", "red's summed damage-ultimate ceiling"),
     ("ult_answers", "blue invulnerabilities plus cleanses"),
     ("style_lean_red", "red's majority playstyle, else none"),
-    ("style_lean_blue", "blue's majority playstyle, else none"),
 ])
 
 MAP_METRICS = OrderedDict([
@@ -495,7 +491,13 @@ RED_MATCHUP = frozenset("matchup." + key for key in (
 
 
 def matchup_metrics(blue_t, red_t):
-    """MATCHUP_METRICS from blue's seat, given both teams' metrics."""
+    """MATCHUP_METRICS from blue's seat, given both teams' metrics.
+
+    Only what reading both sides produces. A blue number that is already a
+    team metric is not restated here under a second name: two strategies
+    reading the same number through two keys weigh one signal twice, and the
+    catalog cannot see that they do. Read team.* for blue's own.
+    """
     x = {}
     x["pool_diff"] = blue_t["pool_total"] - red_t["pool_total"]
     x["dps_diff"] = blue_t["dps_floor"] - red_t["dps_floor"]
@@ -508,14 +510,10 @@ def matchup_metrics(blue_t, red_t):
                              if red_t["dps_floor"] and blue_t["pool_total"] else 999.0)
     x["tempo_diff"] = red_t["cooldown_median"] - blue_t["cooldown_median"]
     x["range_diff"] = blue_t["range_median"] - red_t["range_median"]
-    x["net_edges"] = blue_t["net_edges"]
-    x["coverage_share"] = blue_t["coverage_share"]
     x["exposure_share"] = (blue_t["exposed_count"] / blue_t["size"]
                            if blue_t["size"] else 0.0)
-    x["double_covered"] = blue_t["double_covered"]
     x.update(red_matchup(red_t))
     x["ult_answers"] = blue_t["invuln"] + blue_t["cleanse"]
-    x["style_lean_blue"] = blue_t["style_lean"]
     return x
 
 
@@ -583,7 +581,7 @@ TEXT_METRICS = {
     "team.style_lean", "team.weakest", "team.squishies", "team.burst_hero",
     "team.cc_tools", "team.mobility_tools", "team.isolated", "team.pairs",
     "team.max_ban_hero", "team.unanswered", "team.exposed",
-    "matchup.style_lean_red", "matchup.style_lean_blue",
+    "matchup.style_lean_red",
     "map.style_top", "map.mode", "map.side",
 }
 TEXT_METRICS |= {n.replace("team.", "enemy.", 1) for n in TEXT_METRICS if n.startswith("team.")}

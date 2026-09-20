@@ -189,7 +189,7 @@ A barrier is the one kind of sustain that stops a hit before it lands, so agains
 
 ##### Counter-pick on this map only (`answers-that-fit-map`, map, scored)
 
-weight 1; when `map.known == 1 and enemy.size >= 1 and team.map_offmap == 0`; bonus `matchup.coverage_share * params.FIT_ANSWERS`
+weight 1; when `map.known == 1 and enemy.size >= 1 and team.map_offmap == 0`; bonus `team.coverage_share * params.FIT_ANSWERS`
 params: FIT_ANSWERS=0.5
 
 An answer that runs under its own baseline on this map is a swap into a throw pick, so coverage is worth more once no pick of the six is off-map. The community's example is the tank who swaps to Zarya on Numbani, a map they call bad for her, because red has the D.Va she is said to counter. Coverage share earns up to 0.5 points on a known map once red reveals a pick and no pick of the six runs 2.5 points or more under its own baseline there.
@@ -455,7 +455,7 @@ Two supports who both heal lightly cannot hold anyone alive under fire. Lúcio, 
 
 ##### Synergy that also answers (`synergy-that-answers`, synergy, scored)
 
-weight 1; when `enemy.size >= 3 and matchup.coverage_share >= 0.66`; bonus `min(team.synergy_edges, params.PAIR_CAP) * 0.25`
+weight 1; when `enemy.size >= 3 and team.coverage_share >= 0.66`; bonus `min(team.synergy_edges, params.PAIR_CAP) * 0.25`
 params: PAIR_CAP=4
 
 A documented pair earns its place when the six around it also answers red. A tournament's Sigma comp existed to shut down one tank's dive comps and fell off hard once red stopped fielding that tank. Each authored pair earns a quarter point, up to four pairs, while at least two thirds of three or more revealed red picks are answered.
@@ -873,7 +873,7 @@ When red's supports heal below the roster's bench, their tanks are outdamaged be
 
 ##### Answer more than they answer (`answer-more-than-exposed`, matchup)
 
-`maximize matchup.net_edges` - blue answer edges minus blue exposure edges. weight 0.75
+`maximize team.net_edges` - answer edges minus exposure edges. weight 0.75
 
 A comp comes out ahead when its counter edges onto red outnumber red's edges onto it. Each edge is a duel one side opens with a kit advantage, so three edges out against two in is still a winning ledger. Measured as blue's answer edges minus blue's exposure edges from the counters table, 0 until red reveals a pick.
 
@@ -1053,7 +1053,7 @@ A red whose longest gun stops at 40 metres has to walk into our fire to deal any
 
 ##### Last pick answers what is shown (`last-pick-answers-all`, matchup)
 
-`maximize matchup.coverage_share` - share of red answered by blue. weight 0.5; when `enemy.size >= 5`
+`maximize team.coverage_share` - coverage / enemies revealed. weight 0.5; when `enemy.size >= 5`
 
 With five or six red picks revealed, the last pick in is the counter pick and the six should answer as much of the enemy board as it can. A pick made into a fully revealed six loses nothing to a later swap, so the counters table is read in full. Measured as the share of revealed red picks that at least one of ours answers, while five or more are revealed.
 
@@ -1137,7 +1137,7 @@ Once red has shown its hand, a hero that wins on the ladder still wins through a
 
 ##### Answer their key picks twice (`two-answers-each`, matchup)
 
-`maximize matchup.double_covered` - red picks answered twice over. weight 0.75
+`maximize team.double_covered` - enemies answered by two or more picks. weight 0.75
 
 An enemy answered by two of our picks stays answered when one answerer is banned, dies first or is busy elsewhere, and a tank like Mauga is never solved by a single counter pick. A whole team counter-picks, not one player. Measured as the count of revealed enemies answered by two or more of our picks, 0 with none revealed.
 
@@ -1521,7 +1521,7 @@ Against a red with four or more picks that carry a movement tool, the six surviv
 
 ##### Teamwork answers the uncounterable (`teamwork-answers-uncounterable`, synergy)
 
-`maximize team.synergy_score` - summed synergy scores among the picks. weight 0.25, a need; when `enemy.size >= 1 and matchup.coverage_share < 0.5`
+`maximize team.synergy_score` - summed synergy scores among the picks. weight 0.25, a need; when `enemy.size >= 1 and team.coverage_share < 0.5`
 
 When a red pick has no answer on our six, documented partners are what shuts it down. A tank with no hard counter needs teamwork with the damage heroes, and three threats at once take more than one answerer. Measured as the summed scores of authored synergy pairs among our picks, while under half of the revealed red picks are answered.
 
@@ -1782,10 +1782,7 @@ the `team.*` metrics computed for the red side.
 | `matchup.chew_time_theirs` | seconds of red's floor damage to chew blue's pool |
 | `matchup.tempo_diff` | red median cooldown minus blue's (positive: blue cycles faster) |
 | `matchup.range_diff` | blue median reach minus red's |
-| `matchup.net_edges` | blue answer edges minus blue exposure edges |
-| `matchup.coverage_share` | share of red answered by blue |
 | `matchup.exposure_share` | share of blue answered by red |
-| `matchup.double_covered` | red picks answered twice over |
 | `matchup.dive_pressure` | red picks with a movement tool |
 | `matchup.flyers` | red picks that fly, tanks aside |
 | `matchup.barrier_need` | barrier health red fields |
@@ -1793,7 +1790,6 @@ the `team.*` metrics computed for the red side.
 | `matchup.ult_threat` | red's summed damage-ultimate ceiling |
 | `matchup.ult_answers` | blue invulnerabilities plus cleanses |
 | `matchup.style_lean_red` (text) | red's majority playstyle, else none |
-| `matchup.style_lean_blue` (text) | blue's majority playstyle, else none |
 | `map.known` | 1 if a map is set |
 | `map.sided` | 1 if the mode has an attacking and a defending side (Escort, Hybrid) |
 | `map.side` (text) | this seat's side on a sided map: attack, defense, or empty |

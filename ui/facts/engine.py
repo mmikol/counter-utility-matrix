@@ -745,8 +745,11 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
 def _matchup_facts(fs, blue_t, red_t):
     x = compute.matchup_metrics(blue_t, red_t)
 
-    def add(key, text, unit=None):
-        fs.add("matchup", "blue vs red", "matchup." + key, text, value=x[key],
+    def add(key, text, unit=None, value=None):
+        # a few board facts read blue's own metric: matchup carries only what
+        # reading both sides produces, so those pass their value in
+        fs.add("matchup", "blue vs red", "matchup." + key, text,
+               value=x[key] if value is None else value,
                unit=unit, source="derived:matchup." + key)
 
     add("pool_diff", "pool differential: blue's %d picks carry %d hp vs red's %d picks' %d"
@@ -778,13 +781,15 @@ def _matchup_facts(fs, blue_t, red_t):
         blue_t["range_median"], red_t["range_median"],
         "blue outranges; open fights at distance" if x["range_diff"] > 0 else
         "red outranges; close fast or trade cover" if x["range_diff"] < 0 else "even reach"), "m")
+    net = blue_t["net_edges"]
     add("net_edges", "board net matchup: %d blue answer-edges into red vs %d red into blue"
-        " (%+d) - %s" % (blue_t["answer_edges"], blue_t["exposure_edges"], x["net_edges"],
-                         "the draft is ahead" if x["net_edges"] > 0 else
+        " (%+d) - %s" % (blue_t["answer_edges"], blue_t["exposure_edges"], net,
+                         "the draft is ahead" if net > 0 else
                          "the draft is behind; the open slots must swing it"
-                         if x["net_edges"] < 0 else "dead even"))
+                         if net < 0 else "dead even"), value=net)
     add("coverage_share", "coverage: blue answers %.0f%% of red; red answers %.0f%% of blue"
-        % (100 * x["coverage_share"], 100 * x["exposure_share"]))
+        % (100 * blue_t["coverage_share"], 100 * x["exposure_share"]),
+        value=blue_t["coverage_share"])
     if x["dive_pressure"]:
         add("dive_pressure", "dive pressure: %d red pick(s) carry engage tools - blue peel"
             " (%d crowd-control pick(s)) must hold" % (x["dive_pressure"], blue_t["cc_count"]))
@@ -800,9 +805,10 @@ def _matchup_facts(fs, blue_t, red_t):
     if x["ult_threat"]:
         add("ult_threat", "ult threat: red's damage ultimates total %g vs %d blue"
             " invulnerability/cleanse answer(s)" % (x["ult_threat"], x["ult_answers"]), "hp")
-    if x["style_lean_red"] or x["style_lean_blue"]:
+    if x["style_lean_red"] or blue_t["style_lean"]:
         add("style_lean_red", "style war: red leans %s, blue leans %s" % (
-            x["style_lean_red"] or "nothing yet", x["style_lean_blue"] or "nothing yet"))
+            x["style_lean_red"] or "nothing yet", blue_t["style_lean"] or "nothing yet"),
+            value=x["style_lean_red"])
 
 
 def _playbook_record(fs, world):

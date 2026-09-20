@@ -2,7 +2,7 @@
 name: Answer their key picks twice
 kind: heuristic
 category: matchup
-metric: matchup.double_covered
+metric: team.double_covered
 direction: maximize
 weight: 0.75
 ---

@@ -2,7 +2,7 @@
 name: Last pick answers what is shown
 kind: heuristic
 category: matchup
-metric: matchup.coverage_share
+metric: team.coverage_share
 direction: maximize
 weight: 0.5
 when: enemy.size >= 5

@@ -4,7 +4,7 @@ kind: constraint
 category: map
 weight: 1
 when: map.known == 1 and enemy.size >= 1 and team.map_offmap == 0
-bonus: matchup.coverage_share * params.FIT_ANSWERS
+bonus: team.coverage_share * params.FIT_ANSWERS
 params:
   FIT_ANSWERS: 0.5
 ---

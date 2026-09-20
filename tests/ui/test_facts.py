@@ -690,3 +690,27 @@ def test_expected_picks_read_the_map_and_the_meta_and_no_strategy(world):
     # no strategy is read: nothing here takes a catalog
     import inspect
     assert "catalog" not in inspect.signature(compute.expected_picks).parameters
+
+
+@pytest.mark.invariant
+def test_no_matchup_metric_restates_a_team_metric(world):
+    """A matchup key must read both sides. One that copies blue's own number
+    gives a second name to one signal: two strategies reading it through the
+    two names weigh that signal twice, and nothing in the catalog shows it."""
+    blue = [world.hero(n) for n in ("Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko")]
+    red = [world.hero(n) for n in ("Winston", "Zarya", "Genji", "Tracer", "Lucio", "Mercy")]
+    m = next(iter(world.maps.values()))
+    blue_t = compute.team_metrics(world, blue, m, red)
+    red_t = compute.team_metrics(world, red, m, blue)
+    matchup = compute.matchup_metrics(blue_t, red_t)
+
+    # a matchup key that equals blue's own is only proof of a copy if it also
+    # moves when blue does and red does not: compare a second blue on one red
+    other = [world.hero(n) for n in ("Orisa", "Ramattra", "Reaper", "Bastion", "Moira", "Brigitte")]
+    other_t = compute.team_metrics(world, other, m, red)
+    other_matchup = compute.matchup_metrics(other_t, red_t)
+
+    copies = [key for key, value in matchup.items()
+              if key in blue_t and value == blue_t[key]
+              and other_matchup.get(key) == other_t.get(key)]
+    assert not copies, "matchup restates team: %s - read team.* instead" % ", ".join(sorted(copies))

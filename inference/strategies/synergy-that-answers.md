@@ -2,7 +2,7 @@
 name: Synergy that also answers
 kind: constraint
 category: synergy
-when: enemy.size >= 3 and matchup.coverage_share >= 0.66
+when: enemy.size >= 3 and team.coverage_share >= 0.66
 bonus: min(team.synergy_edges, params.PAIR_CAP) * 0.25
 params:
   PAIR_CAP: 4

@@ -2,7 +2,7 @@
 name: Answer more than they answer
 kind: heuristic
 category: matchup
-metric: matchup.net_edges
+metric: team.net_edges
 direction: maximize
 weight: 0.75
 ---
