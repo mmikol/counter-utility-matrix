@@ -4,7 +4,6 @@
 db/psql/cluster
 .cache-blizzard
 .cache-wiki
-.cache-counterpick
 db/raw
 __pycache__
 **/__pycache__

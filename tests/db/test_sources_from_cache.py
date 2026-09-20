@@ -111,6 +111,94 @@ def test_wiki_kits_store_the_numbers_the_pages_publish(db, dsn):
     ]
 
 
+class _Kept:
+    """One connection for several tools: each leaves it open and uncommitted."""
+
+    def __init__(self, connection):
+        self._connection = connection
+        connection.commit = lambda: None
+
+    def __enter__(self):
+        return self._connection
+
+    def __exit__(self, *exc):
+        return False
+
+
+@pytest.fixture()
+def shared(db, dsn):
+    """(context, connection): every tool writes on the one connection, which the
+    test reads and the teardown rolls back."""
+    connection = psycopg.connect(dsn)
+
+    class Shared(tools.Context):
+        def connect(self):
+            return _Kept(connection)
+
+    yield Shared(dsn=dsn), connection
+    connection.rollback()
+    connection.close()
+
+
+STAGES_BY_MAP = """
+    select g.code, m.name, coalesce(array_agg(s.name order by s.position)
+                                    filter (where s.name is not null), '{}')
+    from maps m join map_modes mm using (map_id) join game_modes g using (mode_id)
+    left join map_stages s using (map_id) group by g.code, m.name"""
+
+
+@needs_caches
+def test_wiki_maps_store_each_modes_stages(shared):
+    ctx, connection = shared
+    text, data = tools.run_tool(ctx, "pull_maps")
+    assert "maps_with_stages" in text
+    stages = {}
+    for code, name, names in connection.execute(STAGES_BY_MAP):
+        stages.setdefault(code, {})[name] = names
+
+    # Control: three stages. Flashpoint: five points. Hybrid: the two phases.
+    assert len(stages["control"]) >= 7 and len(stages["flashpoint"]) >= 3
+    assert all(len(names) == 3 for names in stages["control"].values())
+    assert all(len(names) == 5 for names in stages["flashpoint"].values())
+    assert len(stages["hybrid"]) >= 8
+    assert all(names == ["Assault", "Escort"] for names in stages["hybrid"].values())
+    # Push: whole
+    assert stages["push"] and not any(stages["push"].values())
+    # Escort: the stretches an article names, none where it names none
+    assert stages["escort"]["Havana"] == ["City Streets", "Distillery", "Sea Fort"]
+    assert stages["escort"]["Rialto"] == [
+        "The Grand Hotel and Courtyard", "The Rialto Bridge and Dock",
+        "Talon Headquarters"]                       # not its Gondola Rides
+    assert stages["escort"]["Dorado"] == [] and stages["escort"]["Junkertown"] == []
+    assert all(len(names) in (0, 3) for names in stages["escort"].values())
+    assert stages["control"]["Ilios"] == ["Lighthouse", "Well", "Ruins"]
+
+    assert data["maps_with_stages"] == {
+        code: sum(1 for names in maps.values() if names)
+        for code, maps in stages.items() if any(maps.values())}
+    assert data["stages"] == sum(len(names) for maps in stages.values()
+                                 for names in maps.values())
+
+
+@needs_caches
+def test_wiki_terrain_pulls_the_stages_terrain_after_the_maps(shared):
+    ctx, connection = shared
+    order = [name for name, _ in tools.PULLS]
+    assert order.index("pull_maps") < order.index("pull_terrain")
+    tools.run_tool(ctx, "pull_maps")
+    text, data = tools.run_tool(ctx, "pull_terrain")
+    assert text.startswith("pull_terrain: terrain stored")
+    assert data["tables"] == ["map_terrain", "stage_terrain"]
+    assert data["stage_rows"] == data["stages"] * 8 > 0
+    assert data["stages"] + data["stages_no_text"] == connection.execute(
+        "select count(*) from map_stages").fetchone()[0]
+    # every row hangs off a stage of a map that has stages
+    assert connection.execute(
+        "select count(*), count(distinct t.stage_id) from stage_terrain t"
+        " join map_stages s using (stage_id)").fetchone() == (
+        data["stage_rows"], data["stages"])
+
+
 @needs_caches
 def test_wiki_maps_patches_and_playstyles_pull_from_the_cache(ctx):
     text, data = tools.run_tool(ctx, "pull_maps")
@@ -123,15 +211,36 @@ def test_wiki_maps_patches_and_playstyles_pull_from_the_cache(ctx):
 
 
 @needs_caches
-def test_counterpick_pulls_from_the_cache_and_leaves_no_snapshot_behind(ctx, snapshots, db):
+def test_wiki_counters_pull_from_the_cache_and_stamp_no_snapshot(ctx, snapshots, db):
     text, data = tools.run_tool(ctx, "pull_counters")
-    assert text.startswith("pull_counters:") and data["counters"] > 100
-    assert data["queue"] == "competitive_unspecified_queue"
+    assert text.startswith("pull_counters: counters stored") and data["counters"] > 100
+    assert data["tables"] == ["counters"] and data["unmatched"] == []
+    assert data["articles"] >= 40 and data["cells"] > data["no_verdict"] > 0
+    assert 0 < data["rated"] < data["cells"]
+    # a hero in no edge is one no article wrote about, its own included
+    assert set(data["no_edge"]) <= set(data["unwritten"])
     db.rollback()
     assert db.execute("select count(*) from meta_snapshots").fetchone()[0] == snapshots
+    # the pull's edges are the table's: the built database holds the same count
+    assert db.execute("select count(*) from counters").fetchone()[0] == data["counters"]
 
 
 @needs_caches
-def test_load_authored_reads_every_authored_input(ctx):
+def test_wiki_seasons_and_synergies_pull_from_the_cache(ctx, snapshots):
+    text, data = tools.run_tool(ctx, "pull_seasons")
+    assert text.startswith("pull_seasons: seasons stored") and data["seasons"] > 20
+    assert data["stamped"] == snapshots and data["tables"] == ["seasons", "meta_snapshots"]
+    text, data = tools.run_tool(ctx, "pull_synergies")
+    assert text.startswith("pull_synergies: pairs stored") and data["synergies"] > 100
+    assert 0 < data["mutual"] < data["synergies"] and data["unmatched"] == []
+
+
+@needs_caches
+def test_load_authored_mirrors_the_strategies_and_nothing_else(ctx):
+    from inference import catalog
     text, data = tools.run_tool(ctx, "load_authored")
-    assert text.startswith("load_authored:") and set(data) == set(tools.AUTHORED_INPUTS)
+    assert text.startswith("load_authored: strategies ") and set(data) == {"strategies"}
+    assert data["strategies"]["total"] == len(catalog.load())
+    assert data["strategies"]["tables"] == ["strategies"]
+    # `only` is accepted from older callers and changes nothing
+    assert set(tools.run_tool(ctx, "load_authored", only=["strategies"])[1]) == {"strategies"}

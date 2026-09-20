@@ -67,8 +67,8 @@ Copyright (c) 2026 Miliano Mikol. Licensed under the
 [PolyForm Strict License 1.0.0](LICENSE): noncommercial use only - no
 redistribution, no changes or new works, no commercial use of any kind.
 Anything else needs a separate written license from the author. The data
-the app pulls - Blizzard's hero pages, the wiki, the counterpick lists -
-and the hero portraits remain their owners'.
+the app pulls - Blizzard's hero pages and the wiki - and the hero
+portraits remain their owners'.
 
 ## Documentation
 
@@ -76,6 +76,6 @@ and the hero portraits remain their owners'.
 - [docs/db.md](docs/db.md) - the DATA LAYER: the sources, the tools, the schema, the refresh, the mirror
 - [docs/ui.md](docs/ui.md) - the UI LAYER: the board, its endpoints, the facts behind it
 - [docs/inference.md](docs/inference.md) - the INFERENCE LAYER: the strategy files, the solver, the tuning loop, the deriver, the catalog
-- [docs/skills.md](docs/skills.md) - the nine skills a Claude Code session runs here
+- [docs/skills.md](docs/skills.md) - the skills a Claude Code session runs here
 - [docs/mcp.md](docs/mcp.md) - the two MCP servers and every tool they expose
 - [docs/security.md](docs/security.md) - the threat model and what stands in the way

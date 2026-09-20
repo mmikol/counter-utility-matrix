@@ -139,8 +139,8 @@ inference/
 | --- | --- |
 | `catalog.py` | Parses each file's frontmatter (a flat dialect plus one `params:` block), builds a `Strategy` with `kind`, `form`, compiled expressions and validation against the metrics registry, orders the catalog (constraints - limits, then scored - heuristics, assumptions), mirrors it into the `strategies` table, and writes the catalog at the end of this document. |
 | `expr.py` | A safe subset of Python expressions: the AST is checked once, compiled, and evaluated over a scope whose missing keys read as zero, so a metric that does not apply to a board never crashes a score. |
-| `solver.py` | For a board: every role shape the hard limits allow around the locked picks; per-role pools of released heroes (an announced hero waits for its release) ranked by standing (a hero's mean score across the reference sixes it is in, plus 0.5 per locked partner), the prior breaking ties and ranking alone when nothing has scored; every candidate prepared (namespace, limit check, raw metric values), scored with the frozen bounds and slimmed to its score and tie-break, so a search of thousands holds only verdicts; local search from the best six sixes and the best of every shape, swapping any open slot for any same-role released hero on the roster; the winners hydrated again with their breakdown. The bounds come from a seeded reference sample of legal sixes for that map, side, enemy and bans, so `infer`, `evaluate` and the current comp share one scale and a score means the same thing across calls. |
-| `engine.py` | `infer` (the optimal six around the locked picks), `evaluate` (a full six ranked against the field), `current` (the picks as they stand, partial or full), and `board`: at any stage of a draft, blue's optimal as the counter to red's selection, red's optimal as their counter to blue's, both current comps scored on those scales, blue's picks against red's best counter, blue's locked picks with the empty slots filled, red's likely starting comp, the fight odds, the game plan in prose, and the shapes the playbook's limits allow. Its four searches - blue's optimal, red's counter, the fill, the countered case - are each split across a pool of spawned workers in four rounds: the reference sample, the sample again for each hero's standing (its mean score across the reference sixes it is in, which ranks each role's pool of six), the enumeration, then the ranking and the local search from the best six sixes and the best of every shape. Only verdicts cross (hero ids, score, tie-break) and slices partition their round, so the answer does not depend on the split. The pool is `max(6, min(cores, 12))` workers; `COUNTER_MATRIX_WORKERS` overrides; `COUNTER_MATRIX_PARALLEL=0`, a single core or a caller-supplied catalog keeps it in one process; a dead worker means that board runs sequentially and the pool is rebuilt. Each result carries the picks with reasons and `[F#]` citations into the board's FactSet, the score breakdown per strategy, alternatives, and the assumptions as "ground rules to reconcile against". |
+| `solver.py` | For a board: every role shape the hard limits allow around the locked picks; per-role pools of released heroes (an announced hero waits for its release) ranked by standing (a hero's mean score across the reference sixes it is in, plus 0.5 per locked partner), the prior breaking ties and ranking alone when nothing has scored; every candidate prepared (namespace, limit check, raw metric values), scored with the frozen bounds and slimmed to its score and tie-break, so a search of thousands holds only verdicts; local search from the best six sixes and the best of every shape within 4 points of the best, swapping any open slot for any same-role released hero on the roster, then bringing each of the wiki's synergy pairs into the best sixes two slots at a time; the winners hydrated again with their breakdown. The bounds come from a seeded reference sample of legal sixes for that map, side, enemy and bans, so `infer`, `evaluate` and the current comp share one scale and a score means the same thing across calls. |
+| `engine.py` | `infer` (the optimal six around the locked picks), `evaluate` (a full six ranked against the field), `current` (the picks as they stand, partial or full), and `board`: at any stage of a draft, blue's optimal as the counter to red's selection, red's optimal as their counter to blue's, both current comps scored on those scales, blue's picks against red's best counter, blue's locked picks with the empty slots filled, red's likely starting comp, the fight odds, the game plan in prose, and the shapes the playbook's limits allow. Its four searches - blue's optimal, red's counter, the fill, the countered case - are each split across a pool of spawned workers in four rounds: the reference sample, the sample again for each hero's standing (its mean score across the reference sixes it is in, which ranks each role's pool of six), the enumeration, then the ranking and the local search. Only verdicts cross (hero ids, score, tie-break) and slices partition their round, so the answer does not depend on the split. The pool is `max(6, min(cores, 12))` workers; `COUNTER_MATRIX_WORKERS` overrides; `COUNTER_MATRIX_PARALLEL=0`, a single core or a caller-supplied catalog keeps it in one process; a dead worker means that board runs sequentially and the pool is rebuilt. Each result carries the picks with reasons and `[F#]` citations into the board's FactSet, the score breakdown per strategy, alternatives, and the assumptions as "ground rules to reconcile against". |
 | `reach.py` | Every hero is the right pick somewhere: for a hero, a board that suits it (its maps, a red it answers, a side, the match's bans spent on the rivals holding its seat) on which it is in the optimal six, or the closest it came. The `reach` tool runs it; `tests/fixtures/reach.json` records a board per released hero and the suite checks none is lost. A hero no board seats is one the facts or the strategies cannot see. |
 | `tune.py` | `tune(id, field, value, reason)`: one frontmatter edit; `add(id, name, kind, prose, fields, reason)`: a new file from what the user gave and what `/strategy` inferred; `complete(id, fields, reason)`: a draft's frontmatter in one step. Each is validated by loading the catalog with the new text, then written, re-mirrored and logged. |
 | `derive.py` | `derive()`: for every draft, the prompt (the three inputs, the vocabulary, one finished file of each form for style), `claude -p` on the subscription, the JSON answer through `tune.complete`, one retry carrying the catalog's objection; at most ten drafts a run. `available()` says whether the CLI is here. |
@@ -150,8 +150,9 @@ inference/
 
 `/strategy`, `/comp`, `/tune` and `/up` are this layer's; [skills.md](skills.md)
 documents them and [mcp.md](mcp.md) the tools they run on (`infer`,
-`evaluate`, `board`, `facts`, `strategies`, `metrics`, `add_strategy`,
-`infer_strategy`, `derive_strategies`, `tune`, `tuning_log`), which is what
+`evaluate`, `board`, `reach`, `facts`, `strategies`, `metrics`,
+`add_strategy`, `infer_strategy`, `derive_strategies`, `tune`,
+`tuning_log`), which is what
 makes a session and the board see the same numbers.
 
 ## The catalog
@@ -195,10 +196,10 @@ An answer that runs under its own baseline on this map is a swap into a throw pi
 
 ##### Control points have edges (`control-points-have-edges`, map, scored)
 
-weight 1; when `map.mode == 'Control'`; bonus `min(max(team.cc_count - params.BOOP_FLOOR, 0), params.BOOP_CAP) * 0.5`
+weight 1; when `map.hazards >= 0.5`; bonus `min(max(team.cc_count - params.BOOP_FLOOR, 0), params.BOOP_CAP) * 0.5`
 params: BOOP_CAP=3, BOOP_FLOOR=2
 
-Control stages are built around drops, the well on Ilios, the sanctum pit on Nepal, the edges of Lijiang Tower, and a knockback or a pull turns a full-health enemy into a kill. Roadhog hooking into the well and Lúcio booping on Lighthouse are the community's Control examples, and Orisa is named as good on maps with environmental hazards. Each pick with crowd control beyond the second earns half a point on a Control map, up to 3 picks.
+Control stages are built around drops, the well on Ilios, the sanctum pit on Nepal, the edges of Lijiang Tower, and a knockback or a pull turns a full-health enemy into a kill. Roadhog hooking into the well and Lúcio booping on Lighthouse are the community's Control examples, and Orisa is named as good on maps with environmental hazards. Each pick with crowd control beyond the second earns half a point where the map's hazards stand 0.5 or more above the ordinary map's, up to 3 picks.
 
 ##### Dive maps need peel (`dive-maps-need-peel`, map, scored)
 
@@ -209,17 +210,17 @@ On a map whose geometry lets the enemy land on the backline from above, the supp
 
 ##### A hard choke needs a barrier (`hard-choke-needs-barrier`, map, scored)
 
-weight 1; when `map.style_top == 'brawl'`; bonus `min(team.barrier_hp / params.CHOKE_BARRIER, 1) * params.PER_BARRIER`
+weight 1; when `map.chokes >= 0.5`; bonus `min(team.barrier_hp / params.CHOKE_BARRIER, 1) * params.PER_BARRIER`
 params: CHOKE_BARRIER=1000, PER_BARRIER=0.75
 
-A hard choke is crossed behind a barrier or not at all, and a map whose fights are chokes is a map where one barrier is worth a pick. The community's list of the places a shield is needed is a list of hard chokes, King's Row first point, Eichenwalde third, Havana first and third, and the maps left off it have long sightlines instead. Barrier health earns up to 0.75 points where the map rewards brawl, in full at 1000, and more adds nothing.
+A hard choke is crossed behind a barrier or not at all, and a map whose fights are chokes is a map where one barrier is worth a pick. The community's list of the places a shield is needed is a list of hard chokes, King's Row first point, Eichenwalde third, Havana first and third, and the maps left off it have long sightlines instead. Barrier health earns up to 0.75 points where the map's chokes stand 0.5 or more above the ordinary map's, in full at 1000, and more adds nothing.
 
 ##### High ground looks over a barrier (`high-ground-over-barrier`, map, scored)
 
-weight 1; when `map.style_top == 'dive'`; penalty `min(team.barrier_hp / params.BARRIER_HP, params.BARRIER_CAP) * 0.5`
+weight 1; when `map.high_ground >= 0.5`; penalty `min(team.barrier_hp / params.BARRIER_HP, params.BARRIER_CAP) * 0.5`
 params: BARRIER_CAP=2, BARRIER_HP=1000
 
-A barrier faces one way and the enemy on the high ground above it shoots past it, so on a map built around high ground a barrier tank is a slow pick paying for a tool that does not work. Reinhardt is named as ineffective on Numbani's first two points for the high ground around them. Each 1000 of barrier health costs half a point where the map rewards dive, up to 2000.
+A barrier faces one way and the enemy on the high ground above it shoots past it, so on a map built around high ground a barrier tank is a slow pick paying for a tool that does not work. Reinhardt is named as ineffective on Numbani's first two points for the high ground around them. Each 1000 of barrier health costs half a point where the map's high ground stands 0.5 or more above the ordinary map's, up to 2000.
 
 ##### Lean the way the map leans (`lean-with-the-map`, map, scored)
 
@@ -782,27 +783,21 @@ A hero who runs well above their own average on this map is a specialist worth b
 
 ##### Choke maps reward melee (`choke-maps-reward-melee`, map)
 
-`maximize team.melee` - picks with a melee weapon. weight 0.75; when `map.style_top == 'brawl'`
+`maximize team.melee` - picks with a melee weapon. weight 0.75; when `map.chokes >= 0.5 or map.interiors >= 0.5`
 
-A brawl map has short sightlines and tight chokes, and the fight happens in someone's face, where a melee weapon does its full damage and a long gun does not. Reinhardt is the community's brawl tank because he swings his hammer at close quarters, and the counterpick lists file King's Row among his best maps. Picks with a melee weapon are counted, read where the map rewards brawl.
+A map of tight chokes and rooms puts the fight in someone's face, where a melee weapon does its full damage and a long gun does not. Reinhardt is the community's brawl tank because he swings his hammer at close quarters. Picks with a melee weapon are counted, read on maps whose chokes or interiors stand 0.5 or more above the ordinary map's.
 
 ##### Chokes reward crowd control (`chokes-reward-crowd-control`, map)
 
-`maximize team.cc_count` - picks with crowd control (stun, sleep, immobilize, hinder, knockback). weight 1; when `map.style_top == 'brawl'`
+`maximize team.cc_count` - picks with crowd control (stun, sleep, immobilize, hinder, knockback). weight 1; when `map.chokes >= 0.5 or map.interiors >= 0.5`
 
-Where a map funnels both teams into a choke, crowd control decides who gets through it. A stun, a wall or a knockback at a doorway takes a pick out of the fight at the one moment the whole team is committed, and enclosed space leaves nowhere to dodge it. Picks with a crowd-control tool are counted, read on maps whose rewarded style is brawl.
+Where a map funnels both teams into a choke, crowd control decides who gets through it. A stun, a wall or a knockback at a doorway takes a pick out of the fight at the one moment the whole team is committed, and enclosed space leaves nowhere to dodge it. Picks with a crowd-control tool are counted, read on maps whose chokes or interiors stand 0.5 or more above the ordinary map's.
 
 ##### Control rewards area effects (`control-area-healing`, map)
 
 `maximize team.aoe_count` - kit pieces tagged area of effect or shockwave. weight 0.25; when `map.mode == 'Control'`
 
 Control fights happen on one point with the whole six stacked on it, so healing and damage that touch an area touch everyone. Lúcio's aura and Junkrat's splash both reach the whole point, and a Lúcio and Brigitte pairing was called too strong on king of the hill. Kit pieces tagged area of effect are counted, read on Control maps.
-
-##### The counterpick lists know their maps (`counterpick-knows-its-maps`, map)
-
-`maximize team.map_strategy_hits` - picks counterpick lists among their best maps here. weight 0.25; when `map.known == 1`
-
-A pick the counterpick lists file under their best maps here belongs in the comp more than one they do not. The lists are crowd-sourced opinion on where each hero excels, and they agree with the rates often enough to break a tie. Picks whose best-maps list names the selected map are counted, a light weight for a judged source.
 
 ##### Escort lanes reward the longest gun (`escort-longest-gun`, map)
 
@@ -816,11 +811,17 @@ Escort maps run the payload down long lanes, and the pick with the longest reach
 
 A six built of the playstyle a map rewards wins the fights that map sets up. The authored map notes tag each map with the style its geometry favours, brawl in corridors and chokes, poke across long sightlines, dive where high ground stacks, and a hero carries the style tags its kit earns. The share of the six tagged with the map's rewarded style is the measure, and it reads as 0 without a map.
 
+##### Heroes have home maps (`heroes-have-home-maps`, map)
+
+`maximize team.map_strategy_hits` - picks whose three best maps by rate include this map. weight 0.25; when `map.known == 1`
+
+A pick whose best maps include this one belongs in the comp more than one whose do not. A hero's best maps are the three where Blizzard's rates lift it most over its own overall rate. Picks whose three best maps include the selected map are counted.
+
 ##### High ground strands melee (`high-ground-strands-melee`, map)
 
-`minimize team.melee` - picks with a melee weapon. weight 0.25; when `map.style_top == 'dive'`
+`minimize team.melee` - picks with a melee weapon. weight 0.25; when `map.high_ground >= 0.5`
 
-On a map built around high ground a melee pick has no way to touch an enemy standing above and no quick way up. Reinhardt is named as the tank who suffers most where high ground matters, with nothing to throw at it but a Fire Strike, and brawl's movement tools are said to have no vertical component at all. Picks with a melee weapon are counted, minimised where the map rewards dive.
+On a map built around high ground a melee pick has no way to touch an enemy standing above and no quick way up. Reinhardt is named as the tank who suffers most where high ground matters, with nothing to throw at it but a Fire Strike, and brawl's movement tools are said to have no vertical component at all. Picks with a melee weapon are counted, minimised where the map's high ground stands 0.5 or more above the ordinary map's.
 
 ##### Leave off-map picks at home (`leave-off-map-picks`, map)
 
@@ -842,9 +843,9 @@ On a poke map the pick with the shortest reach is the one who spends the fight u
 
 ##### Sightlines want hitscan (`sightlines-want-hitscan`, map)
 
-`maximize team.hitscan` - picks with a hitscan weapon or ability. weight 0.75; when `map.style_top == 'poke'`
+`maximize team.hitscan` - picks with a hitscan weapon or ability. weight 0.75; when `map.sightlines >= 0.5`
 
-Long sightlines belong to hitscan weapons, which land at any distance the map offers while projectiles arc and slow. On a poke map the fight opens at the range where a Soldier: 76, Ashe or Widowmaker is already hitting and a projectile kit is not. Picks with a hitscan weapon or ability are counted, read on maps whose rewarded style is poke.
+Long sightlines belong to hitscan weapons, which land at any distance the map offers while projectiles arc and slow. On such a map the fight opens at the range where a Soldier: 76, Ashe or Widowmaker is already hitting and a projectile kit is not. Picks with a hitscan weapon or ability are counted, read on maps whose sightlines stand 0.5 or more above the ordinary map's.
 
 ##### Symmetrical modes leave deployables behind (`symmetrical-leave-deployables`, map)
 
@@ -854,9 +855,9 @@ On Control, Push and Flashpoint the fight moves, from the neutral centre to the 
 
 ##### Vertical maps reward fliers (`vertical-maps-reward-fliers`, map)
 
-`maximize team.flyers` - picks that fly or hover. weight 0.25; when `map.style_top == 'dive'`
+`maximize team.flyers` - picks that fly or hover. weight 0.25; when `map.high_ground >= 0.5`
 
-A map with high ground everywhere rewards the picks that travel between its levels without a staircase. Echo is named as the fill pick for maps with verticality, and the maps with the most high ground are called best for heroes that move easily between low and high ground. Picks that fly or hover are counted, read where the map rewards dive.
+A map with high ground everywhere rewards the picks that travel between its levels without a staircase. Echo is named as the fill pick for maps with verticality, and the maps with the most high ground are called best for heroes that move easily between low and high ground. Picks that fly or hover are counted, read where the map's high ground stands 0.5 or more above the ordinary map's.
 
 ##### Win on this ground (`win-on-this-ground`, map)
 
@@ -1472,7 +1473,7 @@ A dive six works when its picks chain into one group that jumps together, not as
 
 ##### Dive supports must partner the divers (`dive-supports-partner-divers`, synergy)
 
-`minimize team.isolated_count` - picks with no authored partner on the team. weight 0.25, a need; when `team.style_lean == 'dive'`
+`minimize team.isolated_count` - picks with a documented partner somewhere and none on the team. weight 0.25, a need; when `team.style_lean == 'dive'`
 
 A dive six needs supports who are documented partners of its divers, or the divers fight forward while the healing stays home. A Winston pick is called wasted beside a support whose kit discourages dive. Measured as the count of our picks with no authored partner on the six, kept low while a strict majority of our picks carry the dive tag.
 
@@ -1484,19 +1485,19 @@ A six with five or more countered picks needs documented pairs among them, since
 
 ##### Flankers catch the pick fighting alone (`flankers-catch-the-loner`, synergy)
 
-`minimize team.isolated_count` - picks with no authored partner on the team. weight 0.25; when `matchup.style_lean_red == 'dive'`
+`minimize team.isolated_count` - picks with a documented partner somewhere and none on the team. weight 0.25; when `matchup.style_lean_red == 'dive'`
 
 Against a dive red, a pick with no documented partner is the one caught alone and burst down before anyone turns around. A flanker's victim is whoever is caught alone, and the reason lone hitscans cannot answer her is that they cannot burst her down fast enough by themselves. Measured as the count of our picks with no authored partner on the six, kept low while most of red's picks are dive picks.
 
 ##### Match their synergy (`match-their-synergy`, synergy)
 
-`maximize team.synergy_edges` - authored synergy pairs among the picks. weight 0.25; when `enemy.synergy_edges >= 2`
+`maximize team.synergy_edges` - the wiki's synergy pairs among the picks. weight 0.25; when `enemy.synergy_edges >= 2`
 
 When red's picks are documented partners, a six without partners of its own starts the match behind. A comp built from strong synergistic heroes is what makes a metagame in the first place. Measured as the count of authored synergy pairs among our picks, while red carries two or more authored pairs.
 
 ##### No pick fights alone (`no-pick-fights-alone`, synergy)
 
-`minimize team.isolated_count` - picks with no authored partner on the team. weight 0.5
+`minimize team.isolated_count` - picks with a documented partner somewhere and none on the team. weight 0.5
 
 A pick with no documented partner on the six fights its own game while the other five fight theirs. A close-range flanker beside four long-range heroes, or a pocket support beside no one who wants a pocket, never plays as a unit. The count of picks with no authored partner on the team is read.
 
@@ -1683,7 +1684,7 @@ the `team.*` metrics computed for the red side.
 | `team.style_top` (text) | the modal playstyle among the picks |
 | `team.style_lean` (text) | the playstyle a strict majority of picks carry, else none |
 | `team.style_fit` | share of picks tagged with the map's rewarded style (0 without a map) |
-| `team.archetype_deviation` | picks over the map's top-style archetype role slots (0 without a map) |
+| `team.archetype_deviation` | picks over EXPECTED_SHAPE's two per role (0 without a map) |
 | `team.pool_total` | team effective HP: sum of health + shield + armor, plus a form's armor by its uptime |
 | `team.pool_min` | the weakest pick's pool - focus fire finds the minimum |
 | `team.weakest` (text) | who holds the smallest pool |
@@ -1740,10 +1741,10 @@ the `team.*` metrics computed for the red side.
 | `team.barrier_count` | picks with a barrier |
 | `team.barrier_piercers` | picks whose kit ignores barriers |
 | `team.deployables` | picks with deployables |
-| `team.synergy_edges` | authored synergy pairs among the picks |
+| `team.synergy_edges` | the wiki's synergy pairs among the picks |
 | `team.synergy_score` | summed synergy scores among the picks |
 | `team.synergy_density` | synergy edges / possible pairs |
-| `team.isolated_count` | picks with no authored partner on the team |
+| `team.isolated_count` | picks with a documented partner somewhere and none on the team |
 | `team.isolated` (text) | the isolated picks |
 | `team.core_size` | largest connected group in the team's synergy graph |
 | `team.pairs` (text) | the synergy pairs present |
@@ -1760,7 +1761,7 @@ the `team.*` metrics computed for the red side.
 | `team.map_pick_mass` | summed pick rate on the map |
 | `team.map_specialists` | picks running 2.5+ points over their own baseline here |
 | `team.map_offmap` | picks running 2.5+ points under their own baseline here |
-| `team.map_strategy_hits` | picks counterpick lists among their best maps here |
+| `team.map_strategy_hits` | picks whose three best maps by rate include this map |
 | `team.coverage` | enemies answered by at least one pick |
 | `team.coverage_share` | coverage / enemies revealed |
 | `team.unanswered` (text) | enemies no pick answers |
@@ -1796,11 +1797,20 @@ the `team.*` metrics computed for the red side.
 | `map.known` | 1 if a map is set |
 | `map.sided` | 1 if the mode has an attacking and a defending side (Escort, Hybrid) |
 | `map.side` (text) | this seat's side on a sided map: attack, defense, or empty |
-| `map.style_top` (text) | the playstyle the map rewards most |
-| `map.style_margin` | top style score minus the runner-up |
+| `map.style_top` (text) | the playstyle the map rewards most: the rates' lift plus the terrain's lean |
+| `map.style_margin` | top style score minus the runner-up, in sd |
 | `map.mode` (text) | the game mode |
-| `map.stages` | stage count |
+| `map.stages` | separate arenas, one played at a time: Control's 3, Flashpoint's 5; else 0 |
+| `map.phases` | named parts of one route, played in order: Hybrid's 2, an Escort map's named stretches; else 0 |
 | `map.bans` | bans already made in this match: a ban rate is a risk only before them |
+| `map.chokes` | chokepoints, narrow streets, corridors, tunnels, gates and doorways: the wiki article's mentions per thousand words, in sd from the mean of the maps with text (0 with no text) |
+| `map.interiors` | rooms, caves and other indoor ground: the wiki article's mentions per thousand words, in sd from the mean of the maps with text (0 with no text) |
+| `map.high_ground` | high ground, rooftops, balconies and other vertical ground: the wiki article's mentions per thousand words, in sd from the mean of the maps with text (0 with no text) |
+| `map.flanks` | flank routes and side paths: the wiki article's mentions per thousand words, in sd from the mean of the maps with text (0 with no text) |
+| `map.sightlines` | long sightlines: the wiki article's mentions per thousand words, in sd from the mean of the maps with text (0 with no text) |
+| `map.open_ground` | open ground and ground said to lack cover: the wiki article's mentions per thousand words, in sd from the mean of the maps with text (0 with no text) |
+| `map.hazards` | drops, pits and other environmental hazards: the wiki article's mentions per thousand words, in sd from the mean of the maps with text (0 with no text) |
+| `map.cover` | cover: the wiki article's mentions per thousand words, in sd from the mean of the maps with text (0 with no text) |
 | `world.heal_bench` | 2 x the median peak heal across the released supports |
 | `world.hps_bench` | 2 x the median sustained healing across the released supports |
 | `world.roster_size` | heroes in the roster |

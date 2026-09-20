@@ -14,5 +14,6 @@
                   into the facts the UI layer generated
     tune          one validated, logged edit to a strategy file; add and complete
     derive        the engine asking the model for a draft's frontmatter
+    reach         the board each released hero is optimal on, within a match's bans
     serve         the engine over HTTP, for the compose stack's board
 """

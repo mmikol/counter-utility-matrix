@@ -1,10 +1,11 @@
 # The playbook's sources
 
-One entry per strategy file in `strategies/`: 238 rules and the user's 5
-assumptions. The rules come from r/OverwatchUniversity, r/Competitiveoverwatch
-and r/Overwatch, read through reddit's feeds and the Arctic Shift archive's
-search, each standardized into the playbook's form, given one metric, stored
-through the tune module's validated add and logged in `strategies/tuning-log.md`.
+One entry per strategy file in `strategies/`: the community's rules, the
+queue's limit and the user's assumptions. The rules come from
+r/OverwatchUniversity, r/Competitiveoverwatch and r/Overwatch; every citation
+links to reddit itself, and new mining reads reddit's own feeds only. Each rule
+is standardized into the playbook's form, given one metric, stored through the
+tune module's validated add and logged in `strategies/tuning-log.md`.
 "applies" and "spreads" are the six-board check made before a rule was chosen;
 the catalog is `docs/inference.md`.
 
@@ -265,9 +266,6 @@ the catalog is `docs/inference.md`.
 - `countered-lynchpin-sinks-comp` - A countered lynchpin sinks the comp (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/b8l41z/satire_i_just_want_goats_to_die_says_owl_viewer/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
-- `counterpick-knows-its-maps` - The counterpick lists know their maps (heuristic). applies on 5/6 boards, spreads on 5.
-  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
-  - https://www.reddit.com/r/OverwatchUniversity/comments/1w90zka/working_on_a_tank_guide_what_are_some_general/
 - `cover-the-swing` - Cover the swing with a cleanse (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/OverwatchUniversity/comments/glid48/we_need_more_guides_on_how_to_play_with_a/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1utl22o/ranked_is_giving_me_cognitive_dissidence/
@@ -389,6 +387,9 @@ the catalog is `docs/inference.md`.
 - `held-point-needs-tank` - A held point needs its tank (heuristic). applies on 2/6 boards, spreads on 2.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1qe83r5/reached_gm_mostly_onetricking_moira_here_are_the/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1tj5z04/one_tricking_is_the_fastest_way_to_get_better_in/
+- `heroes-have-home-maps` - Heroes have home maps (heuristic). Renamed from `counterpick-knows-its-maps`: the best maps are read from Blizzard's map rates.
+  - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
+  - https://www.reddit.com/r/OverwatchUniversity/comments/1w90zka/working_on_a_tank_guide_what_are_some_general/
 - `high-ground-over-barrier` - High ground looks over a barrier (constraint). applies on 2/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/naye5a/how_to_play_winston/

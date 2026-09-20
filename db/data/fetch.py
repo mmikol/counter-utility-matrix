@@ -9,7 +9,7 @@
     session          a requests session that identifies this project
     prepare_cache    the cache directory a tool hands a pull
 
-Each source package (blizzard, wiki, counterpick) names its own endpoints
+Each source package (blizzard, wiki) names its own endpoints
 and its own `sources` row, so provenance lives with the source. Fetching
 yields raw markup; reading it is the package's job.
 """

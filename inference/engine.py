@@ -208,7 +208,7 @@ def _reasons(fs, hero_name, locked):
             why.append("map specialist (%+.1f)" % f.value)
             evidence.append(f.id)
     cite("hero.map_style_fit", lambda f: "fits the %s style" % f.value)
-    cite("hero.map_strategy", lambda f: "counterpick top-%d here" % f.value)
+    cite("hero.map_strategy", lambda f: "top-%d map by rate" % f.value)
     cite("hero.vs_answered_by", lambda f: "CAUTION: answered by %s" % ", ".join(f.value))
     if not evidence:
         cite("hero.rate", lambda f: "wins %.1f%% across all ranks" % f.value["win"])
@@ -509,6 +509,16 @@ SIDE_PLAY = {
 }
 
 
+# the map.terrain facts' features, as the plan words them
+TERRAIN_GROUND = {
+    "chokes": "chokes", "interiors": "interiors", "high_ground": "high ground",
+    "flanks": "flank routes", "sightlines": "long sightlines", "open_ground": "open ground",
+    "hazards": "environmental hazards", "cover": "cover",
+}
+TERRAIN_NAMED = 3   # standout features the plan names, largest first
+STAGES_NAMED = 3    # stages the plan names for their terrain, largest first, in play order
+
+
 def _and(items):
     items = list(items)
     return ", ".join(items[:-1]) + " and " + items[-1] if len(items) > 1 else "".join(items)
@@ -519,37 +529,20 @@ def _sentence(text):
     return text[:1].upper() + text[1:] + "."
 
 
-def _hero_names(world, text):
-    """The hero names in an archetype note ("winston d.va wrecking ball"),
-    resolved through the roster - two-word names first."""
-    tokens, out, i = text.split(), [], 0
-    while i < len(tokens):
-        two = world.hero(" ".join(tokens[i:i + 2])) if i + 1 < len(tokens) else None
-        if two is not None:
-            out.append(two.name)
-            i += 2
-            continue
-        one = world.hero(tokens[i])
-        if one is not None:
-            out.append(one.name)
-        i += 1
-    return out
+FAMILY_SIZE = 5     # heroes the plan names per role
 
 
-def _family(world, m, style, role, roster, bans):
-    """A style's heroes in one role: the authored note's that carry the style
-    tag, plus any hero tagged with that style alone that the note misses;
-    released and unbanned, best win rate here first."""
-    noted = [world.hero(name) for name in _hero_names(world, roster)]
-    heroes = {h.name: h for h in noted if style in h.styles}
-    heroes.update((h.name, h) for h in world.heroes.values()
-                  if h.role == role and h.styles == {style})
+def _family(world, m, style, role, bans):
+    """A style's heroes in one role, by the wiki's playstyle tags: released
+    and unbanned, fewest tags first, then best win rate here."""
     out = {h.name for h in map(world.hero, bans) if h is not None}
 
     def rate(h):
         return (h.map_win(m.id) if m is not None else None) or h.win or 0.0
-    return [h.name for h in sorted(heroes.values(), key=lambda h: (-rate(h), h.name))
-            if h.released and h.name not in out]
+    heroes = [h for h in world.heroes.values()
+              if h.role == role and style in h.styles and h.released and h.name not in out]
+    return [h.name for h in sorted(heroes, key=lambda h: (len(h.styles), -rate(h), h.name))
+            ][:FAMILY_SIZE]
 
 
 def _plan(world, m, side, bans, red_h, blue_r):
@@ -566,9 +559,23 @@ def _plan(world, m, side, bans, red_h, blue_r):
     else:
         ground = MODE_GROUND.get(m.mode, "the fight follows the objective")
         read = ["%s is a %s map: %s." % (m.name, m.mode, ground)]
-        note = m.styles.get(m.style_top, (None, None))[1] if m.style_top else None
-        if note:
-            read.append(_sentence(note))
+        # the ground the wiki's article stresses: the map.terrain facts above the ordinary map
+        facts = getattr(blue_r, "facts", None)
+        stressed = [f.value["feature"] for f in (facts.find("map.terrain", m.name)
+                                                 if facts is not None else ())
+                    if f.value["z"] > 0][:TERRAIN_NAMED]
+        if stressed:
+            read.append("The wiki's article stresses %s."
+                        % _and(TERRAIN_GROUND[f] for f in stressed))
+        # the stages whose own text stresses a feature: the map.stage_terrain facts
+        staged = sorted((facts.find("map.stage_terrain", m.name) if facts is not None else ()),
+                        key=lambda f: -f.value["features"][0]["z"])[:STAGES_NAMED]
+        staged = [(f.value["stage"], _and(TERRAIN_GROUND[x["feature"]]
+                                          for x in f.value["features"]))
+                  for f in sorted(staged, key=lambda f: m.stages.index(f.value["stage"]))]
+        if staged:
+            read.append("; ".join(("%s has the %s" if i == 0 else "%s the %s") % pair
+                                  for i, pair in enumerate(staged)) + ".")
         if side in SIDE_PLAY:
             read.append("You are " + SIDE_PLAY[side] + ".")
     # what to play
@@ -622,17 +629,12 @@ def _plan(world, m, side, bans, red_h, blue_r):
         lines.append("No red pick yet: the six counters their likely six (%s)."
                      % ", ".join(blue_r.red))
     # the family to stay in
-    family = world.archetypes.get(lean) if lean else None
-    if family:
+    if lean:
         parts = []
-        for role, plural in (("tank", "tanks"), ("damage", "damage"), ("support", "supports")):
-            _slots, note = family.get(role, (None, None))
-            if not note:
-                continue
-            desc, _, roster = note.partition(":")
-            names = _family(world, m, lean, role, roster, bans)
-            parts.append("%s: %s%s." % (plural.capitalize(), desc.strip(),
-                                          " (%s)" % ", ".join(names) if names else ""))
+        for role, plural in (("tank", "Tanks"), ("damage", "Damage"), ("support", "Supports")):
+            names = _family(world, m, lean, role, bans)
+            if names:
+                parts.append("%s: %s." % (plural, ", ".join(names)))
         if parts:
             lines.append("If you stray from the six, stay in its family. " + " ".join(parts))
     # what it is built for
@@ -980,7 +982,7 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
         shapes       the (tanks, damage, supports) triples the playbook's shape
                      limits allow - what the roster enforces as you pick
         expected     red's likely six from the data alone - a two-two-two from
-                     the map's pick rates and the authored synergies, past the
+                     the map's pick rates and the wiki's synergies, past the
                      bans - static for the board, no strategy read; what the
                      comps tab shows for red and what blue counters until red
                      reveals a pick

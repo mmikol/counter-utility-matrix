@@ -272,17 +272,17 @@ def test_a_file_named_for_another_id_cannot_hijack_it(catalog_copy):
     assert caught.value.file == "aaa.md" and "id: is the filename" in str(caught.value)
 
 
-def test_an_experiment_playbook_is_chosen_by_the_environment(monkeypatch, tmp_path):
+def test_another_playbook_is_chosen_by_the_environment(monkeypatch, tmp_path):
     """COUNTER_MATRIX_STRATEGIES names another folder of strategy files; the
     shipped playbook is the default, and the docs are written from it alone."""
     monkeypatch.delenv("COUNTER_MATRIX_STRATEGIES", raising=False)
     assert catalog.strategies_dir() == catalog.SHIPPED_DIR
-    experiment = tmp_path / "experiment"            # one rule, copied from the playbook
-    experiment.mkdir()
-    shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), experiment)
-    monkeypatch.setenv("COUNTER_MATRIX_STRATEGIES", str(experiment))
+    other = tmp_path / "other"                      # one rule, copied from the playbook
+    other.mkdir()
+    shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), other)
+    monkeypatch.setenv("COUNTER_MATRIX_STRATEGIES", str(other))
     chosen = catalog.strategies_dir()
-    assert chosen == str(experiment)
+    assert chosen == str(other)
     one = catalog.load(chosen)
     assert {h.id for h in one} == {"open-queue-tanks"}
     monkeypatch.setattr(catalog, "STRATEGIES_DIR", chosen)

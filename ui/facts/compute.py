@@ -17,7 +17,7 @@ which the description says) and `map.known` tells a strategy which.
 import statistics
 from collections import Counter, OrderedDict
 
-from ui.facts.model import ROLES, SQUISHY_POOL
+from ui.facts.model import ROLES, SQUISHY_POOL, TERRAIN_FEATURES
 
 TEAM_SIZE = 6             # 6v6 Open Queue
 MAX_BANS = 5              # each team's two and the lobby's
@@ -27,6 +27,9 @@ ROLE_COUNT = {"tank": "tanks", "damage": "damage", "support": "supports"}   # ro
 SPECIALIST_DELTA = 2.5
 RANK_SENSITIVE = 6.0
 TREND_POINTS = 1.5
+TERRAIN_STANDOUT = 0.75   # sd from the ordinary map at which a terrain feature is a fact
+STAGE_MENTIONS = 2        # mentions a stage's text must hold of a feature to stand out on it
+STAGE_FEATURES = 2        # standout features a stage fact names, largest first
 FLIER_REACH = 30.0        # metres a hitscan weapon must publish to answer a flier
 
 TEAM_METRICS = OrderedDict([
@@ -42,7 +45,7 @@ TEAM_METRICS = OrderedDict([
     ("style_lean", "the playstyle a strict majority of picks carry, else none"),
     ("style_fit", "share of picks tagged with the map's rewarded style (0 without a map)"),
     ("archetype_deviation",
-     "picks over the map's top-style archetype role slots (0 without a map)"),
+     "picks over EXPECTED_SHAPE's two per role (0 without a map)"),
     # durability
     ("pool_total", "team effective HP: sum of health + shield + armor, plus a form's armor by"
                    " its uptime"),
@@ -103,10 +106,10 @@ TEAM_METRICS = OrderedDict([
     ("barrier_piercers", "picks whose kit ignores barriers"),
     ("deployables", "picks with deployables"),
     # cohesion
-    ("synergy_edges", "authored synergy pairs among the picks"),
+    ("synergy_edges", "the wiki's synergy pairs among the picks"),
     ("synergy_score", "summed synergy scores among the picks"),
     ("synergy_density", "synergy edges / possible pairs"),
-    ("isolated_count", "picks with no authored partner on the team"),
+    ("isolated_count", "picks with a documented partner somewhere and none on the team"),
     ("isolated", "the isolated picks"),
     ("core_size", "largest connected group in the team's synergy graph"),
     ("pairs", "the synergy pairs present"),
@@ -127,7 +130,7 @@ TEAM_METRICS = OrderedDict([
     ("map_pick_mass", "summed pick rate on the map"),
     ("map_specialists", "picks running %g+ points over their own baseline here" % SPECIALIST_DELTA),
     ("map_offmap", "picks running %g+ points under their own baseline here" % SPECIALIST_DELTA),
-    ("map_strategy_hits", "picks counterpick lists among their best maps here"),
+    ("map_strategy_hits", "picks whose three best maps by rate include this map"),
     # versus the other team (all 0 when the other team is empty)
     ("coverage", "enemies answered by at least one pick"),
     ("coverage_share", "coverage / enemies revealed"),
@@ -170,12 +173,28 @@ MAP_METRICS = OrderedDict([
     ("known", "1 if a map is set"),
     ("sided", "1 if the mode has an attacking and a defending side (Escort, Hybrid)"),
     ("side", "this seat's side on a sided map: attack, defense, or empty"),
-    ("style_top", "the playstyle the map rewards most"),
-    ("style_margin", "top style score minus the runner-up"),
+    ("style_top", "the playstyle the map rewards most: the rates' lift plus the terrain's lean"),
+    ("style_margin", "top style score minus the runner-up, in sd"),
     ("mode", "the game mode"),
-    ("stages", "stage count"),
+    ("stages", "separate arenas, one played at a time: Control's 3, Flashpoint's 5; else 0"),
+    ("phases", "named parts of one route, played in order: Hybrid's 2, an Escort map's"
+               " named stretches; else 0"),
     ("bans", "bans already made in this match: a ban rate is a risk only before them"),
 ])
+TERRAIN_WORDS = {
+    "chokes": "chokepoints, narrow streets, corridors, tunnels, gates and doorways",
+    "interiors": "rooms, caves and other indoor ground",
+    "high_ground": "high ground, rooftops, balconies and other vertical ground",
+    "flanks": "flank routes and side paths",
+    "sightlines": "long sightlines",
+    "open_ground": "open ground and ground said to lack cover",
+    "hazards": "drops, pits and other environmental hazards",
+    "cover": "cover",
+}
+# map.<feature>: one per terrain feature, numeric
+MAP_METRICS.update((f, "%s: the wiki article's mentions per thousand words, in sd from the mean of"
+                       " the maps with text (0 with no text)" % TERRAIN_WORDS[f])
+                   for f in TERRAIN_FEATURES)
 
 WORLD_METRICS = OrderedDict([
     ("heal_bench", "2 x the median peak heal across the released supports"),
@@ -195,14 +214,14 @@ def _mean(values):
 
 
 EXPECTED_SHAPE = {"tank": 2, "damage": 2, "support": 2}   # what a lobby fields: two of each
-SYNERGY_PULL = 2.0        # pick-rate points a hero gains per authored partner already on the six
+SYNERGY_PULL = 2.0        # pick-rate points a hero gains per synergy partner already on the six
 
 
 def expected_picks(world, m, revealed=(), bans=(), shape=None):
     """What the other side is likely to field, from the data alone - no
     strategy read: any picks given as revealed first, then slot by slot the
     hero the map's pick rates (the overall meta with no map set) and the
-    authored synergies make likeliest - a hero's likelihood is its pick rate
+    wiki's synergies make likeliest - a hero's likelihood is its pick rate
     plus SYNERGY_PULL per partner already on the six - into a two-two-two,
     past the bans. Deterministic; the board calls it with nothing revealed,
     so the six is static for the board. Each entry says what it rests on
@@ -289,8 +308,8 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["style_fit"] = (sum(1 for h in heroes if map_style in h.styles) / n
                       if n and map_style else 0.0)
     dev = 0
-    if map_style and map_style in world.archetypes:
-        for role, (slots, _) in world.archetypes[map_style].items():
+    if map_style:
+        for role, slots in EXPECTED_SHAPE.items():
             dev += max(0, t[ROLE_COUNT[role]] - slots)
     t["archetype_deviation"] = dev
 
@@ -375,7 +394,9 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["synergy_edges"] = len(pairs)
     t["synergy_score"] = sum(p[2] for p in pairs)
     t["synergy_density"] = len(pairs) / possible if possible else 0.0
-    isolated = [h.name for h in heroes if n >= 2 and not adjacency[h.id]]
+    # a hero the wiki pairs with no one at all is unknown, not alone: unknown is not a number
+    isolated = [h.name for h in heroes
+                if n >= 2 and not adjacency[h.id] and world.partners.get(h.id)]
     t["isolated_count"], t["isolated"] = len(isolated), isolated
     t["core_size"] = _largest_component(adjacency)
     t["pairs"] = pairs
@@ -506,14 +527,38 @@ def opposite(side):
     return {"attack": "defense", "defense": "attack"}.get(side, "")
 
 
+def arenas(m):
+    """The map's stages where each is its own ground (Control, Flashpoint)."""
+    return [] if m is None or is_sided(m) else list(m.stages)
+
+
+def phases(m):
+    """The map's stages where they are parts of one route (Hybrid, Escort)."""
+    return list(m.stages) if is_sided(m) else []
+
+
+def stage_standouts(m, stage):
+    """[(feature, z)] a stage's own text stresses: z at or over TERRAIN_STANDOUT
+    on STAGE_MENTIONS or more mentions, largest first, STAGE_FEATURES at most.
+    Stage texts are short: one mention swings the rate, and none says nothing."""
+    terrain, z = m.stage_terrain.get(stage, {}), m.stage_z.get(stage, {})
+    found = [(f, z[f]) for f in TERRAIN_FEATURES
+             if f in terrain and z.get(f, 0.0) >= TERRAIN_STANDOUT
+             and terrain[f][1] >= STAGE_MENTIONS]
+    return sorted(found, key=lambda fz: (-fz[1], fz[0]))[:STAGE_FEATURES]
+
+
 def map_metrics(m, side="", bans=0):
     if m is None:
         return {"known": 0, "sided": 0, "side": "", "style_top": "",
-                "style_margin": 0, "mode": "", "stages": 0, "bans": bans}
+                "style_margin": 0, "mode": "", "stages": 0, "phases": 0, "bans": bans,
+                **dict.fromkeys(TERRAIN_FEATURES, 0.0)}
     sided = 1 if is_sided(m) else 0
     return {"known": 1, "sided": sided, "side": side if sided else "",
             "style_top": m.style_top or "", "style_margin": m.style_margin,
-            "mode": m.mode or "", "stages": len(m.stages), "bans": bans}
+            "mode": m.mode or "", "stages": len(arenas(m)),
+            "phases": len(phases(m)), "bans": bans,
+            **{f: m.terrain_z[f] for f in TERRAIN_FEATURES}}
 
 
 def world_metrics(world):

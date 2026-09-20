@@ -43,12 +43,27 @@ def test_map_pool_is_standard_play_only(rows, one):
                   (select 1 from map_modes mm where mm.map_id = m.map_id)""") == 0
 
 
-def test_stages_only_on_modes_that_have_them(one):
-    # Control and Flashpoint maps have submaps; a stage on an escort map
-    # means the article parser drifted.
-    assert one("""select count(*) from map_stages s
-        where not exists (select 1 from map_modes mm join game_modes g using(mode_id)
-        where mm.map_id = s.map_id and g.code in ('control','flashpoint'))""") == 0
+def test_each_mode_has_its_stages(rows, one):
+    # Control: three stages. Flashpoint: five points. Hybrid: two phases.
+    # Escort: three stretches where the article names them. Push: whole.
+    allowed = {"control": {3}, "flashpoint": {5}, "hybrid": {2},
+               "escort": {0, 3}, "push": {0}}
+    off = [(code, name, n) for code, name, n in rows(
+        """select g.code, m.name, count(s.stage_id)
+           from maps m join map_modes mm using (map_id)
+           join game_modes g using (mode_id) left join map_stages s using (map_id)
+           group by g.code, m.name""") if n not in allowed[code]]
+    assert not off, off
+    # positions run 1..n in play order
+    assert one("""select count(*) from (select map_id, array_agg(position order by position) p,
+                  count(*) n from map_stages group by map_id) t
+                  where p <> (select array_agg(i::smallint) from generate_series(1, n) i)""") == 0
+
+
+def test_stage_terrain_is_whole_per_stage(one):
+    # a stage with text holds all eight features, as a map does
+    assert one("""select count(*) from (select stage_id from stage_terrain
+                  group by stage_id having count(*) <> 8) t""") == 0
 
 
 # --- the measurement model ----------------------------------------------
@@ -110,9 +125,8 @@ def test_meta_records_the_queue_it_came_from(rows):
         "select s.code, m.queue from meta_snapshots m join sources s using(source_id)")}
     assert by_source
     assert all(q.startswith("competitive_") for _, q in by_source)
-    assert {q for c, q in by_source if c == "blizzard"} <= {"competitive_role_queue"}
-    assert {q for c, q in by_source if c == "counterpick"} <= {
-        "competitive_unspecified_queue"}
+    # Blizzard's is the one population: its page offers Role Queue alone
+    assert by_source == {("blizzard", "competitive_role_queue")}
 
 
 def test_platform_is_console_and_input_follows_from_it(rows):
@@ -124,19 +138,33 @@ def test_platform_is_console_and_input_follows_from_it(rows):
 
 # --- the playbook: judgements, undimensioned -----------------------------
 
-def test_playbook_styles_share_one_vocabulary(rows):
-    # style is text by deliberate denormalisation (the wiki page IS the
-    # vocabulary); this is the referential integrity the schema gave up
-    styles = {r[0] for r in rows("select distinct style from playstyle")}
-    for table in ("comp_archetypes", "map_playstyle"):
-        off = {r[0] for r in rows("select distinct style from " + table)} - styles
-        assert not off, "%s uses unknown styles: %s" % (table, off)
+def test_a_maps_styles_are_derived_not_stored(rows):
+    # the style vocabulary is the wiki's hero tags; what a map rewards is
+    # computed from them and the per-map rates at load (ui.facts.model), and
+    # a comp's shape is compute.EXPECTED_SHAPE - neither is a table
+    tables = {r[0] for r in rows("select tablename from pg_tables where schemaname = 'public'")}
+    assert not tables & {"map_playstyle", "comp_archetypes"}
+    # nor are a hero's best maps: the three largest map-over-overall win rates
+    assert "map_strategy" not in tables
+    assert {r[0] for r in rows("select distinct style from playstyle")} >= {
+        "dive", "brawl", "poke"}
 
 
-def test_archetypes_describe_a_full_six_stack(rows):
-    from ui.facts.compute import TEAM_SIZE
-    for style, total in rows("select style, sum(slots) from comp_archetypes group by 1"):
-        assert total == TEAM_SIZE, "%s describes %d slots" % (style, total)
+def test_synergies_are_the_wikis_scored_one_or_two_with_a_short_note(rows, one):
+    from db.data.wiki.synergies import NOTE_LIMIT
+    assert {r[0] for r in rows("select distinct score from synergies")} == {1, 2}
+    assert one("select count(*) from synergies where note is null"
+               " or length(note) >= %s", NOTE_LIMIT) == 0
+    assert one("""select count(*) from synergies s
+                  join heroes a on a.hero_id = s.hero_id
+                  join heroes b on b.hero_id = s.other_id
+                  where a.status <> 'released' or b.status <> 'released'""") == 0
+
+
+def test_seasons_have_started_and_name_their_wiki_page(one):
+    assert one("select count(*) from seasons") > 0
+    assert one("select count(*) from seasons where started > current_date") == 0
+    assert one("select count(*) from seasons where note not like 'Season/%'") == 0
 
 
 def test_synergies_are_canonical_pairs(one):
@@ -146,10 +174,29 @@ def test_synergies_are_canonical_pairs(one):
     assert one("select count(*) from synergies where hero_id >= other_id") == 0
 
 
-def test_map_strategy_ranks_are_dense_per_hero(rows):
-    for hero_id, positions in rows(
-        "select hero_id, array_agg(position order by position) from map_strategy group by 1"):
-        assert positions == list(range(1, len(positions) + 1)), hero_id
+def test_counters_are_directed_edges_between_released_heroes(one):
+    # one row = countered_by_id answers hero_id
+    assert one("select count(*) from counters") >= 100
+    assert one("select count(*) from counters where hero_id = countered_by_id") == 0
+    assert one("""select count(*) from counters c
+                  left join heroes a on a.hero_id = c.hero_id
+                  left join heroes b on b.hero_id = c.countered_by_id
+                  where a.status is distinct from 'released'
+                     or b.status is distinct from 'released'""") == 0
+
+
+def test_no_pair_counters_both_ways(one):
+    # two articles that contradict each other leave the pair without an edge
+    assert one("""select count(*) from counters c join counters r
+                  on r.hero_id = c.countered_by_id and r.countered_by_id = c.hero_id""") == 0
+
+
+def test_most_released_heroes_answer_and_are_answered(one):
+    # a hero whose article has no written Match-Up cell still gets the edges
+    # other articles write about it
+    released = one("select count(*) from heroes where status = 'released'")
+    assert one("select count(distinct hero_id) from counters") >= 0.8 * released
+    assert one("select count(distinct countered_by_id) from counters") >= 0.8 * released
 
 
 # --- provenance ----------------------------------------------------------

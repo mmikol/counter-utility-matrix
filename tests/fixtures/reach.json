@@ -2,15 +2,15 @@
  {
   "hero": "Anran",
   "bans": 0,
-  "map": "Watchpoint: Gibraltar",
-  "side": "defense",
+  "map": "Colosseo",
+  "side": "",
   "red": [
-   "Sigma",
-   "Doomfist",
-   "Genji",
-   "Widowmaker",
+   "Orisa",
+   "Reinhardt",
+   "Soldier: 76",
+   "Bastion",
    "Ana",
-   "Juno"
+   "Wuyang"
   ],
   "banned": [],
   "gap": 0.0
@@ -38,51 +38,58 @@
   "bans": 0,
   "map": "Busan",
   "side": "",
-  "red": [],
+  "red": [
+   "Reinhardt",
+   "D.Mon",
+   "Bastion",
+   "Torbjörn",
+   "Mercy",
+   "Jetpack Cat"
+  ],
   "banned": [],
   "gap": 0.0
  },
  {
   "hero": "Echo",
   "bans": 0,
-  "map": "Colosseo",
-  "side": "",
+  "map": "Eichenwalde",
+  "side": "attack",
   "red": [
-   "Doomfist",
-   "Junker Queen",
+   "Reinhardt",
+   "Roadhog",
    "Reaper",
    "Mei",
-   "Mizuki",
-   "Brigitte"
+   "Jetpack Cat",
+   "Lúcio"
   ],
   "banned": [],
   "gap": 0.0
  },
  {
   "hero": "Emre",
-  "bans": 0,
-  "map": "Havana",
-  "side": "attack",
+  "bans": 3,
+  "map": "Busan",
+  "side": "",
   "red": [],
-  "banned": [],
+  "banned": [
+   "Soldier: 76",
+   "Bastion",
+   "Cassidy"
+  ],
   "gap": 0.0
  },
  {
   "hero": "Freja",
-  "bans": 2,
-  "map": "Dorado",
+  "bans": 5,
+  "map": "Paraíso",
   "side": "attack",
-  "red": [
-   "Roadhog",
-   "Orisa",
-   "Bastion",
-   "Cassidy",
-   "Ana",
-   "Zenyatta"
-  ],
+  "red": [],
   "banned": [
-   "Genji",
-   "Sombra"
+   "Cassidy",
+   "Soldier: 76",
+   "Ashe",
+   "Bastion",
+   "Emre"
   ],
   "gap": 0.0
  },
@@ -92,12 +99,12 @@
   "map": "Shambali Monastery",
   "side": "attack",
   "red": [
-   "Sigma",
-   "Orisa",
+   "D.Va",
+   "Zarya",
    "Soldier: 76",
-   "Ashe",
+   "Bastion",
    "Ana",
-   "Lifeweaver"
+   "Zenyatta"
   ],
   "banned": [],
   "gap": 0.0
@@ -118,10 +125,10 @@
   "side": "",
   "red": [
    "Reinhardt",
-   "Doomfist",
+   "Roadhog",
    "Bastion",
-   "Ashe",
-   "Brigitte",
+   "Mei",
+   "Wuyang",
    "Moira"
   ],
   "banned": [],
@@ -133,12 +140,12 @@
   "map": "Runasapi",
   "side": "",
   "red": [
-   "Orisa",
-   "D.Va",
-   "Anran",
-   "Genji",
-   "Moira",
-   "Ana"
+   "Doomfist",
+   "Zarya",
+   "Hanzo",
+   "Soldier: 76",
+   "Mercy",
+   "Zenyatta"
   ],
   "banned": [],
   "gap": 0.0
@@ -148,14 +155,7 @@
   "bans": 0,
   "map": "Lijiang Tower",
   "side": "",
-  "red": [
-   "Reinhardt",
-   "Doomfist",
-   "Reaper",
-   "Mei",
-   "Lifeweaver",
-   "Kiriko"
-  ],
+  "red": [],
   "banned": [],
   "gap": 0.0
  },
@@ -170,54 +170,65 @@
  },
  {
   "hero": "Shion",
-  "bans": 0,
+  "bans": 5,
   "map": "New Junk City",
   "side": "",
-  "red": [
-   "Sigma",
-   "Orisa",
-   "Echo",
-   "Pharah",
-   "Mercy",
-   "Zenyatta"
+  "red": [],
+  "banned": [
+   "Reaper",
+   "Cassidy",
+   "Vendetta",
+   "Torbjörn",
+   "Bastion"
   ],
-  "banned": [],
   "gap": 0.0
  },
  {
   "hero": "Sierra",
-  "bans": 4,
+  "bans": 3,
   "map": "Watchpoint: Gibraltar",
-  "side": "defense",
-  "red": [],
+  "side": "attack",
+  "red": [
+   "Mauga",
+   "Orisa",
+   "Pharah",
+   "Soldier: 76",
+   "Jetpack Cat",
+   "Moira"
+  ],
   "banned": [
    "Tracer",
    "Sombra",
-   "Reaper",
-   "Anran"
+   "Genji"
   ],
   "gap": 0.0
  },
  {
   "hero": "Sojourn",
-  "bans": 0,
-  "map": "Havana",
+  "bans": 5,
+  "map": "Circuit Royal",
   "side": "defense",
   "red": [
    "Roadhog",
-   "Mauga",
-   "Bastion",
-   "Torbjörn",
+   "Doomfist",
+   "Widowmaker",
+   "Pharah",
    "Jetpack Cat",
-   "Illari"
+   "Moira"
   ],
-  "banned": [],
+  "banned": [
+   "Ashe",
+   "Bastion",
+   "Sombra",
+   "Hanzo",
+   "Soldier: 76"
+  ],
   "gap": 0.0
  },
  {
   "hero": "Soldier: 76",
   "bans": 0,
-  "map": "Esperança",
+  "map": "New Queen Street",
   "side": "",
   "red": [],
   "banned": [],
@@ -225,20 +236,18 @@
  },
  {
   "hero": "Sombra",
-  "bans": 1,
-  "map": "Dorado",
-  "side": "defense",
+  "bans": 0,
+  "map": "Esperança",
+  "side": "",
   "red": [
-   "Sigma",
    "Doomfist",
+   "Domina",
    "Ashe",
-   "Sierra",
-   "Ana",
-   "Jetpack Cat"
+   "Mei",
+   "Jetpack Cat",
+   "Lúcio"
   ],
-  "banned": [
-   "Reaper"
-  ],
+  "banned": [],
   "gap": 0.0
  },
  {
@@ -247,30 +256,27 @@
   "map": "Lijiang Tower",
   "side": "",
   "red": [
-   "Reinhardt",
-   "D.Va",
-   "Anran",
-   "Shion",
+   "Orisa",
+   "Roadhog",
+   "Soldier: 76",
+   "Mei",
    "Moira",
-   "Brigitte"
+   "Zenyatta"
   ],
   "banned": [],
   "gap": 0.0
  },
  {
   "hero": "Torbjörn",
-  "bans": 0,
-  "map": "Aatlis",
+  "bans": 3,
+  "map": "New Junk City",
   "side": "",
-  "red": [
-   "Reinhardt",
-   "D.Mon",
-   "Reaper",
-   "Shion",
-   "Moira",
-   "Brigitte"
+  "red": [],
+  "banned": [
+   "Soldier: 76",
+   "Bastion",
+   "Cassidy"
   ],
-  "banned": [],
   "gap": 0.0
  },
  {
@@ -287,30 +293,16 @@
   "bans": 0,
   "map": "Route 66",
   "side": "attack",
-  "red": [
-   "Sigma",
-   "Domina",
-   "Soldier: 76",
-   "Ashe",
-   "Ana",
-   "Lifeweaver"
-  ],
+  "red": [],
   "banned": [],
   "gap": 0.0
  },
  {
   "hero": "Venture",
   "bans": 0,
-  "map": "Lijiang Tower",
+  "map": "Aatlis",
   "side": "",
-  "red": [
-   "Sigma",
-   "Orisa",
-   "Soldier: 76",
-   "Ashe",
-   "Ana",
-   "Lifeweaver"
-  ],
+  "red": [],
   "banned": [],
   "gap": 0.0
  },
@@ -327,7 +319,7 @@
   "hero": "Ana",
   "bans": 0,
   "map": "Junkertown",
-  "side": "defense",
+  "side": "attack",
   "red": [],
   "banned": [],
   "gap": 0.0
@@ -338,12 +330,12 @@
   "map": "New Queen Street",
   "side": "",
   "red": [
-   "D.Mon",
-   "Orisa",
-   "Bastion",
-   "Junkrat",
-   "Mercy",
-   "Jetpack Cat"
+   "Ramattra",
+   "Doomfist",
+   "Anran",
+   "Echo",
+   "Moira",
+   "Juno"
   ],
   "banned": [],
   "gap": 0.0
@@ -354,9 +346,9 @@
   "map": "Aatlis",
   "side": "",
   "red": [
-   "D.Va",
-   "Sigma",
-   "Shion",
+   "Junker Queen",
+   "Orisa",
+   "Anran",
    "Genji",
    "Moira",
    "Juno"
@@ -366,18 +358,21 @@
  },
  {
   "hero": "Illari",
-  "bans": 0,
-  "map": "Junkertown",
-  "side": "defense",
+  "bans": 2,
+  "map": "Antarctic Peninsula",
+  "side": "",
   "red": [
+   "Doomfist",
    "Orisa",
-   "Reinhardt",
-   "Ashe",
-   "Reaper",
+   "Soldier: 76",
+   "Bastion",
    "Mercy",
-   "Moira"
+   "Jetpack Cat"
   ],
-  "banned": [],
+  "banned": [
+   "Juno",
+   "Baptiste"
+  ],
   "gap": 0.0
  },
  {
@@ -385,7 +380,14 @@
   "bans": 0,
   "map": "Ilios",
   "side": "",
-  "red": [],
+  "red": [
+   "Reinhardt",
+   "Doomfist",
+   "Junkrat",
+   "Pharah",
+   "Mercy",
+   "Lúcio"
+  ],
   "banned": [],
   "gap": 0.0
  },
@@ -401,14 +403,14 @@
  {
   "hero": "Kiriko",
   "bans": 0,
-  "map": "Watchpoint: Gibraltar",
-  "side": "defense",
+  "map": "Havana",
+  "side": "attack",
   "red": [
-   "Junker Queen",
-   "Orisa",
+   "Reinhardt",
+   "Roadhog",
    "Ashe",
-   "Sierra",
-   "Ana",
+   "Anran",
+   "Wuyang",
    "Moira"
   ],
   "banned": [],
@@ -429,12 +431,12 @@
   "map": "Ilios",
   "side": "",
   "red": [
-   "Reinhardt",
+   "D.Va",
    "Sigma",
-   "Ashe",
-   "Genji",
-   "Ana",
-   "Zenyatta"
+   "Reaper",
+   "Bastion",
+   "Mercy",
+   "Juno"
   ],
   "banned": [],
   "gap": 0.0
@@ -450,21 +452,18 @@
  },
  {
   "hero": "Mizuki",
-  "bans": 2,
+  "bans": 0,
   "map": "Samoa",
   "side": "",
   "red": [
-   "D.Va",
    "Doomfist",
+   "Orisa",
+   "Anran",
    "Vendetta",
-   "Soldier: 76",
-   "Moira",
-   "Juno"
+   "Wuyang",
+   "Moira"
   ],
-  "banned": [
-   "Ana",
-   "Wuyang"
-  ],
+  "banned": [],
   "gap": 0.0
  },
  {
@@ -473,12 +472,12 @@
   "map": "Colosseo",
   "side": "",
   "red": [
-   "Sigma",
-   "Doomfist",
-   "Sierra",
-   "Anran",
-   "Juno",
-   "Lúcio"
+   "D.Va",
+   "Ramattra",
+   "Echo",
+   "Sombra",
+   "Lúcio",
+   "Juno"
   ],
   "banned": [],
   "gap": 0.0
@@ -490,11 +489,11 @@
   "side": "attack",
   "red": [
    "Reinhardt",
-   "Ramattra",
-   "Bastion",
+   "Orisa",
+   "Soldier: 76",
    "Cassidy",
-   "Ana",
-   "Brigitte"
+   "Lifeweaver",
+   "Moira"
   ],
   "banned": [],
   "gap": 0.0
@@ -502,16 +501,9 @@
  {
   "hero": "Zenyatta",
   "bans": 0,
-  "map": "Rialto",
+  "map": "Circuit Royal",
   "side": "attack",
-  "red": [
-   "Orisa",
-   "Ramattra",
-   "Soldier: 76",
-   "Bastion",
-   "Moira",
-   "Ana"
-  ],
+  "red": [],
   "banned": [],
   "gap": 0.0
  },
@@ -537,7 +529,7 @@
   "hero": "Domina",
   "bans": 0,
   "map": "Circuit Royal",
-  "side": "attack",
+  "side": "defense",
   "red": [],
   "banned": [],
   "gap": 0.0
@@ -547,81 +539,96 @@
   "bans": 0,
   "map": "Aatlis",
   "side": "",
-  "red": [],
+  "red": [
+   "Sigma",
+   "Hazard",
+   "Soldier: 76",
+   "Torbjörn",
+   "Moira",
+   "Lifeweaver"
+  ],
   "banned": [],
   "gap": 0.0
  },
  {
   "hero": "Hazard",
-  "bans": 3,
-  "map": "Dorado",
-  "side": "defense",
-  "red": [],
+  "bans": 5,
+  "map": "Ilios",
+  "side": "",
+  "red": [
+   "Orisa",
+   "Reinhardt",
+   "Soldier: 76",
+   "Bastion",
+   "Moira",
+   "Juno"
+  ],
   "banned": [
+   "Winston",
+   "D.Mon",
    "D.Va",
    "Doomfist",
-   "Winston"
+   "Roadhog"
   ],
   "gap": 0.0
  },
  {
   "hero": "Junker Queen",
-  "bans": 4,
+  "bans": 1,
   "map": "New Junk City",
   "side": "",
   "red": [],
   "banned": [
-   "Wrecking Ball",
-   "Winston",
-   "Doomfist",
-   "D.Mon"
+   "D.Va"
   ],
   "gap": 0.0
  },
  {
   "hero": "Mauga",
   "bans": 1,
-  "map": "Aatlis",
+  "map": "New Junk City",
   "side": "",
   "red": [
-   "Reinhardt",
-   "Doomfist",
-   "Junkrat",
-   "Pharah",
-   "Juno",
-   "Mercy"
+   "Ramattra",
+   "Roadhog",
+   "Soldier: 76",
+   "Ashe",
+   "Moira",
+   "Jetpack Cat"
   ],
   "banned": [
-   "D.Va"
+   "Junker Queen"
   ],
   "gap": 0.0
  },
  {
   "hero": "Orisa",
-  "bans": 4,
-  "map": "Havana",
-  "side": "defense",
-  "red": [],
-  "banned": [
-   "Domina",
+  "bans": 0,
+  "map": "Busan",
+  "side": "",
+  "red": [
    "Roadhog",
-   "Sigma",
-   "D.Va"
+   "Doomfist",
+   "Cassidy",
+   "Genji",
+   "Kiriko",
+   "Moira"
   ],
+  "banned": [],
   "gap": 0.0
  },
  {
   "hero": "Ramattra",
   "bans": 0,
-  "map": "Shambali Monastery",
-  "side": "attack",
+  "map": "Antarctic Peninsula",
+  "side": "",
   "red": [
-   "Reinhardt",
-   "D.Mon",
-   "Torbjörn",
-   "Soldier: 76",
-   "Brigitte",
-   "Moira"
+   "D.Va",
+   "Sigma",
+   "Cassidy",
+   "Reaper",
+   "Kiriko",
+   "Wuyang"
   ],
   "banned": [],
   "gap": 0.0
@@ -629,9 +636,16 @@
  {
   "hero": "Reinhardt",
   "bans": 0,
-  "map": "Colosseo",
-  "side": "",
-  "red": [],
+  "map": "Shambali Monastery",
+  "side": "attack",
+  "red": [
+   "Sigma",
+   "Doomfist",
+   "Soldier: 76",
+   "Bastion",
+   "Brigitte",
+   "Moira"
+  ],
   "banned": [],
   "gap": 0.0
  },
@@ -648,7 +662,7 @@
   "hero": "Sigma",
   "bans": 0,
   "map": "Circuit Royal",
-  "side": "defense",
+  "side": "attack",
   "red": [],
   "banned": [],
   "gap": 0.0
@@ -659,12 +673,12 @@
   "map": "New Junk City",
   "side": "",
   "red": [
+   "Reinhardt",
    "Sigma",
-   "Zarya",
-   "Soldier: 76",
    "Ashe",
-   "Juno",
-   "Ana"
+   "Genji",
+   "Moira",
+   "Juno"
   ],
   "banned": [],
   "gap": 0.0
@@ -674,24 +688,26 @@
   "bans": 0,
   "map": "Dorado",
   "side": "attack",
-  "red": [],
+  "red": [
+   "Winston",
+   "Orisa",
+   "Widowmaker",
+   "Ashe",
+   "Juno",
+   "Lifeweaver"
+  ],
   "banned": [],
   "gap": 0.0
  },
  {
   "hero": "Zarya",
-  "bans": 1,
-  "map": "Busan",
+  "bans": 3,
+  "map": "Oasis",
   "side": "",
-  "red": [
-   "Orisa",
-   "D.Va",
-   "Sojourn",
-   "Junkrat",
-   "Juno",
-   "Ana"
-  ],
+  "red": [],
   "banned": [
+   "D.Va",
+   "Roadhog",
    "Reinhardt"
   ],
   "gap": 0.0

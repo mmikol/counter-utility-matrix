@@ -1,13 +1,12 @@
 """Shared fixtures.
 
-Three kinds of test:
+Two kinds of test:
 
     unit         pure functions - no database, no network
     invariant    properties the built database must hold
-    validation   our data against a third party's published figures
 
-The last two default to the repo's own build at db/psql/cluster, the database
-`python -m db.mcp call db_rebuild` produces, and skip themselves when it is
+The second defaults to the repo's own build at db/psql/cluster, the database
+`python -m db.mcp call db_rebuild` produces, and skips itself when it is
 absent. COUNTER_MATRIX_LOCAL_SERVER or DATABASE_URL override the target;
 COUNTER_MATRIX_NO_DATABASE=1 runs the suite with no database, as CI does.
 """
@@ -68,22 +67,3 @@ def rows(db):
 @pytest.fixture(scope="session")
 def one(db):
     return lambda sql, *args: db.execute(sql, args or None).fetchone()[0]
-
-
-@pytest.fixture(scope="session")
-def fetch():
-    """A network GET for validation tests; failures skip, never fail."""
-    import requests
-
-    from db.data.fetch import session
-
-    web = session()
-
-    def get(url):
-        try:
-            response = web.get(url, timeout=30)
-            response.raise_for_status()
-            return response
-        except requests.RequestException as error:
-            pytest.skip("network: %s" % error)
-    return get

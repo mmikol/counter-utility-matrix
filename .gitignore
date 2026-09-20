@@ -12,14 +12,11 @@ __pycache__/
 # the page caches and the embedded cluster: built, never committed
 .cache-blizzard/
 .cache-wiki/
-.cache-counterpick/
 /db/psql/cluster/
 
-# the CSV mirror (scraped text and rates) and any stray export. The authored
-# inputs are the exception: they cannot be re-fetched.
+# the CSV mirror (scraped text and rates) and any stray export
 db/raw/
 *.csv
-!db/data/authored/*.csv
 
 # what the sentry set aside; never committed
 *.md.quarantined

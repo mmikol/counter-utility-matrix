@@ -73,7 +73,11 @@ or the user points at, and leave a report.
    docstring that says what it does; a module over a few hundred lines or
    a function over a screen is a smell to name, not necessarily to fix.
    Every write to the playbook or the database goes through a tool that
-   validates and logs it - no new side doors.
+   validates and logs it - no new side doors. The strategy files are the
+   one input a user writes: every table but `strategies` is filled by a
+   pull or derived at load, and none carries the `user` source. The
+   pulls read Blizzard's site and the wiki, nothing else: no third-party
+   site or API.
 
 6. **Security posture.** `docs/security.md` lists the measures; check
    that what it describes is still what the code does (the allowlist in
@@ -97,7 +101,7 @@ in the same shape, before it reports - a lesson that is not written down
 is a lesson the next run relearns.
 
 - **An invariant proven under one playbook.** "An announced hero is
-  never fielded" held under the shipped 38 rules and failed under a
+  never fielded" held under the shipped rules and failed under a
   playbook of one limit: with most sixes tied, the local search swapped
   the announced hero in through a path the pools had filtered. Now: a
   test of a solver invariant runs under a minimal, limit-only catalog as
@@ -115,8 +119,8 @@ is a lesson the next run relearns.
   `or True`, `assert True` and `pytest.skip` inside test bodies, reads
   each `-rs` skip reason, and deletes what can never fail rather than
   keeping it for the count.
-- **A number where there was nothing to measure.** With an experiment
-  playbook of one hard limit in force, every legal six tied at zero and
+- **A number where there was nothing to measure.** With a playbook of
+  one hard limit in force, every legal six tied at zero and
   the board showed 0 and 100 / 100 for every comp; the user read it as
   scoring being broken, and it was the display being confident about
   nothing. Now: a state the board cannot compute reads as what it is
@@ -200,8 +204,8 @@ is a lesson the next run relearns.
   `/app/.coverage`. Now: tests solve at the default pool, and the image
   run points `COVERAGE_FILE` at the tmpfs.
 - **Single pulls make the mirror lie.** Any `pull_*` against the Docker
-  database leaves `db/raw` behind until `export_csv` runs, and a rates or
-  counters pull appends a dated snapshot every time. Now: tests run the
+  database leaves `db/raw` behind until `export_csv` runs, and a rates
+  pull appends a dated snapshot every time. Now: tests run the
   pulls inside a rolled-back transaction, and a pull run by hand is
   followed by `export_csv` before the in-image parity test.
 - **Hash order reached the answer.** Style ties broke by the iteration

@@ -11,9 +11,9 @@ Every COUNTER_MATRIX_SENTRY_EVERY seconds (30):
                    ("ignore previous instructions", a shell command, a
                    credential, a script tag, a base64 blob) is quarantined
                    the same way.
-    the inputs     the same scan over the authored CSVs and the free text in
-                   the database (descriptions, notes, strategy bodies);
-                   those are flagged, not removed - a person decides
+    the database   the same scan over the free text in the database
+                   (descriptions, the wiki's notes, strategy bodies); those
+                   are flagged, not removed - a person decides
     the door       the audit log the MCP server writes (db/raw/audit.jsonl):
                    calls in the last minute, refusals, crashes, and any
                    client past the rate limit
@@ -32,7 +32,7 @@ import time
 import unicodedata
 from datetime import UTC, datetime
 
-from db import AUTHORED_DIR, RAW_DIR
+from db import RAW_DIR
 from db.mcp.server import AUDIT_PATH, RATE_LIMIT  # one definition: the door's own
 from inference import catalog as catalog_module
 
@@ -66,9 +66,8 @@ def normalised(text):
 
 # Free text in the database worth scanning: (table, columns).
 TEXT_COLUMNS = (("abilities", ("description",)), ("perks", ("description",)),
-                ("heroes", ("passive_description",)), ("synergies", ("note",)),
-                ("comp_archetypes", ("note",)), ("map_playstyle", ("note",)),
-                ("strategies", ("body",)))
+                ("subroles", ("passive_description",)), ("synergies", ("note",)),
+                ("seasons", ("name", "note")), ("strategies", ("body",)))
 
 
 def injected(text):
@@ -125,45 +124,36 @@ def check_playbook(directory=None, log=print):
     return quarantined, None
 
 
-def check_inputs(authored_dir=None):
-    """Instruction-like text in the authored CSVs -> flags."""
-    authored_dir = authored_dir or AUTHORED_DIR
+def scan(cx):
+    """Instruction-like text in TEXT_COLUMNS over one connection -> flags, one
+    per column at most. A table or column the database lacks is skipped."""
+    import psycopg
     flags = []
-    if not os.path.isdir(authored_dir):
-        return flags
-    for name in sorted(os.listdir(authored_dir)):
-        if name.endswith(".csv"):
-            with open(os.path.join(authored_dir, name), encoding="utf-8",
-                      errors="replace") as handle:
-                why = injected(handle.read())
-            if why:
-                flags.append("%s reads like an instruction: %r" % (name, why))
+    for table, columns in TEXT_COLUMNS:
+        for column in columns:
+            try:
+                rows = cx.execute("SELECT %s FROM %s WHERE %s IS NOT NULL"
+                                  % (column, table, column)).fetchall()
+            except psycopg.Error:
+                cx.rollback()
+                continue
+            for (value,) in rows:
+                why = injected(value)
+                if why:
+                    flags.append("%s.%s reads like an instruction: %r"
+                                 % (table, column, why))
+                    break
     return flags
 
 
 def check_database(dsn=None):
-    """Instruction-like free text in the database -> flags (none when unreachable)."""
+    """Instruction-like free text in the database -> flags."""
     try:
         import psycopg
 
         from db import psql
         with psycopg.connect(dsn or psql.default_dsn()) as cx:
-            flags = []
-            for table, columns in TEXT_COLUMNS:
-                for column in columns:
-                    try:
-                        rows = cx.execute("SELECT %s FROM %s WHERE %s IS NOT NULL"
-                                          % (column, table, column)).fetchall()
-                    except psycopg.Error:
-                        cx.rollback()
-                        continue
-                    for (value,) in rows:
-                        why = injected(value)
-                        if why:
-                            flags.append("%s.%s reads like an instruction: %r"
-                                         % (table, column, why))
-                            break
-            return flags
+            return scan(cx)
     except Exception as error:      # a scan failure is a flag, not a crash
         return ["database not scanned: %s" % type(error).__name__]
 
@@ -198,13 +188,11 @@ def check_door(audit_path=None, offset=0):
     return offset, recent, refused, crashed, hot
 
 
-def run_once(directory=None, authored_dir=None, audit_path=None, dsn=None, log=print,
+def run_once(directory=None, audit_path=None, dsn=None, log=print,
              report_path=None, scan_database=True, offset=0):
     """One pass -> the report dict, also written to db/raw/sentry.json."""
     quarantined, cat = check_playbook(directory, log)
-    flags = check_inputs(authored_dir)
-    if scan_database:
-        flags += check_database(dsn)
+    flags = check_database(dsn) if scan_database else []
     offset, recent, refused, crashed, hot = check_door(audit_path, offset)
     if crashed:
         flags.append("%d tool call(s) crashed in the last minute" % crashed)
@@ -232,7 +220,7 @@ def run_once(directory=None, authored_dir=None, audit_path=None, dsn=None, log=p
 
 
 def run_forever(every=EVERY, log=print, sleep=time.sleep):
-    log("sentry: watching the playbook, the inputs and the door every %gs" % every)
+    log("sentry: watching the playbook, the database and the door every %gs" % every)
     offset = 0
     while True:
         try:

@@ -13,7 +13,7 @@
 FACTS are derived from the authoritative data - what the sources say about
 the heroes, the maps and the meta, pulled and set - for this board, and
 every domain yields both kinds: the independent facts are a selection's
-own row (a hero's kit, rates and style; the map's mode and note; the
+own row (a hero's kit, rates and style; the map's mode and stages; the
 meta's vintage); the dependent facts are the selection joined with others
 (map_meta is heroes ⋈ maps ⋈ meta, counters and synergies are heroes ⋈
 heroes, the team is the six joined, the matchup the twelve, the bans join
@@ -21,10 +21,10 @@ both teams), and a join belongs to every domain it touches - the
 dependent facts are where the domains' fact sets intersect.
 Independent facts per hero and for the map come first; the joins per team
 appear once a team has picks, and the matchup once both teams do.
-Below them, numbered S1.., rides the PLAYBOOK's record: the archetypes it
-names, how many constraints, heuristics and assumptions it holds -
-citable, never mistaken for data, and not the strategies themselves (those
-are the constraints and heuristics the solver reads). Both sides are
+Below them, numbered S1.., rides the PLAYBOOK's record: how many
+constraints, heuristics and assumptions it holds - citable, never mistaken
+for data, and not the strategies themselves (those are the constraints and
+heuristics the solver reads). Both sides are
 structured (scope, subject, key, value) so the inference layer can read
 them by key, and rendered as sentences so a person - or the /comp skill -
 can read them as evidence. Ids are dense and stable within a board.
@@ -36,11 +36,12 @@ from ui.facts.compute import (
     RANK_SENSITIVE,
     SIDES,
     SPECIALIST_DELTA,
+    TERRAIN_STANDOUT,
     TREND_POINTS,
     is_sided,
     opposite,
 )
-from ui.facts.model import SQUISHY_POOL
+from ui.facts.model import SQUISHY_POOL, TERRAIN_FEATURES, TERRAIN_LEAN
 
 
 class Fact:
@@ -216,6 +217,13 @@ def _ban_facts(fs, world, bans, red, blue):
                    value=threatened, source="counters")
 
 
+def _halves(m, style):
+    """The two halves of a map's style score, as the fact words them."""
+    parts = [("terrain", m.terrain_lean.get(style)), ("rates", m.rate_lift.get(style))]
+    return ", ".join("%s %+.1f" % (word, z) if z is not None else "no %s" % word
+                     for word, z in parts)
+
+
 def _map_facts(fs, world, m, side=""):
     fs.add("map", m.name, "map.mode", "%s is a %s map" % (m.name, m.mode),
            value=m.mode, source="map_modes")
@@ -236,16 +244,60 @@ def _map_facts(fs, world, m, side=""):
     else:
         fs.add("map", m.name, "map.side", "%s (%s) has no attacking or defending side"
                % (m.name, m.mode), value="", source="derived:map.side")
-    if m.stages:
+    if compute.arenas(m):
         fs.add("map", m.name, "map.stages", "%s stages: %s"
                % (m.name, ", ".join(m.stages)), value=m.stages, source="map_stages")
-    for style, (score, note) in sorted(m.styles.items(), key=lambda kv: -(kv[1][0] or 0)):
-        fs.add("map", m.name, "map.style", "%s rewards %s (%s/3): %s"
-               % (m.name, style, score, note), value={"style": style, "score": score},
-               source="map_playstyle")
+    elif compute.phases(m):
+        fs.add("map", m.name, "map.phases", "%s phases, in order: %s"
+               % (m.name, ", ".join(m.stages)), value=m.stages, source="map_stages")
+    for stage in m.stages:
+        standouts = compute.stage_standouts(m, stage)
+        if standouts:
+            fs.add("map", m.name, "map.stage_terrain",
+                   "%s - %s: %s" % (m.name, stage, "; ".join(
+                       "%s, %.1f sd above the ordinary stage (%d mentions in the wiki's article)"
+                       % (f.replace("_", " "), z, m.stage_terrain[stage][f][1])
+                       for f, z in standouts)),
+                   value={"stage": stage, "features": [
+                       {"feature": f, "z": z, "per_thousand": m.stage_terrain[stage][f][0],
+                        "mentions": m.stage_terrain[stage][f][1]} for f, z in standouts]},
+                   source="stage_terrain")
+    if m.terrain:
+        for feature in sorted(TERRAIN_FEATURES, key=lambda f: (-abs(m.terrain_z[f]), f)):
+            z = m.terrain_z[feature]
+            if abs(z) >= TERRAIN_STANDOUT:
+                fs.add("map", m.name, "map.terrain", "%s: %s, %.1f sd %s the ordinary map (the"
+                       " wiki's article)" % (m.name, feature.replace("_", " "), abs(z),
+                                             "below" if z < 0 else "above"),
+                       value={"feature": feature, "z": z, "per_thousand": m.terrain[feature]},
+                       source="map_terrain")
+    else:
+        fs.add("map", m.name, "map.terrain_unread", "%s: the wiki's article has too little on"
+               " the ground; its terrain metrics read 0" % m.name, value=0,
+               source="map_terrain")
+    ranked_styles = sorted(m.styles, key=lambda s: (-m.styles[s][0], s))
+    for style in ranked_styles:
+        if style in m.rate_lift:
+            score = m.rate_lift[style]
+            fs.add("map", m.name, "map.rate_lift", "%s heroes win %.1f sd %s on %s than on other"
+                   " maps" % (style, abs(score), "less" if score < 0 else "more", m.name),
+                   value={"style": style, "score": score}, source="playstyle+map_meta")
+    for style in ranked_styles:
+        if style in m.terrain_lean:
+            fs.add("map", m.name, "map.terrain_lean", "%s's terrain leans %+.1f sd to %s (%s)"
+                   % (m.name, m.terrain_lean[style], style,
+                      ", ".join(f.replace("_", " ") for f in TERRAIN_LEAN[style])),
+                   value={"style": style, "score": m.terrain_lean[style]},
+                   source="map_terrain")
+    for style in ranked_styles:
+        fs.add("map", m.name, "map.style", "%s on %s: %+.1f sd (%s)"
+               % (style, m.name, m.styles[style][0], _halves(m, style)),
+               value={"style": style, "score": m.styles[style][0],
+                      "terrain": m.terrain_lean.get(style), "rates": m.rate_lift.get(style)},
+               source="derived:map.style")
     if m.styles:
-        fs.add("map", m.name, "map.style_top", "%s's rewarded style is %s (margin %s"
-               " over the runner-up)" % (m.name, m.style_top, _g(m.style_margin)),
+        fs.add("map", m.name, "map.style_top", "%s rewards %s: %s (%s sd over the runner-up)"
+               % (m.name, m.style_top, _halves(m, m.style_top), _g(m.style_margin)),
                value=m.style_top, source="derived:map.style_top")
     ranked = sorted((h for h in world.heroes.values() if h.map_win(m.id) is not None),
                     key=lambda h: -h.map_win(m.id))
@@ -259,10 +311,10 @@ def _map_facts(fs, world, m, side=""):
             value=[h.name for h in ranked[-6:]], source="map_meta")
     for h in world.heroes_by_role():
         if m.id in h.best_maps:
-            fs.add("map", m.name, "map.playbook_pick", "%s is a top-%d map for %s"
-                   % (m.name, h.best_maps.index(m.id) + 1, h.name),
-                   value=h.name, source="map_strategy")
-    for style in sorted(m.styles, key=lambda s: -(m.styles[s][0] or 0)):
+            fs.add("map", m.name, "map.playbook_pick", "%s is %s's top-%d map by Blizzard's"
+                   " map rates" % (m.name, h.name, h.best_maps.index(m.id) + 1),
+                   value=h.name, source="derived:map.playbook_pick")
+    for style in sorted(m.styles, key=lambda s: (-m.styles[s][0], s)):
         fits = [h for h in ranked if style in h.styles][:6]
         if fits:
             fs.add("map", m.name, "map.style_fit", "%s heroes who hold up on %s: %s"
@@ -409,11 +461,6 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
                   ", banned %.1f%%" % h.ban if h.ban is not None else ""),
                value={"win": h.win, "pick": h.pick, "ban": h.ban}, source="hero_meta",
                team=team)
-    for code, (win, pick) in sorted(h.alt_rates.items()):
-        fs.add("hero", name, "hero.rate_alt", "%s's own population has %s winning %.1f%%%s"
-               % (code, name, win, ", picked %.1f%%" % pick if pick is not None else ""),
-               value={"source": code, "win": win, "pick": pick}, source="hero_meta",
-               team=team)
     for tier, (win, pick, ban) in sorted(h.by_tier.items()):
         if win is not None:
             fs.add("hero", name, "hero.rate_tier", "%s in %s lobbies: wins %.1f%%, picked %.1f%%%s"
@@ -442,20 +489,22 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
             value=[world.maps[mid].name for mid, _ in best], source="map_meta", team=team)
     if m is None and h.best_maps:
         # the same intersection rule as the rates: with a map on the board the
-        # "top pick on this map" fact below is the whole story
-        fs.add("hero", name, "hero.best_map", "counterpick rates %s a top pick on: %s" % (
-            name, ", ".join(world.maps[mid].name for mid in h.best_maps)),
-            value=[world.maps[mid].name for mid in h.best_maps], source="map_strategy",
-            team=team)
+        # "top map" fact below is the whole story
+        fs.add("hero", name, "hero.best_map", "%s's three best maps by Blizzard's map rates,"
+               " over its own %.1f%%: %s" % (name, h.win, ", ".join(
+                   "%s (%+.1f)" % (world.maps[mid].name, h.map_win(mid) - h.win)
+                   for mid in h.best_maps)),
+               value=[world.maps[mid].name for mid in h.best_maps],
+               source="derived:hero.best_map", team=team)
     answered_by = sorted(world.heroes[x].name for x in world.answered_by.get(h.id, ()))
     if answered_by:
-        fs.add("hero", name, "hero.answered_by", "%s is countered by: %s"
-               % (name, ", ".join(answered_by)), value=answered_by, source="counters",
-               team=team)
+        fs.add("hero", name, "hero.answered_by", "%s is countered by, in the wiki's match-up"
+               " advice: %s" % (name, ", ".join(answered_by)), value=answered_by,
+               source="counters", team=team)
     answers = sorted(world.heroes[x].name for x in world.answers.get(h.id, ()))
     if answers:
-        fs.add("hero", name, "hero.answers", "%s answers: %s" % (name, ", ".join(answers)),
-               value=answers, source="counters", team=team)
+        fs.add("hero", name, "hero.answers", "%s answers, in the wiki's match-up advice: %s"
+               % (name, ", ".join(answers)), value=answers, source="counters", team=team)
     for other, (score, note) in sorted(world.partners.get(h.id, {}).items(),
                                        key=lambda kv: -(kv[1][0] or 0)):
         fs.add("hero", name, "hero.partner", "%s + %s (%s/3): %s"
@@ -482,9 +531,10 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
                        " overall %.1f%% - %s" % (name, delta, m.name, h.win, label),
                        value=delta, source="derived:hero.map_delta", team=team)
         if m.id in h.best_maps:
-            fs.add("hero", name, "hero.map_strategy", "counterpick lists %s as a top-%d"
-                   " pick on this map" % (name, h.best_maps.index(m.id) + 1),
-                   value=h.best_maps.index(m.id) + 1, source="map_strategy", team=team)
+            fs.add("hero", name, "hero.map_strategy", "this map is %s's top-%d by Blizzard's"
+                   " map rates" % (name, h.best_maps.index(m.id) + 1),
+                   value=h.best_maps.index(m.id) + 1, source="derived:hero.map_strategy",
+                   team=team)
         if m.style_top and m.style_top in h.styles:
             fs.add("hero", name, "hero.map_style_fit", "%s fits the %s style %s rewards"
                    % (name, m.style_top, m.name), value=m.style_top,
@@ -541,8 +591,8 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
     if m is not None and m.style_top:
         add("style_fit", "%s fit with the %s style %s rewards: %.0f%% of picks"
             % (label, m.style_top, m.name, 100 * t["style_fit"]))
-        add("archetype_deviation", "%s deviation from the %s archetype's role slots: %d"
-            " pick(s) over" % (label, m.style_top, t["archetype_deviation"]))
+        add("archetype_deviation", "%s over two per role: %d pick(s)"
+            % (label, t["archetype_deviation"]))
     add("pool_total", "%s effective HP: %d across %d picks" % (label, t["pool_total"], t["size"]),
         "hp")
     add("pool_min", "%s weakest link: %s at %d pool - focus fire finds the minimum"
@@ -665,9 +715,9 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
     if m is not None:
         add("map_win_mean", "%s on %s: mean win rate %.1f%% (pick mass %.1f)"
             % (label, m.name, t["map_win_mean"], t["map_pick_mass"]), "%")
-        add("map_specialists", "%s map fit on %s: %d specialist(s), %d off-map, %d listed"
-            " by counterpick here" % (label, m.name, t["map_specialists"], t["map_offmap"],
-                                       t["map_strategy_hits"]))
+        add("map_specialists", "%s map fit on %s: %d specialist(s), %d off-map, %d with"
+            " this map among their three best by rate"
+            % (label, m.name, t["map_specialists"], t["map_offmap"], t["map_strategy_hits"]))
     if enemies:
         add("coverage", "%s coverage: answers %d/%d %s picks%s" % (
             label, t["coverage"], len(enemies), side,
@@ -759,12 +809,6 @@ def _playbook_record(fs, world):
     """S1..: the playbook's record - what it holds - never what the sources
     say, and not the constraints and heuristics themselves."""
     scope = PLAYBOOK_SCOPE
-    for style in sorted(world.archetypes):
-        for role, (slots, note) in world.archetypes[style].items():
-            fs.add(scope, style, "playbook.archetype", "a %s comp wants %d %s: %s"
-                   % (style, slots, role, note or ""), value={"style": style, "role": role,
-                                                             "slots": slots},
-                   source="comp_archetypes")
     if world.catalog_counts:
         c = world.catalog_counts
         fs.add(scope, "catalog", "playbook.catalog",

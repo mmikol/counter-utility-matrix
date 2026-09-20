@@ -1,6 +1,6 @@
 ---
 name: maps
-description: Add or update maps in Counter Utility Matrix's database - a new map, a mode change, the stages, the per-map rates, and the authored note on what kind of fight a map rewards. Use when the user names a new map, says "add the new map", "is X in the pool", "update the maps", or a map has no playstyle note.
+description: Add or update maps in Counter Utility Matrix's database - a new map, a mode change, the stages, the per-map rates, and the style a map rewards, derived from those rates. Use when the user names a new map, says "add the new map", "is X in the pool", "update the maps", or a map shows no rewarded style.
 ---
 
 Bring the map pool up to date. Work through the
@@ -12,19 +12,23 @@ Bring the map pool up to date. Work through the
    refresh.
 2. **The pool.** `pull_maps` with `refresh: true`: the wiki's map pool -
    maps, game modes, playable stages. A new map arrives here.
-3. **What a map rewards.** `load_authored` reloads
-   `db/data/authored/map_playstyle.csv`. A map without a row there has no
-   authored note, so the board's game plan falls back to the mode's
-   geometry: tell the user which maps lack one and offer the line to add
-   - the style it rewards (dive, brawl or poke), a score 1-3, and one
-   sentence on the terrain - for them to add to the file. You do not edit
-   the file yourself; a person does, then `load_authored` again.
-4. **Rates and counters.** `pull_rates` with `refresh: true` brings the
-   per-map rates for a map in the game's rotation; `pull_counters` with
-   `refresh: true` brings each hero's best maps. Then `db_docs` and
-   `export_csv`.
-5. **Report**, in under ten lines: maps added or changed, stages, which
-   maps still lack an authored note, and the capture date now.
+3. **Rates.** `pull_rates` with `refresh: true` brings the per-map rates
+   for a map in the game's rotation. Each hero's best maps are derived
+   from them when the facts load: the three maps where its win rate is
+   furthest above its overall rate.
+4. **What a map rewards.** Nothing is written for it, by you or the user:
+   `load_authored` mirrors the strategy files and nothing else. A map's
+   styles are derived when the facts load - for each of the wiki's
+   playstyles, how much better the heroes tagged with it win on this map
+   than overall, against the other maps. `facts` with `map: "<name>"`
+   states each style's figure and the rewarded one. A map with no per-map
+   rates has no style: it is outside the rotation, or `pull_rates` has not
+   run since it joined. If the hero tags look stale, `pull_playstyles`
+   with `refresh: true`.
+5. Then `db_docs` and `export_csv`.
+6. **Report**, in under ten lines: maps added or changed, stages, each new
+   map's rewarded style or that it has no rates yet, and the capture date
+   now. Never edit a file by hand.
 
 ## What is data
 

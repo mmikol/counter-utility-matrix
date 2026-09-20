@@ -8,17 +8,17 @@
 #   inference   INFERENCE ENGINE: http://localhost:8019, reading the strategy
 #               files live
 #   ui          UI LAYER: the board at http://localhost:8017
-#   refresher   the data layer's clock: rates and counters daily at
+#   refresher   the data layer's clock: seasons and rates daily at
 #               COUNTER_MATRIX_REFRESH_AT (05:00 container time; set TZ), every
 #               source weekly, and on start when the caches are a day old
 #   sentry      the guard: quarantines a strategy file that will not load or
 #               reads like an instruction, flags instruction-like text in the
-#               inputs and the database, watches the MCP audit log; its report
-#               is what `orchestrator.py status` prints
+#               database, watches the MCP audit log; its report is what
+#               `orchestrator.py status` prints
 #
 # Every container runs as an unprivileged user on a read-only root filesystem
 # with every capability dropped and no new privileges, on one network. Only
-# data and refresher open a connection out, to three fixed hosts. Every
+# data and refresher open a connection out, to two fixed hosts. Every
 # published port binds to 127.0.0.1. No keys, no accounts.
 # COUNTER_MATRIX_MCP_TOKEN (in .env) requires a bearer token on the MCP server.
 # One image, built once by `data`, shared by every container; each container
@@ -96,9 +96,7 @@ services:
     volumes:                         # every tool lands here: the pulls, the mirror, a tune,
       - ./.cache-blizzard:/app/.cache-blizzard             # a draft, the docs, the audit log
       - ./.cache-wiki:/app/.cache-wiki
-      - ./.cache-counterpick:/app/.cache-counterpick
       - ./db/raw:/app/db/raw
-      - ./db/data/authored:/app/db/data/authored
       - ./inference/strategies:/app/inference/strategies
       - ./docs:/app/docs
     ports:
@@ -159,12 +157,10 @@ services:
   refresher:
     <<: *app
     command: ["refresh"]
-    volumes:                      # pulls into the caches, re-exports the mirror; reads the rest
+    volumes:                      # pulls into the caches, re-exports the mirror; reads the playbook
       - ./.cache-blizzard:/app/.cache-blizzard
       - ./.cache-wiki:/app/.cache-wiki
-      - ./.cache-counterpick:/app/.cache-counterpick
       - ./db/raw:/app/db/raw
-      - ./db/data/authored:/app/db/data/authored:ro
       - ./inference/strategies:/app/inference/strategies:ro
     environment:
       <<: *env
@@ -179,9 +175,8 @@ services:
   sentry:
     <<: *app
     command: ["sentry"]
-    volumes:                      # quarantines in the playbook, the report in raw; reads the inputs
+    volumes:                      # quarantines in the playbook; the report in raw, beside the audit log
       - ./db/raw:/app/db/raw
-      - ./db/data/authored:/app/db/data/authored:ro
       - ./inference/strategies:/app/inference/strategies
     environment:
       <<: *env

@@ -20,14 +20,17 @@ is left half-done: a step that fails is reported, not hidden.
    drafts. `tuning_log`: the last few changes.
 2. **Refresh the data.** If the newest capture is older than a day, or a
    patch shipped since (the `facts` tool's first lines say so), run
-   `sync_all` with `refresh: true` - every source refetched, entities
-   upserted, a new rates snapshot appended. Otherwise the daily set:
-   `pull_rates`, `pull_counters` with `refresh: true`, then
-   `load_authored`. A pull fetches dozens of pages at a polite pace and
-   takes minutes; wait for it, one call at a time, never two pulls at
-   once. A source that fails keeps yesterday's pages; say which. `query`
-   is yours for looking (read-only by construction): the newest snapshot,
-   a lock, a count.
+   `sync_all` with `refresh: true` - Blizzard's site and the wiki
+   refetched, entities upserted, a new rates snapshot appended, the hero
+   articles' synergies and counters reloaded. Otherwise the daily set:
+   `pull_seasons`, then `pull_rates`, each with `refresh: true`, then
+   `load_authored` (the strategies mirror). If `db_status` shows
+   `synergies` or `counters` empty, fill it from the cached articles:
+   `pull_synergies`, `pull_counters`, no refresh. A pull fetches dozens of
+   pages at a polite pace and takes minutes; wait for it, one call at a
+   time, never two pulls at once. A source that fails keeps yesterday's
+   pages; say which. `query` is yours for looking (read-only by
+   construction): the newest snapshot, a lock, a count.
 3. **Complete the drafts.** For each pending strategy: read its prose,
    read `metrics` for the vocabulary, decide the frontmatter exactly as
    the `/strategy` skill does (a heuristic's metric, direction and
@@ -42,12 +45,14 @@ is left half-done: a step that fails is reported, not hidden.
    map, a Control map, an Escort map with a side. A heuristic listed
    under `silent` on all three no longer varies across comps and may say
    so in a `tune` to weight 0 with the reason; a strategy the
-   tuning log shows moved twice the same way this week is left alone. Do
-   not add strategies here - that is the user's `/strategy`.
+   tuning log shows moved twice the same way this week is left alone.
+   After a full refresh, `reach` on a hero whose counters changed: a hero
+   no board seats is reported, not fixed here. Do not add strategies
+   here - that is the user's `/strategy`.
 5. **Regenerate and mirror.** `db_docs` (the catalog in
    docs/inference.md, the ERD and data dictionary), then `export_csv`.
-   `load_authored` with `only: ["strategies"]` if anything in step 3 or 4
-   changed, so the table matches the files.
+   `load_authored` if anything in step 3 or 4 changed, so the
+   `strategies` table matches the files.
 6. **Report**, in under fifteen lines: the capture date now, what was
    refetched, drafts completed (ids and forms), weights moved (id, old,
    new, reason), anything skipped and why, and that the board is ready at

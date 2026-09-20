@@ -1,8 +1,11 @@
 """Unit tests: the pure functions the pulls lean on. No database, no
 network - every lesson here was paid for once already."""
 
+import pytest
+
 from db.data.names import name_key
-from db.data.wiki.maps import parse_stages
+from db.data.wiki import WikiError
+from db.data.wiki.maps import parse_phases, parse_stages, parse_stretches, stages_of
 from db.data.wiki.measurements import parse_measurements
 
 # --- measurements: value / numerator / denominator / window ------------
@@ -113,6 +116,86 @@ def test_prose_only_maps_have_no_stages():
 
 def test_fewer_than_two_bullets_is_not_a_stage_list():
     assert parse_stages("==Gameplay==\n* Lone bullet\n") == []
+
+
+# --- an Escort map's stretches, a Hybrid map's phases ---------------------------
+
+ESCORT_NAMED = """
+==Background==
+=== The Old Quarter ===
+lore
+== Gameplay ==
+[[File:Harbour View.webp|thumb|Harbour View]]
+Harbour is an [[Escort]] map which takes place in three main locations: The
+City Streets, a [[Rum|Distillery]], and the Sea Fort.
+
+=== City Streets ===
+A long open street.
+
+===<u>Distillery</u>===
+An enclosed building.
+
+=== The Sea Fort ===
+A straight with minimal cover.
+
+===Ferry Rides===
+Ferries cross the water.
+
+== Strategy ==
+=== Heroes ===
+"""
+
+ESCORT_UNNAMED = """
+==Gameplay==
+The payload starts at the docks, passes the market and ends in the [[hangar]].
+
+==Strategy==
+=== Attack ===
+Take the high ground.
+"""
+
+HYBRID_PAGE = """[[File:Hybrid.png|right|frameless]]
+'''Hybrid''' is one of the main [[game mode]]s. It is a combination of the
+[[Assault]] and [[Escort (game mode)|Escort]] modes.
+
+==Gameplay==
+In the first section, the attacking team must capture a point.
+"""
+
+
+def test_stretches_are_the_gameplay_subsections_the_opening_names():
+    # a leading article aside; Ferry Rides is a subsection, not a stretch
+    assert parse_stretches(ESCORT_NAMED) == ["City Streets", "Distillery", "The Sea Fort"]
+
+
+def test_an_escort_article_that_names_no_stretch_stores_none():
+    assert parse_stretches(ESCORT_UNNAMED) == []
+    assert stages_of("escort", ESCORT_UNNAMED, ["Assault", "Escort"]) == []
+    # subsections its opening does not list are not stretches
+    assert parse_stretches("==Gameplay==\nA route.\n=== Docks ===\n=== Market ===\n") == []
+    assert parse_stretches("==Background==\nlore\n") == []
+
+
+def test_the_hybrid_article_names_the_two_phases_in_play_order():
+    # a piped link gives its label
+    assert parse_phases(HYBRID_PAGE) == ["Assault", "Escort"]
+    assert parse_phases("a combination of [[Assault]] and [[Escort]].") == ["Assault", "Escort"]
+    with pytest.raises(WikiError):
+        parse_phases("Hybrid is a [[game mode]].")
+
+
+def test_a_maps_stages_follow_its_mode():
+    phases = ["Assault", "Escort"]
+    assert stages_of("control", FIXTURE, phases) == ["Downtown", "Sanctuary", "MEKA Base"]
+    assert stages_of("flashpoint", FIXTURE, phases) == ["Downtown", "Sanctuary", "MEKA Base"]
+    assert stages_of("escort", ESCORT_NAMED, phases) == [
+        "City Streets", "Distillery", "The Sea Fort"]
+    # every Hybrid map plays the two phases, whatever its article lists
+    assert stages_of("hybrid", ESCORT_NAMED, phases) == phases
+    assert stages_of("hybrid", "", phases) == phases
+    # a Push map stays whole
+    assert stages_of("push", FIXTURE, phases) == []
+    assert stages_of("push", ESCORT_NAMED, phases) == []
 
 
 # --- an announced hero, from its article ----------------------------------------------

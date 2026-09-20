@@ -175,7 +175,7 @@ def derive_pending(h):
         return
     print("%d draft strategy(ies) await frontmatter; deriving on the host..." % pending)
     sh(sys.executable, "-m", "db.mcp", "call", "derive_strategies")
-    mcp("load_authored", {"only": ["strategies"]})
+    mcp("load_authored")
 
 
 def up():
@@ -230,8 +230,9 @@ def status():
 # names - on either server, and no built-in tool at all: no shell, no file
 # edits, no web.
 AGENT_TOOL_NAMES = ("db_status", "strategies", "tuning_log", "metrics", "facts", "infer",
-                    "query", "sync_all", "pull_rates", "pull_counters", "load_authored",
-                    "infer_strategy", "tune", "db_docs", "export_csv")
+                    "query", "sync_all", "pull_rates", "pull_counters", "pull_synergies",
+                    "pull_seasons", "load_authored", "infer_strategy", "tune", "db_docs",
+                    "export_csv", "reach")
 # A refresh pull fetches dozens of pages at a polite pace: minutes, not the
 # seconds a tool call is given by default.
 AGENT_TOOL_TIMEOUT_MS = str(45 * 60 * 1000)

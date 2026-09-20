@@ -99,10 +99,9 @@ def _summary(title, summary):
       " supplies, and how many pages its cache holds.")
 def list_sources(ctx):
     from db.data.blizzard import BLIZZARD
-    from db.data.counterpick import COUNTERPICK
     from db.data.wiki import WIKI
     rows = []
-    for code, name, url in (BLIZZARD, WIKI, COUNTERPICK):
+    for code, name, url in (BLIZZARD, WIKI):
         path = ctx.caches[code]
         cached = len(os.listdir(path)) if os.path.isdir(path) else 0
         rows.append({"code": code, "name": name, "url": url,
@@ -151,11 +150,24 @@ def pull_kits(ctx, refresh=False, supplement=True):
 
 
 @tool("pull_maps", "The wiki's map pool: maps, game modes, playable"
-      " combinations, and the stages of Control and Flashpoint maps.",
+      " combinations, and each map's stages: a Control map's three, a Flashpoint"
+      " map's five points, a Hybrid map's two phases, an Escort map's stretches"
+      " where its article names them. Push maps have none.",
       REFRESH)
 def pull_maps(ctx, refresh=False):
     return _summary("pull_maps: map pool stored", _pull(
         ctx, "wiki", "db.data.wiki.maps", refresh))
+
+
+@tool("pull_terrain", "The wiki's map articles: per map, the mentions of each"
+      " terrain feature (chokes, interiors, high_ground, flanks, sightlines,"
+      " open_ground, hazards, cover) and the mentions per thousand words; the"
+      " same per stage, where the article has text about the stage. Reloads"
+      " map_terrain and stage_terrain whole. Run after pull_maps: a stage must"
+      " exist before its terrain.", REFRESH)
+def pull_terrain(ctx, refresh=False):
+    return _summary("pull_terrain: terrain stored", _pull(
+        ctx, "wiki", "db.data.wiki.terrain", refresh))
 
 
 @tool("pull_patches", "The wiki's patch list, so every rates snapshot can say"
@@ -163,6 +175,14 @@ def pull_maps(ctx, refresh=False):
 def pull_patches(ctx, refresh=False):
     return _summary("pull_patches: patches stored", _pull(
         ctx, "wiki", "db.data.wiki.patches", refresh))
+
+
+@tool("pull_seasons", "The wiki's Season pages: every season that has started,"
+      " with its start date. Restamps every rates snapshot with its season. Run"
+      " before pull_rates.", REFRESH)
+def pull_seasons(ctx, refresh=False):
+    return _summary("pull_seasons: seasons stored", _pull(
+        ctx, "wiki", "db.data.wiki.seasons", refresh))
 
 
 @tool("pull_rates", "Blizzard's win/pick/ban rates as a NEW dated snapshot,"
@@ -181,46 +201,55 @@ def pull_playstyles(ctx, refresh=False):
         ctx, "wiki", "db.data.wiki.playstyles", refresh))
 
 
-@tool("pull_counters", "counterpick.gg: who answers whom, each hero's best"
-      " maps, and its own rates under a separate snapshot.", REFRESH)
+@tool("pull_synergies", "The Synergy section of every hero's wiki article: one"
+      " row per pair, score 2 when both articles name each other, 1 when one"
+      " does, the wiki's advice as the note. Run after pull_heroes.", REFRESH)
+def pull_synergies(ctx, refresh=False):
+    return _summary("pull_synergies: pairs stored", _pull(
+        ctx, "wiki", "db.data.wiki.synergies", refresh))
+
+
+@tool("pull_counters", "The Match-Up column of every hero's wiki article: each"
+      " written cell read as a verdict and stored as a directed edge, one row ="
+      " countered_by answers hero. Reloads the table whole. Run after"
+      " pull_heroes.", REFRESH)
 def pull_counters(ctx, refresh=False):
     return _summary("pull_counters: counters stored", _pull(
-        ctx, "counterpick", "db.data.counterpick.heroes", refresh))
+        ctx, "wiki", "db.data.wiki.matchups", refresh))
 
 
+# Dependency order: heroes before what links to them, maps and their stages
+# before the terrain counted for them, seasons and patches before the pull
+# that stamps a snapshot (rates).
 PULLS = [("pull_heroes", "blizzard"), ("pull_kits", "wiki"),
-         ("pull_maps", "wiki"), ("pull_patches", "wiki"),
+         ("pull_maps", "wiki"), ("pull_terrain", "wiki"),
+         ("pull_patches", "wiki"), ("pull_seasons", "wiki"),
          ("pull_rates", "blizzard"), ("pull_playstyles", "wiki"),
-         ("pull_counters", "counterpick")]
+         ("pull_synergies", "wiki"), ("pull_counters", "wiki")]
 
-AUTHORED_INPUTS = ("seasons", "synergies", "archetypes", "map_playstyle", "strategies")
+# The one input a user writes. Every other table is pulled.
+AUTHORED_INPUTS = ("strategies",)
 
 
-@tool("load_authored", "Store the inputs we write instead of fetch: seasons,"
-      " synergies, comp archetypes, map playstyles, and the mirror of the"
-      " strategies catalog. Whole-truth reloads.",
+@tool("load_authored", "Store the one input a user writes: the mirror of the"
+      " strategies in inference/strategies/. A whole-truth reload.",
       {"only": {"type": "array", "items": {"type": "string",
                                             "enum": list(AUTHORED_INPUTS)},
-                "description": "a subset to reload (default: all)"}})
+                "description": "accepted for older callers; strategies is the"
+                               " only input"}})
 def load_authored(ctx, only=None):
-    from db.data import authored
-    selected = [p for p in AUTHORED_INPUTS if not only or p in only]
+    from inference import catalog, derive
     summaries = {}
     with ctx.connect() as cx:
-        for name in selected:
-            if name == "strategies":
-                from inference import catalog, derive
-                cat = catalog.load()
-                if any(h.pending for h in cat) and derive.available():
-                    # drafts on a host with the CLI: the engine derives them now
-                    ctx.log(derive.rendered(derive.derive(log=ctx.log)))
-                    cat = catalog.load()
-                summaries[name] = catalog.mirror(cx, cat)
-                pending = [h.id for h in cat if h.pending]
-                if pending:
-                    summaries[name]["pending"] = len(pending)
-            else:
-                summaries[name] = authored.LOADERS[name](cx, log=ctx.log)
+        cat = catalog.load()
+        if any(h.pending for h in cat) and derive.available():
+            # drafts on a host with the CLI: the engine derives them now
+            ctx.log(derive.rendered(derive.derive(log=ctx.log)))
+            cat = catalog.load()
+        summaries["strategies"] = catalog.mirror(cx, cat)
+        pending = [h.id for h in cat if h.pending]
+        if pending:
+            summaries["strategies"]["pending"] = len(pending)
     text = "load_authored: " + "; ".join(
         "%s %s" % (name, ", ".join("%s=%s" % (k, v) for k, v in s.items()
                                     if k != "tables"))
@@ -228,8 +257,8 @@ def load_authored(ctx, only=None):
     return text, summaries
 
 
-@tool("sync_all", "Every pull_* tool in dependency order, then the authored"
-      " inputs, then the CSV mirror. On a populated database this is an"
+@tool("sync_all", "Every pull_* tool in dependency order, then the strategies"
+      " mirror, then the CSV mirror. On a populated database this is an"
       " update: entities refresh in place, rates append a snapshot.", REFRESH)
 def sync_all(ctx, refresh=False):
     results = {}
@@ -239,7 +268,7 @@ def sync_all(ctx, refresh=False):
     ctx.log("=== load_authored ===")
     results["load_authored"] = run_tool(ctx, "load_authored")[1]
     results["export_csv"] = run_tool(ctx, "export_csv")[1]
-    return "sync_all: %d pulls + authored inputs + export done" % len(PULLS), results
+    return "sync_all: %d pulls + strategies mirror + export done" % len(PULLS), results
 
 
 # --- the database's life ----------------------------------------------------
@@ -605,7 +634,7 @@ def reach_tool(ctx, hero):
       " each other), the game plan in prose, the shapes the playbook's limits"
       " allow, and red's likely six"
       " from the data alone (a two-two-two from the map's pick rates and the"
-      " authored synergies, past the bans; static for the board, no strategy read).",
+      " wiki's synergies, past the bans; static for the board, no strategy read).",
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
                                                           " search keeps (default 6)"},
            weights={"type": "object",

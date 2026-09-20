@@ -26,7 +26,8 @@ DOC_DOMAIN = {"001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES"
               "003_maps.sql": "MAPS", "004_meta.sql": "META",
               "005_playbook.sql": "PLAYBOOK",
               "008_schema_migrations.sql": "foundation",
-              "010_constraints_and_heuristics.sql": "INFERENCE"}
+              "010_constraints_and_heuristics.sql": "INFERENCE",
+              "020_map_terrain.sql": "MAPS", "021_stage_terrain.sql": "MAPS"}
 
 
 class SchemaError(Exception):
@@ -113,6 +114,9 @@ def rebuild(connection, quiet=False):
 
 # --- generated documentation -------------------------------------------
 
+COMMENT_RE = re.compile(r"^COMMENT ON TABLE (\w+) IS\s+'((?:[^']|'')*)'\s*;", re.M)
+
+
 def _migration_tables():
     out = {}
     for path, text in read_migrations():
@@ -121,6 +125,11 @@ def _migration_tables():
             prose = " ".join(line.lstrip("-").strip() for line in m.group(1).splitlines()
                              if line.strip() not in ("--", ""))
             out[m.group(2)] = (fn, prose.strip())
+        # a later COMMENT ON TABLE rewrites the prose: applied migrations are
+        # never edited, so this is how a table's description is corrected
+        for m in COMMENT_RE.finditer(text):
+            if m.group(1) in out:
+                out[m.group(1)] = (out[m.group(1)][0], m.group(2).replace("''", "'").strip())
     return out
 
 
@@ -180,8 +189,9 @@ def generate_docs(connection, path=None):
            "(the selection joined with others: map_meta is heroes ⋈ maps ⋈ meta,",
            "counters and synergies are heroes ⋈ heroes), and a join belongs to",
            "every domain it touches. The other two are the",
-           "playbook's record: the authored inputs (PLAYBOOK) and the mirror of the",
-           "strategies the inference layer solves with (INFERENCE). The composition is",
+           "playbook's record: the judgements pulled from the wiki",
+           "(PLAYBOOK) and the mirror of the strategies, the one input a user writes,",
+           "that the inference layer solves with (INFERENCE). The composition is",
            "the argmax of the strategies - the constraints, heuristics and assumptions",
            "in inference/strategies/ - over the facts.", "",
            "```", "DATA        = HEROES ∪ MAPS ∪ META",

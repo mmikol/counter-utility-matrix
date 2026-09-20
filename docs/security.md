@@ -1,7 +1,7 @@
 # Security
 
 The project runs on your machine, on your Claude Code subscription,
-against three public websites. What is worth protecting: your account,
+against two public websites. What is worth protecting: your account,
 your operating system, and the playbook and database the board trusts at
 game time.
 
@@ -9,10 +9,10 @@ game time.
 
 | threat | how it would arrive |
 | --- | --- |
-| **prompt injection** | text from a source page (an ability description, a wiki note, a counterpick tooltip) or a strategy file that reads like an instruction, shown to a session by a tool - or to the headless agents' run, which has tools and no person watching |
+| **prompt injection** | text from a source page (an ability description, a wiki note) or a strategy file that reads like an instruction, shown to a session by a tool - or to the headless agents' run, which has tools and no person watching |
 | **the door** | the MCP server over HTTP: any process on this machine can call every tool, including the ones that write, refresh or rebuild; a browser page could try the same through DNS rebinding |
 | **SQL** | the `query` tool: the project's database users are superusers, and a superuser's `SELECT` can read files off the disk it runs on |
-| **files** | tools that write into the playbook and the authored inputs: a path that escapes the folder, a file the catalog would refuse, an oversized body |
+| **files** | tools that write into the playbook: a path that escapes the folder, a file the catalog would refuse, an oversized body |
 | **the containers** | a compromised process inside one reaching the internet, escalating, or filling the host |
 | **your account** | the CLI signed in on the host, driven headless with tools |
 
@@ -91,19 +91,20 @@ share one network: Docker publishes a port only for a container on a
 routable network, and the sentry needs the database, so what keeps
 `inference`, `ui`, `db` and `sentry` off the internet is that their code
 opens no connection out - only the two pull-side containers fetch
-anything, from three fixed hosts. Every published port binds to
-127.0.0.1.
+anything, from two fixed hosts: Blizzard's site and the wiki. Every
+published port binds to 127.0.0.1.
 
-**The sentry watches.** A sixth container (`db/sentry.py`) checks, every
+**The sentry watches.** The `sentry` container (`db/sentry.py`) checks, every
 thirty seconds: that every file in `inference/strategies/` loads through
 the catalog - one that does not is quarantined (renamed to
 `.md.quarantined`, which the catalog ignores) and named in the report;
 that no strategy's prose reads like an instruction ("ignore previous
 instructions", a shell command, a credential, a script tag, a base64
-blob) - one that does is quarantined the same way; that the authored CSVs
-and the free text in the database carry no such text - those are flagged,
-not removed, a person decides; and what the audit log says about the last
-minute - calls, refusals, crashes, any client past the rate limit. The
+blob) - one that does is quarantined the same way; that the free text in
+the database (descriptions, the wiki's notes, strategy bodies) carries no
+such text - those are flagged, not removed, a person decides; and what the
+audit log says about the last minute - calls, refusals, crashes, any
+client past the rate limit. The
 scan folds Unicode to one shape and strips zero-width characters first,
 so a word broken by an invisible character still reads as the word. Its
 report is `db/raw/sentry.json`, and `python orchestrator.py status`
@@ -115,7 +116,7 @@ exits non-zero when something is wrong.
 - The CLI is signed in under your account on the host. The fences above
   bound what a headless run can do with it; nothing bounds what you type
   into an interactive session. Read what a skill reports.
-- The sources are three public websites fetched over HTTPS by two
+- The sources are two public websites fetched over HTTPS by two
   containers. A compromised page can put text into the database; the
   sentry flags it, the skills treat it as data, and a rebuild from the
   page cache reproduces it until the cache is refreshed.

@@ -144,6 +144,11 @@ def test_full_refresh_is_due_when_the_slow_caches_are_stale(tmp_path):
     assert refresh.full_due(7, [str(tmp_path)]) is False
     _old_file(tmp_path / "Ana.wikitext", "x", hours=24 * 8)
     assert refresh.full_due(7, [str(tmp_path)]) is True
+    # the daily refresh refetches the Season pages; the rest still says stale
+    _old_file(tmp_path / "Mei.wikitext", "x", hours=24 * 9)
+    _old_file(tmp_path / "Season.wikitext", "x", hours=1)
+    assert refresh.full_due(7, [str(tmp_path)]) is True
+    assert refresh.full_due(7) in (True, False)     # the default reads the wiki cache
 
 
 def test_daily_refresh_touches_only_what_moves(monkeypatch):
@@ -153,8 +158,13 @@ def test_daily_refresh_touches_only_what_moves(monkeypatch):
         (name, kw.get("refresh"))) or ("%s: ok" % name, {}))
     ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"),
                                  lambda m: None, full=False)
-    assert ok and calls == [("pull_rates", True), ("pull_counters", True),
+    # seasons first: the day's snapshots are stamped with the season live today
+    assert ok and calls == [("pull_seasons", True), ("pull_rates", True),
                             ("load_authored", None), ("export_csv", None)]
+    # the hero articles (kits, synergies, counters) are the full refresh's: a
+    # daily refetch would keep the wiki cache young and full_due() never true
+    assert not set(refresh.DAILY) & {"pull_kits", "pull_synergies", "pull_counters"}
+    assert "pull_counters" in [name for name, _ in tools.PULLS]
     calls.clear()
     ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"),
                                  lambda m: None, full=True)

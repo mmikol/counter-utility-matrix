@@ -1,5 +1,5 @@
-"""The daily refresh: the database, the authored inputs and the strategies
-mirror brought up to date on a schedule.
+"""The daily refresh: the database and the strategies mirror brought up to
+date on a schedule.
 
     python -m db.refresh              run daily at COUNTER_MATRIX_REFRESH_AT
                                         (05:00 by default, container time);
@@ -9,10 +9,11 @@ mirror brought up to date on a schedule.
     python -m db.refresh --now        one refresh, then exit
 
 A refresh comes in two sizes. The DAILY one refetches what moves day to
-day - the rates and counterpick's counters - then re-mirrors the authored
-inputs and the strategies and re-exports db/raw. The FULL one is
-`sync_all` with refresh on: every page of every source, including the
-hero pages and wiki articles that only change with a patch; it runs when
+day - the wiki's seasons (a snapshot is stamped with the season live that
+day) and the rates - then re-mirrors the strategies and re-exports db/raw.
+The FULL one is `sync_all` with refresh on: every page of every source,
+including the hero pages and the wiki articles (kits, synergies, counters)
+that only change with a patch; it runs when
 the wiki cache is older than COUNTER_MATRIX_REFRESH_FULL_DAYS (7). Either
 way a page that fails keeps its cached copy, so a flaky source degrades
 to yesterday's numbers rather than an empty table. The `refresher`
@@ -31,7 +32,10 @@ from db.mcp import tools
 DEFAULT_AT = os.environ.get("COUNTER_MATRIX_REFRESH_AT", "05:00")
 DEFAULT_MAX_AGE_HOURS = float(os.environ.get("COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS", "20"))
 DEFAULT_FULL_DAYS = float(os.environ.get("COUNTER_MATRIX_REFRESH_FULL_DAYS", "7"))
-DAILY = ("pull_rates", "pull_counters")     # what moves between patches
+# What moves between patches. Seasons first: rates stamp their snapshot with
+# the season live today. No tool that reads the hero articles: refetching
+# them daily would keep the wiki cache young and a full refresh never due.
+DAILY = ("pull_seasons", "pull_rates")
 
 
 def parse_at(text):
@@ -73,15 +77,21 @@ def cache_age_hours(cache_dirs=None):
 
 
 def full_due(full_days=DEFAULT_FULL_DAYS, cache_dirs=None):
-    """A full refresh is due when the slow-moving caches (the wiki's) are
-    older than `full_days`, or absent."""
-    dirs = cache_dirs or [CACHE_DIRS["wiki"], CACHE_DIRS["blizzard"]]
-    age = cache_age_hours(dirs)
-    return age is None or age > full_days * 24
+    """A full refresh is due when the slow-moving cache (the wiki's) is older
+    than `full_days`, or absent. Its age is the median page's: the daily
+    refresh refetches a few pages (the Season pages), a full one all of them."""
+    ages = []
+    for path in (cache_dirs or [CACHE_DIRS["wiki"]]):
+        if os.path.isdir(path):
+            ages += [time.time() - os.path.getmtime(os.path.join(path, name))
+                     for name in os.listdir(path)]
+    if not ages:
+        return True
+    return sorted(ages)[len(ages) // 2] > full_days * 24 * 3600
 
 
 def refresh_once(ctx, log=print, full=None, full_days=DEFAULT_FULL_DAYS):
-    """One refresh -> (ok, text): daily (rates, counters, authored inputs, export)
+    """One refresh -> (ok, text): daily (seasons, rates, strategies, export)
     or full (every source) - decided by full_due() unless `full` is given.
     Never raises; a failure returns (False, the error)."""
     started = time.time()

@@ -247,9 +247,9 @@ class Strategy:
         """A heuristic guarded on the six's own state: the solver charges what it
         misses (weight x (norm - 1)) instead of paying what it has. Guards on red
         or the map - red's matchup keys included - leave it a reward."""
-        from ui.facts.compute import RED_MATCHUP
         return (self.form == "heuristic" and self.when is not None
-                and any(n.split(".", 1)[0] not in BOARD_SECTIONS and n not in RED_MATCHUP
+                and any(n.split(".", 1)[0] not in BOARD_SECTIONS
+                        and n not in compute.RED_MATCHUP
                         for n in self.when.names))
 
     def to_dict(self):

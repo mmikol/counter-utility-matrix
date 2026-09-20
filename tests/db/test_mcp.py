@@ -37,7 +37,8 @@ def test_initialize_then_list_tools_over_stdio():
     assert replies[0]["result"]["protocolVersion"] == "2025-06-18"
     assert replies[0]["result"]["serverInfo"]["name"] == "counter-utility-matrix"
     names = {t["name"] for t in replies[1]["result"]["tools"]}
-    assert {"pull_heroes", "pull_rates", "sync_all", "db_rebuild", "db_migrate", "query",
+    assert {"pull_heroes", "pull_rates", "pull_seasons", "pull_synergies", "sync_all",
+            "db_rebuild", "db_migrate", "query",
             "facts", "infer", "evaluate", "board", "strategies", "load_authored",
             "tune", "tuning_log", "metrics",
             "add_strategy", "infer_strategy", "derive_strategies", "db_docs"} <= names
@@ -55,7 +56,8 @@ def test_tools_call_without_a_database_and_unknown_method():
         {"jsonrpc": "2.0", "id": 3, "method": "resources/list"},
     ])
     text = replies[0]["result"]["content"][0]["text"]
-    assert "blizzard" in text and "wiki" in text and "counterpick" in text
+    assert "blizzard" in text and "wiki" in text and "counterpick" not in text
+    assert "pull_counters" in next(line for line in text.splitlines() if line.startswith("wiki"))
     assert replies[0]["result"]["isError"] is False
     assert replies[1]["error"]["code"] == -32601
     uris = {r["uri"] for r in replies[2]["result"]["resources"]}
@@ -112,7 +114,10 @@ def test_query_is_read_only(ctx):
 @pytest.mark.invariant
 def test_db_status_and_roster(ctx):
     _, status = tools.run_tool(ctx, "db_status")
-    assert status["tables"] >= 36 and status["counts"]["heroes"] > 40
+    # 33: map_strategy went with counterpick.gg (migration 019)
+    assert status["tables"] >= 33 and status["counts"]["heroes"] > 40
+    assert status["counts"]["counters"] >= 100
+    assert {s["source"] for s in status["snapshots"]} == {"blizzard"}
     _, roster = tools.run_tool(ctx, "roster")
     assert any(h["name"] == "Ana" and h["portrait"] for h in roster["heroes"])
     assert any(m["name"] == "King's Row" and m["mode"] == "Hybrid" for m in roster["maps"])

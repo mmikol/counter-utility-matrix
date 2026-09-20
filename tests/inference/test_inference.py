@@ -1,6 +1,7 @@
 """The inference layer: the expression language and catalog are pure; the
 solver and evaluation run against the built database."""
 
+import copy
 import os
 import shutil
 
@@ -218,9 +219,8 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     # prose: the ground, what to play, them, the family
     plan = b["plan"]
     assert plan.startswith("King's Row is a Hybrid map: a capture point and then the payload path")
-    assert "The archetypal brawl map; streets phase is one long corridor." in plan
     assert "You are attacking: you have to break their hold" in plan
-    assert "The map rewards brawl" in plan
+    assert "The map rewards %s" % world.map("King's Row").style_top in plan
     assert "Their 2 picks so far (Zarya, Pharah)" in plan and "answer" in plan
     assert "If you stray from the six, stay in its family. Tanks: " in plan
     assert "Above all: " in plan
@@ -356,9 +356,11 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     # reference (100), and the verdict is the plain "no picks yet"
     empty = engine.board_dict(engine.board(world, None, [], [], catalog=scratch))
     assert empty["blue"]["normalized"] == 100 and empty["blue"]["unscored"] is None
-    if any(world.hero(name).flyer for name in empty["expected"]["blue"]):
+    # matchup.flyers counts fliers tanks aside: a flying tank does not raise the guard
+    if any(world.hero(name).flyer and world.hero(name).role != "tank"
+           for name in empty["expected"]["blue"]):
         assert empty["momentum"]["verdict"] == "no picks yet on either side"
-    else:                         # the likely six fields no flier: the one rule waits here too
+    else:                         # the likely six fields no such flier: the one rule waits here too
         assert "waits for matchup.flyers >= 1" in empty["momentum"]["verdict"]
     assert empty["blue"]["red"] == empty["expected"]["blue"]           # countering the likely six
     flying = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
@@ -440,7 +442,7 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     b = engine.board(world, "Ilios", [], [], bans=["Widowmaker"], catalog=fix)
     assert b["plan"].endswith("the map, 1 ban.") and b["plan"].count("\n") >= 2
     assert b["plan"].startswith("Ilios is a Control map: one point in three arenas")
-    assert "Ledges and open points reward mobility; well punishes immobile comps." in b["plan"]
+    assert "The map rewards %s" % world.map("Ilios").style_top in b["plan"]
 
 
 @pytest.mark.invariant
@@ -531,21 +533,77 @@ def test_the_momentum_verdict_reads_the_two_current_comps():
 
 
 @pytest.mark.invariant
-def test_the_plan_reads_every_authored_map_note(world, kings_row_board):
-    """Every map's authored note is a sentence of its plan. One board is solved
-    through the public path; the other maps' plans are composed from that
-    board's optimal, since the note is the map's and the solve is not."""
+def test_the_plan_names_every_maps_derived_style(world, kings_row_board):
+    """Every map's plan names the style its rates reward and cites no note: a
+    map has none. One board is solved through the public path; the other maps'
+    plans are composed from that board's optimal."""
     from inference import engine
     blue_r = kings_row_board["blue"]
-    for m in world.maps.values():                         # each note is a sentence of the plan
-        note = m.styles.get(m.style_top, (None, None))[1] if m.style_top else None
-        if note:
-            plan = (kings_row_board["plan"] if m.name == "King's Row"
-                    else engine._plan(world, m, "", [], [], blue_r))
-            assert engine._sentence(note) in plan, m.name
+    for m in world.maps.values():
+        assert m.style_top and all(note is None for _, note in m.styles.values()), m.name
+        plan = (kings_row_board["plan"] if m.name == "King's Row"
+                else engine._plan(world, m, "", [], [], blue_r))
+        assert "The map rewards %s" % m.style_top in plan, m.name
+        assert "archetype" not in plan and "authored" not in plan, m.name
     assert engine._and(["A"]) == "A" and engine._and(["A", "B", "C"]) == "A, B and C"
-    names = engine._hero_names(world, "winston d.va wrecking ball nobody")
-    assert names == ["Winston", "D.Va", "Wrecking Ball"]
+
+
+@pytest.mark.invariant
+def test_the_plan_names_the_terrain_the_facts_hold_and_no_other(world, kings_row_board):
+    """The map sentence names the map.terrain facts above the ordinary map, largest
+    first; a board whose facts hold none for the map names none."""
+    from inference import engine
+    from ui.facts import model
+    blue_r = kings_row_board["blue"]
+    above = [f.value["feature"] for f in blue_r.facts.find("map.terrain", "King's Row")
+             if f.value["z"] > 0][:engine.TERRAIN_NAMED]
+    assert above and above[0] == "chokes"
+    assert set(engine.TERRAIN_GROUND) == set(model.TERRAIN_FEATURES)
+    sentence = "The wiki's article stresses %s." % engine._and(
+        engine.TERRAIN_GROUND[f] for f in above)
+    assert sentence in kings_row_board["plan"].split("\n")[0]
+    # these facts are King's Row's: another map's plan reads none of them
+    assert "stresses" not in engine._plan(world, world.map("Ilios"), "", [], [], blue_r)
+
+
+@pytest.mark.invariant
+def test_the_plan_names_the_stages_the_facts_hold_and_no_other(world, kings_row_board):
+    """One sentence names the stages with a map.stage_terrain fact, in play order,
+    STAGES_NAMED at most, each by the features its fact holds; no fact, no sentence."""
+    import copy
+
+    from inference import engine
+    from ui.facts import engine as facts_engine
+    blue_r = kings_row_board["blue"]
+    held = blue_r.facts.find("map.stage_terrain", "King's Row")
+    assert [f.value["stage"] for f in held] == ["Assault", "Escort"]
+    named = [engine._and(engine.TERRAIN_GROUND[x["feature"]] for x in f.value["features"])
+             for f in held]
+    sentence = "Assault has the %s; Escort the %s." % tuple(named)
+    assert sentence in kings_row_board["plan"].split("\n")[0]
+
+    def plan(name):
+        r = copy.copy(blue_r)
+        r.facts = facts_engine.generate(world, name)
+        return engine._plan(world, world.map(name), "", [], [], r).split("\n")[0]
+    assert "Well has the environmental hazards." in plan("Ilios")
+    assert "Lighthouse" not in plan("Ilios") and "Ruins" not in plan("Ilios")
+    # three stages at most: the largest, told in play order
+    suravasa = world.map("Suravasa")
+    r = copy.copy(blue_r)
+    r.facts = facts_engine.generate(world, "Suravasa")
+    assert not r.facts.find("map.stage_terrain")
+    for stage, z in zip(suravasa.stages[:4], (1.0, 4.0, 3.0, 2.0), strict=True):
+        r.facts.add("map", "Suravasa", "map.stage_terrain", stage, source="stage_terrain",
+                    value={"stage": stage, "features": [{"feature": "cover", "z": z}]})
+    assert engine.STAGES_NAMED == 3 and "%s has the cover; %s the cover; %s the cover." % tuple(
+        suravasa.stages[1:4]) in engine._plan(world, suravasa, "", [], [], r)
+    assert suravasa.stages[0] not in engine._plan(world, suravasa, "", [], [], r)
+    # no stage fact: Oasis has stages and no text of theirs, Dorado no stages
+    for name in ("Oasis", "Dorado", "Colosseo"):
+        assert not facts_engine.generate(world, name).find("map.stage_terrain")
+        assert " has the " not in plan(name), name
+        assert not any(stage in plan(name) for stage in world.map(name).stages), name
 
 
 def test_the_plan_says_nothing_the_board_contradicts(world):
@@ -555,7 +613,8 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     from types import SimpleNamespace as Ns
 
     from inference import engine
-    m = world.map("King's Row")
+    m = copy.copy(world.map("King's Row"))
+    m.styles = {"brawl": (1.0, None), "dive": (-0.5, None), "poke": (0.0, None)}   # a brawl map
     rules = [Ns(id="two-supports-hold", name="Two supports hold a six", kind="constraint",
                 category="shape", when=None),
              Ns(id="dive-the-pocket", name="Dive the pocket", kind="constraint",
@@ -586,13 +645,20 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     plan = engine._plan(world, m, "", [], [], six)                      # red has revealed nothing
     assert "this red" not in plan and "but the six leans poke" in plan
     assert "No red pick yet: the six counters their likely six (Reinhardt, Zarya)." in plan
-    tanks = engine._family(world, m, "brawl", "tank", " reinhardt zarya sigma", ["Zarya"])
-    alone = [h.name for h in world.heroes.values()
-             if h.role == "tank" and h.styles == {"brawl"} and h.released and h.name != "Zarya"]
-    assert "Reinhardt" in tanks and set(alone) <= set(tanks)
+    tanks = engine._family(world, m, "brawl", "tank", ["Zarya"])
+    tagged = [h for h in world.heroes.values()
+              if h.role == "tank" and "brawl" in h.styles and h.released and h.name != "Zarya"]
+    assert set(tanks) <= {h.name for h in tagged} and "Reinhardt" in tanks
+    assert len(tanks) == min(engine.FAMILY_SIZE, len(tagged))
     assert "Zarya" not in tanks and "Sigma" not in tanks             # banned; not tagged brawl
-    rates = [world.hero(n).map_win(m.id) or world.hero(n).win or 0.0 for n in tanks]
-    assert rates == sorted(rates, reverse=True)
+    # fewest tags first, then the best win rate here
+    keys = [(len(world.hero(n).styles), -(world.hero(n).map_win(m.id) or world.hero(n).win or 0.0))
+            for n in tanks]
+    assert keys == sorted(keys)
+    alone = [h for h in tagged if h.styles == {"brawl"}]
+    assert [world.hero(n) for n in tanks[:len(alone)]] == sorted(
+        alone, key=lambda h: -(h.map_win(m.id) or h.win or 0.0))[:engine.FAMILY_SIZE]
+    assert "Tanks: %s." % ", ".join(engine._family(world, m, "poke", "tank", [])) in plan
 
 
 def test_the_rendered_breakdown_marks_a_need():
@@ -664,12 +730,12 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
     for key in ("style_top", "style_lean", "style_counts", "style_fit"):
         assert forward[key] == backward[key], key
     ilios = world.map("Ilios")
-    tied = dict(ilios.styles)
-    ilios.styles = dict(reversed(list(tied.items())))
+    derived = dict(ilios.styles)
+    ilios.styles = {"poke": (1.0, None), "dive": (0.2, None), "brawl": (1.0, None)}
     try:
-        assert ilios.style_top == max(sorted(tied), key=lambda st: (tied[st][0] or 0, st))
+        assert ilios.style_top == "brawl" and ilios.style_margin == 0
     finally:
-        ilios.styles = tied
+        ilios.styles = derived
     once = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
     twice = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
     assert once.blue == twice.blue and abs(once.score - twice.score) < 1e-12
@@ -715,7 +781,8 @@ def test_a_mirror_pick_cites_its_own_facts_not_the_enemy_copy(world):
     r = engine.evaluate(world, "King's Row", ["Winston", "Genji", "Tracer"],
                         ["D.Va", "Reinhardt", "Tracer", "Brigitte", "Lúcio", "Ana"])
     ours = next(p for p in r.picks if p["hero"] == "Tracer")
-    assert "answers Ana" not in ours["why"] and "Winston" not in ours["why"]
+    partners = ours["why"].split(";")[0]          # red's Winston may answer her; he is no partner
+    assert "answers Ana" not in ours["why"] and "Winston" not in partners
     clues = ("answers Genji", "answers Tracer", "partner of D.Va")
     assert any(clue in ours["why"] for clue in clues)
 
@@ -755,12 +822,10 @@ def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(wor
 @pytest.mark.invariant
 def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path):
     """One slot at a time, a pair worth nothing apart is never met: each partner
-    alone only costs. The playbook here pays one authored pair, the two
+    alone only costs. The playbook here pays one synergy pair, the two
     lowest-standing heroes of their roles, outside the pools. The best six holds
     both, with the locked pick, the ban and the shape kept; the pair step off,
     the search stops short of it."""
-    import copy
-
     from inference import solver as solver_module
     (tmp_path / "shape.md").write_text(
         "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and"
@@ -774,7 +839,7 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
     def solver_on(w):
         return solver_module.Solver(w, None, [], locked, scratch, pool_size=3, bans=banned)
 
-    alone = copy.copy(world)                   # the same roster, no authored pair yet
+    alone = copy.copy(world)                   # the same roster, no synergy pair yet
     alone.synergies, alone.partners = {}, {}
     before = solver_on(alone)
     before.solve(top=1)

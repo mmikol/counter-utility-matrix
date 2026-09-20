@@ -238,11 +238,10 @@ class Hero:
         self.modifiers = []
         self.win = self.pick = self.ban = None
         self.by_tier = {}
-        self.alt_rates = {}          # other sources' own populations: code -> (win, pick)
         self.prev_win = None
         self.map_rates = {}
         self.map_bans = {}           # map_id -> ban rate on that map, when published
-        self.best_maps = []
+        self.best_maps = []          # map ids, three at most: see best_maps()
         self.perk_effects = []       # (perk, the ability it alters)
 
     # --- derived scalars, computed once the kit and rates are loaded ------
@@ -543,11 +542,28 @@ class Hero:
         return rate[1] if rate else None
 
 
+# the terrain the wiki's map articles describe, as map_terrain stores it
+TERRAIN_FEATURES = ("chokes", "interiors", "high_ground", "flanks", "sightlines",
+                    "open_ground", "hazards", "cover")
+# the terrain each playstyle is played on (authored; cover leans to none)
+TERRAIN_LEAN = {
+    "brawl": ("chokes", "interiors"),
+    "dive": ("high_ground", "flanks", "hazards"),
+    "poke": ("sightlines", "open_ground"),
+}
+
+
 class Map:
     def __init__(self, mid, name, mode):
         self.id, self.name, self.mode = mid, name, mode
-        self.stages = []
-        self.styles = {}          # style -> (score, note)
+        self.stages = []          # names, in play order: see map_stages
+        self.stage_terrain = {}   # stage -> {feature: (per thousand words, mentions)}; text only
+        self.stage_z = {}         # stage -> {feature: z}: see stage_terrain
+        self.terrain = {}         # feature -> mentions per thousand words; empty without text
+        self.terrain_z = dict.fromkeys(TERRAIN_FEATURES, 0.0)   # see map_terrain
+        self.rate_lift = {}       # style -> z: see map_styles
+        self.terrain_lean = {}    # style -> z: see map_terrain
+        self.styles = {}          # style -> (rate_lift + terrain_lean, None)
 
     @property
     def style_top(self):
@@ -558,7 +574,9 @@ class Map:
     @property
     def style_margin(self):
         scores = sorted((v[0] or 0 for v in self.styles.values()), reverse=True)
-        return (scores[0] - scores[1]) if len(scores) >= 2 else (scores[0] if scores else 0)
+        if len(scores) >= 2:
+            return round(scores[0] - scores[1], 3)
+        return scores[0] if scores else 0
 
 
 class World:
@@ -572,7 +590,6 @@ class World:
         self.answers = defaultdict(set)         # winner -> {losers}
         self.synergies = {}                     # frozenset({a,b}) -> (score, note)
         self.partners = defaultdict(dict)       # a -> {b: (score, note)}
-        self.archetypes = defaultdict(dict)     # style -> {role: (slots, note)}
         self.snapshots = []
         self.newer_patches = []
         self.subrole_passives = {}              # subrole -> its passive's description
@@ -652,6 +669,86 @@ PREVIOUS_BLIZZARD = """(select ms.snapshot_id from meta_snapshots ms
 
 def _rows(cx, sql, *args):
     return cx.execute(sql, args or None).fetchall()
+
+
+def _z_scores(values):
+    """{key: value} -> {key: z}, by the population's mean and sd; 0 where sd is 0."""
+    if not values:
+        return {}
+    mean, sd = statistics.fmean(values.values()), statistics.pstdev(values.values())
+    return {k: round((v - mean) / sd, 3) if sd else 0.0 for k, v in values.items()}
+
+
+def map_terrain(w):
+    """Map.terrain_z[F]: the map's mentions of F per thousand words, z-scored
+    across the maps that have text; 0 for every F on a map with none.
+    Map.terrain_lean[S]: the mean of terrain_z over TERRAIN_LEAN[S], z-scored
+    across the same maps; absent on a map with no text."""
+    read = sorted((m for m in w.maps.values() if m.terrain), key=lambda m: m.id)
+    for m in w.maps.values():
+        m.terrain_z = dict.fromkeys(TERRAIN_FEATURES, 0.0)
+        m.terrain_lean = {}
+    for feature in TERRAIN_FEATURES:
+        for mid, z in _z_scores({m.id: m.terrain.get(feature, 0.0) for m in read}).items():
+            w.maps[mid].terrain_z[feature] = z
+    for style, features in sorted(TERRAIN_LEAN.items()):
+        means = {m.id: statistics.fmean(m.terrain_z[f] for f in features) for m in read}
+        for mid, z in _z_scores(means).items():
+            w.maps[mid].terrain_lean[style] = z
+
+
+def stage_terrain(w):
+    """Map.stage_z[stage][F]: the stage's mentions of F per thousand words of its
+    own text, z-scored across every stage that has text; a stage without text
+    holds nothing."""
+    read = sorted((m.id, stage) for m in w.maps.values() for stage in m.stage_terrain)
+    for m in w.maps.values():
+        m.stage_z = {stage: {} for stage in m.stage_terrain}
+    for feature in TERRAIN_FEATURES:
+        rates = {(mid, stage): w.maps[mid].stage_terrain[stage].get(feature, (0.0, 0))[0]
+                 for mid, stage in read}
+        for (mid, stage), z in _z_scores(rates).items():
+            w.maps[mid].stage_z[stage][feature] = z
+
+
+def map_styles(w):
+    """Map.rate_lift[S]: for a playstyle S and a map, the mean, over released
+    heroes tagged S, each weighted 1/(its tag count), of the hero's win rate
+    on the map minus its overall win rate, z-scored across the maps.
+    Map.styles[S] = (rate_lift[S] + terrain_lean[S], None); a missing half is 0."""
+    heroes = sorted((h for h in w.heroes.values()
+                     if h.released and h.styles and h.win is not None),
+                    key=lambda h: h.id)
+    maps = sorted(w.maps.values(), key=lambda m: m.id)
+    for m in maps:
+        m.rate_lift = {}
+    for style in sorted({s for h in heroes for s in h.styles}):
+        lifts = {}
+        for m in maps:
+            total = weight = 0.0
+            for h in heroes:
+                win = h.map_win(m.id)
+                if style in h.styles and win is not None:
+                    total += (win - h.win) / len(h.styles)
+                    weight += 1 / len(h.styles)
+            if weight:
+                lifts[m.id] = total / weight
+        for mid, z in _z_scores(lifts).items():
+            w.maps[mid].rate_lift[style] = z
+    for m in maps:
+        m.styles = {s: (round(m.rate_lift.get(s, 0.0) + m.terrain_lean.get(s, 0.0), 3), None)
+                    for s in sorted(set(m.rate_lift) | set(m.terrain_lean))}
+
+
+def best_maps(w):
+    """Hero.best_maps: the three maps with the largest (map win rate - overall
+    win rate), only where positive; ties by map name."""
+    for h in w.heroes.values():
+        if h.win is None:
+            continue
+        lifts = sorted((-round(win - h.win, 3), w.maps[mid].name, mid)
+                       for mid, (win, _) in h.map_rates.items() if win > h.win)
+        h.best_maps = [mid for _, _, mid in lifts[:3]]
 
 
 def load(cx):
@@ -759,19 +856,6 @@ def load(cx):
             where t.code = 'all' and m.snapshot_id = %s""" % PREVIOUS_BLIZZARD):
         if hid in w.heroes and win is not None:
             w.heroes[hid].prev_win = float(win)
-    # the other sources' rates are a second population, kept apart
-    for hid, code, win, pick in _rows(cx, """
-            select m.hero_id, src.code, m.win_rate, m.pick_rate from hero_meta m
-            join competitive_tiers t on t.tier_id = m.tier_id
-            join meta_snapshots ms on ms.snapshot_id = m.snapshot_id
-            join sources src on src.source_id = ms.source_id
-            where t.code = 'all' and src.code <> 'blizzard' and m.win_rate is not null
-              and ms.snapshot_id = (select ms2.snapshot_id from meta_snapshots ms2
-                                    where ms2.source_id = ms.source_id
-                                    order by ms2.captured_at desc, ms2.snapshot_id desc
-                                    limit 1)"""):
-        if hid in w.heroes:
-            w.heroes[hid].alt_rates[code] = (float(win), float(pick) if pick is not None else None)
 
     for mid, name, mode in _rows(cx, """
             select m.map_id, m.name, g.name from maps m
@@ -781,9 +865,6 @@ def load(cx):
         w.maps_by_key[name_key(name)] = mid
     for mid, stage in _rows(cx, "select map_id, name from map_stages order by map_id, position"):
         w.maps[mid].stages.append(stage)
-    for mid, style, score, note in _rows(
-            cx, "select map_id, style, score, note from map_playstyle"):
-        w.maps[mid].styles[style] = (score, note)
     for hid, mid, win, pick, ban in _rows(cx, """
             select m.hero_id, m.map_id, m.win_rate, m.pick_rate, m.ban_rate from map_meta m
             join competitive_tiers t on t.tier_id = m.tier_id
@@ -792,10 +873,17 @@ def load(cx):
             w.heroes[hid].map_rates[mid] = (float(win), float(pick) if pick is not None else None)
             if ban is not None:
                 w.heroes[hid].map_bans[mid] = float(ban)
-    for hid, mid in _rows(
-            cx, "select hero_id, map_id from map_strategy order by hero_id, position"):
-        if hid in w.heroes and mid in w.maps:
-            w.heroes[hid].best_maps.append(mid)
+    best_maps(w)
+    for mid, feature, rate in _rows(cx, "select map_id, feature, per_thousand from map_terrain"):
+        if mid in w.maps:
+            w.maps[mid].terrain[feature] = float(rate)
+    map_terrain(w)
+    for mid, stage, feature, rate, mentions in _rows(cx, """
+            select s.map_id, s.name, t.feature, t.per_thousand, t.mentions
+            from stage_terrain t join map_stages s using(stage_id)"""):
+        if mid in w.maps:
+            w.maps[mid].stage_terrain.setdefault(stage, {})[feature] = (float(rate), mentions)
+    stage_terrain(w)
 
     for loser, winner in _rows(cx, "select hero_id, countered_by_id from counters"):
         w.counters.add((loser, winner))
@@ -805,10 +893,6 @@ def load(cx):
         w.synergies[frozenset((a, b))] = (score, note)
         w.partners[a][b] = (score, note)
         w.partners[b][a] = (score, note)
-    for style, role, slots, note in _rows(cx, """
-            select a.style, r.code, a.slots, a.note from comp_archetypes a
-            join roles r using(role_id)"""):
-        w.archetypes[style][role] = (slots, note)
 
     w.snapshots = [{"source": src, "captured": str(cap), "patch": patch,
                     "released": str(rel) if rel else None, "season": season,
@@ -831,6 +915,7 @@ def load(cx):
             where p.released > (select coalesce(max(pp.released), '1900-01-01')
                 from meta_snapshots ms join patches pp using(patch_id))
             order by p.released desc""")]
+    map_styles(w)
     if cx.execute("select to_regclass('strategies')").fetchone()[0]:
         w.catalog_counts = dict(_rows(cx, "select kind, count(*) from strategies group by kind"))
         named = [p for (p,) in _rows(cx, "select distinct playbook from strategies")]

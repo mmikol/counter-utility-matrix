@@ -31,7 +31,7 @@ Code on your subscription, before a game, never during one.
 | `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain` | [skills.md](skills.md) |
 | `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
 | `.github/workflows/` | `ci.yml`: lint and the tests that need no built database, on pushes to `main` and on pull requests | |
-| `.cache-blizzard/` `.cache-wiki/` `.cache-counterpick/` | the page caches (gitignored): every build after the first costs almost no requests | |
+| `.cache-blizzard/` `.cache-wiki/` | the page caches (gitignored): every build after the first costs almost no requests | |
 
 How they fit:
 
@@ -39,14 +39,12 @@ How they fit:
 flowchart LR
     subgraph SOURCES["sources (free, no data APIs)"]
         BLZ["Blizzard<br/>roster, portraits, rates"]
-        WIKI["Overwatch wiki<br/>kits, numbers, keywords,<br/>maps, patches, styles"]
-        CPK["counterpick.gg<br/>counters, best maps"]
-        CSV["authored files<br/>synergies, archetypes,<br/>map styles, seasons"]
+        WIKI["Overwatch wiki<br/>kits, numbers, keywords,<br/>maps, patches, seasons,<br/>styles, synergies, counters"]
     end
 
     subgraph DATA["DATA LAYER - db/mcp/ (an MCP server)"]
         PULL["pull_* tools<br/>fetch (cached) -> clean -> store"]
-        PLAY["load_authored<br/>the authored inputs +<br/>the strategies mirror"]
+        PLAY["load_authored<br/>the strategies mirror"]
         DBT["db_* · query · export_csv"]
     end
 
@@ -69,8 +67,7 @@ flowchart LR
         SOLVER["solver<br/>enumerate · prune ·<br/>normalise · refine"]
     end
 
-    BLZ & WIKI & CPK --> PULL
-    CSV --> PLAY
+    BLZ & WIKI --> PULL
     HEUR --> PLAY
     PLAY --> INF
     PULL & PLAY --> PG
@@ -90,7 +87,7 @@ inference layer reads the facts, never the tables.
 
 The equation divides the layers. The data layer owns DATA. The UI layer's
 fact engine owns FACTS: per domain, the independent facts (a selection's
-own row - a hero's kit, rates and style; the map's mode and note; the
+own row - a hero's kit, rates and style; the map's mode and styles; the
 meta's vintage) and the dependent ones (that selection joined with
 others: the hero on this map, against each enemy, beside each ally, the
 six aggregated, the twelve compared, a banned hero against both teams'
@@ -109,13 +106,13 @@ mistaken for the other.
 | file | purpose |
 | --- | --- |
 | `orchestrator.py` | the end-to-end run. `python orchestrator.py` brings the stack up (the data container pulls and ingests when the database is empty or stale), runs the agents headless on the `/refresh` skill, and leaves the app running. Verbs: `run` (default) · `up` · `agents` · `status` · `refresh` · `test` · `down` |
-| `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock), `sentry` (the guard). Every container is unprivileged on a read-only root with no capabilities; every published port binds to 127.0.0.1. Bind mounts keep the caches, `db/raw`, `db/data/authored`, `inference/strategies` and `docs` on the host, so tuning, authoring and regenerating need no rebuild |
+| `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock), `sentry` (the guard). Every container is unprivileged on a read-only root with no capabilities; every published port binds to 127.0.0.1. Bind mounts keep the caches, `db/raw`, `inference/strategies` and `docs` on the host, so tuning, authoring and regenerating need no rebuild |
 | `Dockerfile` | the one image, run as an unprivileged user (uid 1000, or `COUNTER_MATRIX_UID`/`GID` from `.env` on a Linux host whose checkout is owned by someone else); `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty, unfilled or behind the migrations |
 | `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'` |
 | `.mcp.json` | registers the two MCP servers a Claude Code session sees: `counter-utility-matrix` (stdio, the local cluster) and `counter-utility-matrix-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
 | `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pytest-cov, ruff, and pgserver (the embedded PostgreSQL a local build uses) |
 | `pyproject.toml` | ruff's rules (line length 100); the coverage bar, 75% where a database exists |
-| `pytest.ini` | the `invariant` marker for tests that need a built database, `validation` for those that need the network |
+| `pytest.ini` | the `invariant` marker for tests that need a built database |
 | `SECURITY.md` | the terms - you run it at your own risk, no security commitment from the author - and how to report a vulnerability privately; the measures themselves are in [security.md](security.md) |
 | `LICENSE` | PolyForm Strict 1.0.0: noncommercial use only, no redistribution, no changes or new works; anything else needs a separate license from the author |
 | `.gitignore` `.dockerignore` | the caches, the cluster, the mirror, the venv, `.env` |
@@ -134,8 +131,8 @@ flowchart LR
         INF["inference - INFERENCE ENGINE<br/>:8019 infer · evaluate ·<br/>board · strategies"]
         UI["ui - UI LAYER<br/>:8017 the board<br/>facts in-process,<br/>comps via INFERENCE_URL"]
         DBC["db - postgres:16<br/>volume pgdata"]
-        REF["refresher - the clock<br/>rates + counters daily,<br/>every source weekly,<br/>and on start when stale"]
-        SEN["sentry - the guard<br/>the playbook, the inputs,<br/>the door's audit log"]
+        REF["refresher - the clock<br/>seasons + rates daily,<br/>every source weekly,<br/>and on start when stale"]
+        SEN["sentry - the guard<br/>the playbook, the database's text,<br/>the door's audit log"]
     end
     SESSION -->|".mcp.json: counter-utility-matrix-docker"| DATA
     BROWSER --> UI
@@ -188,8 +185,8 @@ servers and every tool.
 | `/tune` | changes a weight, a dial or an expression through `tune` |
 | `/strategy` | asks for a name, a kind and prose, infers the frontmatter and stores the strategy through `add_strategy` |
 | `/patches` | pulls the patch list and, when a patch shipped since the capture, refetches what it changes: rates, kits, Blizzard's text |
-| `/heroes` | adds or refreshes heroes: Blizzard's roster, the wiki's kits, the announced heroes ahead of release, counters |
-| `/maps` | adds or refreshes maps and names the ones without an authored playstyle note |
+| `/heroes` | adds or refreshes heroes: Blizzard's roster, the wiki's kits, styles and synergies, the announced heroes ahead of release, counters |
+| `/maps` | adds or refreshes maps: the pool, modes and stages, the per-map rates, the style each map's rates reward |
 | `/refresh` | the agents' run, the one `orchestrator.py agents` executes headless: refresh, complete drafts, re-infer with restraint, regenerate, report |
 | `/maintain` | the repo's maintainer: lint and tests three ways, docs current, stale names, dead code, layout, security posture, a report |
 
@@ -205,6 +202,6 @@ captured under, and the board warns when patches shipped since.
 Judgements (counters, synergies, playstyles) are tier- and
 region-agnostic by design, and a table is a table: every row carries its
 source, and that is the only distinction drawn between measured, judged
-and hand-written data. Players are assumed to play optimally - the ground
+and hand-written data. Only the strategies are hand-written. Players are assumed to play optimally - the ground
 rule every skill holds a comp to ([skills.md](skills.md)), so a strategy
 encodes the game, never a lobby's habits.

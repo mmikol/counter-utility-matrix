@@ -15,7 +15,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-RUN mkdir -p db/raw .cache-blizzard .cache-wiki .cache-counterpick \
+RUN mkdir -p db/raw .cache-blizzard .cache-wiki \
     && chown -R app:app /app
 USER app
 

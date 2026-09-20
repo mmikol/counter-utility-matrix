@@ -5,6 +5,11 @@
     maps           maps, game modes and stages from the Maps article
     patches        game versions from the Patches cargo table
     playstyles     the team-composition playstyles (dive, brawl, poke)
+    seasons        the seasons that have started, from the Season pages
+    synergies      pairs that work together, from each hero article's
+                   Synergy column
+    matchups       who answers whom (counters), from the same section's
+                   Match-Up column
     markup         reading the wiki's two markups - Cargo's rendered HTML
                    and article wikitext - and the tidying both need
     measurements   a stat value -> value, unit, window, condition

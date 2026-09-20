@@ -104,7 +104,7 @@ rests on. Below, two seats. Blue's optimal counter to current picks
 (left) is solved against red's revealed picks - or their likely starting
 comp until they reveal one - and never against blue's own picks. Red's
 most likely starting comp (right) is a two-two-two filled slot by slot
-with the hero the map's pick rates and the authored synergies make
+with the hero the map's pick rates and the wiki's synergies make
 likeliest, past the bans; static for the board, no strategy read. Neither
 seat carries a score: each is its side's reference. Under a seat's cards
 sit the search's numbers (candidates, seconds, the lean), the strategies
@@ -173,10 +173,16 @@ portrait tiles.
 heroes (role, subrole, health/shield/armor, the kit - weapons with their
 firing configs, abilities, perks, every stat as a measurement with unit
 and condition - keywords, the latest and previous rates, the per-map and
-per-tier rates, counters both ways, best maps, playstyles), the maps
-(mode, stages, playstyle fit), the meta snapshots and the patches newer
-than the capture, synergies and partners, archetypes, the catalog's
-shape. `Hero.finish()` derives the hero's numbers from weapons, abilities
+per-tier rates, counters both ways, playstyles), the maps
+(mode, stages), the meta snapshots and the patches newer than the
+capture, synergies and partners, the catalog's shape. `map_styles` then
+derives each map's styles: for a playstyle, the mean over the released
+heroes tagged with it - each weighted 1/(its tag count) - of the hero's
+win rate on the map minus its overall win rate, z-scored across the maps.
+`style_top` is the highest, ties by name; `style_margin` is the top minus
+the runner-up. `best_maps` derives each hero's best maps: the three with
+the largest map win rate minus overall win rate, only where positive,
+ties by map name. `Hero.finish()` derives the hero's numbers from weapons, abilities
 and passives; ultimates add tools only, perks nothing. dps: the held
 weapon, sustained, reload in. burst: the biggest single hit, a headshot
 where one counts. hps and peak heal: healing onto teammates, per second
@@ -200,7 +206,7 @@ prints them as the vocabulary a strategy may reference):
 | --- | --- |
 | `team.*` (also read as `enemy.*`) | shape (`tanks`, `damage`, `supports`, `shape_flags`), sustain (`hps_supports`, `hps_ratio`, `heal_peak_max`), damage (`dps_floor`, `burst_max`, `one_shots`), durability (`pool_total`, `squish_count`), tools (`mobility_count`, `cc_count`, `hitscan`, `antiheal`, `barrier_count`), coverage of the enemy (`coverage_share`), cohesion (`synergy_score`), map fit (`map_specialists`, `map_strategy_hits`), style (`style_lean`) |
 | `matchup.*` | the differences and ratios between the two teams: `dps_diff`, `burst_vs_heal`, `tempo_diff`, `ult_threat`, `style_lean_red` |
-| `map.*` | `known`, `mode`, `sided`, `side`, `style_top`, `style_margin`, `stages` |
+| `map.*` | `known`, `mode`, `sided`, `side`, `style_top`, `style_margin`, `stages`, `bans` |
 | `world.*` | `heal_bench`, `hps_bench`, `roster_size` |
 
 `team_metrics(world, heroes, map, enemies)` computes a team's numbers
@@ -209,9 +215,9 @@ prints them as the vocabulary a strategy may reference):
 `world_metrics(world)` the rest; `namespace(...)` bundles them as the
 `team`, `enemy`, `matchup`, `map` and `world` sections a strategy's
 expression reads. `expected_picks` is red's likely six from the data
-alone. `TEAM_SIZE` (six, 6v6 Open Queue), `MAX_BANS` (five),
-`SIDED_MODES` (Escort, Hybrid), `SIDES`, `is_sided` and `opposite` live
-here too.
+alone, filled into `EXPECTED_SHAPE` (two per role). `TEAM_SIZE` (six,
+6v6 Open Queue), `MAX_BANS` (five), `SIDED_MODES` (Escort, Hybrid),
+`SIDES`, `is_sided` and `opposite` live here too.
 
 ### `engine.py` - the FactSet
 
@@ -228,16 +234,15 @@ sentences so a person - or the `/comp` session - reads them as evidence:
 [F210] blue team shape: 2 tank / 2 dps / 2 support                 team
 [F230] sustain war: red supports peak 165 heal vs 1 blue anti-heal matchup
 -- the playbook's record: what it holds - not facts --
-[S1]  a brawl comp wants 2 tank: ...                               playbook
+[S1]  the playbook holds ... constraints, ... heuristics and ...   playbook
 ```
 
 Independent facts per hero and for the map come first; joint facts per
 team appear once a team has picks; matchup facts once both teams do. Ids
 are dense and stable within a board, which is what makes a citation mean
 something. Below the facts, numbered S1.., rides the playbook's record -
-the archetypes, how many constraints, heuristics and assumptions the
-catalog holds - citable but never mistaken for data, and not the
-strategies themselves.
+how many constraints, heuristics and assumptions the catalog holds -
+citable but never mistaken for data, and not the strategies themselves.
 
 ## One click on the board
 

@@ -41,7 +41,7 @@ shows). Prefer whichever is connected; they expose the same tools.
    facts (a selection's own row) and dependent ones (its joins: hero ⋈
    map, hero ⋈ enemy, hero ⋈ ally, the team, the matchup). Below a
    divider comes the playbook's record, numbered S1.. and just as
-   citable: the archetypes and the catalog's shape. The game is 6v6 Open
+   citable: the catalog's shape. The game is 6v6 Open
    Queue: six picks, at most two tanks. The playbook itself - STRATEGIES
    = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS - is three kinds of markdown
    file (read them with the `strategies` tool or as MCP resources):
@@ -70,8 +70,8 @@ shows). Prefer whichever is connected; they expose the same tools.
   for Open Queue. Lean on them for direction, not decimals;
   RANK-SENSITIVE facts matter if the user names a rank.
 - Never build a comp that dies with a likely ban (the ban facts say who).
-- The compose stack's `refresher` refreshes everything daily, so the
-  facts should open with today's capture. If they instead warn that
+- The compose stack's `refresher` refetches the rates daily and every
+  source weekly, so the facts should open with today's capture. If they instead warn that
   patches shipped since capture, weight kit facts and the playbook over
   rates, say so, and offer to run `sync_all` with `refresh: true`.
 

@@ -183,6 +183,13 @@ def test_every_named_hero_gets_a_deep_stack_of_independent_facts(world):
     assert sum(1 for f in fs.facts if f.subject == "Zarya") == 0
 
 
+def _an_edge(world):
+    """(loser, winner): the first directed counter edge between released heroes, by name -
+    the edges are the wiki's and move with it, so no test names one."""
+    names = {h.id: h.name for h in world.heroes.values() if h.released}
+    return min((names[a], names[b]) for a, b in world.counters if a in names and b in names)
+
+
 def test_team_facts_appear_per_side_and_matchup_only_with_both(world):
     fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], [])
     scopes = {f.scope for f in fs.facts}
@@ -190,12 +197,15 @@ def test_team_facts_appear_per_side_and_matchup_only_with_both(world):
     assert fs.find("team.tanks", "red")
     fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"])
     assert fs.find("team.coverage", "blue") and fs.find("matchup.net_edges")
-    assert any("Zarya is answered by blue Reinhardt" in f.text for f in fs.facts)
+    loser, winner = _an_edge(world)                # whichever match-up the wiki states
+    fs = engine.generate(world, "King's Row", [loser], [winner])
+    assert any("%s is answered by blue %s" % (loser, winner) in f.text for f in fs.facts)
 
 
 def test_board_context_facts_warn_and_cite(world):
-    fs = engine.generate(world, None, ["Zarya"], ["Ana"])
-    assert any(f.text.startswith("WARNING: blue Ana is answered by red Zarya")
+    loser, winner = _an_edge(world)
+    fs = engine.generate(world, None, [winner], [loser])
+    assert any(f.text.startswith("WARNING: blue %s is answered by red %s" % (loser, winner))
                for f in fs.facts)
     fs = engine.generate(world, "King's Row", [], ["Ana", "Reinhardt"])
     assert any(f.key == "hero.with_ally" and f.subject == "Ana" for f in fs.facts)
@@ -243,7 +253,12 @@ def test_the_whole_database_becomes_facts(world, rows):
     assert unread == [], unread
     fs = engine.generate(world, "King's Row", ["Zarya"], ["Ana"])
     keys = {f.key for f in fs.facts}
-    assert {"hero.rate_alt", "hero.perk_effect", "playbook.catalog"} <= keys, keys
+    assert {"hero.perk_effect", "playbook.catalog"} <= keys, keys
+    # one population of rates, Blizzard's: no source's second set, no third party named
+    assert "hero.rate_alt" not in keys and not hasattr(world.hero("Ana"), "alt_rates")
+    assert {s["source"] for s in world.snapshots} == {"blizzard"}
+    assert not any("counterpick" in f.text.lower() for f in fs.facts)
+    assert "map_strategy" not in src and "counterpick" not in src
     assert any("Americas" in f.text for f in fs.facts if f.key == "meta.snapshot")
 
 
@@ -258,6 +273,294 @@ def test_bans_become_facts_and_a_banned_pick_is_refused(world):
         engine.generate(world, None, ["Zarya"], ["Ana"], bans=["Ana"])
     with pytest.raises(ValueError, match="unknown heroes"):
         engine.generate(world, None, [], [], bans=["Goku"])
+
+
+def test_the_rates_half_of_a_maps_style_is_derived_from_its_rates(world):
+    """Map.rate_lift[S] is the z-score, across the maps, of the mean map-minus-overall
+    win rate of the released heroes tagged S, each weighted 1/(its tag count)."""
+    import statistics
+    styles = sorted({s for h in world.heroes.values() for s in h.styles})
+    assert styles and all(set(m.styles) == set(styles) for m in world.maps.values())
+
+    def lift(m, style):
+        rows = [((h.map_win(m.id) - h.win) / len(h.styles), 1 / len(h.styles))
+                for h in world.heroes.values()
+                if h.released and style in h.styles and h.win is not None
+                and h.map_win(m.id) is not None]
+        return sum(x for x, _ in rows) / sum(w for _, w in rows)
+    for style in styles:
+        lifts = {m.id: lift(m, style) for m in world.maps.values()}
+        mean, sd = statistics.fmean(lifts.values()), statistics.pstdev(lifts.values())
+        for m in world.maps.values():
+            assert m.rate_lift[style] == pytest.approx((lifts[m.id] - mean) / sd, abs=1e-3)
+            assert m.styles[style][1] is None
+        assert statistics.fmean(m.rate_lift[style] for m in world.maps.values()) == \
+            pytest.approx(0, abs=1e-3)
+    m = world.map("King's Row")
+    ranked = sorted(m.styles, key=lambda s: (-m.styles[s][0], s))
+    assert m.style_top == ranked[0]
+    assert m.style_margin == pytest.approx(m.styles[ranked[0]][0] - m.styles[ranked[1]][0])
+    # an announced hero moves no map's style
+    early = [h for h in world.heroes.values() if not h.released]
+    before = {mm.id: (dict(mm.styles), dict(mm.rate_lift)) for mm in world.maps.values()}
+    kept = [(h, h.win, h.map_rates) for h in early]
+    for h in early:
+        h.win, h.map_rates = 99.0, {m.id: (1.0, None)}
+    try:
+        model.map_styles(world)
+        assert early and before == {mm.id: (dict(mm.styles), dict(mm.rate_lift))
+                                    for mm in world.maps.values()}
+    finally:
+        for h, win, map_rates in kept:
+            h.win, h.map_rates = win, map_rates
+    fs = engine.generate(world, "King's Row", [], [])
+    facts = fs.find("map.rate_lift")
+    assert [f.value["style"] for f in facts] == ranked
+    top = facts[0]
+    assert top.source == "playstyle+map_meta" and top.text == (
+        "%s heroes win %.1f sd %s on King's Row than on other maps"
+        % (ranked[0], abs(m.rate_lift[ranked[0]]),
+           "less" if m.rate_lift[ranked[0]] < 0 else "more"))
+    assert not any("authored" in f.text or "archetype" in f.text for f in fs.facts)
+
+
+def _with_text(world):
+    return [m for m in world.maps.values() if m.terrain]
+
+
+def test_terrain_metrics_are_z_scores_across_the_maps_with_text(world, rows):
+    import statistics
+    features = model.TERRAIN_FEATURES
+    assert set(features) == {f for (f,) in rows("select distinct feature from map_terrain")}
+    assert set(features) < set(compute.MAP_METRICS)
+    assert not {"map." + f for f in features} & compute.TEXT_METRICS
+    assert all("map." + f in compute.registry() for f in features)
+    read = _with_text(world)
+    assert len(read) == rows("select count(distinct map_id) from map_terrain")[0][0] >= 2
+    for m in read:
+        assert set(m.terrain) == set(features)             # all eight rows, zeros included
+    for f in features:
+        raw = {m.id: m.terrain[f] for m in read}
+        mean, sd = statistics.fmean(raw.values()), statistics.pstdev(raw.values())
+        assert sd > 0
+        for m in read:
+            assert m.terrain_z[f] == pytest.approx((raw[m.id] - mean) / sd, abs=1e-3)
+            assert compute.map_metrics(m)[f] == m.terrain_z[f]
+        zs = [m.terrain_z[f] for m in read]
+        assert statistics.fmean(zs) == pytest.approx(0, abs=1e-3)
+        assert statistics.pstdev(zs) == pytest.approx(1, abs=1e-2)
+    # the wiki's King's Row: narrow streets and a first chokepoint
+    kings = world.map("King's Row")
+    assert max(features, key=lambda f: kings.terrain_z[f]) == "chokes"
+    assert kings.terrain_z["chokes"] == max(m.terrain_z["chokes"] for m in read)
+
+
+def test_a_map_without_text_reads_zero_for_every_terrain_metric(world):
+    bare = [m for m in world.maps.values() if not m.terrain]
+    assert bare
+    for m in bare:
+        metrics = compute.map_metrics(m)
+        assert all(metrics[f] == 0.0 for f in model.TERRAIN_FEATURES)
+        assert m.terrain_lean == {}
+        assert {s: v[0] for s, v in m.styles.items()} == m.rate_lift    # the rates alone
+    none = compute.map_metrics(None)
+    assert all(none[f] == 0.0 for f in model.TERRAIN_FEATURES)
+    fs = engine.generate(world, bare[0].name, [], [])
+    assert fs.find("map.terrain_unread") and not fs.find("map.terrain")
+    assert not fs.find("map.terrain_lean")
+    assert "no terrain" in fs.find("map.style_top")[0].text
+
+
+def test_a_maps_style_is_the_rates_lift_plus_the_terrains_lean(world):
+    import statistics
+    assert model.TERRAIN_LEAN == {"brawl": ("chokes", "interiors"),
+                                  "dive": ("high_ground", "flanks", "hazards"),
+                                  "poke": ("sightlines", "open_ground")}
+    read = _with_text(world)
+    for style, features in model.TERRAIN_LEAN.items():
+        means = {m.id: statistics.fmean(m.terrain_z[f] for f in features) for m in read}
+        mean, sd = statistics.fmean(means.values()), statistics.pstdev(means.values())
+        for m in read:
+            assert m.terrain_lean[style] == pytest.approx((means[m.id] - mean) / sd, abs=1e-3)
+        assert statistics.pstdev(m.terrain_lean[style] for m in read) == \
+            pytest.approx(1, abs=1e-2)                       # on the rates' scale
+    for m in world.maps.values():
+        for style, (score, note) in m.styles.items():
+            assert note is None and score == pytest.approx(
+                m.rate_lift.get(style, 0.0) + m.terrain_lean.get(style, 0.0), abs=1e-3)
+    # the wiki's chokes outweigh King's Row's rates: the terrain rectifies the style
+    kings = world.map("King's Row")
+    assert max(kings.terrain_lean, key=kings.terrain_lean.get) == "brawl"
+    assert kings.style_top == max(kings.styles, key=lambda s: kings.styles[s][0])
+    assert compute.map_metrics(kings)["style_top"] == kings.style_top
+    assert compute.map_metrics(kings)["style_margin"] == kings.style_margin
+
+
+def test_terrain_and_both_halves_of_the_style_are_facts(world):
+    from ui.facts.compute import TERRAIN_STANDOUT
+    m = world.map("King's Row")
+    fs = engine.generate(world, "King's Row", [], [])
+    standouts = sorted((f for f in model.TERRAIN_FEATURES
+                        if abs(m.terrain_z[f]) >= TERRAIN_STANDOUT),
+                       key=lambda f: (-abs(m.terrain_z[f]), f))
+    facts = fs.find("map.terrain")
+    assert [f.value["feature"] for f in facts] == standouts and standouts[0] == "chokes"
+    assert facts[0].source == "map_terrain" and facts[0].text == (
+        "King's Row: chokes, %.1f sd above the ordinary map (the wiki's article)"
+        % m.terrain_z["chokes"])
+    assert facts[0].value == {"feature": "chokes", "z": m.terrain_z["chokes"],
+                              "per_thousand": m.terrain["chokes"]}
+    ranked = sorted(m.styles, key=lambda s: (-m.styles[s][0], s))
+    assert [f.value["style"] for f in fs.find("map.style")] == ranked
+    assert {f.value["style"]: f.value["score"] for f in fs.find("map.terrain_lean")} == \
+        m.terrain_lean
+    for f in fs.find("map.style"):
+        style = f.value["style"]
+        assert f.value["terrain"] == m.terrain_lean[style]
+        assert f.value["rates"] == m.rate_lift[style]
+        assert f.text == "%s on King's Row: %+.1f sd (terrain %+.1f, rates %+.1f)" % (
+            style, m.styles[style][0], m.terrain_lean[style], m.rate_lift[style])
+    top = fs.find("map.style_top")[0]
+    assert top.value == m.style_top and top.text.startswith(
+        "King's Row rewards %s: terrain %+.1f, rates %+.1f ("
+        % (m.style_top, m.terrain_lean[m.style_top], m.rate_lift[m.style_top]))
+
+
+def test_the_terrain_and_the_style_are_the_same_on_every_load(world, db):
+    again = model.load(db)
+    db.rollback()
+    for m in world.maps.values():
+        other = again.maps[m.id]
+        assert (m.terrain, m.terrain_z, m.terrain_lean, m.rate_lift, m.styles) == (
+            other.terrain, other.terrain_z, other.terrain_lean, other.rate_lift, other.styles)
+        assert list(compute.map_metrics(m)) == list(compute.map_metrics(other))
+    before = {m.id: (dict(m.terrain_z), dict(m.terrain_lean)) for m in world.maps.values()}
+    model.map_terrain(world)
+    assert before == {m.id: (dict(m.terrain_z), dict(m.terrain_lean))
+                      for m in world.maps.values()}
+
+
+def test_stages_are_read_per_mode_as_the_wiki_holds_them(world, rows):
+    stored = {}
+    for name, stage in rows("""select m.name, s.name from map_stages s join maps m
+                               using(map_id) order by m.name, s.position"""):
+        stored.setdefault(name, []).append(stage)
+    assert {m.name: m.stages for m in world.maps.values() if m.stages} == stored
+    by_mode = {}
+    for m in world.maps.values():
+        by_mode.setdefault(m.mode, []).append(m)
+    assert all(len(m.stages) == 3 for m in by_mode["Control"])
+    assert all(len(m.stages) == 5 for m in by_mode["Flashpoint"])
+    assert all(m.stages == ["Assault", "Escort"] for m in by_mode["Hybrid"])   # point, then payload
+    assert all(m.stages == [] for m in by_mode["Push"])
+    # an Escort map holds the three stretches its own article names, or none
+    assert {len(m.stages) for m in by_mode["Escort"]} == {0, 3}
+    assert world.map("Havana").stages == ["City Streets", "Distillery", "Sea Fort"]
+    assert world.map("Dorado").stages == []
+    assert world.map("Ilios").stages == ["Lighthouse", "Well", "Ruins"]
+
+
+def test_map_stages_counts_arenas_and_map_phases_counts_parts_of_a_route(world):
+    """`map.stages >= 3` guards rules about separate arenas (Control, Flashpoint):
+    a Hybrid map's two phases and an Escort map's three stretches count as
+    map.phases and leave map.stages at 0."""
+    for m in world.maps.values():
+        x = compute.map_metrics(m)
+        assert (x["stages"], x["phases"]) == (
+            (0, len(m.stages)) if compute.is_sided(m) else (len(m.stages), 0)), m.name
+        assert (x["stages"] >= 3) == (m.mode in ("Control", "Flashpoint")), m.name
+    assert compute.map_metrics(world.map("Havana"))["phases"] == 3
+    assert compute.map_metrics(world.map("King's Row"))["phases"] == 2
+    assert compute.map_metrics(world.map("Dorado"))["phases"] == 0
+    none = compute.map_metrics(None)
+    assert (none["stages"], none["phases"]) == (0, 0)
+    assert {"map.stages", "map.phases"} <= set(compute.registry())
+    assert not {"map.stages", "map.phases"} & compute.TEXT_METRICS
+    # one list fact a map: stages on arenas, phases on a route, neither without rows
+    for name, key, other in (("Ilios", "map.stages", "map.phases"),
+                             ("Havana", "map.phases", "map.stages"),
+                             ("King's Row", "map.phases", "map.stages")):
+        fs = engine.generate(world, name)
+        assert fs.find(key)[0].value == world.map(name).stages and not fs.find(other)
+        assert fs.find(key)[0].source == "map_stages"
+    assert engine.generate(world, "Havana").find("map.phases")[0].text == \
+        "Havana phases, in order: City Streets, Distillery, Sea Fort"
+    fs = engine.generate(world, "Colosseo")
+    assert not fs.find("map.stages") and not fs.find("map.phases")
+
+
+def test_stage_terrain_is_z_scored_across_the_stages_with_text(world, rows):
+    import statistics
+    features = model.TERRAIN_FEATURES
+    read = [(m, stage) for m in world.maps.values() for stage in m.stage_terrain]
+    assert len(read) == rows("select count(distinct stage_id) from stage_terrain")[0][0] >= 2
+    for m, stage in read:
+        assert stage in m.stages and set(m.stage_terrain[stage]) == set(features)
+        assert set(m.stage_z[stage]) == set(features)
+    for f in features:
+        raw = [m.stage_terrain[stage][f][0] for m, stage in read]
+        mean, sd = statistics.fmean(raw), statistics.pstdev(raw)
+        for m, stage in read:
+            assert m.stage_z[stage][f] == pytest.approx(
+                (m.stage_terrain[stage][f][0] - mean) / sd if sd else 0.0, abs=1e-3)
+    (rate, mentions), = rows("""select t.per_thousand, t.mentions from stage_terrain t
+        join map_stages s using(stage_id) join maps m using(map_id)
+        where m.name = 'Ilios' and s.name = 'Well' and t.feature = 'hazards'""")
+    assert world.map("Ilios").stage_terrain["Well"]["hazards"] == (float(rate), mentions)
+    # the same on every pass
+    before = {m.id: {s: dict(z) for s, z in m.stage_z.items()} for m in world.maps.values()}
+    model.stage_terrain(world)
+    assert before == {m.id: m.stage_z for m in world.maps.values()}
+
+
+def test_a_stage_fact_names_the_terrain_its_own_text_stresses(world):
+    from ui.facts.compute import STAGE_FEATURES, STAGE_MENTIONS, TERRAIN_STANDOUT
+    ilios = world.map("Ilios")
+    z = ilios.stage_z["Well"]["hazards"]
+    mentions = ilios.stage_terrain["Well"]["hazards"][1]
+    assert z >= TERRAIN_STANDOUT and mentions >= STAGE_MENTIONS
+    assert compute.stage_standouts(ilios, "Well") == [("hazards", z)]
+    facts = engine.generate(world, "Ilios").find("map.stage_terrain")
+    assert [f.value["stage"] for f in facts] == ["Well"]   # the article describes no other
+    assert facts[0].source == "stage_terrain" and facts[0].text == (
+        "Ilios - Well: hazards, %.1f sd above the ordinary stage (%d mentions in the wiki's"
+        " article)" % (z, mentions))
+    assert facts[0].value["features"] == [{
+        "feature": "hazards", "z": z, "mentions": mentions,
+        "per_thousand": ilios.stage_terrain["Well"]["hazards"][0]}]
+    # every stage fact: above the ordinary stage, on two mentions or more, two features at most
+    for m in world.maps.values():
+        facts = engine.generate(world, m.name).find("map.stage_terrain")
+        assert [f.value["stage"] for f in facts] == [
+            s for s in m.stages if compute.stage_standouts(m, s)], m.name
+        for f in facts:
+            named = f.value["features"]
+            assert 1 <= len(named) <= STAGE_FEATURES
+            assert [x["z"] for x in named] == sorted((x["z"] for x in named), reverse=True)
+            assert all(x["z"] >= TERRAIN_STANDOUT and x["mentions"] >= STAGE_MENTIONS
+                       for x in named)
+    # a Hybrid phase's attack and defense text count together: one fact a phase
+    assert [f.value["stage"] for f in engine.generate(world, "King's Row").find(
+        "map.stage_terrain")] == ["Assault", "Escort"]
+
+
+def test_a_stage_without_text_of_its_own_gets_no_stage_fact(world):
+    oasis, dorado = world.map("Oasis"), world.map("Dorado")
+    assert oasis.stages and not oasis.stage_terrain and not oasis.stage_z
+    assert not dorado.stages and not dorado.stage_terrain
+    for m in (oasis, dorado, world.map("Colosseo"), world.map("Blizzard World")):
+        assert not engine.generate(world, m.name).find("map.stage_terrain"), m.name
+        assert all(compute.stage_standouts(m, s) == [] for s in m.stages)
+    assert engine.generate(world, "Oasis").find("map.stages")     # the list still stands
+    # one mention swings a short text's rate: it is not a fact
+    import copy
+    m = copy.copy(oasis)
+    m.stage_terrain = {"Gardens": {"hazards": (40.0, compute.STAGE_MENTIONS - 1)}}
+    m.stage_z = {"Gardens": {"hazards": 3.0}}
+    assert compute.stage_standouts(m, "Gardens") == []
+    m.stage_terrain = {"Gardens": {"hazards": (40.0, compute.STAGE_MENTIONS)}}
+    assert compute.stage_standouts(m, "Gardens") == [("hazards", 3.0)]
+    assert compute.stage_standouts(m, "University") == []
 
 
 def test_sides_exist_only_on_escort_and_hybrid(world):
@@ -289,7 +592,7 @@ def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_ap
     assert [f.id for f in side] == ["S%d" % i for i in range(1, len(side) + 1)]
     assert {f.scope for f in facts} <= {"meta", "bans", "map", "hero", "team", "matchup"}
     assert {f.key.split(".")[0] for f in side} == {"playbook"}
-    assert {"playbook.archetype", "playbook.catalog"} <= {f.key for f in side}
+    assert {f.key for f in side} == {"playbook.catalog"}
     assert fs.count == len(facts) and fs.to_dict()["playbook_count"] == len(side)
     text = fs.rendered()
     assert text.startswith("[F1]") and engine.PLAYBOOK_DIVIDER in text
@@ -312,6 +615,33 @@ def test_map_rates_are_the_intersection_with_the_board(world):
     assert best[0].text.startswith("Sombra's best maps: ")
     assert len(no_map.find("hero.best_map", "Sombra")) <= 1 and not with_map.find("hero.best_map")
     assert not no_map.find("hero.map_win")
+
+
+def test_a_heros_best_maps_are_derived_from_blizzards_map_rates(world):
+    """Hero.best_maps: the three maps with the largest (map win rate - overall win
+    rate), only where positive, ties by map name."""
+    for h in world.heroes.values():
+        lifts = sorted((-round(win - h.win, 3), world.maps[mid].name, mid)
+                       for mid, (win, _) in h.map_rates.items()
+                       if h.win is not None and win > h.win)
+        assert h.best_maps == [mid for _, _, mid in lifts[:3]], h.name
+        assert len(h.best_maps) <= 3
+        assert all(h.map_win(mid) > h.win for mid in h.best_maps), h.name
+    assert sum(1 for h in world.heroes.values() if h.released and len(h.best_maps) == 3) > 40
+    assert all(not h.best_maps for h in world.heroes.values() if not h.map_rates)
+    # the hero's own line without a map; on its best map, the rank, and the team's count
+    sym = world.hero("Symmetra")
+    top = world.maps[sym.best_maps[0]]
+    line = engine.generate(world, None, [], ["Symmetra"]).find("hero.best_map", "Symmetra")[0]
+    assert line.text.startswith("Symmetra's three best maps by Blizzard's map rates")
+    assert line.value == [world.maps[mid].name for mid in sym.best_maps]
+    assert line.source == "derived:hero.best_map"
+    on_map = engine.generate(world, top.name, [], ["Symmetra"])
+    assert on_map.find("hero.map_strategy", "Symmetra")[0].value == 1
+    assert any(f.value == "Symmetra" for f in on_map.find("map.playbook_pick"))
+    assert compute.team_metrics(world, [sym], top)["map_strategy_hits"] == 1
+    assert compute.registry()["team.map_strategy_hits"] == (
+        "picks whose three best maps by rate include this map")
 
 
 def test_the_provenance_is_one_line_per_source(world):

@@ -24,8 +24,7 @@ keeps it current.
 - **The fact engine's dependent variables.** The equation is stated per
   domain (a selection's own row, then its joins) and the math page says
   so; the joins the data can still yield are listed under "Fact engine"
-  below, best first - the pairwise numbers, blue pick against red pick,
-  are the one to start with.
+  below, best first.
 - **Voice control for the picks.** Say "blue Ana", "red Pharah", "swap
   Ana for Kiriko", "clear red" and the board sets the picks, no clicking
   - for a draft called out at the table. The browser's speech
@@ -50,30 +49,25 @@ keeps it current.
   Cost: (a) three to four days, the kit model most of it; (b) a day for
   the tests, a day for the page.
 - **Weights that learn on their own.** The user wants them to, with the
-  sliders as the manual override. Learning needs a signal, and the one it
-  had was removed on the user's word. Two ways back, to decide with the
-  user: (a) a minimal outcome record, one row per board with won or lost
-  and the weights in force, and a `fit` that nudges each heuristic's
-  weight toward the contributions that won (a logistic fit over the
-  contribution vectors, capped per step, every change a tuning-log line
-  with "fit" as its reason); or (b) no recording: fit the weights so that
-  the solver's per-hero contribution ranks agree with each hero's
-  published win rate on the map, a weaker signal the data already holds.
-  Cost: (a) two days including the record and its tool; (b) a day.
+  sliders as the manual override. The weights were fitted once to a
+  benchmark of community comps; nothing refits them. No match result is
+  recorded, and a record of results would be a user input, which the
+  database does not take. The signal the data holds: fit the weights so
+  that the solver's per-hero contribution ranks agree with each hero's
+  published win rate on the map, capped per step, every change a
+  tuning-log line with "fit" as its reason. Cost: a day.
 - **Memoize the per-hero parts of the metrics.** `compute.team_metrics`
   rebuilds each hero's pool, kit sums and keyword sets for every
   candidate and is ~41% of a sequential board. A per-world term table
   measured 3x on the function, ~5% on a board. Cost: a day; risk: none to
   the answer if the memo is keyed on the hero and the map.
-- **What the scrub left in the data layer.** Reaper's Death Blossom
-  reads 185 (a per-second rate stored flat: `db/data/wiki/measurements.py`
-  RATE_UNITS, then a kit pull); Domina's weapon publishes no rate (dps 0);
-  conditional cooldowns are mis-split for nine abilities; the Blizzard
-  snapshot is stamped with a season seven months old; the counter page's
-  payload carries a 7-9 rating and a reason for 336 of the 450 edges,
-  unscraped. Cost: two days.
+- **What the scrub left in the data layer.** Domina's weapon publishes no
+  rate (dps 0); conditional cooldowns are mis-split for some abilities;
+  the match-up reader gives no verdict on about two in three written
+  wiki cells, and seven hero articles have no written cell. Cost: two
+  days.
 - **Facts no metric reads.** `ability_modifiers` holds speed, damage-taken
-  and healing-received buffs for thirty heroes; nothing in
+  and healing-received buffs; nothing in
   `ui/facts/compute.py` reads `hero.modifiers`. Knockbacks as their own
   count (Control's edges), damage beams apart from healing beams, area
   healing apart from area damage. Cost: a day each.
@@ -82,18 +76,17 @@ keeps it current.
   three-damage attacks (57-79 percent of the optimal today). The shape
   rules are scored constraints, which the fit does not touch. Cost: a day
   to fit their dials to the benchmark's off-shape entries.
-- **One hero on most boards.** D.Mon is in 74 percent of optimal sixes on
-  the strength of the roster's highest win rate (58.2). A win rate on a
-  2.9-8.6 percent pick rate is a specialist's: weigh it by its sample.
+- **One hero on most boards.** D.Mon is in most optimal sixes on the
+  strength of the roster's highest win rate. A win rate on a low pick
+  rate is a specialist's: weigh it by its sample.
 - **Shard the local search by seed.** The countered case's refine is the
   last serial block (~0.12 s). The result set holds; the reported
   `considered` count depends on seed order and would change.
 - **A strict dead-CSS test.** The test word-matches class names, so a dead
   compound selector passes (`.hcard .legend` did). Needs an exception list
   for the four classes built by concatenation.
-- **Fetch the sources concurrently, one polite pace per host.** Blizzard,
-  the wiki and the counter site can be pulled at the same time while each
-  keeps its delay; the database writes keep their order (heroes before
+- **Fetch the sources concurrently, one polite pace per host.** Blizzard
+  and the wiki can be pulled at the same time while each keeps its delay; the database writes keep their order (heroes before
   kits). Only the first build and the weekly full refresh get faster.
   Cost: a day; risk: the politeness must stay per host, not per thread.
 - **Run the test suite in parallel.** A worker plugin would take the
@@ -113,26 +106,16 @@ map, the meta, the bans); the rest are intersections (hero x map, hero x
 enemy, hero x ally, the team, the matchup). What the data can still
 yield, best first:
 
-- **Mend the tags the playbook review found.** Five reviewers reading
-  243 rules against the kit data found the vocabulary misleading in
-  places, and every rule on those keys inherits it: `team.range_max`
-  takes the largest range on any ability or ultimate, so Cassidy reads
-  200 m, Orisa 180 and Widowmaker 20 - the weapon's range is the number a
-  sniper rule means; `team.flyers` tags D.Va, Sigma, Mercy, Juno and
-  Illari, so a flier guard is always on; `team.deployables` counts
-  Reinhardt's, Sigma's and Ramattra's barriers and Mei's wall but not
-  Torbjörn's turret or Illari's pylon; `team.invuln` is mostly escape
-  tools while Immortality Field and Sound Barrier are untagged;
-  `team.barrier_hp` includes ultimates (Symmetra 4,000); `team.hitscan`
-  counts support and tank guns. And several keys are one measure under
-  two names - every `matchup.*_diff` normalises exactly like its blue
-  half because red is constant across a board's sample, `safe_count` is
-  6 minus `exposed_count`, `exposure_share` is `exposed_count` over 6,
-  `heal_ratio` is `heal_peak_supports` over a constant - so the catalog
-  should refuse a second heuristic on an alias of a metric already in
-  use. Cost: a day for the tags (a weapon-range key, a turret and pylon
-  tag, a true invulnerability tag, a flier tag from flight only), half a
-  day for the alias table and the catalog check.
+- **Refuse a second heuristic on an aliased metric.** Several keys are
+  one measure under two names - every `matchup.*_diff` normalises exactly
+  like its blue half because red is constant across a board's sample,
+  `safe_count` is 6 minus `exposed_count`, `heal_ratio` is
+  `heal_peak_supports` over a constant - so the catalog should refuse a
+  second heuristic on an alias of a metric already in use. Two tags are
+  still loose: `team.deployables` counts Reinhardt's, Sigma's and
+  Ramattra's barriers and Mei's wall; `team.hitscan` counts support and
+  tank guns. Cost: half a day for the alias table and the catalog check,
+  half a day for the tags.
 - **Tag every fact independent or dependent.** Each fact kind names the
   tables it joins (none for an independent one); the facts tab shows the
   tag and the board's counts by kind, so the equation's two terms are
@@ -147,9 +130,9 @@ yield, best first:
   against an engage tool, an invulnerability against a damage ultimate, a
   cleanse against a debuff. The team-level "wars" exist; the per-pair
   version names who answers whom and with what, from the kit keywords
-  plus a small authored table of which tool beats which. Cost: two days,
-  half of it the table.
-- **History across captures.** Seven snapshots exist; only the last step
+  plus a constant in `ui/facts/compute.py` of which tool beats which.
+  Cost: two days, half of it the constant.
+- **History across captures.** Every rates pull appends a snapshot; only the last step
   is a fact. A hero's win-rate series, who is rising and falling this
   season, and the patch each change followed. Cost: a day.
 - **Gaps named, not counted.** Coverage says "answers 2/3 red picks";
@@ -160,7 +143,7 @@ yield, best first:
   constraint would read these; a fact should state them. Cost: an hour.
 - **What the community says and no metric measures.** Building the
   community playbook left these unexpressed, each said by several voices:
-  a rush archetype and speed boost (Lúcio, Juno); peel as its own tool
+  rush as a style and speed boost (Lúcio, Juno); peel as its own tool
   set; main-tank and main-healer tags; per-role splits (a support line's
   damage, a tank pair's synergy, mobility per role); negative synergies
   (pairs that clash); healing and defensive ultimates as sustain (only
@@ -172,14 +155,27 @@ yield, best first:
   cheapest and unlock the most.
 
 What the sources do not publish, so no fact can: per-map rates by rank,
-per-side rates, per-stage rates, and a strength for a counter (the
-counters table is a list).
+per-side rates, per-stage rates, and a strength for a counter beyond the
+few match-ups the wiki rates (the counters table is a list).
 
 ## Done
 
+- **The strategies are the one user input** - `data-only-inputs` branch.
+  `seasons` and `synergies` are pulled from the wiki (`pull_seasons`,
+  `pull_synergies`); `map_playstyle` and `comp_archetypes` are dropped
+  (migration 018): a map's styles are derived at load from the per-map
+  rates and the wiki's hero playstyles, the expected shape is
+  `compute.EXPECTED_SHAPE`. The authored CSVs are deleted and
+  `load_authored` mirrors the strategy files only. The daily refresh
+  pulls the seasons, so a snapshot is stamped with the season live that
+  day. The scraped counter site is gone (migration 019): `pull_counters`
+  reads the Match-Up cells of every hero's wiki article into `counters`,
+  `map_strategy` is dropped and a hero's best maps are derived at load
+  from Blizzard's per-map rates, the second rates population and its
+  snapshots are deleted. The sources are Blizzard's site and the wiki.
 - **Facts audited, strategies weighed against them, weights fitted** -
   `facts-and-weights` branch. Hero numbers rebuilt from the kit rows
-  (keywords, three kit sets, units), 111 synergy pairs, 238 strategies
+  (keywords, three kit sets, units), 238 strategies
   reviewed against the database with 102 fixed, weights fitted to 117
   community comps (held-out AUC 0.79 -> 0.86), a second scrub of 71
   findings applied. Never-picked heroes 19 -> 9 of 53.
@@ -192,7 +188,7 @@ counters table is a list).
 - **The community's rules are the playbook** - `community-playbook`
   branch. Three hundred mined from reddit (r/OverwatchUniversity,
   r/Competitiveoverwatch, r/Overwatch: 172 threads and 11,800 comments
-  through the feeds and the archive's search) by twelve analysts over two
+  through reddit) by twelve analysts over two
   passes, standardized, stored through the validated add, checked on six
   boards and their reference samples; then five reviewers read them
   against each other and 62 went as duplicates behind aliased metrics or
@@ -215,9 +211,8 @@ counters table is a list).
   and `--cov` defined once in pyproject.
 - **The look is the game's again** - `fe32e70`. Dark surfaces, Bebas
   Neue, a gold accent, red and blue for the sides.
-- **Six debts cleared** - `debt` branch. The suite reads the map notes
-  off one solved board and shares the most-read board (three minutes to
-  two locally, four to three in the image); red's likely comp is a
+- **Six debts cleared** - `debt` branch. The suite shares the most-read
+  board (three minutes to two locally, four to three in the image); red's likely comp is a
   `Result` like every seat; the fixture playbook is the nineteen rules
   the tests use; the script trusts the engine's unscored reason; the
   math page is `ui/static/math.html`; the board script is three files

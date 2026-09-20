@@ -1,6 +1,6 @@
 ---
 name: patches
-description: Bring Counter Utility Matrix's database up to date with the game's patches - pull the patch list, see whether a patch shipped since the rates were captured, refetch what a patch changes (rates, kits, Blizzard's hero text), and report what moved. Use when the user says a patch dropped, asks "are we on the latest patch", "update for the patch", or the facts warn that patches shipped since capture.
+description: Bring Counter Utility Matrix's database up to date with the game's patches - pull the patch list, see whether a patch shipped since the rates were captured, refetch what a patch changes (the season, rates, kits, Blizzard's hero text), and report what moved. Use when the user says a patch dropped, asks "are we on the latest patch", "update for the patch", or the facts warn that patches shipped since capture.
 ---
 
 Keep the database on the current patch. Work through the
@@ -15,12 +15,16 @@ the one the board shows) when it answers, else `counter-utility-matrix`.
 2. **Nothing new?** Say so - the patch on record, its date, the capture
    date - and stop. A refetch for nothing is unkind to the sources.
 3. **A patch shipped.** In this order, one call at a time (a pull takes
-   minutes; wait for each): `pull_rates` with `refresh: true` (a new
-   dated snapshot, stamped with the patch), `pull_kits` with
+   minutes; wait for each): `pull_seasons` with `refresh: true` (a season
+   opens with a patch, and a snapshot is stamped with the season live
+   that day), `pull_rates` with `refresh: true` (a new dated snapshot,
+   stamped with the patch and the season), `pull_kits` with
    `refresh: true` (the numbers a patch changes: damage, cooldowns,
    health), `pull_heroes` with `refresh: true` (Blizzard's ability text
-   and any hero the patch released). `pull_counters` with `refresh: true`
-   if the patch reworked a hero. Then `db_docs` and `export_csv`.
+   and any hero the patch released). If the patch reworked a hero,
+   `pull_synergies` with `refresh: true` (the hero articles refetched),
+   then `pull_counters` with no refresh (the same articles' Match-Up
+   cells). Then `db_docs` and `export_csv`.
 4. **Report**, in under ten lines: the patch now on record, the capture
    date now, each pull's summary line (rows, heroes, anything unknown),
    and whether the board's facts still warn. Never edit a file by hand.

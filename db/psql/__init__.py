@@ -80,7 +80,7 @@ def current_patch(cursor):
 
 
 def current_season(cursor):
-    """The season live today, by latest start date. NULL until authored."""
+    """The season live today, by latest start date. NULL until pull_seasons."""
     row = cursor.execute(
         "SELECT season_id FROM seasons WHERE started <= CURRENT_DATE"
         " ORDER BY started DESC, season_id DESC LIMIT 1"

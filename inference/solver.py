@@ -23,7 +23,7 @@
                the answer does not depend on how the sweep was split
     refine     local search from the best six sixes and the best of every shape:
                swap any slot for any same-role hero on the roster, keep improvements;
-               then bring each authored pair into the best sixes two slots at once
+               then bring each of the wiki's synergy pairs into the best sixes two slots at once
 """
 
 import heapq
@@ -415,8 +415,8 @@ class Solver:
         exposed = sum(1 for e in self.red if self.world.counters_of(h.id, e.id))
         partners = sum(1 for a in self.locked if self.world.synergy(a.id, h.id))
         style = 1 if (self.m is not None and self.m.style_top in h.styles) else 0
-        listed = 1 if (self.m is not None and self.m.id in h.best_maps) else 0
-        return base + 3.0 * answers - 3.0 * exposed + 2.0 * partners + style + listed
+        best = 1 if (self.m is not None and self.m.id in h.best_maps) else 0
+        return base + 3.0 * answers - 3.0 * exposed + 2.0 * partners + style + best
 
     def pools(self):
         locked_ids = {h.id for h in self.locked} | self.banned
@@ -495,7 +495,7 @@ class Solver:
         """Local search: swap any open slot for any same-role hero. A swap keeps
         the shape, so the starts are the best SEEDS of the field and the best
         six of every shape in it: an off-shape six can win only if its own
-        shape was searched. Then the best SEEDS sixes try each authored pair
+        shape was searched. Then the best SEEDS sixes try each of the wiki's synergy pairs
         brought in two slots at once, and the swaps run on from any that gained:
         partners that pay only together are never met one swap at a time."""
         known = {c.key: c for c in ranked}
@@ -559,7 +559,7 @@ class Solver:
             current = best
 
     def _pairs(self):
-        """The authored synergy pairs this board can field, in id order."""
+        """The wiki's synergy pairs this board can field, in id order."""
         heroes = self.world.heroes
         out = []
         for a, b in sorted(tuple(sorted(pair)) for pair in self.world.synergies

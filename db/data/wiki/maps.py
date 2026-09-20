@@ -2,7 +2,8 @@
 
 Only the Maps article's "Standard Play" section is read; Former Standard
 Play (Assault, Clash), Stadium, Arcade, Custom Games, Training and seasonal
-modes are out of scope. Each map's own article supplies its stages.
+modes are out of scope. Each map's own article supplies its stages; the
+Hybrid article supplies the two phases every Hybrid map plays.
 """
 
 import re
@@ -65,11 +66,26 @@ def parse_modes_and_maps(text):
     return modes
 
 
-# --- stages (submaps) --------------------------------------------------
+# --- stages ------------------------------------------------------------------
+#
+# Control and Flashpoint maps: the submaps, from the Gameplay section's list.
+# Escort maps: the stretches of the route, where the article names them.
+# Hybrid maps: the two phases the Hybrid article names. Push maps: none.
 
 GAMEPLAY_SECTION_RE = re.compile(
     r'^==\s*Gameplay\s*==\s*$(.*?)(?=^==|\Z)', re.M | re.S)
+# The same section with its === subsections ===, cut at the next == heading.
+GAMEPLAY_WHOLE_RE = re.compile(
+    r'^==\s*Gameplay\s*==\s*$(.*?)(?=^==[^=]|\Z)', re.M | re.S)
+SUBHEADING_RE = re.compile(r'^===\s*([^=].*?)\s*===\s*$', re.M)
 LINK_TEXT_RE = re.compile(r'\[\[(?:[^|\]]*\|)?([^\]]+)\]\]')
+LEADING_ARTICLE_RE = re.compile(r'^(?:the|an?)\s+', re.I)
+
+HYBRID_PAGE = "Hybrid"
+# "It is a combination of the [[Assault]] and [[Escort]] modes."
+PHASES_RE = re.compile(
+    r'combination of\s+(?:the\s+)?(\[\[[^\]]+\]\])\s+and\s+'
+    r'(?:the\s+)?(\[\[[^\]]+\]\])', re.I)
 
 
 def parse_stages(text):
@@ -95,6 +111,51 @@ def parse_stages(text):
         if name and len(name) <= 40 and '. ' not in name:
             stages.append(name)
     return stages if len(stages) >= 2 else []
+
+
+def parse_stretches(text):
+    """[stretch name, ...] in route order, or [] when the article names none.
+
+    An article that names its route opens the Gameplay section with the list
+    ("takes place in three main locations: The City Streets, the Distillery,
+    and the Sea Fort") and gives each a === subsection ===. A subsection is a
+    stretch when that opening names it, a leading article aside: Rialto's
+    === Gondola Rides === is not one.
+    """
+    section = GAMEPLAY_WHOLE_RE.search(text)
+    if not section:
+        return []
+    body = section.group(1)
+    first = SUBHEADING_RE.search(body)
+    if not first:
+        return []
+    opening = markup.wikitext_to_text(body[:first.start()]).casefold()
+    stretches = []
+    for heading in SUBHEADING_RE.findall(body):
+        name = markup.wikitext_to_text(heading)
+        if LEADING_ARTICLE_RE.sub("", name).casefold() in opening:
+            stretches.append(name)
+    return stretches if len(stretches) >= 2 else []
+
+
+def parse_phases(text):
+    """The Hybrid article's two phases in play order: ["Assault", "Escort"].
+    A Hybrid map's first section is a capture point, the rest a payload."""
+    match = PHASES_RE.search(text)
+    if not match:
+        raise WikiError("Hybrid: the lead does not name the two modes combined")
+    return [markup.tidy(link) for link in match.groups()]
+
+
+def stages_of(code, text, phases):
+    """A map's stages by its mode; `phases` is parse_phases' result."""
+    if code in ("control", "flashpoint"):
+        return parse_stages(text)
+    if code == "escort":
+        return parse_stretches(text)
+    if code == "hybrid":
+        return list(phases)
+    return []
 
 
 # --- store ---------------------------------------------------------------------
@@ -138,11 +199,18 @@ def run(connection, cache_dir=None, session=None, log=print):
             combinations += 1
         log("  %-11s %2d maps" % (name, len(maps)))
 
-    stage_rows = 0
+    phases = parse_phases(fetch_wikitext(session, HYBRID_PAGE, cache_dir))
+    # a map in two modes takes its stages from the first
+    codes = {map_name: code for code, _, maps in reversed(modes)
+             for map_name in maps}
+    stage_rows, staged = 0, {}
     for map_name, map_id in map_ids.items():
-        for position, stage in enumerate(
-            parse_stages(fetch_wikitext(session, map_name.replace(" ", "_"),
-                                        cache_dir)), start=1):
+        stages = stages_of(codes[map_name], fetch_wikitext(
+            session, map_name.replace(" ", "_"), cache_dir), phases)
+        if stages:
+            staged[codes[map_name]] = staged.get(codes[map_name], 0) + 1
+            log("  %-22s %s" % (map_name, " > ".join(stages)))
+        for position, stage in enumerate(stages, start=1):
             cursor.execute(
                 "INSERT INTO map_stages (map_id, position, name, source_id)"
                 " VALUES (%s, %s, %s, %s)"
@@ -155,4 +223,5 @@ def run(connection, cache_dir=None, session=None, log=print):
     connection.commit()
     return {"modes": len(modes), "maps": len(map_ids),
             "combinations": combinations, "stages": stage_rows,
+            "maps_with_stages": staged,
             "tables": ["game_modes", "maps", "map_modes", "map_stages"]}

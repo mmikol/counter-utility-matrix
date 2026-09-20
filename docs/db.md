@@ -4,7 +4,7 @@ Pull every source, clean it, store it in Postgres, and serve the tools
 that do so. This layer owns `DATA = HEROES ∪ MAPS ∪ META`: the tables a
 board's facts are derived from. Every row carries a `source_id`, and that
 is the only distinction drawn between what was measured, what was judged
-and what was written by hand.
+and what was written by hand. Only the strategies are written by hand.
 
 **One door.** The MCP tools in `mcp/tools.py` are the only way in. A
 Claude Code session calls them over MCP, the `refresher` container calls
@@ -31,8 +31,7 @@ db/
   data/              the sources, page to table
     blizzard/        overwatch.blizzard.com
     wiki/            overwatch.fandom.com
-    counterpick/     counterpick.gg
-    authored/        the inputs we write by hand, and their loader
+    authored/        the `sources` row of the strategies mirror
     fetch.py         the page cache and its freshness policy
     names.py         matching hero, map and ability names across sources
   psql/              the database: where it is, the schema, the ledger
@@ -45,10 +44,10 @@ db/
 
 | file | purpose |
 | --- | --- |
-| `__init__.py` | What the whole layer agrees on, declared once: where the repo, the caches, the authored inputs and the mirror live, and the scope every rates snapshot is pinned to - console, controller, Americas. |
+| `__init__.py` | What the whole layer agrees on, declared once: where the repo, the caches and the mirror live, and the scope every rates snapshot is pinned to - console, controller, Americas. |
 | `data/fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `set_max_age`: the freshness policy - a build keeps every cached page, a refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `prepare_cache`: the cache directory a tool hands a pull. |
 | `data/names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. |
-| `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the authored CSVs and the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `python -m db.sentry --once` is one pass from a shell. |
+| `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `python -m db.sentry --once` is one pass from a shell. |
 | `refresh.py` | The clock: the daily refresh below, and the full one once the wiki cache is a week old. |
 
 ### `data/` - one package per source
@@ -67,12 +66,14 @@ them.
 | `wiki/` | `heroes.py` | hero kits from the Cargo Abilities table: weapons and their firing configs, abilities, perks, keywords, and every stat as a measurement. Also the announced heroes: a Cargo hero the roster lacks whose article is marked upcoming gets a row (role, subrole, health, release day, status `announced`) so its kit loads ahead of release; Blizzard listing it later flips the status to released. Supplements the interaction flags from article wikitext. Runs after `blizzard.heroes`. |
 | | `maps.py` | maps, game modes and stages from the Maps article's Standard Play section. |
 | | `patches.py` | game versions from the Patches cargo table; snapshots link to the patch current at capture. Runs before the rates pulls. |
+| | `seasons.py` | every season that has started, with its start date, from the Season article's subpages; note is the subpage. Reloads the table and restamps every rates snapshot with its season. Runs before the rates pulls. |
 | | `playstyles.py` | the team-composition playstyles (dive, brawl, poke) and the heroes listed under each. |
+| | `synergies.py` | which heroes work with which, from the Team Synergy cells in the "Match-Ups and Team Synergy" section of every released hero's article: a pair is stored once, score 2 when both articles claim it, 1 when one does; note is the wiki's advice cut to one clause. Reloads the table. Runs after `blizzard.heroes`. |
+| | `matchups.py` | who answers whom, from the Match-Up cells of the same section, through `synergies.py`'s section and row parsing. Each written cell is a verdict from the article hero's seat: the other hero answers this one, this one answers the other, or neither. The wiki's MATCHUP or VS. rating decides where there is one; otherwise the prose is scored. A verdict either way is one directed edge in `counters`; a pair the two articles contradict on gets none. Reloads the table. Runs after `blizzard.heroes`. |
 | | `markup.py` | reading the wiki's two markups - Cargo's rendered HTML and article wikitext - and the tidying both need; the link pattern. |
 | | `measurements.py` | a stat value ("75 over 0.59 seconds", "10 - 20 meters", a yes/no glyph) into value, unit, window and condition. |
 | | `weapons.py` | the wiki's one-entry-per-firing-mode list grouped into weapons and their configs. |
 | | `modifiers.py` | what a buff scales and who it lands on, recovered from the value's wording and the ability's keywords. |
-| `counterpick/` | `heroes.py` | who counters whom, best maps, and the site's own win and pick rates as their own snapshot (a different population from Blizzard's). Runs after `wiki.maps` and `blizzard.meta`. |
 
 ### `mcp/` - the door
 
@@ -82,7 +83,7 @@ The servers, the transport and the full tool reference are in
 | file | purpose |
 | --- | --- |
 | `server.py` | A dependency-free MCP server: JSON-RPC over stdio, and the same surface over Streamable HTTP (`POST /mcp`, `GET /health`). `initialize`, `tools/list`, `tools/call`, `resources/*`. Dependency-free so the door has nothing to audit but its own few hundred lines. |
-| `tools.py` | The tools. `pull_*` (one source and domain each), `load_authored`, `sync_all`; the database's life (`db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, read-only `query`); and, through the same door, the UI and inference layers' tools (`roster`, `facts`, `infer`, `evaluate`, `board`, `strategies`, `metrics`, `add_strategy`, `infer_strategy`, `derive_strategies`, `tune`, `tuning_log`). The strategies are also served as `strategy://` resources. |
+| `tools.py` | The tools. `pull_*` (one source and domain each), `load_authored`, `sync_all`; the database's life (`db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, read-only `query`); and, through the same door, the UI and inference layers' tools (`roster`, `facts`, `infer`, `evaluate`, `board`, `reach`, `strategies`, `metrics`, `add_strategy`, `infer_strategy`, `derive_strategies`, `tune`, `tuning_log`). The strategies are also served as `strategy://` resources. |
 | `__main__.py` | `python -m db.mcp` serves over stdio (what `.mcp.json` launches); `--http HOST:PORT` serves over HTTP (the `data` container); `list` and `call NAME [JSON]` are the shell. |
 
 ### `psql/` - the database
@@ -91,34 +92,21 @@ The servers, the transport and the full tool reference are in
 | --- | --- |
 | `__init__.py` | Where the database is (`DATABASE_URL`, or the embedded cluster at `db/psql/cluster`); how a source registers the `sources` row its rows carry; how names look up ids; what a capture is stamped with (now, the current patch and season); the CSV export and its `EXPORT.json` mark naming the database it came from. Knows no particular source or table. |
 | `schema.py` | Applies migrations and records them in the `schema_migrations` ledger; `pending` says which files the database has not seen; `rebuild` drops everything and reapplies; `generate_docs` writes the ER diagrams and the data dictionary at the end of this document from the live schema. |
-| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
+| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment, `018` `map_playstyle` and `comp_archetypes` dropped, `seasons` and `synergies` pulled from the wiki, `019` `map_strategy` and the third source's rates, snapshots and `sources` row dropped, `counters` pulled from the wiki. A migration is never edited once applied; a change is a new file, and a populated database catches up with `db_migrate`. |
 | `cluster/` | The embedded Postgres cluster `pgserver` creates on first touch (gitignored). The compose stack uses its own `postgres` container instead, reachable from the host through `./docker-db`. |
 
-### `data/authored/` - what we write
+### `data/authored/` - the one input a user writes
 
-Everything else in the database is fetched by a pull tool. These files are
-written by hand and nothing under `authored/` is written by the code, so
-they are committed, loaded whole-truth by `load_authored`, and never
-discarded by a rebuild. The loader is this folder's own `__init__.py`; it
-declares the `sources` row they become, as every source package does, and
-a malformed row or an unknown name is a loud error.
+The playbook in [`inference/strategies/`](../inference/strategies/) is the
+only input written by hand; every other table is filled by a pull tool.
+This folder's `__init__.py` declares the `sources` row (`user`) the
+`strategies` mirror carries. `load_authored` reloads the mirror from the
+files, whole-truth, deriving pending drafts first where the `claude` CLI
+is present.
 
-- `synergies.csv` - `hero,other,score,note`: one PAIR per row, written once
-  in either order, stored once. The note is the reasoning the board shows;
-  `team.synergy_score` counts the pairs.
-- `archetypes.csv` - `style,role,slots,note`: what a six-stack of each
-  playstyle looks like (2-2-2 by default).
-- `map_playstyle.csv` - `map,style,score,note`: what kind of fight each map
-  rewards (1-3). `map.style_top` reads the top style; the game plan reads
-  the note.
-- `seasons.csv` - `name,started,note`: the coarse delineator of rates
-  snapshots; loading recomputes `season_id` on every snapshot.
-
-There are no free-form notes here. A note that should shape a comp is an
-assumption in [`inference/strategies/`](../inference/strategies/) - the
-playbook holds constraints, heuristics and assumptions, and nothing else -
-where it is shown on the board, read by the `/comp` session, and tuned
-and logged with the rest.
+A note that should shape a comp is an assumption in the playbook, where it
+is shown on the board, read by the `/comp` session, and tuned and logged
+with the rest.
 
 ### `raw/` - the mirror
 
@@ -130,20 +118,20 @@ other database.
 ## The order of a build
 
 `sync_all` runs the pulls in dependency order - `blizzard.heroes`,
-`wiki.heroes`, `wiki.maps`, `wiki.patches`, `blizzard.meta`,
-`wiki.playstyles`, `counterpick.heroes` - then `load_authored`, then
-`export_csv`. Entity tables refresh in place; each rates pull appends a
-dated snapshot, the series the trend facts difference. The page caches
-(`.cache-blizzard/`, `.cache-wiki/`, `.cache-counterpick/` at the repo
-root) make every build after the first cost almost no requests.
+`wiki.heroes`, `wiki.maps`, `wiki.patches`, `wiki.seasons`,
+`blizzard.meta`, `wiki.playstyles`, `wiki.synergies`, `wiki.matchups` -
+then `load_authored`, then `export_csv`. Entity tables refresh in place;
+each rates pull appends a dated snapshot, the series the trend facts
+difference. The page caches (`.cache-blizzard/`, `.cache-wiki/` at the
+repo root) make every build after the first cost almost no requests.
 
 ```mermaid
 stateDiagram-v2
     [*] --> Empty: docker compose up<br/>(or pgserver first touch)
     Empty --> Schema: db_init<br/>every migration, no data
-    Schema --> Populated: sync_all<br/>7 pull tools + load_authored
+    Schema --> Populated: sync_all<br/>every pull tool + load_authored
     Empty --> Populated: db_rebuild<br/>(the entrypoint's move<br/>on an empty database)
-    Populated --> Populated: pull_rates + pull_counters daily,<br/>sync_all weekly (the refresher)<br/>entities upsert in place,<br/>rates APPEND a dated snapshot
+    Populated --> Populated: pull_seasons + pull_rates daily,<br/>sync_all weekly (the refresher)<br/>entities upsert in place,<br/>rates APPEND a dated snapshot
     Populated --> Empty: db_rebuild<br/>drop everything
 ```
 
@@ -154,11 +142,11 @@ database, then serves the door.
 
 The `refresher` container refreshes the database once a day, so the board
 is ready when a game starts. The daily refresh refetches what moves day to
-day - the rates (a new dated snapshot) and counterpick's counters - then
-re-mirrors the authored inputs and the strategies and re-exports `raw/`.
+day - the wiki's seasons and the rates (a new dated snapshot) - then
+re-mirrors the strategies and re-exports `raw/`.
 Once the wiki cache is older than `COUNTER_MATRIX_REFRESH_FULL_DAYS` it
 runs `sync_all` with refresh on: every page of every source, hero pages
-and articles included. It also refreshes on start when the cached pages
+and articles (kits, synergies, counters) included. It also refreshes on start when the cached pages
 are older than `COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS`. A page that fails
 to fetch keeps its cached copy, so a flaky source degrades to yesterday's
 numbers rather than an empty table; the board's header shows the capture
@@ -168,7 +156,7 @@ date and warns when patches shipped since.
 | --- | --- | --- |
 | `COUNTER_MATRIX_REFRESH_AT` | `05:00` | daily time, in the container's `TZ` (UTC unless set) |
 | `COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS` | `20` | refresh on start when the cache is older than this |
-| `COUNTER_MATRIX_REFRESH_FULL_DAYS` | `7` | refetch every source (not just rates and counters) when the wiki cache is older than this |
+| `COUNTER_MATRIX_REFRESH_FULL_DAYS` | `7` | refetch every source (not just the daily set) when the wiki cache is older than this |
 
 Set them in the environment or a `.env` file next to `compose.yaml`. The
 same refresh from a shell, against whichever database `DATABASE_URL` names:
@@ -215,7 +203,7 @@ says nothing about whether that player held a controller or a mouse, and
 both platforms support both. `meta_snapshots.input` therefore carries the
 one value the pin entails - `controller`, because the project pins
 console - and a real split would need a source that separates the two;
-none of the three does.
+neither source does.
 
 **Map stages exist; per-stage rates do not.** The stage list is loaded -
 36 stages across the ten Control and Flashpoint maps, read from each map's
@@ -267,8 +255,9 @@ yields independent facts (a selection's own row) and dependent ones
 (the selection joined with others: map_meta is heroes ⋈ maps ⋈ meta,
 counters and synergies are heroes ⋈ heroes), and a join belongs to
 every domain it touches. The other two are the
-playbook's record: the authored inputs (PLAYBOOK) and the mirror of the
-strategies the inference layer solves with (INFERENCE). The composition is
+playbook's record: the judgements pulled from the wiki
+(PLAYBOOK) and the mirror of the strategies, the one input a user writes,
+that the inference layer solves with (INFERENCE). The composition is
 the argmax of the strategies - the constraints, heuristics and assumptions
 in inference/strategies/ - over the facts.
 
@@ -282,7 +271,7 @@ COMP        = ARGMAX[ STRATEGIES( FACTS ) ]
 
 Every table but `sources` and `schema_migrations` also carries
 `source_id` → `sources` and a `cao` timestamp. Those edges are left off -
-they would connect `sources` to 34 tables and obscure everything else.
+they would connect `sources` to 33 tables and obscure everything else.
 
 #### HEROES
 
@@ -316,8 +305,10 @@ erDiagram
 ```mermaid
 erDiagram
     game_modes ||--o{ map_modes : "mode_id"
+    map_stages ||--o{ stage_terrain : "stage_id"
     maps ||--o{ map_modes : "map_id"
     maps ||--o{ map_stages : "map_id"
+    maps ||--o{ map_terrain : "map_id"
 ```
 
 #### META
@@ -344,13 +335,9 @@ erDiagram
 erDiagram
     heroes ||--o{ counters : "countered_by_id"
     heroes ||--o{ counters : "hero_id"
-    heroes ||--o{ map_strategy : "hero_id"
     heroes ||--o{ playstyle : "hero_id"
     heroes ||--o{ synergies : "hero_id"
     heroes ||--o{ synergies : "other_id"
-    maps ||--o{ map_playstyle : "map_id"
-    maps ||--o{ map_strategy : "map_id"
-    roles ||--o{ comp_archetypes : "role_id"
 ```
 
 #### INFERENCE
@@ -375,18 +362,17 @@ erDiagram
     heroes ||--o{ counters : "hero_id"
     heroes ||--o{ hero_meta : "hero_id"
     heroes ||--o{ map_meta : "hero_id"
-    heroes ||--o{ map_strategy : "hero_id"
     heroes ||--o{ perks : "hero_id"
     heroes ||--o{ playstyle : "hero_id"
     heroes ||--o{ synergies : "hero_id"
     heroes ||--o{ synergies : "other_id"
     heroes ||--o{ weapons : "hero_id"
     map_stages ||--o{ map_meta : "stage_id"
+    map_stages ||--o{ stage_terrain : "stage_id"
     maps ||--o{ map_meta : "map_id"
     maps ||--o{ map_modes : "map_id"
-    maps ||--o{ map_playstyle : "map_id"
     maps ||--o{ map_stages : "map_id"
-    maps ||--o{ map_strategy : "map_id"
+    maps ||--o{ map_terrain : "map_id"
     meta_snapshots ||--o{ hero_meta : "snapshot_id"
     meta_snapshots ||--o{ map_meta : "snapshot_id"
     patches ||--o{ meta_snapshots : "patch_id"
@@ -395,7 +381,6 @@ erDiagram
     perks ||--o{ perk_stats : "perk_id"
     regions ||--o{ hero_meta : "region_id"
     regions ||--o{ map_meta : "region_id"
-    roles ||--o{ comp_archetypes : "role_id"
     roles ||--o{ heroes : "role_id"
     roles ||--o{ subroles : "role_id"
     seasons ||--o{ meta_snapshots : "season_id"
@@ -425,9 +410,9 @@ was read. Every table but `sources` and `schema_migrations` carries both;
 | --- | --- |
 | **foundation** | `schema_migrations` · `sources` |
 | **HEROES** | `abilities` · `ability_kinds` · `ability_modifiers` · `ability_stats` · `heroes` · `perk_ability_effects` · `perk_stats` · `perk_tiers` · `perks` · `roles` · `stat_keys` · `subroles` · `weapon_config_slots` · `weapon_configs` · `weapon_stats` · `weapons` |
-| **MAPS** | `game_modes` · `map_modes` · `map_stages` · `maps` |
+| **MAPS** | `game_modes` · `map_modes` · `map_stages` · `map_terrain` · `maps` · `stage_terrain` |
 | **META** | `competitive_tiers` · `hero_meta` · `map_meta` · `meta_snapshots` · `patches` · `regions` · `seasons` |
-| **PLAYBOOK** | `comp_archetypes` · `counters` · `map_playstyle` · `map_strategy` · `playstyle` · `synergies` |
+| **PLAYBOOK** | `counters` · `playstyle` · `synergies` |
 | **INFERENCE** | `strategies` |
 
 
@@ -491,19 +476,6 @@ One row per measurement, not per stat. A wiki value like "0.67 shots/s (max char
 | `value_text` | text | no |  |
 | `raw_value` | text | no |  |
 
-#### `comp_archetypes`
-
-*PLAYBOOK · `005_playbook.sql`*
-
-What a composition IS, by archetype: the role shape a playstyle wants. playstyle tags heroes; this defines the comp those heroes assemble into - dive wants one engage tank, two flankers who arrive with him, two mobile supports. Authored in db/data/authored/archetypes.csv; the style vocabulary follows the playstyle table by convention. slots describe the standard 1-2-2 shape; Open Queue may flex them, and note says with whom.
-
-| column | type | null | references |
-| --- | --- | --- | --- |
-| `style` | text | no |  |
-| `role_id` | integer | no | `roles.role_id` |
-| `slots` | smallint | no |  |
-| `note` | text | yes |  |
-
 #### `competitive_tiers`
 
 *META · `004_meta.sql`*
@@ -521,7 +493,7 @@ What a composition IS, by archetype: the role shape a playstyle wants. playstyle
 
 *PLAYBOOK · `005_playbook.sql`*
 
-Who answers whom: one row means countered_by_id answers hero_id. The source publishes two directional columns per hero - "countered by" and "counters" - but they are one claim seen from either side: "X counters Y" IS "Y countered by X". The loader normalises both into this one direction and keeps the union, so a pairing the source lists on only one hero's row (about a third of them) still loads, and one it lists on both collapses to a single row. Beware the source's own naming: its field called `counters` is displayed as "Countered by". The loader follows the columns as labelled and explained by their tooltips, not the field names.
+Who answers whom: one row means countered_by_id answers hero_id. Pulled from the Match-Up column of every hero's wiki article (pull_counters): each written cell is read from the article hero's seat as a verdict - the other hero answers this one, this one answers the other, or neither - and a verdict either way becomes one directed edge. A pair the two articles contradict on gets no edge. Reloaded whole.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -605,24 +577,11 @@ One row per playable combination: this table is the set of matches that can actu
 | `map_id` | integer | no | `maps.map_id` |
 | `mode_id` | integer | no | `game_modes.mode_id` |
 
-#### `map_playstyle`
-
-*PLAYBOOK · `005_playbook.sql`*
-
-Which playstyle suits which map: the bridge between MAPS and the playbook. map_strategy picks heroes for a map; this says what KIND of fight the map rewards, which is what a comp is built around. Authored in db/data/authored/map_playstyle.csv, same score scale as synergies.
-
-| column | type | null | references |
-| --- | --- | --- | --- |
-| `map_id` | integer | no | `maps.map_id` |
-| `style` | text | no |  |
-| `score` | smallint | yes |  |
-| `note` | text | yes |  |
-
 #### `map_stages`
 
 *MAPS · `003_maps.sql`*
 
-Stages within a map: Ilios' Well, Lighthouse and Ruins. Loaded from each map's own article for the Control and Flashpoint maps, which play their rounds on submaps; the other modes have none. No source publishes per-stage rates, so map_meta.stage_id stays NULL - the vocabulary is here for when one does.
+Stages within a map, in play order (pull_maps). Control maps: the three stages of the Gameplay section's list (Ilios: Lighthouse, Well, Ruins). Flashpoint maps: the five points of the same list. Hybrid maps: the two phases the wiki's Hybrid article names, Assault (the capture point) then Escort (the payload). Escort maps: the stretches of the route, only where the map's article names them - the Gameplay subsections its opening lists (Havana: City Streets, Distillery, Sea Fort). Push maps: none. No source publishes per-stage rates, so map_meta.stage_id stays NULL.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -631,17 +590,18 @@ Stages within a map: Ilios' Well, Lighthouse and Ruins. Loaded from each map's o
 | `position` | smallint | no |  |
 | `name` | text | no |  |
 
-#### `map_strategy`
+#### `map_terrain`
 
-*PLAYBOOK · `005_playbook.sql`*
+*MAPS · `020_map_terrain.sql`*
 
-The maps a hero is strongest on, best first. The source ranks them but publishes no per-map figure, so position is the whole of what it says.
+A map's terrain, counted in its wiki article (pull_terrain). The sections about the ground and how it is played are kept - gameplay, strategy, the per-stage subsections, a rework's changes, the infobox's terrain line - and the lore, place-name lists and media are dropped. Each feature has one pattern (db/data/wiki/terrain.py): chokes, interiors, high_ground, flanks, sightlines, open_ground, hazards, cover. A map whose article has text holds all eight rows, zeros included; a map whose article has under 60 words of kept text holds none. Reloaded whole.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
-| `hero_id` | integer | no | `heroes.hero_id` |
 | `map_id` | integer | no | `maps.map_id` |
-| `position` | smallint | no |  |
+| `feature` | text | no |  |
+| `mentions` | integer | no |  |
+| `per_thousand` | numeric | no |  |
 
 #### `maps`
 
@@ -669,6 +629,8 @@ The maps a hero is strongest on, best first. The source ranks them but publishes
 #### `patches`
 
 *META · `004_meta.sql`*
+
+The game versions the meta moves with. A win rate is true of a patch, so a snapshot records which patch was live when it was captured. Pulled from the wiki's Patches cargo table (pull_patches); name is the wiki's own page name, since Blizzard ships most balance patches unversioned.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -773,7 +735,7 @@ Which playstyle a hero belongs to, straight from the wiki's team composition pag
 
 *META · `004_meta.sql`*
 
-The game versions the meta moves with. A win rate is true of a patch, so a snapshot records which patch was live when it was captured - that is what makes an accumulated series interpretable ("these rates predate the nerf"). Scraped from the wiki's Patches cargo table; name is the wiki's own page name, since Blizzard ships most balance patches unversioned. Seasons: the coarser delineator. A patch tweaks numbers; a season swaps the hero pool and map rotation, so a snapshot records both. Authored in db/data/authored/seasons.csv rather than scraped: the wiki's season pages are lore articles, and its current-era page carries no dates at all.
+Seasons: the coarser delineator. A patch tweaks numbers; a season swaps the hero pool and map rotation, so a snapshot records both. Pulled from the wiki's Season pages (pull_seasons): every season that has started, with its start date; note is the wiki subpage it came from. Reloaded whole; every rates snapshot is restamped with its season.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -791,6 +753,19 @@ The game versions the meta moves with. A win rate is true of a patch, so a snaps
 | `code` | text | no |  |
 | `name` | text | no |  |
 | `url` | text | no |  |
+
+#### `stage_terrain`
+
+*MAPS · `021_stage_terrain.sql`*
+
+A stage's terrain, counted in the map's wiki article (pull_terrain) with map_terrain's features and patterns. A stage's text: every kept section under a heading that names the stage, and every paragraph or list item elsewhere that names it and no other stage. A Hybrid phase's text: every Assault or Escort section, attack and defense together; where the article names the route's stretches, the first is the capture point's and the rest the payload's. A stage with 20 words of text or more holds all eight rows, zeros included; a stage with less holds none. Reloaded whole with map_terrain.
+
+| column | type | null | references |
+| --- | --- | --- | --- |
+| `stage_id` | integer | no | `map_stages.stage_id` |
+| `feature` | text | no |  |
+| `mentions` | integer | no |  |
+| `per_thousand` | numeric | no |  |
 
 #### `stat_keys`
 
@@ -844,7 +819,7 @@ The ten subroles, each belonging to exactly one role, each carrying the passive 
 
 *PLAYBOOK · `005_playbook.sql`*
 
-Which heroes work WITH which. Proprietary, not scraped: hand-authored in db/data/authored/synergies.csv. No snapshot, region or tier, because an authored judgement has no population behind it. Bidirectional, unlike counters. Synergy is a property of the PAIR: if Mei works with Tracer then Tracer works with Mei - one fact, one row. A counter is an arrow: Mei answering Tracer says nothing about the reverse. So this table stores each pair once, in canonical order (lower hero_id first, enforced below), and a query reads it from either side. score is whatever scale the author keeps consistently; note carries the reasoning, which is the part a model actually wants.
+Which heroes work WITH which. Pulled from the Synergy section of every hero's wiki article (pull_synergies): a pair per hero linked in another hero's section. score is 2 when both articles name each other, 1 when one does; note is the wiki's advice for the pair, cut to one clause. Bidirectional, unlike counters: each pair is stored once, lower hero_id first, and read from either side. Reloaded whole.
 
 | column | type | null | references |
 | --- | --- | --- | --- |

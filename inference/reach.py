@@ -6,8 +6,7 @@ optimal six, banning the rivals that hold its seat where it must, up to the five
 match has. A hero with no such board is one the facts or the strategies cannot
 see: a wrong number, a tool no metric reads, a rule that charges it for what it is not.
 
-    maps   the four its map rates lift it most on, and the listed ones the rates do not
-           contradict
+    maps   the four its map rates lift it most on (its three best maps are among them)
     reds   none (blue counters the likely six); the heroes it answers, two a role, the
            most exposed to it first; the same without the heroes that answer it back
 """
@@ -18,7 +17,6 @@ from ui.facts import compute
 MAPS = 4
 MAX_BANS = compute.MAX_BANS       # a match bans up to five; a rival banned is a real board
 CLOSEST = 5                       # boards the ban search starts from
-CONTRADICTED = -1.0               # a listed map this far under the hero's own rate is not its map
 
 
 def maps(world, hero):
@@ -27,15 +25,7 @@ def maps(world, hero):
     def lift(m):
         return (hero.map_win(m.id) or base) - base
 
-    ranked = sorted(world.maps.values(), key=lambda m: (-lift(m), m.name))
-    listed = [world.maps[i] for i in hero.best_maps
-              if i in world.maps and lift(world.maps[i]) > CONTRADICTED]
-    out, seen = [], set()
-    for m in ranked[:MAPS] + listed:
-        if m.id not in seen:
-            seen.add(m.id)
-            out.append(m)
-    return out
+    return sorted(world.maps.values(), key=lambda m: (-lift(m), m.name))[:MAPS]
 
 
 def reds(world, hero):

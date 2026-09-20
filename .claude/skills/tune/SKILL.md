@@ -17,15 +17,15 @@ reason in `inference/strategies/tuning-log.md`. Nothing is edited by hand.
 1. Read the catalog: the `strategies` tool lists every strategy with its
    kind, metric, direction, weight, expressions and params. Find the one
    the user means (`answer-more-than-exposed`, a heuristic on
-   `matchup.net_edges` at weight 1).
+   `matchup.net_edges`).
 2. Decide the smallest change that does what they asked: a weight
    (heuristics and scored constraints; keep it within 0.25..5 unless they
    insist), a `params.NAME` dial, or an expression (the vocabulary is
    every `team.*`, `enemy.*`, `matchup.*`, `map.*`, `world.*` key - the
    `metrics` tool, or the vocabulary in docs/inference.md).
 3. Call `tune`: `{"id": "answer-more-than-exposed", "field": "weight",
-   "value": 2, "reason": "user: the solver keeps ignoring the counter
-   lists"}`. A metric that does not exist or an expression that does not
+   "value": 2, "reason": "user: the solver keeps ignoring the
+   counters"}`. A metric that does not exist or an expression that does not
    parse is refused; nothing changes.
 4. Show the effect: re-run `board` (or `infer`) for the board the user is
    looking at and say what moved. One change per request unless they ask

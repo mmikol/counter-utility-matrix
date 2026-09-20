@@ -4,8 +4,8 @@ A skill is a markdown playbook a Claude Code session follows:
 `.claude/skills/<name>/SKILL.md` - a name, a description the session
 matches your request against, the MCP tools ([mcp.md](mcp.md)) it calls,
 and the rules it keeps. Open the repo in a session and type `/name`, or
-say what you want and the description matches. Nine of them. They run on
-your subscription; no API key. `/refresh` also runs headless, driven by
+say what you want and the description matches. They run on your
+subscription; no API key. `/refresh` also runs headless, driven by
 `orchestrator.py agents`.
 
 ## `/up` - bring it up and prove it
@@ -111,13 +111,16 @@ and `python orchestrator.py` runs it after bringing the stack up.
 **Does, in order:** `db_status`, `strategies` and `tuning_log` for where
 things stand; the data refreshed - `sync_all` with `refresh: true` when
 the newest capture is older than a day or a patch shipped since, else the
-daily set (`pull_rates`, `pull_counters`, `load_authored`); every draft
-completed with `infer_strategy`, exactly as `/strategy` would; a
-restrained re-read of the catalog against the fresh data (a heuristic
-`infer` with `compact: true` lists as silent on three boards, red picks
-revealed on each, may be silenced, with a logged reason;
-nothing is added here); `db_docs`, `export_csv`, and `load_authored` for
-the strategies if anything changed; `query` for a look at the data along
+daily set (`pull_seasons`, `pull_rates`, `load_authored`), and
+`pull_synergies` or `pull_counters` from the cached articles when
+`db_status` shows its table empty; every draft completed with
+`infer_strategy`, exactly as `/strategy` would; a restrained re-read of
+the catalog against the fresh data (a heuristic `infer` with
+`compact: true` lists as silent on three boards, red picks revealed on
+each, may be silenced, with a logged reason; after a full refresh,
+`reach` on a hero whose counters changed, a hero no board seats
+reported; nothing is added here); `db_docs`, `export_csv`, and `load_authored` (the
+strategies mirror) if anything changed; `query` for a look at the data along
 the way; then a report of under fifteen lines - the capture date now,
 what was refetched, drafts completed, weights moved, anything skipped and
 why, and that the board is ready.
@@ -134,11 +137,13 @@ patch".
 
 **Does:** `pull_patches`, then `db_status` and the first lines of `facts`
 to see whether a patch shipped since the rates were captured. Nothing
-new: it says so and stops. A patch shipped: `pull_rates` (a new dated
-snapshot stamped with the patch), `pull_kits` (the numbers a patch
-changes), `pull_heroes` (Blizzard's text and any hero the patch
-released), `pull_counters` if a hero was reworked, then `db_docs` and
-`export_csv`, one call at a time. Reports the patch on record, the
+new: it says so and stops. A patch shipped: `pull_seasons` (a season
+opens with a patch), `pull_rates` (a new dated snapshot stamped with the
+patch and the season), `pull_kits` (the numbers a patch changes),
+`pull_heroes` (Blizzard's text and any hero the patch released),
+`pull_synergies` then `pull_counters` if a hero was reworked (the hero
+articles refetched once, read twice), then `db_docs` and `export_csv`,
+one call at a time. Reports the patch on record, the
 capture date and each pull's summary.
 
 ## `/heroes` - add or update characters
@@ -151,21 +156,27 @@ released hero's role, subrole, portrait and text; an announced hero
 Blizzard now lists flips to released), `pull_kits` (the wiki's numbers,
 and the announced heroes: an upcoming article becomes a row with role,
 subrole, health and release day, so the kit loads and the board shows the
-hero in its role column, never picked until it ships), `pull_counters`
-for a released hero, `pull_rates` on request, then `load_authored`,
+hero in its role column, never picked until it ships), `pull_playstyles`
+and `pull_synergies` (the wiki's style tags and its Team Synergy advice,
+a pair stored once, score 2 when both articles claim it),
+`pull_counters` (the same articles' Match-Up cells, each written cell
+read as who answers whom), `pull_rates` on request, then
 `db_docs`, `export_csv`. Reports what was added or flipped, and what the
-facts now say about the hero.
+facts now say about the hero. Nothing is written by hand: `load_authored`
+mirrors the strategy files only.
 
 ## `/maps` - add or update maps
 
 **Say:** "add the new map", "is X in the pool", "update the maps".
 
 **Does:** `roster` for the pool, `pull_maps` (the wiki's maps, modes and
-stages), `load_authored` for the playstyle notes - and names the maps
-that have none, offering the line to add to `map_playstyle.csv` (a person
-edits the file; the skill does not), `pull_rates` and `pull_counters` for
-the per-map rates and each hero's best maps, then `db_docs` and
-`export_csv`.
+stages), `pull_rates` for the per-map rates, `facts` with the map for the
+style it rewards, then `db_docs` and `export_csv`. A map's styles and
+each hero's best maps are derived from those rates when the facts load.
+A style: for each of the wiki's playstyles, how much better the heroes tagged
+with it win on this map than overall, against the other maps. A map with
+no per-map rates has no style. Nothing is written by hand:
+`load_authored` mirrors the strategy files only.
 
 ## `/maintain` - keep the repo clean
 
@@ -204,7 +215,7 @@ unasked.
 /strategy    a new file from a name, a kind and prose     when you learn something
 /patches     the database on the current patch          when a patch drops
 /heroes      a hero added, announced or refreshed         when the roster moves
-/maps        a map added or refreshed, its note checked   when the pool moves
+/maps        a map added or refreshed, its style derived  when the pool moves
 /refresh     all of the above the engine can do alone    every night, headless
 /maintain    the repo itself: checks, docs, stale, dead   after changes
 ```
