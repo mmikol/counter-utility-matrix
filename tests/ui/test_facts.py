@@ -714,3 +714,21 @@ def test_no_matchup_metric_restates_a_team_metric(world):
               if key in blue_t and value == blue_t[key]
               and other_matchup.get(key) == other_t.get(key)]
     assert not copies, "matchup restates team: %s - read team.* instead" % ", ".join(sorted(copies))
+
+
+@pytest.mark.invariant
+def test_no_released_hero_is_missing_a_core_kit_number(world):
+    """The kit block carries most of the playbook's weight, and a hole in it is
+    silent: a tank that deals no damage still scores, just wrongly. Domina read
+    zero because her beam publishes a rate only as damage `over time`."""
+    holes = []
+    for hero in sorted(world.heroes.values(), key=lambda h: h.name):
+        if not hero.released:
+            continue
+        if not hero.pool:
+            holes.append("%s has no health pool" % hero.name)
+        if not hero.dps:
+            holes.append("%s deals no damage" % hero.name)
+        if hero.role == "support" and not hero.hps:
+            holes.append("%s is a support that heals nothing" % hero.name)
+    assert not holes, holes

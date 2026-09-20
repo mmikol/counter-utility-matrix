@@ -718,6 +718,9 @@ def evaluate_comp(world, m, red, heroes, catalog, pool_size=6, bans=(), side="",
         solver, size, feasible = swept
         solver.considered = size
     target = solver.score(solver.prepare(Candidate(heroes)))
-    feasible.sort(key=Solver._rank_key)
+    # rank against the field the search actually ends on. Ranking against the raw
+    # sweep alone called a six first that the refinement had already beaten, so a
+    # comp and a strictly better one both read rank 1.
+    feasible = solver.refine(sorted(feasible, key=Solver._rank_key))
     rank = 1 + sum(1 for c in feasible if c.score > target.score + 1e-9)
     return target, [solver.hydrate(c) for c in feasible[:5]], rank, solver

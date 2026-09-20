@@ -182,6 +182,15 @@ def _rate(kit, code, per_shot):
                 if s.value is not None and s.unit_den is None]
         shots = [s.value for s in [s for s in rows if s.condition in counted] or rows]
         firing = max(shots) * rate if shots and rate else None
+        if firing is None:
+            # Nothing published a rate: no dps row, and no fire_rate to turn a
+            # per-shot figure into one. A damage row worded "over time" already is
+            # a rate - the wiki writes Domina's beam as 60 over time, which its own
+            # tooltip spells 7.2 every 0.12 seconds - so read it as one rather than
+            # leave a tank dealing no damage. Only where nothing else scored.
+            sustained = [s.value for s in kit.stats.get(per_shot, ())
+                         if s.value is not None and "over time" in (s.condition or "").lower()]
+            firing = max(sustained) if sustained else None
     if not firing or worded:
         return firing                        # the text words its own reload figure: left alone
     # no usable reload figure: the magazine's share of magazine + reload. A

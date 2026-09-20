@@ -199,7 +199,7 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert set(rc.blue) == {"Zarya", "Pharah"}
     assert rc.red == ["Ana"]
     assert rc.partial
-    assert 0 <= rc.to_dict()["normalized"] <= 100
+    assert rc.to_dict()["normalized"] is None        # a partial team has no share
     assert b["countered"] is not None and b["countered"].kind == "countered"
     fill = b["fill"]                                       # the empty slots, filled around Ana
     assert fill.kind == "fill"
@@ -213,7 +213,12 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert fill.blue == around.blue
     mo = b["momentum"]
     assert set(mo) >= {"blue", "red", "countered", "verdict", "partial"} and mo["partial"]
-    assert mo["blue"] == cur.to_dict()["normalized"] and mo["red"] == rc.to_dict()["normalized"]
+    # blue is half-drafted, so its share is read through the fill - the best six
+    # reachable from its picks - not off the picks alone. Red has no fill computed,
+    # so its share keeps the older reading; both dicts report no share of their own.
+    assert mo["blue"] == fill.to_dict()["normalized"]
+    assert mo["red"] is not None
+    assert cur.to_dict()["normalized"] is None and rc.to_dict()["normalized"] is None
     assert ("ahead by" in mo["verdict"] or mo["verdict"].startswith("even"))
     assert "best counter" in mo["verdict"]
     # prose: the ground, what to play, them, the family
@@ -319,7 +324,9 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world):
     assert "(unscored)" in b["current"].rendered() and "UNSCORED:" in b["current"].rendered()
     scored = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
                                             ["Ana", "Reinhardt"], catalog=reference))
-    assert scored["current"]["scoring"] is True and 0 < scored["current"]["normalized"] < 100
+    assert scored["current"]["scoring"] is True
+    assert scored["current"]["normalized"] is None   # two picks of six: no share to give
+    assert 0 < scored["fill"]["normalized"] <= 100   # the filled six carries it
     assert scored["current"]["unscored"] is None
 
 
@@ -366,13 +373,14 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     flying = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
                                             ["Reinhardt", "Cassidy"], catalog=scratch))
     assert flying["blue"]["scoring"] is True and flying["blue"]["normalized"] == 100
-    assert flying["current"]["unscored"] is None and flying["current"]["normalized"] is not None
+    assert flying["current"]["unscored"] is None
+    assert flying["current"]["normalized"] is None   # partial: the fill holds the share
     # blue fields no flier, so red's seat still waits: the verdict reads each side on its own
     assert flying["red_current"]["scoring"] is False
     verdict = flying["momentum"]["verdict"]
-    assert verdict.startswith("blue %d / 100" % flying["current"]["normalized"])
+    assert verdict.startswith("blue %d / 100" % flying["fill"]["normalized"])
     assert "red unscored: Fliers need hitscan cover waits for matchup.flyers >= 1" in verdict
-    assert flying["momentum"]["blue"] == flying["current"]["normalized"]
+    assert flying["momentum"]["blue"] == flying["fill"]["normalized"]
     assert flying["momentum"]["red"] is None and flying["momentum"]["odds"] is None
 
 

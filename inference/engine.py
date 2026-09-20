@@ -121,8 +121,12 @@ class Result:
                 "bans": self.bans, "side": self.side, "partial": self.partial,
                 "score": round(self.score, 3), "scoring": scoring, "unscored": unscored,
                 "weights": {h.id: h.weight for h in self.catalog if h.kind == "heuristic"},
+                # a partial team has no share to report: the sum runs over the picks
+                # it has, so a perfectly played draft reads 16 after one pick and can
+                # fall when the right third pick lands. The fill result carries the
+                # number that means something - the best six reachable from here
                 "normalized": (_pct(self.score, self.best if self.best is not None else self.score)
-                               if scoring else None),
+                               if scoring and not self.partial else None),
                 "playstyle": self.playstyle, "picks": self.picks,
                 "contributions": self.contributions, "violations": self.violations,
                 "alternatives": self.alternatives, "rank": self.rank,
@@ -146,7 +150,9 @@ class Result:
         counts = catalog_module.counts(self.catalog)
         unscored = _unscored(self)
         share = ("(%d/100)" % _pct(self.score, self.best if self.best is not None else self.score)
-                 if unscored is None else "(unscored)")
+                 if unscored is None and not self.partial else
+                 "(unscored)" if unscored is not None else
+                 "(partial - see the filled six for a share)")
         if self.kind == "expected":                # a likelihood, not a score
             share = "(from the map's pick rates and the synergies, no strategy read)"
         lines = [head, "  %s%s - score %.2f %s%s, %d candidates considered in %.1fs"
@@ -358,6 +364,8 @@ def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
     result.alternatives = [{"blue": _order(c.heroes), "score": round(c.score, 3)}
                            for c in field[:3]]
     result.seconds = time.time() - started
+    # the board's best known six is the 100, not this comp's own best rival: a
+    # beaten six must not read 100 because nothing it was compared against beat it
     _finish(result, max([result.score] + [a["score"] for a in result.alternatives]))
     return result
 
@@ -415,18 +423,29 @@ def board_rendered(b):
     return "\n\n".join([*parts, "momentum: " + b["momentum"]["verdict"]])
 
 
-def _momentum(cur, red_cur, countered, blue_r=None, red_r=None):
+def _momentum(cur, red_cur, countered, blue_r=None, red_r=None, fill=None):
     """Who the picks favour, read off the two current comps on their own
     optimals' scales: blue's share of its best counter to red's selection,
     red's share of its best counter to blue's. A seat with no picks has no
     contributions to name a waiting strategy by, so its reason is read off
-    its optimal instead."""
+    its optimal instead.
+
+    A half-drafted seat is read through its fill - the best six reachable from
+    what it has. Scoring the picks alone sums over a smaller team, so a
+    perfectly played draft would read low and could fall when the right pick
+    lands; that measures how many picks are in, not how good they are."""
     blue_why = _unscored(cur) if cur.blue or blue_r is None else _waiting(blue_r)
     red_why = _unscored(red_cur) if red_cur.blue or red_r is None else _waiting(red_r)
     if blue_why and red_why:                       # neither seat can be a share of anything
         return {"blue": None, "red": None, "countered": None, "partial": False,
                 "verdict": blue_why}
-    n = _pct(cur.score, cur.best) if cur.blue and not blue_why else None
+    # A half-drafted seat is read through its fill where one was computed - the
+    # best six reachable from its picks. Scoring the picks alone sums over a
+    # smaller team, so a well-played draft reads low and can fall when the right
+    # pick lands. Red has no fill, so its half-drafted share keeps that bias: the
+    # seat with more picks is flattered. Known, and not fixed here.
+    blue_now = fill if (fill is not None and cur.partial and cur.blue) else cur
+    n = _pct(blue_now.score, blue_now.best) if cur.blue and not blue_why else None
     m = _pct(red_cur.score, red_cur.best) if red_cur.blue and not red_why else None
     k = (_pct(countered.score, countered.best)
          if countered is not None and countered.blue and not _unscored(countered) else None)
@@ -1086,6 +1105,7 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
         _finish(fill, blue_r.score)                # how close the best completion comes
     return {"map": m.name if m else None, "side": side, "bans": list(bans),
             "blue": blue_r, "red": red_r, "current": cur, "red_current": red_cur, "fill": fill,
-            "countered": countered, "momentum": _momentum(cur, red_cur, countered, blue_r, red_r),
+            "countered": countered,
+            "momentum": _momentum(cur, red_cur, countered, blue_r, red_r, fill),
             "plan": _plan(world, m, side, list(bans), red_h, blue_r),
             "shapes": [list(s) for s in legal_shapes(catalog)], "expected": expected}

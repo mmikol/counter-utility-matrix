@@ -573,9 +573,9 @@ Anti-heal is the only cooldown that turns a target's healing off rather than rac
 
 ##### One long gun (`one-long-gun`, damage)
 
-`maximize team.range_max` - the longest range on the team. weight 0.25
+`maximize team.range_max` - the longest range on the team. weight 0.25, a need; when `team.style_lean != 'brawl'`
 
-A comp carries one pick whose reach opens every sightline the map offers. A long-range threat forces cover from anyone crossing it, and a kit without falloff pokes enemies and barriers from a distance to soften them before the fight. The longest published range on the six is measured.
+A comp carries one pick whose reach opens every sightline the map offers. A long-range threat forces cover from anyone crossing it, and a kit without falloff pokes enemies and barriers from a distance to soften them before the fight. The longest published range on the six is measured, and not on a brawl six, where that reach is the backline `brawl-has-no-backline` reads in the other direction on this same metric.
 
 ##### Out-ult their ultimates (`out-ult-their-ults`, damage)
 
