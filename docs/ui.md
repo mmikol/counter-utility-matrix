@@ -4,7 +4,8 @@ The board, and the facts behind it. Every click - a map, a side, a ban, a
 hero on either roster - becomes a request; the database is read; back
 come every fact about that board, the optimal six for both seats with the
 current picks scored, and the playbook as it sits on disk. This layer
-reads; its one write, a heuristic's weight stored from its slider, is
+reads: its one write, a heuristic's weight stored from its slider, is
+off by default (`COUNTER_MATRIX_READ_ONLY`) and, when turned on, is
 handed to the data layer's `tune` tool.
 
 It owns FACTS, the left-hand side of the equation in
@@ -59,7 +60,7 @@ the scripts have no constant to keep in step with the Python.
 | `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, red's likely starting comp, the fight odds, the game plan and the shapes the limits allow |
 | `/api/strategies` | the strategies catalog: every constraint, heuristic and assumption with its kind, form, frontmatter and body |
 | `/math` | `static/math.html` in the page shell: the equation, the scoring function (what 100 means, fight odds, the argmax), the board (red's likely starting comp and its formula, blue's optimal counter, the weights) and how the layers fit, with a table of contents; linked from the board's header |
-| `POST /api/weight` `{id, weight}` | the board's one write: a `tune` call, see the playbook panel below |
+| `POST /api/weight` `{id, weight}` | the board's one write, a `tune` call - off by default (403): a weight applies to the session only; `COUNTER_MATRIX_READ_ONLY=0` turns it and the *store* button on |
 
 Every request opens its own connection and loads a fresh World, so a
 `pull_rates` or a tune shows on the next click without a restart.
@@ -145,11 +146,14 @@ exact figure, the file's weight as the inferred default, a reset. A
 setting is kept in the browser, rides with every board request as
 `weight=<id>:<value>`, is applied by the solver for that board only (each
 result names the `weights` it was scored under) and never touches the
-file until *store*: `POST /api/weight` `{id, weight}` becomes a `tune`
-call - over HTTP at `COUNTER_MATRIX_MCP_URL` with the bearer token in the
-compose stack, in-process on the local cluster - validated, logged with
-its reason and mirrored; the file's weight is then the default and the
-browser's setting is dropped. Only heuristics have a weight to set.
+file. By default that is the whole story: the board is read-only, there
+is no *store* button and `POST /api/weight` answers 403. With
+`COUNTER_MATRIX_READ_ONLY=0` the button returns, and *store* -
+`POST /api/weight` `{id, weight}` - becomes a `tune` call: over HTTP at
+`COUNTER_MATRIX_MCP_URL` with the bearer token in the compose stack,
+in-process on the local cluster - validated, logged with its reason and
+mirrored; the file's weight is then the default and the browser's
+setting is dropped. Only heuristics have a weight to set.
 
 **The header** pins two pills top-right: *the math* and the repository on
 GitHub (`COUNTER_MATRIX_REPO_URL` overrides the address). It keeps only

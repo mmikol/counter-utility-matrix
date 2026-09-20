@@ -40,10 +40,14 @@ long enough for a polite scrape (`MCP_TOOL_TIMEOUT`). The deriver runs
 servers, no tools and two turns, and stores only what the catalog
 validates.
 
-**The board has one write, and it knocks at the door too.** Storing a
-heuristic's weight from its slider is `POST /api/weight` on the board
-(bound to 127.0.0.1 like everything else), which the board turns into a
-`tune` call - over HTTP to the MCP server with the bearer token in the
+**The board's one write is off by default, and knocks at the door when
+it is on.** `COUNTER_MATRIX_READ_ONLY` defaults to `1`: the board offers
+no *store* button and answers `POST /api/weight` with 403, so a weight
+set on a slider is the session's own and reaches no file. The data
+layer's `tune` tool is deliberately unaffected - a Claude Code session
+still writes weights through it. With `COUNTER_MATRIX_READ_ONLY=0` the
+write comes back: `POST /api/weight` on the board (bound to 127.0.0.1
+like everything else), which the board turns into a `tune` call - over HTTP to the MCP server with the bearer token in the
 compose stack, in-process through the same tool registry on the local
 cluster - so the change is validated against the catalog, logged with its
 reason and mirrored like any other. The board never opens a playbook

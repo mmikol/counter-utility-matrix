@@ -38,10 +38,15 @@ PORT = int(os.environ.get("COUNTER_MATRIX_UI_PORT", "8017"))
 INFERENCE_URL = os.environ.get("INFERENCE_URL", "").rstrip("/")
 # the board's one write - storing a heuristic's weight - goes to the data
 # layer's `tune` tool: over HTTP to the MCP server when a URL is set (the
-# compose stack), in-process through the same registry otherwise
+# compose stack), in-process through the same registry otherwise. READ_ONLY
+# below is what decides whether that write is offered at all.
 MCP_URL = os.environ.get("COUNTER_MATRIX_MCP_URL", "").rstrip("/")
 MCP_TOKEN = os.environ.get("COUNTER_MATRIX_MCP_TOKEN", "")
 STORE_REASON = "stored from the board's slider"
+# The board writes nothing unless told it may: a weight set on the playbook tab
+# rides with the session's own requests and never reaches a strategy file.
+# COUNTER_MATRIX_READ_ONLY=0 brings back the store button and its one POST.
+READ_ONLY = os.environ.get("COUNTER_MATRIX_READ_ONLY", "1").lower() not in ("0", "no", "false")
 # The repository the header links to; override when the repo moves.
 REPO_URL = os.environ.get("COUNTER_MATRIX_REPO_URL", "https://github.com/mmikol/counter-utility-matrix")
 GITHUB_MARK = ("<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='true'><path fill='currentColor' d='M8 0C3.58 0 0 3.58 0 8"  # noqa: E501
@@ -278,11 +283,11 @@ def view_board():
             "<span id='chips'></span><span id='factsn' class='count'></span></div>"
             "<table class='facts'><tbody id='factbody'></tbody></table></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
-            "</main><script>var TEAM = %d, BANS = %d;</script>"
+            "</main><script>var TEAM = %d, BANS = %d, READ_ONLY = %s;</script>"
             "<script src='/static/comps.js'></script>"
             "<script src='/static/playbook.js'></script>"
             "<script src='/static/board.js'></script>"
-            % (REPO_URL, GITHUB_MARK, TEAM_SIZE, MAX_BANS))
+            % (REPO_URL, GITHUB_MARK, TEAM_SIZE, MAX_BANS, "true" if READ_ONLY else "false"))
 
 
 # --- the math page -------------------------------------------------------------
@@ -327,6 +332,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if urlparse(self.path).path != "/api/weight":
             return self._json({"error": "nothing here"}, 404)
+        if READ_ONLY:
+            return self._json({"error": "this board does not write: a weight applies to your"
+                                        " session only"}, 403)
         try:
             length = int(self.headers.get("Content-Length") or 0)
             if not 0 < length <= 4096:

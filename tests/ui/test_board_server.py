@@ -30,7 +30,28 @@ def post(url, body):
         return error.code, json.loads(error.read().decode("utf-8"))
 
 
+def test_a_read_only_board_refuses_the_one_post(served, monkeypatch):
+    # the default: a weight set on the page is the session's own and reaches no file.
+    # the sentinel records rather than raising: pytest.fail raises BaseException,
+    # which do_POST's `except Exception` misses, killing the handler thread instead
+    wrote = []
+    monkeypatch.setattr(board, "READ_ONLY", True)
+    monkeypatch.setattr(board, "api_weight", lambda payload: (wrote.append(payload), ({}, 200))[1])
+    code, data = post(served + "/api/weight", {"id": "coverage", "weight": 3})
+    assert code == 403 and "session only" in data["error"]
+    assert wrote == [], wrote
+    assert "READ_ONLY = true" in board.view_board()
+
+
+def test_a_writable_board_renders_the_store_button(monkeypatch):
+    # COUNTER_MATRIX_READ_ONLY=0 is the documented escape hatch: the page shell
+    # must hand the scripts READ_ONLY = false, which is what renders *store*
+    monkeypatch.setattr(board, "READ_ONLY", False)
+    assert "READ_ONLY = false" in board.view_board()
+
+
 def test_the_weight_store_is_the_only_post_and_reads_a_small_json_body(served, monkeypatch):
+    monkeypatch.setattr(board, "READ_ONLY", False)
     monkeypatch.setattr(board, "api_weight",
                         lambda payload: ({"line": "tuned %s" % payload["id"]}, 200))
     code, data = post(served + "/api/weight", {"id": "coverage", "weight": 3})

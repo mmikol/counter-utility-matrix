@@ -82,7 +82,8 @@ The data layer owns every write to Postgres and the playbook. The UI
 layer reads, turns every table into facts, and defines every metric once
 (`ui/facts/compute.py`), so the number on the board and the number the
 solver scores are the same function; its one write, a heuristic's weight
-stored from the board, is handed to the data layer's `tune` tool. The
+stored from the board, is off by default (`COUNTER_MATRIX_READ_ONLY`)
+and, when turned on, is handed to the data layer's `tune` tool. The
 inference layer reads the facts, never the tables.
 
 The equation divides the layers. The data layer owns DATA. The UI layer's
@@ -160,6 +161,7 @@ Settings, from the environment or `.env` (the refresh times are in [db.md](db.md
 | `COUNTER_MATRIX_WORKERS` | `max(6, min(cores, 12))` | the solver's worker processes |
 | `COUNTER_MATRIX_PARALLEL` | `1` | `0`: every board in one process |
 | `COUNTER_MATRIX_UI_HOST`, `COUNTER_MATRIX_UI_PORT` | `127.0.0.1`, `8017` | where the board listens |
+| `COUNTER_MATRIX_READ_ONLY` | `1` | the board writes nothing: a slider's weight is the session's own; `0` brings back *store* |
 | `COUNTER_MATRIX_INFERENCE_HOST`, `COUNTER_MATRIX_INFERENCE_PORT` | `127.0.0.1`, `8019` | where the inference service listens |
 | `COUNTER_MATRIX_MCP_TOKEN` | unset | bearer token the MCP server requires over HTTP |
 | `COUNTER_MATRIX_AUDIT` | `db/raw/audit.jsonl` | the MCP server's audit log |

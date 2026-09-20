@@ -228,6 +228,11 @@ def test_the_page_is_a_shell_over_static_files():
     assert "function setWeight" in script
     assert "h.form === 'heuristic' ? weightRow(h)" in script     # only heuristics have weights
     assert "function storeWeight" in script and "fetch('/api/weight', { method: 'POST'" in script
+    # *store* is rendered only on a writable board, and the row's handlers must
+    # not assume the button is there
+    assert "(READ_ONLY ? '' : \"<button class='wstore' " in script
+    assert "if (store) store.disabled = x === inferred;" in script
+    assert "if (store) store.onclick =" in script
     # the card is its kind, its name, its metric line and, for a heuristic, the weight row
     assert "(h.form === 'heuristic' ? weightRow(h) : '') + '</div>'" in script
     # a heuristic's card says when it is a need and shows its guard
@@ -259,7 +264,10 @@ def test_the_page_is_a_shell_over_static_files():
     # the suggestions fill blue's empty slots alone
     suggestions = script[script.index("function paintSuggestions"):script.index("function showTab")]
     assert "el('blueslots')" in suggestions and "el('redslots')" not in suggestions
-    assert "var TEAM = 6, BANS = 5;" in body
+    # writes nothing by default; pinned so an exported COUNTER_MATRIX_READ_ONLY
+    # cannot decide an unrelated assertion
+    assert board.READ_ONLY is True, "run the suite without COUNTER_MATRIX_READ_ONLY set"
+    assert "var TEAM = 6, BANS = 5, READ_ONLY = true;" in body
     data, ctype = board.static_file("board.js")
     assert ctype.startswith("application/javascript") and b"function paint" in data
     data, ctype = board.static_file("comps.js")
