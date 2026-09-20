@@ -104,6 +104,7 @@ TEAM_METRICS = OrderedDict([
     ("barrier_hp", "summed barrier health the team fields"),
     ("barrier_count", "picks with a barrier"),
     ("barrier_piercers", "picks whose kit ignores barriers"),
+    ("pierce_dps", "summed damage of the picks whose kit ignores barriers"),
     ("deployables", "picks with deployables"),
     # cohesion
     ("synergy_edges", "the wiki's synergy pairs among the picks"),
@@ -376,6 +377,9 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["barrier_hp"] = sum(h.barrier_hp for h in heroes)
     t["barrier_count"] = sum(1 for h in heroes if h.barrier_hp)
     t["barrier_piercers"] = sum(1 for h in heroes if h.pierces_barrier)
+    # what the piercing is worth, not how many carry it: a flail that swings past
+    # a barrier and a beam that burns through one are one pick each by count
+    t["pierce_dps"] = sum(h.dps for h in heroes if h.pierces_barrier)
     t["deployables"] = sum(1 for h in heroes if h.deployables)
 
     pairs, adjacency = [], {h.id: set() for h in heroes}

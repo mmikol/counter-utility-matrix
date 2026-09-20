@@ -233,7 +233,8 @@ HEAD = ("<!doctype html><meta charset='utf-8'>"
 
 def view_board():
     return (HEAD + "<title>Countrix</title><main>"
-            "<header class='top'><h1>Counter <span>Utility Matrix</span></h1>"
+            "<header class='top'><h1>Countrix"
+            "<span class='expand'> the counter utility matrix</span></h1>"
             "<div class='mapsel'><select id='mapsel'></select><span class='mode' id='mode'></span>"
             "<span class='sideseg' id='sideseg' title=\"blue's side;"
             " red gets the other\">"

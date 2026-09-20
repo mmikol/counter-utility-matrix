@@ -933,3 +933,35 @@ def test_one_hero_cannot_hold_two_seats(world):
                           kwargs.get("bans", []))
     # but a hero may play for both teams
     world.resolve("King's Row", ["Zarya"], ["Zarya"], [])
+
+
+@pytest.mark.invariant
+def test_a_rule_scales_by_the_metric_it_names(world):
+    """`confidence:` is an engine field, not a rule: a heuristic names any numeric
+    metric and its weight rides on that metric's place between the low and high of
+    whatever population the metric actually varies over. Nothing in the code knows
+    which metric any rule names."""
+    from inference import catalog as catalog_module
+    from inference import engine
+    from inference import solver as solver_module
+    catalog = catalog_module.load()
+    scaled = [s for s in catalog if getattr(s, "confidence", None)]
+    assert scaled, "no rule declares a confidence - this test guards a live feature"
+
+    def points(map_name, strategy_id):
+        m, red, _, _ = world.resolve(map_name, ["Zarya", "Pharah"], [], [])
+        solver = solver_module.Solver(world, m, red, [], catalog, 6, [],
+                                      engine._side(m, "attack"))
+        solver.freeze_bounds()
+        best = engine.infer(world, map_name, ["Zarya", "Pharah"], [],
+                            side=engine._side(m, "attack"), top=1)
+        cand = solver.prepare(solver_module.Candidate([world.hero(n) for n in best.blue]))
+        solver.score(cand, detail=True)
+        return next(c for c in cand.contributions if c["id"] == strategy_id)
+
+    # the map that leans hardest pays the map-style rule; the one that barely leans
+    # pays almost none of it, and neither number is written anywhere
+    sure = points("Nepal", "fit-the-map-style")
+    unsure = points("Paraíso", "fit-the-map-style")
+    assert sure["confidence_raw"] > unsure["confidence_raw"]
+    assert sure["weighted"] > unsure["weighted"] * 5

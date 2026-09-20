@@ -246,7 +246,11 @@ def test_the_page_is_a_shell_over_static_files():
     assert "<h3>\" + k[1] + \" <span class='n'>\" + these.length + '</span></h3>'" in script
     assert "commas(shown) + ' of ' + commas(total) + ' facts'" in script   # the total, with commas
     assert "function commas(n)" in script and "commas(d.considered)" in script
-    assert "strategies satisfied" in script and "' off'" in script  # the list keeps its grey-out
+    # three panes now - satisfied, costing, did not read - each filterable
+    assert "function verdictOf" in script and "' off'" in script   # the list keeps its grey-out
+    assert "'costing'" in script and "'unread'" in script
+    assert "function why(c)" in script                             # one sentence per verdict
+    assert "class='barfind'" in script and "function wireBars" in script
     # the search's numbers sit under the cards and above the strategies met, not in the head
     cards, meta, met = (fn.index("<div class='comp'>"), fn.index("class='legend meta'"),
                         fn.index("bars(d.contributions)"))

@@ -157,6 +157,11 @@ class Strategy:
         if not 0.0 <= self.weight <= 10.0:
             raise CatalogError("%s: weight must be within 0..10" % hid)
         self.soft = bool(meta.get("soft", False))
+        # A metric that says how strongly this rule's own premise holds. It scales
+        # the term through the same reference bounds the metric uses, so a rule
+        # whose premise is barely true contributes barely anything. Declared, not
+        # coded: nothing here knows which metric any rule names.
+        self.confidence = meta.get("confidence")
         self.params = dict((meta.get("params") or {}).items())
         self.params_section = Section({k: 0 if v is None else v
                                        for k, v in self.params.items()})
@@ -180,6 +185,16 @@ class Strategy:
                                    % (self.id, self.metric))
             if self.metric in compute.TEXT_METRICS:
                 raise CatalogError("%s: metric %r is text, not a number" % (self.id, self.metric))
+        if self.confidence is not None:
+            known = compute.registry()
+            if self.confidence not in known:
+                raise CatalogError("%s: confidence %r is not a metric"
+                                   % (self.id, self.confidence))
+            if self.confidence in compute.TEXT_METRICS:
+                raise CatalogError("%s: confidence %r is text, not a number"
+                                   % (self.id, self.confidence))
+            if self.form != "heuristic":
+                raise CatalogError("%s: only a heuristic scales by a confidence" % self.id)
         if self.kind == "assumption" and (self.metric or self.require is not None
                                           or self.bonus is not None or self.penalty is not None
                                           or self.when is not None):
@@ -257,6 +272,7 @@ class Strategy:
                 "pending": self.pending, "need": self.need,
                 "category": self.category, "direction": self.direction,
                 "metric": self.metric, "weight": self.weight, "soft": self.soft,
+                "confidence": self.confidence,
                 "when": self.when.source if self.when else None,
                 "require": self.require.source if self.require else None,
                 "bonus": self.bonus.source if self.bonus else None,

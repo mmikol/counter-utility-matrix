@@ -809,7 +809,7 @@ Escort maps run the payload down long lanes, and the pick with the longest reach
 
 `maximize team.style_fit` - share of picks tagged with the map's rewarded style (0 without a map). weight 2.5; when `map.known == 1`
 
-A six built of the playstyle a map rewards wins the fights that map sets up. The authored map notes tag each map with the style its geometry favours, brawl in corridors and chokes, poke across long sightlines, dive where high ground stacks, and a hero carries the style tags its kit earns. The share of the six tagged with the map's rewarded style is the measure, and it reads as 0 without a map.
+A six built of the playstyle a map rewards wins the fights that map sets up. The authored map notes tag each map with the style its geometry favours, brawl in corridors and chokes, poke across long sightlines, dive where high ground stacks, and a hero carries the style tags its kit earns. The share of the six tagged with the map's rewarded style is the measure, it reads as 0 without a map, and the weight rides on `map.style_margin` so a map that leans hard pays the rule in full while one whose top style barely leads pays almost none of it.
 
 ##### Heroes have home maps (`heroes-have-home-maps`, map)
 
@@ -1113,9 +1113,9 @@ A dive lands on the backline with movement tools, and the answer is crowd contro
 
 ##### Pierce what they hide behind (`pierce-their-barriers`, matchup)
 
-`maximize team.barrier_piercers` - picks whose kit ignores barriers. weight 0.25; when `matchup.barrier_need >= 1200`
+`maximize team.pierce_dps` - summed damage of the picks whose kit ignores barriers. weight 0.25; when `matchup.barrier_need >= 1200`
 
-Against a comp that holds a choke behind barriers, damage that ignores the barrier reaches the supports standing behind it: Winston's Tesla Cannon and Moira's Biotic Orb pass through the shield, Reinhardt's Fire Strike flies through it, and a hammer or flail swings past it. Measured as the count of picks whose kit ignores barriers, read while red fields 1200 or more barrier health.
+Against a comp that holds a choke behind barriers, damage that ignores the barrier reaches the supports standing behind it: Winston's Tesla Cannon and Moira's Biotic Orb pass through the shield, Reinhardt's Fire Strike flies through it, and a hammer or flail swings past it. Measured as the summed damage of the picks whose kit ignores barriers, read while red fields 1200 or more barrier health: counting heads instead would buy the rule with whoever happens to carry a flail, when what breaks a bunker is how much damage arrives behind the shield.
 
 ##### Two saves outlast the bait (`saves-cycle-against-bait`, matchup)
 
@@ -1740,6 +1740,7 @@ the `team.*` metrics computed for the red side.
 | `team.barrier_hp` | summed barrier health the team fields |
 | `team.barrier_count` | picks with a barrier |
 | `team.barrier_piercers` | picks whose kit ignores barriers |
+| `team.pierce_dps` | summed damage of the picks whose kit ignores barriers |
 | `team.deployables` | picks with deployables |
 | `team.synergy_edges` | the wiki's synergy pairs among the picks |
 | `team.synergy_score` | summed synergy scores among the picks |

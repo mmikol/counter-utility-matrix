@@ -5,6 +5,8 @@
 <a class='sub' href='#what-100-means'>what 100 means</a>
 <a class='sub' href='#fight-odds'>fight odds</a>
 <a class='sub' href='#argmax'>the argmax</a>
+<a class='sub' href='#searched'>what is searched</a>
+<a class='sub' href='#against-red'>what it is optimal against</a>
 <a href='#board'>the board</a>
 <a class='sub' href='#likely-comp'>red's likely starting comp</a>
 <a class='sub' href='#counter'>blue's optimal counter</a>
@@ -81,8 +83,27 @@ hero's mean score across the reference sixes it is in, plus 0.5 per locked partn
 shape is filled around the locked picks, each six is scored, and a local search swaps same-role
 heroes while the score rises, from the best six sixes and the best six of every shape within 4 points
 of the top; then it brings the wiki's synergy pairs into the best sixes two slots at a time. Ties break by mean map win rate, then by name.</p>
-<p id='reach'><b>Reach.</b> The weights make a hero common or rare, never impossible: every
-released hero is in the optimal six on some board that suits it, within a match's five bans.</p>
+<p id='searched'><b>What is searched, and what is not.</b> There are
+<b>18,040,386</b> legal sixes. The search scores about <b>14,500</b> of them, near enough
+0.08%, so the answer is not a proof that nothing better exists. Two things cut the space.
+The <b>pool</b> keeps each role's six highest-standing heroes, which is a truncation: it can
+drop a hero that is weak alone and decisive beside one partner. The <b>local search</b> then
+reaches back out of the pool - it swaps against the whole released roster, restarts two dozen
+times inside the leading shape, and changes two seats at once, which is how a pair that only
+pays together is found. On 30 boards brute-forced over all 18 shapes the answer was the exact
+maximum every time, and on 13 of those the winning six held a hero the pool had cut - so the
+reaching-back is doing the work, not the pool.</p>
+<p id='against-red'><b>What it is optimal against.</b> A comp is optimal <i>against the red
+you can see</i>, not against every red they might pick. Before red reveals anything the board
+answers their most likely starting comp, drawn from the map's pick rates; each pick they show
+re-solves against what is now known. So it is a best reply to present information, and it
+changes as that information does - it is not a strategy that holds whatever red does next. The
+<i>if countered optimally</i> row is the hedge: it scores your six against red's best reply to
+it, so a comp that wins only while red plays badly shows up there.</p>
+<p id='reach'><b>Reach.</b> The weights make a hero common or rare, and nearly never
+impossible: 51 of the 53 released heroes are in the optimal six on some board that suits
+them, within a match's five bans. Two are not, which is the playbook not valuing what they
+do rather than a rule forbidding them.</p>
 <p><b>When nothing scores</b>: every legal six is zero, the board reads <i>unscored</i>, and the
 optimal is the tie-break alone.</p>
 <h2 id='board'>The board</h2>

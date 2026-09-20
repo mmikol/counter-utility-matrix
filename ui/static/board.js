@@ -191,6 +191,32 @@ function qs() {
 }
 
 var pending = null, seq = 0, FACTS = null, INF = null;
+/* one switch for every figure the solver owns */
+function solving(on) {
+  document.body.classList.toggle('solving', !!on);
+  ['bluescore', 'redscore'].forEach(function (id) {
+    var node = el(id);
+    if (!node) return;
+    if (on) { node.dataset.was = node.textContent; node.textContent = '…'; }
+    else if (node.textContent === '…' && node.dataset.was !== undefined) { node.textContent = node.dataset.was; }
+  });
+  if (on) {
+    var mo = el('momentum');
+    if (mo) mo.innerHTML = "<span class='lbl'>fight odds</span><span class='legend searching'>solving…</span>";
+    var pl = el('plan');
+    if (pl && !pl.dataset.held) { pl.dataset.held = '1'; pl.classList.add('waiting'); }
+    ['blueslots', 'redslots'].forEach(function (id) {
+      var s = el(id); if (s) s.classList.add('waiting');
+    });
+  } else {
+    var pl2 = el('plan');
+    if (pl2) { delete pl2.dataset.held; pl2.classList.remove('waiting'); }
+    ['blueslots', 'redslots'].forEach(function (id) {
+      var s = el(id); if (s) s.classList.remove('waiting');
+    });
+  }
+}
+
 function refresh() {
   clearTimeout(pending);
   pending = setTimeout(function () {
@@ -200,11 +226,23 @@ function refresh() {
       if (d.error) { flash(d.error); return; }
       FACTS = d; renderFacts();
     }).catch(function () { flash('the database is not answering'); });
-    el('inf-blue').innerHTML = "<p class='legend'>searching both seats…</p>"; el('inf-red').innerHTML = '';
+    /* the search is seconds of work, so everything it feeds says so until it
+       lands: the two seats, the odds bar, the scores, the plan and the filled
+       slots. Without this the board shows the last board's numbers while it
+       thinks, which reads as an answer. */
+    solving(true);
+    el('inf-blue').innerHTML = "<p class='legend searching'>searching both seats…</p>";
+    el('inf-red').innerHTML = "<p class='legend searching'>searching…</p>";
     fetch('/api/infer?' + q).then(function (r) { return r.json(); }).then(function (d) {
       if (mine !== seq) return;
+      solving(false);
       INF = d; renderInf();
-    }).catch(function () { el('inf-blue').innerHTML = "<p class='legend'>inference is not answering</p>"; });
+    }).catch(function () {
+      if (mine !== seq) return;
+      solving(false);
+      el('inf-blue').innerHTML = "<p class='legend'>inference is not answering</p>";
+      el('inf-red').innerHTML = '';
+    });
   }, 200);
 }
 

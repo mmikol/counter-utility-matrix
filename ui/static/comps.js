@@ -1,20 +1,126 @@
 /* the comps tab: the game plan, the fight odds, the two seats and the badges above
    the pickers; loaded before board.js, which calls into it */
-/* the list under a comp: every strategy the playbook holds, one bar each -
-   lit when it applied to this comp, greyed when it did not (its guard unmet,
-   or nothing to read); headed by the count satisfied */
+/* the list under a comp: every strategy the playbook holds, one bar each - lit
+   when it applied to this comp, greyed when it did not (its guard unmet, or
+   nothing to read). Split into met and unmet, each its own scrolling pane with
+   a filter, because the playbook is 244 rules and a page that lists them all at
+   once buries the board. Sorted by name inside a pane: a rule is looked up by
+   the name it is known by, not by where the catalog happens to put it. */
+var BARS_SEQ = 0;
+
+/* three ways a rule can end a board: it never read, it read and charged, or it
+   read and was satisfied. The middle one is what a comp is paying for and had
+   nowhere to show before. */
+function verdictOf(c) {
+  if (c.applies === false) return 'unread';
+  if (c.ok === false || (c.weighted || 0) < -1e-9) return 'costing';
+  return 'met';
+}
+
+/* one sentence saying why a rule paid or did not: a rule that read nothing names
+   the guard that stopped it, so an unlit bar is never mistaken for a rule the
+   board quietly ignored */
+function why(c) {
+  var n = function (x) { return typeof x === 'number' ? +x.toFixed(2) : x; };
+  if (c.form === 'limit') return c.ok ? 'A hard limit, and this six keeps it.'
+                                      : 'A hard limit, and this six breaks it.';
+  if (!c.applies) {
+    return c.when ? 'Did not read: its guard ' + c.when + ' does not hold on this board.'
+                  : 'Did not read: nothing on this board gives it a number.';
+  }
+  if (c.form === 'scored') {
+    var net = (c.bonus || 0) - (c.penalty || 0);
+    return net > 0 ? 'Paid ' + n(c.weighted) + ': bonus ' + n(c.bonus) + ' over penalty ' + n(c.penalty) + '.'
+         : net < 0 ? 'Charged ' + n(c.weighted) + ': penalty ' + n(c.penalty) + ' over bonus ' + n(c.bonus) + '.'
+                   : 'Read, and bonus and penalty cancelled.';
+  }
+  var pos = Math.round((c.norm || 0) * 100);
+  var where = c.spread === false ? 'the sample never moved this metric, so it reads the middle'
+            : pos >= 100 ? 'at the top of the reference range, so more would not pay further'
+            : pos <= 0 ? 'at the bottom of the reference range'
+            : pos + '% of the way up the reference range';
+  if (c.need) {
+    return (c.weighted || 0) < -1e-9
+      ? 'A need this six only part meets: ' + c.metric + ' = ' + n(c.raw) + ', ' + where + ', costing ' + n(c.weighted) + '.'
+      : 'A need this six meets in full: ' + c.metric + ' = ' + n(c.raw) + ', so it costs nothing.';
+  }
+  return 'Read ' + c.metric + ' = ' + n(c.raw) + ', ' + where + ', worth ' + n(c.weighted) + '.';
+}
+
+function barRow(c, mx) {
+  var w = Math.abs(c.weighted || 0) / mx * 100;
+  var detail = why(c);
+  if (c.confidence) detail += ' Scaled by ' + c.confidence + (typeof c.confidence_raw === 'number' ? ' = ' + (+c.confidence_raw).toFixed(2) : '') + '.';
+  return "<div class='bar" + ((c.weighted || 0) < 0 ? ' neg' : '') + (c.applies === false ? ' off' : '') +
+    "' data-id='" + esc(c.id) + "' title=\"" + esc(detail + (c.text ? ' - ' + c.text : '')) + "\"><span class='lbl'>" +
+    esc(c.id) + (c.fact ? " <span class='ev'>" + c.fact + '</span>' : '') +
+    "</span><span class='trk'><span class='fill' style='width:" + w.toFixed(1) + "%'></span></span><span class='val'>" +
+    ((c.weighted || 0) >= 0 ? '+' : '') + (+(c.weighted || 0)).toFixed(2) + '</span></div>';
+}
+
 function bars(contribs) {
-  var mx = 0.01, met = contribs.filter(function (c) { return c.applies !== false && c.ok !== false && !(c.need && (c.weighted || 0) < -1e-9); }).length;
+  var mx = 0.01;
   contribs.forEach(function (c) { mx = Math.max(mx, Math.abs(c.weighted || 0)); });
-  var out = "<h4 class='barshead'>strategies satisfied <span class='n'>" + met + ' of ' + contribs.length + "</span></h4><div class='bars'>";
-  contribs.forEach(function (c) {
-    var w = Math.abs(c.weighted || 0) / mx * 100;
-    var detail = c.form === 'heuristic' ? (c.applies ? c.metric + ' = ' + (typeof c.raw === 'number' ? +c.raw.toFixed(2) : c.raw) + ' · norm ' + (+c.norm).toFixed(2) + (c.need ? ' · need: costs what it misses' : '') : 'not applicable here')
-               : c.form === 'scored' ? (c.applies ? 'bonus ' + c.bonus + ' − penalty ' + c.penalty : 'condition not met')
-               : (c.ok ? 'limit satisfied' : 'limit VIOLATED');
-    out += "<div class='bar" + ((c.weighted || 0) < 0 ? ' neg' : '') + (c.applies === false ? ' off' : '') + "' title=\"" + esc(detail + (c.text ? ' - ' + c.text : '')) + "\"><span class='lbl'>" + esc(c.id) + (c.fact ? " <span class='ev'>" + c.fact + '</span>' : '') + "</span><span class='trk'><span class='fill' style='width:" + w.toFixed(1) + "%'></span></span><span class='val'>" + ((c.weighted || 0) >= 0 ? '+' : '') + (+(c.weighted || 0)).toFixed(2) + '</span></div>';
+  var byName = function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; };
+  var group = { met: [], costing: [], unread: [] };
+  contribs.forEach(function (c) { group[verdictOf(c)].push(c); });
+  Object.keys(group).forEach(function (k) { group[k].sort(byName); });
+  var cost = group.costing.reduce(function (s, c) { return s + (c.weighted || 0); }, 0);
+  var id = 'bars' + (++BARS_SEQ);
+  var pane = function (key) {
+    return "<div class='barpane' data-pane='" + key + "'" + (key === 'met' ? '' : ' hidden') + '>' +
+      (group[key].length ? group[key].map(function (c) { return barRow(c, mx); }).join('')
+                         : "<p class='legend none'>none</p>") + '</div>';
+  };
+  var tab = function (key, label, extra) {
+    return "<button" + (key === 'met' ? " class='on'" : '') + " data-pane='" + key + "'>" + label +
+      " <span class='n'>" + group[key].length + '</span>' + (extra || '') + '</button>';
+  };
+  return "<div class='barsbox' id='" + id + "'>" +
+    "<div class='barstabs'>" +
+      tab('met', 'satisfied') +
+      tab('costing', 'costing', cost ? " <span class='cost'>" + cost.toFixed(2) + '</span>' : '') +
+      tab('unread', 'did not read') +
+      "<input class='barfind' type='search' placeholder='filter " + contribs.length + " strategies'" +
+      " aria-label='filter the strategies'>" +
+    '</div>' +
+    "<div class='bars'>" + pane('met') + pane('costing') + pane('unread') + '</div>' +
+    "<p class='legend barcount'></p></div>";
+}
+
+/* the tabs and the filter, bound after the panel is written */
+function wireBars(root) {
+  (root || document).querySelectorAll('.barsbox').forEach(function (box) {
+    if (box.dataset.wired) return;
+    box.dataset.wired = '1';
+    var find = box.querySelector('.barfind'), count = box.querySelector('.barcount');
+    var show = function (key) {
+      box.querySelectorAll('.barstabs button').forEach(function (b) {
+        b.classList.toggle('on', b.getAttribute('data-pane') === key);
+      });
+      box.querySelectorAll('.barpane').forEach(function (p) {
+        p.hidden = p.getAttribute('data-pane') !== key;
+      });
+      filter();
+    };
+    var filter = function () {
+      var q = (find.value || '').trim().toLowerCase();
+      var pane = box.querySelector('.barpane:not([hidden])');
+      if (!pane) return;
+      var shown = 0, rows = pane.querySelectorAll('.bar');
+      rows.forEach(function (row) {
+        var hit = !q || (row.getAttribute('data-id') || '').indexOf(q) >= 0
+                     || (row.getAttribute('title') || '').toLowerCase().indexOf(q) >= 0;
+        row.hidden = !hit;
+        if (hit) shown++;
+      });
+      count.textContent = q ? shown + ' of ' + rows.length + ' match ' + q : '';
+    };
+    box.querySelectorAll('.barstabs button').forEach(function (b) {
+      b.onclick = function () { show(b.getAttribute('data-pane')); };
+    });
+    find.oninput = filter;
   });
-  return out + '</div>';
 }
 
 /* what a current comp's figure means - the badge's tooltip: the 0-100 share
@@ -99,4 +205,5 @@ function renderResult(d, container, title) {
       d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + '</li>'; }).join('') + '</ol></div>';
   }
   container.innerHTML = out;
+  wireBars(container);          // the tabs and the filter live on the new nodes
 }

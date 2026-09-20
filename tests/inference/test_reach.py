@@ -40,8 +40,8 @@ def test_every_released_hero_is_optimal_on_some_board(world):
     # them fails here. Both were recorded as seated while the reference sample was
     # drawn per ban list - spending a hero's five bans redrew the scale that
     # normalises every heuristic, so the bans flattered the hero as well as
-    # clearing its rivals. With the scale held still, Freja reaches 0.27 of the
-    # optimum on her best board and Shion 0.54. That is the playbook not valuing
+    # clearing its rivals. With the scale held still, Freja reaches 0.34 of the
+    # optimum on her best board and Shion 0.40. That is the playbook not valuing
     # what they do, and it is the playbook's to answer.
     newly_lost = set(lost) - UNSEATED
     assert not newly_lost, "no board seats: %s" % ", ".join(sorted(newly_lost))

@@ -55,7 +55,14 @@ function renderPlaybook(d) {
     return "<button class='" + k[0] + "' data-group='pb-" + k[0] + "'>" + k[1] + " <span class='n'>" + n + '</span></button>';
   }).join('') + '</nav>';
   KINDS.forEach(function (k) {
-    var these = d.strategies.filter(function (h) { return h.kind === k[0]; });
+    /* by name inside a kind: a rule is looked up by what it is called, not by
+       where the catalog puts it. The catalog's own order is the scoring order
+       and is left alone - the terms sum in it, and the sum is bit-reproducible. */
+    var these = d.strategies.filter(function (h) { return h.kind === k[0]; })
+      .slice().sort(function (a, b) {
+        var x = (a.name || a.id).toLowerCase(), y = (b.name || b.id).toLowerCase();
+        return x < y ? -1 : x > y ? 1 : 0;
+      });
     out += "<section class='pbgroup " + k[0] + "' id='pb-" + k[0] + "'><h3>" + k[1] + " <span class='n'>" + these.length + '</span></h3>';
     out += these.length ? "<div class='hcards'>" + these.map(card).join('') + '</div>' : "<p class='legend none'>none</p>";
     out += '</section>';

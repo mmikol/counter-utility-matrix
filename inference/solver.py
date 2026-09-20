@@ -39,8 +39,10 @@ REFERENCE_SIZE = 1200
 PARTNER_POINTS = 0.5              # a locked partner's worth when ranking a pool
 SEEDS = 6                         # the local search's starts, whatever `top` asks for
 RESTARTS = 24                     # in-shape random starts: the SEEDS are near-duplicates
+SCALE_POOL = 6                    # the field that fixes a board's scale, whatever pool is searched
 SHAPE_REACH = 4.0                 # a shape starts too when its best six is this close
 PAIR_TRIES = 800                  # the most new sixes one refine scores bringing pairs in
+CONFIDENCE_KEY = "\x00confidence"   # a rule's scale bounds, beside its own
 NEED_BUDGET = 2.0                 # the most one guarded state can cost
 REFERENCE_SEED = 20260913
 
@@ -55,6 +57,7 @@ _EMPTY = {}
 
 class Candidate:
     __slots__ = (
+        "confidence",
         "contributions",
         "heroes",
         "key",
@@ -76,6 +79,7 @@ class Candidate:
         self.contributions = []
         self.violations = []
         self.raw = []          # one metric value per heuristic, in catalog order
+        self.confidence = []   # its confidence metric where it names one, else None
 
     @property
     def names(self):
@@ -109,6 +113,9 @@ class Solver:
         self._scored = [(r, gates[r.id], slots.get(r.id, 0))
                         for r in self.scored_constraints]
         self._heuristics = [(g, gates[g.id], slots.get(g.id, 0), *g.metric.split(".", 1))
+                            for g in self.heuristics]
+        # the same, for whatever metric a rule scales itself by; None where none
+        self._confidence = [tuple(g.confidence.split(".", 1)) if g.confidence else None
                             for g in self.heuristics]
         # a heuristic guarded on the six's own state is a need: see score().
         # Needs that share a guard share NEED_BUDGET: the state costs at most
@@ -194,6 +201,14 @@ class Solver:
             else:
                 keep(None)
         cand.raw = raw
+        confidence = []
+        for i, spec in enumerate(self._confidence):
+            if spec is None or raw[i] is None:
+                confidence.append(None)
+                continue
+            value = ns.get(spec[0], _EMPTY).get(spec[1])
+            confidence.append(float(value) if value else 0.0)
+        cand.confidence = confidence
         cand.tiebreak = ns["team"]["map_win_mean"]
         return cand
 
@@ -203,7 +218,7 @@ class Solver:
         values and the breakdown. A search holds thousands of candidates at
         once and reads only their score, tie-break and picks; the winners are
         hydrated again before they are shown."""
-        cand.ns = cand.scope = cand.raw = None
+        cand.ns = cand.scope = cand.raw = cand.confidence = None
         cand.contributions = []
         return cand
 
@@ -254,6 +269,24 @@ class Solver:
                 out.append(cand)
         return out
 
+    def _confidence_bounds(self, index, prepared):
+        """The low and high a rule's confidence metric is read against.
+
+        A metric of the six varies across the reference sixes, so the reference
+        is its population. A metric of the board - the map, the world - is one
+        number here however the six changes, and normalising it against a sample
+        that cannot move it would call every board equally certain. Its
+        population is the other boards: the same metric over every map.
+        """
+        section, key = self._confidence[index]
+        if section == "map":
+            over = [compute.map_metrics(m, self.side).get(key)
+                    for m in self.world.maps.values()]
+            over = [float(v) for v in over if v is not None]
+            return (min(over), max(over)) if over else (0.0, 0.0)
+        seen = [c.confidence[index] for c in prepared if c.confidence[index] is not None]
+        return (min(seen), max(seen)) if seen else (0.0, 0.0)
+
     def reference(self, size=REFERENCE_SIZE):
         """The sample prepared, minus what the hard limits refuse: what every
         heuristic is normalised against."""
@@ -263,26 +296,87 @@ class Solver:
         return self._reference
 
     def reference_bounds(self, index=0, count=1):
-        """{heuristic id: (min, max)} over one slice of the sample, leaving out
-        the heuristics the slice never valued. The slices partition the
-        sample, so merging their lows and highs gives what one process
+        """{heuristic id: (min, max)} over one slice of the sample AND of the
+        field, leaving out the heuristics the slice never valued. The slices
+        partition both, so merging their lows and highs gives what one process
         freezes."""
         prepared = [c for c in (self.prepare(c) for c in self.sample()[index::count])
                     if not c.violations]
+        prepared += self._field_sample(index, count)
         out = {}
         for i, g in enumerate(self.heuristics):
             values = [c.raw[i] for c in prepared if c.raw[i] is not None]
             if values:
                 out[g.id] = (min(values), max(values))
+            if self._confidence[i] is not None:
+                out[g.id + CONFIDENCE_KEY] = self._confidence_bounds(i, prepared)
+        return out
+
+    def _board_prior(self, h):
+        """`prior` without the locked-partner points: the board's own ranking.
+
+        prior() pays a hero for each locked pick it partners, which is right
+        when ranking a pool to search and wrong when choosing the field that
+        fixes the scale - that field has to be the same for every seat and
+        every set of locks on this board."""
+        base = h.map_win(self.m.id) if self.m is not None and h.map_win(self.m.id) \
+            is not None else (h.win if h.win is not None else 50.0)
+        answers = sum(1 for e in self.red if self.world.counters_of(e.id, h.id))
+        exposed = sum(1 for e in self.red if self.world.counters_of(h.id, e.id))
+        style = 1 if (self.m is not None and self.m.style_top in h.styles) else 0
+        best = 1 if (self.m is not None and self.m.id in h.best_maps) else 0
+        return base + 3.0 * answers - 3.0 * exposed + style + best
+
+    def _board_field(self):
+        """The field this board would search with nothing locked: each role's
+        top `pool_size` by standing alone, over every legal shape.
+
+        It must not read the locked picks, and it takes SCALE_POOL rather than
+        the pool this search happens to use. The bounds it feeds are the
+        board's one scale: `infer`, `evaluate`, `current` and the countered
+        what-if run with different locks and different pool sizes on the same
+        board, and a scale that moved with either would make a current comp and
+        the optimal it is a share of two different numbers."""
+        ranked = {}
+        for role in ROLE_COUNT:
+            heroes = [h for h in self.world.heroes.values()
+                      if h.role == role and h.released and h.id not in self.banned]
+            heroes.sort(key=lambda h: (-self._board_prior(h), h.name))
+            ranked[role] = heroes[:SCALE_POOL]
+        for t, d, s in legal_shapes(self.catalog):
+            if t > len(ranked["tank"]) or d > len(ranked["damage"]) or s > len(ranked["support"]):
+                continue
+            for a in itertools.combinations(ranked["tank"], t):
+                for b in itertools.combinations(ranked["damage"], d):
+                    for c in itertools.combinations(ranked["support"], s):
+                        yield list(a) + list(b) + list(c)
+
+    def _field_sample(self, index=0, count=1):
+        """The board's field, prepared but unscored.
+
+        The sample alone is 1,200 random legal sixes, and the search picks from
+        comps far better than random, so a good six sat above the sample's high
+        on most metrics and every one of them normalised to the same 1.0: the
+        rule stopped telling them apart, and a weight raised past that bought
+        nothing. The field belongs in the population that sets the scale."""
+        out = []
+        for size, heroes in enumerate(self._board_field()):
+            if size % count == index:
+                cand = self.prepare(Candidate(heroes))
+                if not cand.violations:
+                    out.append(cand)
         return out
 
     def freeze_bounds(self):
-        """Bounds per heuristic from the reference sample, then each hero's
-        standing in it."""
+        """Bounds per heuristic from the reference sample and the field, then
+        each hero's standing in the sample."""
         reference = self.reference()
+        over = reference + self._field_sample()
         for i, g in enumerate(self.heuristics):
-            values = [c.raw[i] for c in reference if c.raw[i] is not None]
+            values = [c.raw[i] for c in over if c.raw[i] is not None]
             self.bounds[g.id] = (min(values), max(values)) if values else (0.0, 0.0)
+            if self._confidence[i] is not None:
+                self.bounds[g.id + CONFIDENCE_KEY] = self._confidence_bounds(i, over)
         self._freeze_norms()
         self.adopt_standing(self._tally(reference))
 
@@ -327,11 +421,13 @@ class Solver:
         reference low, the reference spread (None where the sample never
         moved: everything then normalises to 0.5), its weight, whether it
         minimises and whether it is a need."""
-        self._norm = [(g, lo, hi - lo if hi > lo else None,
-                       g.weight * self._needs.get(g.id, 1.0),
-                       g.direction == "minimize", g.id in self._needs)
-                      for g, (lo, hi) in ((g, self.bounds.get(g.id, (0.0, 0.0)))
-                                          for g in self.heuristics)]
+        self._norm = []
+        for g in self.heuristics:
+            lo, hi = self.bounds.get(g.id, (0.0, 0.0))
+            scale = self.bounds.get(g.id + CONFIDENCE_KEY) if g.confidence else None
+            self._norm.append((g, lo, hi - lo if hi > lo else None,
+                               g.weight * self._needs.get(g.id, 1.0),
+                               g.direction == "minimize", g.id in self._needs, scale))
 
     def score(self, cand, detail=True):
         """Score with the frozen bounds; with detail, fill the breakdown too.
@@ -362,13 +458,14 @@ class Solver:
                 contributions.append({"id": h.id, "kind": "constraint", "form": "limit",
                                       "applies": applies, "ok": ok, "weighted": -penalty,
                                       "metric": h.require.source})
-        for raw, (g, lo, span, weight, minimize, need) in zip(cand.raw, self._norm,
-                                                               strict=True):
+        for raw, scale_raw, (g, lo, span, weight, minimize, need, scale) in zip(
+                cand.raw, cand.confidence, self._norm, strict=True):
             if raw is None:
                 if detail:
                     contributions.append({"id": g.id, "kind": "heuristic",
                                           "form": "heuristic", "applies": False, "raw": None,
-                                          "norm": 0.0, "weighted": 0.0, "metric": g.metric})
+                                          "norm": 0.0, "weighted": 0.0, "metric": g.metric,
+                                          "when": g.when.source if g.when else None})
                 continue
             if span is not None:
                 norm = (raw - lo) / span
@@ -380,13 +477,30 @@ class Solver:
                 norm = 1.0 if need else 0.5     # a need nothing here can miss costs nothing
             if minimize and span is not None:
                 norm = 1.0 - norm
+            # a rule that names a confidence metric is worth its weight only where
+            # that metric is at its reference high, and nothing where it is at the
+            # low: a premise that barely holds barely counts
+            if scale is not None and scale_raw is not None:
+                scale_lo, scale_hi = scale
+                # anchor at zero where the metric never goes below it: the least
+                # certain board seen is not the same as no certainty at all, and
+                # taking it as the floor would pay that board nothing
+                if scale_lo >= 0.0:
+                    scale_lo = 0.0
+                width = scale_hi - scale_lo
+                sure = 1.0 if width <= 0 else (scale_raw - scale_lo) / width
+                sure = 0.0 if sure < 0.0 else 1.0 if sure > 1.0 else sure
+                weight = weight * sure
             weighted = weight * (norm - 1.0) if need else weight * norm
             total += weighted
             if detail:
                 contributions.append({"id": g.id, "kind": "heuristic", "form": "heuristic",
                                       "applies": True, "raw": raw, "norm": norm,
                                       "weighted": weighted, "metric": g.metric,
-                                      "spread": span is not None, "need": need})
+                                      "when": g.when.source if g.when else None,
+                                      "spread": span is not None, "need": need,
+                                      "confidence": g.confidence,
+                                      "confidence_raw": scale_raw})
         for r, applies, slot in self._scored:
             if applies is None:
                 applies = held[slot]
@@ -405,7 +519,8 @@ class Solver:
             if detail:
                 contributions.append({"id": r.id, "kind": "constraint", "form": "scored",
                                       "applies": applies, "bonus": bonus, "penalty": penalty,
-                                      "weighted": weighted, "metric": r.expressions})
+                                      "weighted": weighted, "metric": r.expressions,
+                                      "when": r.when.source if r.when else None})
         cand.score = total
         cand.contributions = contributions
         return cand
