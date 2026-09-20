@@ -30,6 +30,7 @@ Code on your subscription, before a game, never during one.
 | `tests/` | one folder per layer (`tests/db`, `tests/ui`, `tests/inference`) and `tests/fixtures/playbook/`, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the community's rules and the user's assumptions. `pytest -q` runs them, skipping what needs a built database when there is none | |
 | `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain` | [skills.md](skills.md) |
 | `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
+| `scripts/` | `optimal.py`: records the true maximum of proven boards into `tests/fixtures/optimal.json`, which `tests/inference/test_optimal.py` re-solves on every run - the regression gate on the search. Run after a deliberate change to the objective, and say in the commit why every number moved | |
 | `.github/workflows/` | `ci.yml`: lint and the tests that need no built database, on pushes to `main` and on pull requests | |
 | `.cache-blizzard/` `.cache-wiki/` | the page caches (gitignored): every build after the first costs almost no requests | |
 
