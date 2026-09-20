@@ -857,7 +857,71 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
         assert {a.name, b.name, "Reinhardt"} <= set(top.names) and "Mercy" not in top.names
         assert sorted(h.role for h in top.heroes) == ["damage"] * 2 + ["support"] * 2 + ["tank"] * 2
         assert any(c["id"] == "together" and c["raw"] == 1 for c in top.contributions)
+        # with the pair step off, the two-at-once swap still reaches them: that is
+        # what it is for. Only with both off is a pair outside the pool unreachable,
+        # because a one-slot climb meets each partner alone and neither pays alone.
         single = solver_on(paired)
         single._pairs = list                   # the pair step off
-        short = single.solve(top=1)[0]
+        pair_off = single.solve(top=1)[0]
+        assert {a.name, b.name} <= set(pair_off.names)
+
+        # a pair outside the pool is unreachable only when all three are off: the
+        # restarts can land on both partners at once, as can the two-at-once swap.
+        neither = solver_on(paired)
+        neither._pairs = list                  # the pair step off
+        neither._two_swap = lambda leader, roster, known: leader
+        neither._restarts = lambda leader, roster, known, n=0: leader
+        short = neither.solve(top=1)[0]
         assert not {a.name, b.name} & set(short.names) and short.score < top.score
+
+
+@pytest.mark.invariant
+def test_a_ban_does_not_rescale_the_board(world):
+    """The reference sample fixes every heuristic's [lo, hi], so it must not
+    depend on the bans: banning a hero on neither team would otherwise move the
+    score of an unchanged six, and `the best six here` would stop being a
+    function of the six. Bans screen the candidate field, not the scale."""
+    from inference import catalog as catalog_module
+    from inference import solver as solver_module
+    catalog = catalog_module.load()
+    red = ["Zarya", "Pharah"]
+    six = ["Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko"]
+    absent = [h.name for h in world.heroes.values()
+              if h.released and h.name not in six and h.name not in red][:2]
+
+    def score_under(bans):
+        m, red_h, _, bans_h = world.resolve("King's Row", red, [], bans)
+        solver = solver_module.Solver(world, m, red_h, [], catalog, 6, bans_h, "attack")
+        solver.freeze_bounds()
+        cand = solver.prepare(solver_module.Candidate([world.hero(n) for n in six]))
+        return solver.score(cand, detail=False).score
+
+    # the same six, the same number of bans, a different hero banned
+    first = score_under([absent[0], "Sombra"])
+    second = score_under([absent[1], "Sombra"])
+    assert abs(first - second) < 1e-9, (first, second)
+
+
+@pytest.mark.invariant
+def test_the_order_of_a_six_does_not_decide_the_ranking(world):
+    """_rank_key's third element breaks ties, so it has to be a property of the
+    hero set - in seat order one set keys 720 ways."""
+    from inference import solver as solver_module
+    heroes = [world.hero(n) for n in ("Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko")]
+    one = solver_module.Candidate(heroes)
+    other = solver_module.Candidate(list(reversed(heroes)))
+    one.score = other.score = 1.0
+    one.tiebreak = other.tiebreak = 0.5
+    assert solver_module.Solver._rank_key(one) == solver_module.Solver._rank_key(other)
+
+
+def test_one_hero_cannot_hold_two_seats(world):
+    """A six with a hero twice is a five, and team_metrics would count it twice."""
+    import pytest as _pytest
+    for kwargs in ({"blue": ["Ana", "Ana"]}, {"red": ["Zarya", "Zarya"]},
+                   {"bans": ["Sombra", "Sombra"]}):
+        with _pytest.raises(ValueError, match="same hero twice"):
+            world.resolve("King's Row", kwargs.get("red", []), kwargs.get("blue", []),
+                          kwargs.get("bans", []))
+    # but a hero may play for both teams
+    world.resolve("King's Row", ["Zarya"], ["Zarya"], [])

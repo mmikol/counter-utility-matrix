@@ -617,6 +617,16 @@ class World:
         unknown = [n for n in list(red) + list(blue) + list(bans) if self.hero(n) is None]
         if unknown:
             raise ValueError("unknown heroes: %s" % ", ".join(unknown))
+        # a hero may play for either team but cannot hold two seats on one, and a
+        # ban list naming the same hero twice bans one hero
+        for label, names in (("red", red), ("blue", blue), ("ban", bans)):
+            seen, twice = set(), []
+            for n in names:
+                hid = self.hero(n).id
+                twice.append(n) if hid in seen else seen.add(hid)
+            if twice:
+                raise ValueError("%s picks the same hero twice: %s"
+                                 % (label, ", ".join(sorted(set(twice)))))
         if not allow_announced:
             early = [self.hero(n) for n in list(red) + list(blue) + list(bans)
                      if not self.hero(n).released]

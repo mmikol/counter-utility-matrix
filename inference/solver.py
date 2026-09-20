@@ -38,6 +38,7 @@ from ui.facts.compute import ROLE_COUNT, TEAM_SIZE
 REFERENCE_SIZE = 1200
 PARTNER_POINTS = 0.5              # a locked partner's worth when ranking a pool
 SEEDS = 6                         # the local search's starts, whatever `top` asks for
+RESTARTS = 24                     # in-shape random starts: the SEEDS are near-duplicates
 SHAPE_REACH = 4.0                 # a shape starts too when its best six is this close
 PAIR_TRIES = 800                  # the most new sixes one refine scores bringing pairs in
 NEED_BUDGET = 2.0                 # the most one guarded state can cost
@@ -216,19 +217,30 @@ class Solver:
 
     def sample(self, size=REFERENCE_SIZE):
         """A seeded sample of random legal sixes for this board, unprepared.
-        Deterministic for a given map, side, enemies and bans, and independent
-        of the locked picks and the pool, so every call on one board shares a
-        scale - and any process draws the same list and can take a slice."""
-        rng = random.Random("%d|%s|%s|%s|%s" % (        # a str seed is stable across processes
-            REFERENCE_SEED, self.m.id if self.m else 0, self.side,
-            ",".join(str(i) for i in sorted(h.id for h in self.red)),
-            ",".join(str(i) for i in sorted(self.banned))))
+        Deterministic for a given map and side, and independent of the locked
+        picks, the pool, the enemies and the bans, so every call on one board
+        shares a scale - and any process draws the same list and can take a
+        slice.
+
+        It must not depend on red or the bans. The sample fixes every
+        heuristic's [lo, hi], so drawing it differently rescales the whole
+        objective: a hero banned out of neither team would move the score of
+        an unchanged six, banning could raise the reported maximum over a
+        smaller feasible set, and `the optimal comp for this board` would
+        stop being a function of the composition. Bans still screen the
+        candidate field, in pools(), refine() and _pairs() - it is only the
+        measuring stick that has to hold still."""
+        rng = random.Random("%d|%s|%s" % (              # a str seed is stable across processes
+            REFERENCE_SEED, self.m.id if self.m else 0, self.side))
         by_role = {r: sorted((h for h in self.world.heroes.values()    # by id: the draw must
-                              if h.role == r and h.released           # not hang on a
-                              and h.id not in self.banned),           # query's row order
-                             key=lambda h: h.id)
+                              if h.role == r and h.released),          # not hang on a
+                             key=lambda h: h.id)                       # query's row order
                    for r in ROLE_COUNT}
         shapes = legal_shapes(self.catalog)
+        # bans can empty a role past what a shape needs; drawing one then raises
+        shapes = [(t, d, s) for t, d, s in shapes
+                  if t <= len(by_role["tank"]) and d <= len(by_role["damage"])
+                  and s <= len(by_role["support"])]
         out, seen = [], set()
         if shapes:
             while len(out) < size:
@@ -489,7 +501,10 @@ class Solver:
 
     @staticmethod
     def _rank_key(c):
-        return (-c.score, -c.tiebreak, c.names)
+        # sorted: a six's names in seat order are a construction artifact, so the
+        # same hero set could key 720 ways and the order would not be a function
+        # of the composition
+        return (-c.score, -c.tiebreak, sorted(c.names))
 
     def refine(self, ranked):
         """Local search: swap any open slot for any same-role hero. A swap keeps
@@ -515,11 +530,18 @@ class Solver:
             self._climb(seed, roster, known)
         pairs = self._pairs()
         if pairs:
-            spent = self.considered + PAIR_TRIES          # best six first, until it is spent
             for seed in heapq.nsmallest(SEEDS, known.values(), key=self._rank_key):
+                spent = self.considered + PAIR_TRIES      # each seed gets its own budget
                 paired = self._bring_pair(seed, pairs, known, spent)
                 if paired is not seed:
                     self._climb(paired, roster, known)
+        # the SEEDS are the top of one pool-restricted sweep and sit within a swap
+        # or two of each other, so the climbs above share a basin; and a climb moves
+        # one seat at a time, so a six two swaps away is unreachable however many
+        # times it is started. These two stages answer those in that order.
+        leader = min(known.values(), key=self._rank_key)
+        leader = self._restarts(leader, roster, known)
+        self._two_swap(leader, roster, known)
         out = list(known.values())
         out.sort(key=self._rank_key)
         return out
@@ -557,6 +579,62 @@ class Solver:
             if best is current:
                 return current
             current = best
+
+    def _restarts(self, leader, roster, known, n=RESTARTS):
+        """Climbs from random sixes of the leader's own shape. A climb preserves
+        the shape, so a start off it can only report on a shape already searched;
+        confining the draw is what makes a couple of dozen starts enough."""
+        locked_ids = {h.id for h in self.locked}
+        by_role = {r: [h for h in roster if h.role == r and h.id not in locked_ids]
+                   for r in ROLE_COUNT}
+        locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLE_COUNT}
+        shape = {r: sum(1 for h in leader.heroes if h.role == r) for r in ROLE_COUNT}
+        rng = random.Random("restart|%s|%s" % (self.m.id if self.m else 0, self.side))
+        best = leader
+        for _ in range(n):
+            heroes = []
+            for role in ROLE_COUNT:
+                need = shape[role] - len(locked_by_role[role])
+                if not 0 <= need <= len(by_role[role]):
+                    heroes = None
+                    break
+                heroes += locked_by_role[role] + rng.sample(by_role[role], need)
+            if heroes is None:
+                continue
+            cand = self._try(heroes, known)
+            if cand is None:
+                continue
+            cand = self._climb(cand, roster, known)
+            if cand.score > best.score + 1e-9:
+                best = cand
+        return best
+
+    def _two_swap(self, leader, roster, known):
+        """Two open seats changed at once, to convergence. Two picks that pay
+        only together are a saddle a one-slot climb cannot cross."""
+        locked_ids = {h.id for h in self.locked}
+        current = leader
+        while True:
+            best = current
+            open_seats = [i for i, h in enumerate(current.heroes) if h.id not in locked_ids]
+            for a_at in range(len(open_seats)):
+                for b_at in range(a_at + 1, len(open_seats)):
+                    i, j = open_seats[a_at], open_seats[b_at]
+                    role_i, role_j = current.heroes[i].role, current.heroes[j].role
+                    for x in roster:
+                        if x.role != role_i or x.id in current.key:
+                            continue
+                        for y in roster:
+                            if y.role != role_j or y.id in current.key or y.id == x.id:
+                                continue
+                            heroes = list(current.heroes)
+                            heroes[i], heroes[j] = x, y
+                            cand = self._try(heroes, known)
+                            if cand is not None and cand.score > best.score + 1e-9:
+                                best = cand
+            if best is current:
+                return current
+            current = self._climb(best, roster, known)
 
     def _pairs(self):
         """The wiki's synergy pairs this board can field, in id order."""
