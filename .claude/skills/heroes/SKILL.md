@@ -1,11 +1,11 @@
 ---
 name: heroes
-description: Add or update characters in Counter Utility Matrix's database - a hero Blizzard just released, one the wiki knows ahead of release (announced: shown on the roster in its role, its kit in the facts, never picked until it ships), a reworked kit, new playstyle tags, synergies and counters. Use when the user names a new hero, says "add X", "is X in the database", "update the heroes", or a hero's numbers look stale.
+description: Add or update characters in Countrix's database - a hero Blizzard just released, one the wiki knows ahead of release (announced: shown on the roster in its role, its kit in the facts, never picked until it ships), a reworked kit, new playstyle tags, synergies and counters. Use when the user names a new hero, says "add X", "is X in the database", "update the heroes", or a hero's numbers look stale.
 ---
 
 Bring the roster and the kits up to date. Work through the
-`counter-utility-matrix-docker` MCP server when it answers, else
-`counter-utility-matrix`. One call at a time; a pull takes minutes.
+`countrix-docker` MCP server when it answers, else
+`countrix`. One call at a time; a pull takes minutes.
 
 1. **Where things stand.** `roster`: every hero with role, subrole and
    status - `released`, or `announced` with its release day. If the hero

@@ -148,7 +148,7 @@ def dotenv():
 
 
 def token():
-    return os.environ.get("COUNTER_MATRIX_MCP_TOKEN") or dotenv().get("COUNTER_MATRIX_MCP_TOKEN")
+    return os.environ.get("COUNTRIX_MCP_TOKEN") or dotenv().get("COUNTRIX_MCP_TOKEN")
 
 
 def mcp(name, arguments=None, timeout=600):
@@ -237,7 +237,7 @@ AGENT_TOOL_NAMES = ("db_status", "strategies", "tuning_log", "metrics", "facts",
 # seconds a tool call is given by default.
 AGENT_TOOL_TIMEOUT_MS = str(45 * 60 * 1000)
 AGENT_TOOLS = ",".join("mcp__%s__%s" % (server, name)
-                       for server in ("counter-utility-matrix-docker", "counter-utility-matrix")
+                       for server in ("countrix-docker", "countrix")
                        for name in AGENT_TOOL_NAMES)
 
 
@@ -314,7 +314,7 @@ def test():
     """The suite inside the image: coverage writes to the tmpfs (the root is
     read-only); the shipped playbook is used whatever .env names."""
     sh("docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage",
-       "-e", "COUNTER_MATRIX_STRATEGIES=", "data",
+       "-e", "COUNTRIX_STRATEGIES=", "data",
        "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--cov")
     return 0
 

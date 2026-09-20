@@ -7,8 +7,8 @@ Two kinds of test:
 
 The second defaults to the repo's own build at db/psql/cluster, the database
 `python -m db.mcp call db_rebuild` produces, and skips itself when it is
-absent. COUNTER_MATRIX_LOCAL_SERVER or DATABASE_URL override the target;
-COUNTER_MATRIX_NO_DATABASE=1 runs the suite with no database, as CI does.
+absent. COUNTRIX_LOCAL_SERVER or DATABASE_URL override the target;
+COUNTRIX_NO_DATABASE=1 runs the suite with no database, as CI does.
 """
 
 import os
@@ -17,9 +17,9 @@ import pytest
 
 
 def _dsn():
-    if os.environ.get("COUNTER_MATRIX_NO_DATABASE"):
+    if os.environ.get("COUNTRIX_NO_DATABASE"):
         return None            # what CI sees: no cluster, the db-bound tests skip
-    local = os.environ.get("COUNTER_MATRIX_LOCAL_SERVER")
+    local = os.environ.get("COUNTRIX_LOCAL_SERVER")
     if not local and not os.environ.get("DATABASE_URL"):
         default = os.path.join(os.path.dirname(os.path.dirname(
             os.path.abspath(__file__))), "db", "psql", "cluster")

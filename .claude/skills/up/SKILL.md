@@ -1,6 +1,6 @@
 ---
 name: up
-description: Bring the whole counter-utility-matrix stack up and current - database, data layer (MCP), inference engine, board, refresher - and report the URLs and the data's vintage. Use when the user says to start, run, launch or check the app, or wants everything "good to go" before a game.
+description: Bring the whole countrix stack up and current - database, data layer (MCP), inference engine, board, refresher - and report the URLs and the data's vintage. Use when the user says to start, run, launch or check the app, or wants everything "good to go" before a game.
 ---
 
 Bring everything up and prove it is ready. Run, from the repo root:
@@ -25,7 +25,7 @@ later starts take seconds. Then:
    reachable -> `docker compose logs db`.
 3. If the rates capture date is not today and the user is about to play,
    offer `python orchestrator.py refresh` (or the `sync_all` tool with
-   `refresh: true` on the `counter-utility-matrix-docker` MCP server). The
+   `refresh: true` on the `countrix-docker` MCP server). The
    refresher container refreshes daily on its own and on start when the
    caches are a day old, so this is rarely needed.
 4. Never run `docker compose down -v`: that deletes the database volume

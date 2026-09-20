@@ -5,9 +5,8 @@ against two public websites. What is worth protecting: your account,
 your operating system, and the playbook and database the board trusts at
 game time.
 
-The board is also published - see [deploy.md](deploy.md). That adds one
-threat and one defence, both below; everything else on this page is
-unchanged, because the tunnel names the board's port and no other.
+Nothing is published: every port binds to 127.0.0.1 and the board is
+reachable from this machine only ([deploy.md](deploy.md)).
 
 ## The threat model
 
@@ -19,7 +18,6 @@ unchanged, because the tunnel names the board's port and no other.
 | **files** | tools that write into the playbook: a path that escapes the folder, a file the catalog would refuse, an oversized body |
 | **the containers** | a compromised process inside one reaching the internet, escalating, or filling the host |
 | **your account** | the CLI signed in on the host, driven headless with tools |
-| **the published board** | the board answers on the internet over a Cloudflare Tunnel: a stranger reaching it, or reaching past it to a port the tunnel was never meant to carry |
 
 ## What stands in the way
 
@@ -46,11 +44,11 @@ servers, no tools and two turns, and stores only what the catalog
 validates.
 
 **The board's one write is off by default, and knocks at the door when
-it is on.** `COUNTER_MATRIX_READ_ONLY` defaults to `1`: the board offers
+it is on.** `COUNTRIX_READ_ONLY` defaults to `1`: the board offers
 no *store* button and answers `POST /api/weight` with 403, so a weight
 set on a slider is the session's own and reaches no file. The data
 layer's `tune` tool is deliberately unaffected - a Claude Code session
-still writes weights through it. With `COUNTER_MATRIX_READ_ONLY=0` the
+still writes weights through it. With `COUNTRIX_READ_ONLY=0` the
 write comes back: `POST /api/weight` on the board (bound to 127.0.0.1
 like everything else), which the board turns into a `tune` call - over HTTP to the MCP server with the bearer token in the
 compose stack, in-process through the same tool registry on the local
@@ -58,25 +56,12 @@ cluster - so the change is validated against the catalog, logged with its
 reason and mirrored like any other. The board never opens a playbook
 file, and its container mounts the playbook read-only.
 
-**The perimeter is Access, and it names one port.** The published board
-sits behind Cloudflare Access: an unauthenticated request is answered
-at the edge with a redirect to a login and never reaches the tunnel, so
-no page, no fact and no strategy leaves the machine unasked. The policy
-is an allowlist of email addresses verified by a one-time PIN. The
-tunnel's ingress carries `countrix.app` and `www.countrix.app` to
-`localhost:8017` and answers everything else with a 404, so PostgreSQL,
-the inference service and - the one that matters - the MCP server with
-its writing tools are not published at all. The board is read-only
-there (`COUNTER_MATRIX_READ_ONLY`), so the one write it could offer is
-not on the internet either. The board itself still has no
-authentication of its own; Access is what stands in the way.
-
 **The door checks who is knocking.** The HTTP server binds to 127.0.0.1,
 refuses browser origins that are not local (DNS-rebinding guard), caps a
 request at one megabyte and a batch at twenty messages, allows 120 tool
 calls per client address per minute (the limit is per address, not per
 claimed session id) and answers 429 past that, and - when
-`COUNTER_MATRIX_MCP_TOKEN` is set in `.env` - requires
+`COUNTRIX_MCP_TOKEN` is set in `.env` - requires
 `Authorization: Bearer <token>` on every call (the session sends it from
 `.mcp.json`; `/health` stays open for the healthchecks). Every tool call,
 over either transport, is one line in the audit log
@@ -148,7 +133,7 @@ exits non-zero when something is wrong.
 - Keep `.env` out of the repository (it is ignored) and out of the image
   (it is not copied). There are no other secrets.
 - On a Linux host whose checkout is not owned by uid 1000, set
-  `COUNTER_MATRIX_UID` and `COUNTER_MATRIX_GID` in `.env` to the owner's
+  `COUNTRIX_UID` and `COUNTRIX_GID` in `.env` to the owner's
   ids, or the containers cannot write the bind mounts (the audit log, the
   mirror, a quarantine, a tune) and say so in their logs.
 

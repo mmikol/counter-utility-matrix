@@ -27,7 +27,7 @@ from inference import engine
 from ui.facts import model
 from ui.facts.compute import MAX_BANS, TEAM_SIZE
 
-PORT = int(os.environ.get("COUNTER_MATRIX_INFERENCE_PORT", "8019"))
+PORT = int(os.environ.get("COUNTRIX_INFERENCE_PORT", "8019"))
 
 
 def parse_board(query):
@@ -131,14 +131,14 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default=os.environ.get("COUNTER_MATRIX_INFERENCE_HOST",
+    parser.add_argument("--host", default=os.environ.get("COUNTRIX_INFERENCE_HOST",
                                                          "127.0.0.1"))
     parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
     workers = engine.warm()                    # the board's solves split across these
-    print("counter-utility-matrix inference: http://%s:%d%s" % (
+    print("countrix inference: http://%s:%d%s" % (
         args.host, args.port, " (%d solver workers)" % workers if workers else ""))
     server.serve_forever()
 

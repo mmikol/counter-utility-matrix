@@ -1,5 +1,5 @@
 -- The strategies table mirrors one playbook at a time - the shipped one, or an
--- experiment chosen with COUNTER_MATRIX_STRATEGIES. It now says which, so a
+-- experiment chosen with COUNTRIX_STRATEGIES. It now says which, so a
 -- reader (and the parity test) compares it with the right files.
 BEGIN;
 

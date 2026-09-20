@@ -12,6 +12,11 @@
 <a href='#pieces'>how the pieces fit</a>
 </nav>
 <h2 id='equation'>The Counter Utility Matrix</h2>
+<p><b>Countrix</b> is short for <b>Counter Utility Matrix</b>, which is the thing
+below: the counter is who answers whom, the utility is what a pick is worth once
+the facts are counted, and the matrix is every selection crossed with every other -
+heroes against heroes, heroes against maps, both against the meta. A comp is the
+argmax over that matrix.</p>
 <pre class='eq'>DATA           = HEROES &cup; MAPS &cup; META
 for each domain D in { HEROES, MAPS, META }:
   INDEPENDENT(D) = &#8899; facts(s)      over each selection s in D

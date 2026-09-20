@@ -10,7 +10,7 @@
 #   refresh     DATA LAYER's clock: wait for the database, then refresh it
 #               daily (db/refresh.py)
 #   sentry      the guard: the playbook, the database's text and the door, every
-#               COUNTER_MATRIX_SENTRY_EVERY seconds (db/sentry.py)
+#               COUNTRIX_SENTRY_EVERY seconds (db/sentry.py)
 #
 # Anything else is run as a command in the image:
 #   docker compose run data python -m db.mcp call sync_all

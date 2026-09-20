@@ -4,12 +4,12 @@
 #   data        DATA LAYER: builds the database from the bind-mounted page
 #               caches when it is empty or stale, then serves the MCP server at
 #               http://localhost:8020/mcp (.mcp.json, server
-#               "counter-utility-matrix-docker")
+#               "countrix-docker")
 #   inference   INFERENCE ENGINE: http://localhost:8019, reading the strategy
 #               files live
 #   ui          UI LAYER: the board at http://localhost:8017
 #   refresher   the data layer's clock: seasons and rates daily at
-#               COUNTER_MATRIX_REFRESH_AT (05:00 container time; set TZ), every
+#               COUNTRIX_REFRESH_AT (05:00 container time; set TZ), every
 #               source weekly, and on start when the caches are a day old
 #   sentry      the guard: quarantines a strategy file that will not load or
 #               reads like an instruction, flags instruction-like text in the
@@ -20,16 +20,16 @@
 # with every capability dropped and no new privileges, on one network. Only
 # data and refresher open a connection out, to two fixed hosts. Every
 # published port binds to 127.0.0.1. No keys, no accounts.
-# COUNTER_MATRIX_MCP_TOKEN (in .env) requires a bearer token on the MCP server.
+# COUNTRIX_MCP_TOKEN (in .env) requires a bearer token on the MCP server.
 # One image, built once by `data`, shared by every container; each container
 # mounts only what it reads, read-only unless it writes there.
 
 name: counter-utility-matrix
 
 x-app: &app
-  image: counter-utility-matrix
+  image: countrix
   # the checkout's owner on a Linux host, so the bind mounts stay writable
-  user: "${COUNTER_MATRIX_UID:-1000}:${COUNTER_MATRIX_GID:-1000}"
+  user: "${COUNTRIX_UID:-1000}:${COUNTRIX_GID:-1000}"
   restart: unless-stopped
   read_only: true
   tmpfs:
@@ -47,7 +47,7 @@ x-app: &app
   environment: &env
     DATABASE_URL: postgresql://overwatch:${POSTGRES_PASSWORD:-overwatch}@db/overwatch
     # another playbook: a folder under the repo (empty: inference/strategies)
-    COUNTER_MATRIX_STRATEGIES: ${COUNTER_MATRIX_STRATEGIES:-}
+    COUNTRIX_STRATEGIES: ${COUNTRIX_STRATEGIES:-}
 
 networks:
   stack: {}
@@ -92,7 +92,7 @@ services:
     command: ["data"]
     environment:
       <<: *env
-      COUNTER_MATRIX_MCP_TOKEN: ${COUNTER_MATRIX_MCP_TOKEN:-}
+      COUNTRIX_MCP_TOKEN: ${COUNTRIX_MCP_TOKEN:-}
     volumes:                         # every tool lands here: the pulls, the mirror, a tune,
       - ./.cache-blizzard:/app/.cache-blizzard             # a draft, the docs, the audit log
       - ./.cache-wiki:/app/.cache-wiki
@@ -145,12 +145,12 @@ services:
     environment:
       <<: *env
       INFERENCE_URL: http://inference:8019
-      COUNTER_MATRIX_UI_HOST: 0.0.0.0
-      # the board writes nothing unless COUNTER_MATRIX_READ_ONLY=0; the two
+      COUNTRIX_UI_HOST: 0.0.0.0
+      # the board writes nothing unless COUNTRIX_READ_ONLY=0; the two
       # below are the channel that one write would use (the data layer's tune)
-      COUNTER_MATRIX_READ_ONLY: ${COUNTER_MATRIX_READ_ONLY:-}
-      COUNTER_MATRIX_MCP_URL: http://data:8020/mcp
-      COUNTER_MATRIX_MCP_TOKEN: ${COUNTER_MATRIX_MCP_TOKEN:-}
+      COUNTRIX_READ_ONLY: ${COUNTRIX_READ_ONLY:-}
+      COUNTRIX_MCP_URL: http://data:8020/mcp
+      COUNTRIX_MCP_TOKEN: ${COUNTRIX_MCP_TOKEN:-}
     depends_on:
       data:
         condition: service_healthy
@@ -167,9 +167,9 @@ services:
       - ./inference/strategies:/app/inference/strategies:ro
     environment:
       <<: *env
-      COUNTER_MATRIX_REFRESH_AT: ${COUNTER_MATRIX_REFRESH_AT:-05:00}
-      COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS: ${COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS:-20}
-      COUNTER_MATRIX_REFRESH_FULL_DAYS: ${COUNTER_MATRIX_REFRESH_FULL_DAYS:-7}
+      COUNTRIX_REFRESH_AT: ${COUNTRIX_REFRESH_AT:-05:00}
+      COUNTRIX_REFRESH_MAX_AGE_HOURS: ${COUNTRIX_REFRESH_MAX_AGE_HOURS:-20}
+      COUNTRIX_REFRESH_FULL_DAYS: ${COUNTRIX_REFRESH_FULL_DAYS:-7}
       TZ: ${TZ:-UTC}
     depends_on:
       data:
@@ -183,7 +183,7 @@ services:
       - ./inference/strategies:/app/inference/strategies
     environment:
       <<: *env
-      COUNTER_MATRIX_SENTRY_EVERY: ${COUNTER_MATRIX_SENTRY_EVERY:-30}
+      COUNTRIX_SENTRY_EVERY: ${COUNTRIX_SENTRY_EVERY:-30}
     depends_on:
       db:
         condition: service_healthy

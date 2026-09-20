@@ -46,9 +46,9 @@ def test_the_agents_run_is_headless_claude_on_the_refresh_skill(monkeypatch):
     assert "--no-session-persistence" in command and "--output-format" in command
     assert command[command.index("--tools") + 1] == "" and "--max-turns" in command
     allowed = set(orchestrator.AGENT_TOOLS.split(","))
-    assert "mcp__counter-utility-matrix-docker__sync_all" in allowed
-    assert "mcp__counter-utility-matrix__infer_strategy" in allowed
-    assert "mcp__counter-utility-matrix-docker__query" in allowed      # read-only, its own login
+    assert "mcp__countrix-docker__sync_all" in allowed
+    assert "mcp__countrix__infer_strategy" in allowed
+    assert "mcp__countrix-docker__query" in allowed      # read-only, its own login
     for never in ("add_strategy", "db_rebuild", "db_init", "db_migrate"):
         assert not any(t.endswith("__" + never) for t in allowed), never
     from inference import derive
@@ -139,7 +139,7 @@ def test_refresh_test_down_and_main_dispatch(stubbed, capsys):
     assert orchestrator.refresh() == 0 and ("mcp", "sync_all") in calls
     assert orchestrator.test() == 0
     suite = next(c for c in calls if "pytest" in c)     # in the image, on the shipped playbook
-    assert "COVERAGE_FILE=/tmp/.coverage" in suite and "COUNTER_MATRIX_STRATEGIES=" in suite
+    assert "COVERAGE_FILE=/tmp/.coverage" in suite and "COUNTRIX_STRATEGIES=" in suite
     assert orchestrator.down() == 0 and ("sh", "docker", "compose", "down") in calls
     assert orchestrator.main(["status"]) == 0
     with pytest.raises(SystemExit):
@@ -176,9 +176,9 @@ def test_run_brings_the_stack_up_and_skips_the_agents_without_a_cli(stubbed, mon
 def test_dotenv_token_sentry_line_and_the_http_helpers(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrator, "ROOT", str(tmp_path))
     assert orchestrator.dotenv() == {} and orchestrator.sentry_line() is None
-    (tmp_path / ".env").write_text("# a comment\nCOUNTER_MATRIX_MCP_TOKEN='t0k'\nX=1\n")
-    monkeypatch.delenv("COUNTER_MATRIX_MCP_TOKEN", raising=False)
-    assert orchestrator.dotenv() == {"COUNTER_MATRIX_MCP_TOKEN": "t0k", "X": "1"}
+    (tmp_path / ".env").write_text("# a comment\nCOUNTRIX_MCP_TOKEN='t0k'\nX=1\n")
+    monkeypatch.delenv("COUNTRIX_MCP_TOKEN", raising=False)
+    assert orchestrator.dotenv() == {"COUNTRIX_MCP_TOKEN": "t0k", "X": "1"}
     assert orchestrator.token() == "t0k"
     raw = tmp_path / "db" / "raw"
     raw.mkdir(parents=True)
@@ -209,7 +209,7 @@ def test_mcp_posts_a_tool_call_and_reads_the_text(monkeypatch):
         reply = {"result": {"content": [{"type": "text", "text": "hello"}]}}
         return Reply(json.dumps(reply).encode())
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    monkeypatch.setenv("COUNTER_MATRIX_MCP_TOKEN", "t0k")
+    monkeypatch.setenv("COUNTRIX_MCP_TOKEN", "t0k")
     assert orchestrator.mcp("db_status", {"a": 1}) == "hello"
     assert seen["body"]["params"] == {"name": "db_status", "arguments": {"a": 1}}
     assert seen["auth"] == "Bearer t0k"

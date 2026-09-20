@@ -22,12 +22,12 @@ from urllib.parse import urlparse
 from db import RAW_DIR
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
-SERVER_INFO = {"name": "counter-utility-matrix", "version": "2.1.0"}
+SERVER_INFO = {"name": "countrix", "version": "2.1.0"}
 
 # Every tools/call is one JSON line here: when, over which transport, from
 # whom, which tool, the shape of its arguments (names and sizes, never the
 # values), whether it succeeded, and how long it took. The sentry reads it.
-AUDIT_PATH = os.environ.get("COUNTER_MATRIX_AUDIT", os.path.join(RAW_DIR, "audit.jsonl"))
+AUDIT_PATH = os.environ.get("COUNTRIX_AUDIT", os.path.join(RAW_DIR, "audit.jsonl"))
 _client = threading.local()
 
 
@@ -124,7 +124,7 @@ class Server:
                              "prompts": {"listChanged": False}},
             "serverInfo": SERVER_INFO,
             "instructions": (
-                "Counter Utility Matrix: the data layer (pull_* tools scrape, clean and"
+                "Countrix: the data layer (pull_* tools scrape, clean and"
                 " store each source; sync_all does them all in order), the"
                 " UI layer (facts: every fact the database holds about a"
                 " board of map + red + blue picks) and the inference layer"
@@ -238,11 +238,11 @@ LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 MAX_BODY = 1 << 20            # one request is a tool call, not an upload
 MAX_BATCH = 20                # messages in one JSON-RPC batch
 RATE_LIMIT = 120              # tool calls per client address per minute
-TOKEN_ENV = "COUNTER_MATRIX_MCP_TOKEN"
+TOKEN_ENV = "COUNTRIX_MCP_TOKEN"
 
 
 class HttpHandler(BaseHTTPRequestHandler):
-    server_version = "counter-utility-matrix-mcp/2.1"
+    server_version = "countrix-mcp/2.1"
 
     def log_message(self, fmt, *args):
         pass
@@ -374,6 +374,6 @@ def serve_http(mcp, host, port, status, allowed_hosts=()):
     """Serve `mcp` (a Server) over HTTP until interrupted."""
     mcp.transport = "http"
     httpd = HttpServer((host, port), mcp, status, allowed_hosts)
-    sys.stderr.write("counter-utility-matrix mcp: http://%s:%d/mcp%s\n" % (
+    sys.stderr.write("countrix mcp: http://%s:%d/mcp%s\n" % (
         host, port, " (bearer token required)" if httpd.token else ""))
     httpd.serve_forever()

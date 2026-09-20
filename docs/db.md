@@ -144,19 +144,19 @@ The `refresher` container refreshes the database once a day, so the board
 is ready when a game starts. The daily refresh refetches what moves day to
 day - the wiki's seasons and the rates (a new dated snapshot) - then
 re-mirrors the strategies and re-exports `raw/`.
-Once the wiki cache is older than `COUNTER_MATRIX_REFRESH_FULL_DAYS` it
+Once the wiki cache is older than `COUNTRIX_REFRESH_FULL_DAYS` it
 runs `sync_all` with refresh on: every page of every source, hero pages
 and articles (kits, synergies, counters) included. It also refreshes on start when the cached pages
-are older than `COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS`. A page that fails
+are older than `COUNTRIX_REFRESH_MAX_AGE_HOURS`. A page that fails
 to fetch keeps its cached copy, so a flaky source degrades to yesterday's
 numbers rather than an empty table; the board's header shows the capture
 date and warns when patches shipped since.
 
 | setting | default | meaning |
 | --- | --- | --- |
-| `COUNTER_MATRIX_REFRESH_AT` | `05:00` | daily time, in the container's `TZ` (UTC unless set) |
-| `COUNTER_MATRIX_REFRESH_MAX_AGE_HOURS` | `20` | refresh on start when the cache is older than this |
-| `COUNTER_MATRIX_REFRESH_FULL_DAYS` | `7` | refetch every source (not just the daily set) when the wiki cache is older than this |
+| `COUNTRIX_REFRESH_AT` | `05:00` | daily time, in the container's `TZ` (UTC unless set) |
+| `COUNTRIX_REFRESH_MAX_AGE_HOURS` | `20` | refresh on start when the cache is older than this |
+| `COUNTRIX_REFRESH_FULL_DAYS` | `7` | refetch every source (not just the daily set) when the wiki cache is older than this |
 
 Set them in the environment or a `.env` file next to `compose.yaml`. The
 same refresh from a shell, against whichever database `DATABASE_URL` names:

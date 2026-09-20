@@ -1,11 +1,11 @@
 ---
 name: maps
-description: Add or update maps in Counter Utility Matrix's database - a new map, a mode change, the stages, the per-map rates, and the style a map rewards, derived from those rates. Use when the user names a new map, says "add the new map", "is X in the pool", "update the maps", or a map shows no rewarded style.
+description: Add or update maps in Countrix's database - a new map, a mode change, the stages, the per-map rates, and the style a map rewards, derived from those rates. Use when the user names a new map, says "add the new map", "is X in the pool", "update the maps", or a map shows no rewarded style.
 ---
 
 Bring the map pool up to date. Work through the
-`counter-utility-matrix-docker` MCP server when it answers, else
-`counter-utility-matrix`. One call at a time; a pull takes minutes.
+`countrix-docker` MCP server when it answers, else
+`countrix`. One call at a time; a pull takes minutes.
 
 1. **Where things stand.** `roster`: the map pool with modes. If the map
    the user named is there, say so and stop unless they asked for a

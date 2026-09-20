@@ -1,14 +1,14 @@
 ---
 name: tune
-description: Change how Counter Utility Matrix's inference engine scores compositions - a strategy's weight, a params dial, or an expression. Use when the user says the solver over- or under-values something, wants a rule changed, asks to "tune", "reweight" or "adjust".
+description: Change how Countrix's inference engine scores compositions - a strategy's weight, a params dial, or an expression. Use when the user says the solver over- or under-values something, wants a rule changed, asks to "tune", "reweight" or "adjust".
 ---
 
 You are editing the brain: the playbook in `inference/strategies/`,
 STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS - a constraint is a
 limit (`require`) or a scored adjustment (`bonus`/`penalty`), a heuristic
 a weighted metric, an assumption prose. Every change goes through the
-`tune` tool on the `counter-utility-matrix` (or
-`counter-utility-matrix-docker`) MCP server, which validates it against
+`tune` tool on the `countrix` (or
+`countrix-docker`) MCP server, which validates it against
 the catalog, writes the file, re-mirrors the table, and logs it with your
 reason in `inference/strategies/tuning-log.md`. Nothing is edited by hand.
 

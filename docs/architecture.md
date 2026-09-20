@@ -82,7 +82,7 @@ The data layer owns every write to Postgres and the playbook. The UI
 layer reads, turns every table into facts, and defines every metric once
 (`ui/facts/compute.py`), so the number on the board and the number the
 solver scores are the same function; its one write, a heuristic's weight
-stored from the board, is off by default (`COUNTER_MATRIX_READ_ONLY`)
+stored from the board, is off by default (`COUNTRIX_READ_ONLY`)
 and, when turned on, is handed to the data layer's `tune` tool. The
 inference layer reads the facts, never the tables.
 
@@ -107,10 +107,10 @@ mistaken for the other.
 | file | purpose |
 | --- | --- |
 | `orchestrator.py` | the end-to-end run. `python orchestrator.py` brings the stack up (the data container pulls and ingests when the database is empty or stale), runs the agents headless on the `/refresh` skill, and leaves the app running. Verbs: `run` (default) · `up` · `agents` · `status` · `refresh` · `test` · `down` |
-| `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock), `sentry` (the guard). Every container is unprivileged on a read-only root with no capabilities; every published port binds to 127.0.0.1, and a deployment reaches the board through a tunnel to one of them rather than a binding of its own ([deploy.md](deploy.md)). Bind mounts keep the caches, `db/raw`, `inference/strategies` and `docs` on the host, so tuning, authoring and regenerating need no rebuild |
-| `Dockerfile` | the one image, run as an unprivileged user (uid 1000, or `COUNTER_MATRIX_UID`/`GID` from `.env` on a Linux host whose checkout is owned by someone else); `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty, unfilled or behind the migrations |
+| `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock), `sentry` (the guard). Every container is unprivileged on a read-only root with no capabilities; every published port binds to 127.0.0.1 and nothing is published ([deploy.md](deploy.md)). Bind mounts keep the caches, `db/raw`, `inference/strategies` and `docs` on the host, so tuning, authoring and regenerating need no rebuild |
+| `Dockerfile` | the one image, run as an unprivileged user (uid 1000, or `COUNTRIX_UID`/`GID` from `.env` on a Linux host whose checkout is owned by someone else); `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty, unfilled or behind the migrations |
 | `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'` |
-| `.mcp.json` | registers the two MCP servers a Claude Code session sees: `counter-utility-matrix` (stdio, the local cluster) and `counter-utility-matrix-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
+| `.mcp.json` | registers the two MCP servers a Claude Code session sees: `countrix` (stdio, the local cluster) and `countrix-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
 | `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pytest-cov, ruff, and pgserver (the embedded PostgreSQL a local build uses) |
 | `pyproject.toml` | ruff's rules (line length 100); the coverage bar, 75% where a database exists |
 | `pytest.ini` | the `invariant` marker for tests that need a built database |
@@ -135,7 +135,7 @@ flowchart LR
         REF["refresher - the clock<br/>seasons + rates daily,<br/>every source weekly,<br/>and on start when stale"]
         SEN["sentry - the guard<br/>the playbook, the database's text,<br/>the door's audit log"]
     end
-    SESSION -->|".mcp.json: counter-utility-matrix-docker"| DATA
+    SESSION -->|".mcp.json: countrix-docker"| DATA
     BROWSER --> UI
     UI -->|"HTTP"| INF
     UI --> DBC
@@ -157,16 +157,20 @@ Settings, from the environment or `.env` (the refresh times are in [db.md](db.md
 
 | setting | default | meaning |
 | --- | --- | --- |
-| `COUNTER_MATRIX_STRATEGIES` | empty | a playbook folder other than `inference/strategies/` |
-| `COUNTER_MATRIX_WORKERS` | `max(6, min(cores, 12))` | the solver's worker processes |
-| `COUNTER_MATRIX_PARALLEL` | `1` | `0`: every board in one process |
-| `COUNTER_MATRIX_UI_HOST`, `COUNTER_MATRIX_UI_PORT` | `127.0.0.1`, `8017` | where the board listens |
-| `COUNTER_MATRIX_READ_ONLY` | `1` | the board writes nothing: a slider's weight is the session's own; `0` brings back *store* |
-| `COUNTER_MATRIX_INFERENCE_HOST`, `COUNTER_MATRIX_INFERENCE_PORT` | `127.0.0.1`, `8019` | where the inference service listens |
-| `COUNTER_MATRIX_MCP_TOKEN` | unset | bearer token the MCP server requires over HTTP |
-| `COUNTER_MATRIX_AUDIT` | `db/raw/audit.jsonl` | the MCP server's audit log |
-| `COUNTER_MATRIX_SENTRY_EVERY` | `30` | seconds between sentry sweeps |
-| `COUNTER_MATRIX_CLAUDE` | the `claude` on `PATH` | the CLI the agents and `derive` run |
+| `COUNTRIX_STRATEGIES` | empty | a playbook folder other than `inference/strategies/` |
+| `COUNTRIX_WORKERS` | `max(6, min(cores, 12))` | the solver's worker processes |
+| `COUNTRIX_PARALLEL` | `1` | `0`: every board in one process |
+| `COUNTRIX_UI_HOST`, `COUNTRIX_UI_PORT` | `127.0.0.1`, `8017` | where the board listens |
+| `COUNTRIX_READ_ONLY` | `1` | the board writes nothing: a slider's weight is the session's own; `0` brings back *store* |
+| `COUNTRIX_INFERENCE_HOST`, `COUNTRIX_INFERENCE_PORT` | `127.0.0.1`, `8019` | where the inference service listens |
+| `COUNTRIX_MCP_TOKEN` | unset | bearer token the MCP server requires over HTTP |
+| `COUNTRIX_AUDIT` | `db/raw/audit.jsonl` | the MCP server's audit log |
+| `COUNTRIX_SENTRY_EVERY` | `30` | seconds between sentry sweeps |
+| `COUNTRIX_CLAUDE` | the `claude` on `PATH` | the CLI the agents and `derive` run |
+| `COUNTRIX_MCP_URL` | unset | the MCP server the board's one write goes to; in-process through the same registry when unset |
+| `COUNTRIX_REPO_URL` | `https://github.com/mmikol/countrix` | the repository the board's header links to |
+| `INFERENCE_URL` | unset | the inference service the board delegates to; the engine runs in-process when unset |
+| `DATABASE_URL` | unset | the PostgreSQL to use; the embedded cluster at `db/psql/cluster` when unset |
 
 Local-only works identically: without `DATABASE_URL`, everything runs in
 one process against the embedded pgserver cluster at `db/psql/cluster` -

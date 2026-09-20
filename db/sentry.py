@@ -1,6 +1,6 @@
 """The sentry: the guard over the playbook and the door.
 
-Every COUNTER_MATRIX_SENTRY_EVERY seconds (30):
+Every COUNTRIX_SENTRY_EVERY seconds (30):
 
     the playbook   every file in inference/strategies/ must load through the
                    catalog; one that does not is quarantined (renamed to
@@ -36,7 +36,7 @@ from db import RAW_DIR
 from db.mcp.server import AUDIT_PATH, RATE_LIMIT  # one definition: the door's own
 from inference import catalog as catalog_module
 
-EVERY = float(os.environ.get("COUNTER_MATRIX_SENTRY_EVERY", "30"))
+EVERY = float(os.environ.get("COUNTRIX_SENTRY_EVERY", "30"))
 
 REPORT_PATH = os.path.join(RAW_DIR, "sentry.json")
 QUARANTINE = ".quarantined"

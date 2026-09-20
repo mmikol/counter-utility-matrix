@@ -31,7 +31,7 @@ from ui.facts import engine as facts_engine
 from ui.facts import model
 from ui.facts.compute import MAX_BANS, SIDED_MODES, TEAM_SIZE
 
-PORT = int(os.environ.get("COUNTER_MATRIX_UI_PORT", "8017"))
+PORT = int(os.environ.get("COUNTRIX_UI_PORT", "8017"))
 
 # The inference layer runs in-process unless a service is named: in the
 # compose stack the `inference` container serves it (inference/serve.py).
@@ -40,15 +40,15 @@ INFERENCE_URL = os.environ.get("INFERENCE_URL", "").rstrip("/")
 # layer's `tune` tool: over HTTP to the MCP server when a URL is set (the
 # compose stack), in-process through the same registry otherwise. READ_ONLY
 # below is what decides whether that write is offered at all.
-MCP_URL = os.environ.get("COUNTER_MATRIX_MCP_URL", "").rstrip("/")
-MCP_TOKEN = os.environ.get("COUNTER_MATRIX_MCP_TOKEN", "")
+MCP_URL = os.environ.get("COUNTRIX_MCP_URL", "").rstrip("/")
+MCP_TOKEN = os.environ.get("COUNTRIX_MCP_TOKEN", "")
 STORE_REASON = "stored from the board's slider"
 # The board writes nothing unless told it may: a weight set on the playbook tab
 # rides with the session's own requests and never reaches a strategy file.
-# COUNTER_MATRIX_READ_ONLY=0 brings back the store button and its one POST.
-READ_ONLY = os.environ.get("COUNTER_MATRIX_READ_ONLY", "1").lower() not in ("0", "no", "false")
+# COUNTRIX_READ_ONLY=0 brings back the store button and its one POST.
+READ_ONLY = os.environ.get("COUNTRIX_READ_ONLY", "1").lower() not in ("0", "no", "false")
 # The repository the header links to; override when the repo moves.
-REPO_URL = os.environ.get("COUNTER_MATRIX_REPO_URL", "https://github.com/mmikol/counter-utility-matrix")
+REPO_URL = os.environ.get("COUNTRIX_REPO_URL", "https://github.com/mmikol/countrix")
 GITHUB_MARK = ("<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='true'><path fill='currentColor' d='M8 0C3.58 0 0 3.58 0 8"  # noqa: E501
                "c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94"  # noqa: E501
                "-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2"  # noqa: E501
@@ -232,7 +232,7 @@ HEAD = ("<!doctype html><meta charset='utf-8'>"
 
 
 def view_board():
-    return (HEAD + "<title>Counter Utility Matrix</title><main>"
+    return (HEAD + "<title>Countrix</title><main>"
             "<header class='top'><h1>Counter <span>Utility Matrix</span></h1>"
             "<div class='mapsel'><select id='mapsel'></select><span class='mode' id='mode'></span>"
             "<span class='sideseg' id='sideseg' title=\"blue's side;"
@@ -377,12 +377,12 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default=os.environ.get("COUNTER_MATRIX_UI_HOST", "127.0.0.1"))
+    parser.add_argument("--host", default=os.environ.get("COUNTRIX_UI_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=PORT)
     args = parser.parse_args()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     workers = 0 if INFERENCE_URL else inference_engine.warm()   # in-process boards split too
-    print("Counter Utility Matrix: http://%s:%d%s" % (
+    print("Countrix: http://%s:%d%s" % (
         args.host, args.port, " (%d solver workers)" % workers if workers else ""))
     server.serve_forever()
 

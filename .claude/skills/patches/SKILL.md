@@ -1,11 +1,11 @@
 ---
 name: patches
-description: Bring Counter Utility Matrix's database up to date with the game's patches - pull the patch list, see whether a patch shipped since the rates were captured, refetch what a patch changes (the season, rates, kits, Blizzard's hero text), and report what moved. Use when the user says a patch dropped, asks "are we on the latest patch", "update for the patch", or the facts warn that patches shipped since capture.
+description: Bring Countrix's database up to date with the game's patches - pull the patch list, see whether a patch shipped since the rates were captured, refetch what a patch changes (the season, rates, kits, Blizzard's hero text), and report what moved. Use when the user says a patch dropped, asks "are we on the latest patch", "update for the patch", or the facts warn that patches shipped since capture.
 ---
 
 Keep the database on the current patch. Work through the
-`counter-utility-matrix-docker` MCP server (the compose stack's database,
-the one the board shows) when it answers, else `counter-utility-matrix`.
+`countrix-docker` MCP server (the compose stack's database,
+the one the board shows) when it answers, else `countrix`.
 
 1. **The patch list.** `pull_patches` with `refresh: true`: the wiki's
    patch list, so every rates snapshot can say which patch was live.

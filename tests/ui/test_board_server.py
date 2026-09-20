@@ -44,7 +44,7 @@ def test_a_read_only_board_refuses_the_one_post(served, monkeypatch):
 
 
 def test_a_writable_board_renders_the_store_button(monkeypatch):
-    # COUNTER_MATRIX_READ_ONLY=0 is the documented escape hatch: the page shell
+    # COUNTRIX_READ_ONLY=0 is the documented escape hatch: the page shell
     # must hand the scripts READ_ONLY = false, which is what renders *store*
     monkeypatch.setattr(board, "READ_ONLY", False)
     assert "READ_ONLY = false" in board.view_board()

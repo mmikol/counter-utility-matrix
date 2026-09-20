@@ -58,6 +58,30 @@ def test_every_relative_link_in_the_docs_resolves():
     assert not broken, broken
 
 
+ENV_RE = re.compile(r"""os\.environ\.get\(\s*["']"""
+                    r"""(COUNTRIX_[A-Z_]+|INFERENCE_URL|DATABASE_URL)["']""")
+# read where the code reads them, documented where a reader looks: the settings
+# table in architecture.md, or db.md for the refresh clock it delegates
+ENV_DOCS = ("architecture.md", "db.md")
+
+
+def test_every_setting_the_code_reads_is_documented():
+    names = set()
+    for folder in ("db", "ui", "inference"):
+        for base, _, files in os.walk(os.path.join(ROOT, folder)):
+            for name in files:
+                if name.endswith(".py"):
+                    path = os.path.join(base, name)
+                    with open(path, encoding="utf-8") as handle:
+                        names |= set(ENV_RE.findall(handle.read()))
+    names |= set(ENV_RE.findall(_read("orchestrator.py")))
+    documented = "".join(_read("docs", doc) for doc in ENV_DOCS)
+    # the two that only the tests set are the suite's own, not a setting to document
+    missing = sorted(n for n in names - {"COUNTRIX_NO_DATABASE", "COUNTRIX_LOCAL_SERVER"}
+                     if n not in documented)
+    assert not missing, missing
+
+
 @needs_git
 def test_the_overview_names_everything_at_the_root():
     tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True,
@@ -70,10 +94,10 @@ def test_the_overview_names_everything_at_the_root():
 
 def test_mcp_json_registers_the_two_servers():
     servers = json.loads(_read(".mcp.json"))["mcpServers"]
-    assert set(servers) == {"counter-utility-matrix", "counter-utility-matrix-docker"}
-    assert servers["counter-utility-matrix"]["args"] == ["-m", "db.mcp"]
-    assert servers["counter-utility-matrix-docker"]["url"].endswith(":8020/mcp")
-    docker = servers["counter-utility-matrix-docker"]
+    assert set(servers) == {"countrix", "countrix-docker"}
+    assert servers["countrix"]["args"] == ["-m", "db.mcp"]
+    assert servers["countrix-docker"]["url"].endswith(":8020/mcp")
+    docker = servers["countrix-docker"]
     assert docker["headers"]["Authorization"].startswith("Bearer ${")
 
 

@@ -14,10 +14,10 @@ in the repo:
 
 | server | transport | reaches | started by |
 | --- | --- | --- | --- |
-| `counter-utility-matrix` | stdio: `.venv/bin/python -m db.mcp` | the local embedded cluster at `db/psql/cluster` (or whatever `DATABASE_URL` names) | the session, on demand |
-| `counter-utility-matrix-docker` | Streamable HTTP: `http://localhost:8020/mcp` | the compose stack's PostgreSQL - the database the board at :8017 shows | the `data` container, after it has built the database |
+| `countrix` | stdio: `.venv/bin/python -m db.mcp` | the local embedded cluster at `db/psql/cluster` (or whatever `DATABASE_URL` names) | the session, on demand |
+| `countrix-docker` | Streamable HTTP: `http://localhost:8020/mcp` | the compose stack's PostgreSQL - the database the board at :8017 shows | the `data` container, after it has built the database |
 
-They expose the same tools. The skills prefer `counter-utility-matrix-docker`
+They expose the same tools. The skills prefer `countrix-docker`
 when the stack is up, so what a session changes is what the board shows;
 the headless agents' run (`orchestrator.py agents`) is allowed an explicit
 list of tools on these two servers and no built-in tool at all.
@@ -25,7 +25,7 @@ list of tools on these two servers and no built-in tool at all.
 The HTTP door checks who is knocking: it binds to 127.0.0.1, refuses
 non-local browser origins, caps a request at one megabyte and a batch at
 twenty messages, allows 120 tool calls per client address per minute, and
-requires `Authorization: Bearer <token>` when `COUNTER_MATRIX_MCP_TOKEN`
+requires `Authorization: Bearer <token>` when `COUNTRIX_MCP_TOKEN`
 is set (in `.env`; `.mcp.json` sends it from the same variable). Every
 tool call over either transport is a line in the audit log,
 `db/raw/audit.jsonl`, that the sentry reads. The `query` tool connects as

@@ -28,7 +28,7 @@ from inference import catalog as catalog_module
 from inference import tune
 from ui.facts import compute
 
-CLI_ENV = "COUNTER_MATRIX_CLAUDE"
+CLI_ENV = "COUNTRIX_CLAUDE"
 CLI_CANDIDATES = ("claude",                                   # on PATH, any OS
                   os.path.expanduser("~/.local/bin/claude"))    # the native installer's default
 TIMEOUT = 300
@@ -88,7 +88,7 @@ def prompt(draft, catalog, objection=None):
               ' or {"when": "<expr>", "bonus": "<expr>", "penalty": "<expr>",'
               ' "params": {"NAME": <number>}}'
               ' (when/bonus/penalty/params each optional) or {"kind": "assumption"}')
-    text = """You complete a strategy file for counter-utility-matrix, a deterministic
+    text = """You complete a strategy file for countrix, a deterministic
 Overwatch 2 6v6 composition solver. A person wrote the file's name, its kind and its prose;
 you write its frontmatter. Answer with ONE JSON object and nothing else:
 

@@ -684,19 +684,19 @@ def _plan(world, m, side, bans, red_h, blue_r):
 # six is ranked against the field its seat's search already swept.
 #
 # The world crosses as bytes pickled once and cached per worker; so is the
-# playbook, reread when a file changes. Off with COUNTER_MATRIX_PARALLEL=0,
+# playbook, reread when a file changes. Off with COUNTRIX_PARALLEL=0,
 # on one core, or with a catalog the caller supplied (a worker loads the
 # playbook from its files).
 
-PARALLEL = os.environ.get("COUNTER_MATRIX_PARALLEL", "1").lower() not in ("0", "no", "false")
+PARALLEL = os.environ.get("COUNTRIX_PARALLEL", "1").lower() not in ("0", "no", "false")
 WORKER_CEILING = 12          # a worker holds about 70 MB, and past a dozen slices the
                              # rounds' own overhead eats what a finer slice saves
 
 
 def _worker_count():
     """Six workers, or one per core where there are more, capped at
-    WORKER_CEILING. COUNTER_MATRIX_WORKERS overrides."""
-    override = os.environ.get("COUNTER_MATRIX_WORKERS", "").strip()
+    WORKER_CEILING. COUNTRIX_WORKERS overrides."""
+    override = os.environ.get("COUNTRIX_WORKERS", "").strip()
     if override.isdigit() and int(override) > 0:
         return int(override)
     return max(6, min(os.cpu_count() or 1, WORKER_CEILING))

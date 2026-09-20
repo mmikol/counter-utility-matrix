@@ -1,13 +1,13 @@
 {
   "mcpServers": {
-    "counter-utility-matrix": {
+    "countrix": {
       "command": ".venv/bin/python",
       "args": ["-m", "db.mcp"]
     },
-    "counter-utility-matrix-docker": {
+    "countrix-docker": {
       "type": "http",
       "url": "http://localhost:8020/mcp",
-      "headers": {"Authorization": "Bearer ${COUNTER_MATRIX_MCP_TOKEN:-}"}
+      "headers": {"Authorization": "Bearer ${COUNTRIX_MCP_TOKEN:-}"}
     }
   }
 }

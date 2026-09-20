@@ -56,9 +56,9 @@ SHIPPED_DIR = os.path.join(ROOT, "inference", "strategies")
 
 
 def strategies_dir():
-    """The playbook in force: the shipped one, unless COUNTER_MATRIX_STRATEGIES
+    """The playbook in force: the shipped one, unless COUNTRIX_STRATEGIES
     names another folder - a path relative to the repo root or absolute."""
-    chosen = os.environ.get("COUNTER_MATRIX_STRATEGIES", "").strip()
+    chosen = os.environ.get("COUNTRIX_STRATEGIES", "").strip()
     return os.path.abspath(os.path.join(ROOT, chosen)) if chosen else SHIPPED_DIR
 
 

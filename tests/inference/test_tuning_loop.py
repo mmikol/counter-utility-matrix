@@ -273,14 +273,14 @@ def test_a_file_named_for_another_id_cannot_hijack_it(catalog_copy):
 
 
 def test_another_playbook_is_chosen_by_the_environment(monkeypatch, tmp_path):
-    """COUNTER_MATRIX_STRATEGIES names another folder of strategy files; the
+    """COUNTRIX_STRATEGIES names another folder of strategy files; the
     shipped playbook is the default, and the docs are written from it alone."""
-    monkeypatch.delenv("COUNTER_MATRIX_STRATEGIES", raising=False)
+    monkeypatch.delenv("COUNTRIX_STRATEGIES", raising=False)
     assert catalog.strategies_dir() == catalog.SHIPPED_DIR
     other = tmp_path / "other"                      # one rule, copied from the playbook
     other.mkdir()
     shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), other)
-    monkeypatch.setenv("COUNTER_MATRIX_STRATEGIES", str(other))
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", str(other))
     chosen = catalog.strategies_dir()
     assert chosen == str(other)
     one = catalog.load(chosen)

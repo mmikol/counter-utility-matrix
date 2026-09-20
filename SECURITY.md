@@ -1,6 +1,6 @@
 # Security
 
-Counter Utility Matrix runs on your own machine, against public sources
+Countrix runs on your own machine, against public sources
 and your own Claude Code subscription. You run it at your own risk.
 
 No warranty, no support, no promised response time, no duty to fix. The

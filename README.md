@@ -1,11 +1,14 @@
-# Counter Utility Matrix
+# Countrix
 
-[![ci](https://github.com/mmikol/counter-utility-matrix/actions/workflows/ci.yml/badge.svg)](https://github.com/mmikol/counter-utility-matrix/actions/workflows/ci.yml)
+[![ci](https://github.com/mmikol/countrix/actions/workflows/ci.yml/badge.svg)](https://github.com/mmikol/countrix/actions/workflows/ci.yml)
 
 Optimal Overwatch 2 team compositions: a database pulled from the
 sources, a board that turns every pick into facts, and a deterministic
 solver over a markdown playbook of constraints, heuristics and
 assumptions. No accounts, no keys, no API billing.
+
+*Countrix* is short for *Counter Utility Matrix* - the equation the board
+solves, written out on its [math page](ui/static/math.html).
 
 ## Install
 
@@ -14,7 +17,7 @@ assumptions. No accounts, no keys, no API billing.
 - [Claude Code](https://claude.com/claude-code) for the skills and the agents' run, signed in once with `claude login`
 
 ```bash
-git clone git@github.com:mmikol/counter-utility-matrix.git && cd counter-utility-matrix
+git clone git@github.com:mmikol/countrix.git && cd countrix
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
@@ -36,9 +39,8 @@ pace.
 | the MCP server | http://localhost:8020/mcp |
 | PostgreSQL | localhost:5433 (`./docker-db <command>` points a host command at it) |
 
-Every port binds to 127.0.0.1 - a published board reaches the internet
-through a tunnel to one of them, never a binding of its own; see
-[docs/deploy.md](docs/deploy.md). Without the `claude` CLI signed in, the
+Every port binds to 127.0.0.1; nothing is published
+([docs/deploy.md](docs/deploy.md)). Without the `claude` CLI signed in, the
 run still brings the stack up and says what it skipped. The other verbs:
 
 ```bash
@@ -81,4 +83,4 @@ portraits remain their owners'.
 - [docs/skills.md](docs/skills.md) - the skills a Claude Code session runs here
 - [docs/mcp.md](docs/mcp.md) - the two MCP servers and every tool they expose
 - [docs/security.md](docs/security.md) - the threat model and what stands in the way
-- [docs/deploy.md](docs/deploy.md) - the DEPLOYMENT: the tunnel, the door, the containers it runs
+- [docs/deploy.md](docs/deploy.md) - the DEPLOYMENT: there is none today, and what the containers would need

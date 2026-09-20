@@ -35,7 +35,7 @@ def test_initialize_then_list_tools_over_stdio():
     ])
     assert replies[0]["id"] == 1
     assert replies[0]["result"]["protocolVersion"] == "2025-06-18"
-    assert replies[0]["result"]["serverInfo"]["name"] == "counter-utility-matrix"
+    assert replies[0]["result"]["serverInfo"]["name"] == "countrix"
     names = {t["name"] for t in replies[1]["result"]["tools"]}
     assert {"pull_heroes", "pull_rates", "pull_seasons", "pull_synergies", "sync_all",
             "db_rebuild", "db_migrate", "query",
@@ -194,7 +194,7 @@ def test_http_transport_initializes_lists_and_calls(http_server):
         "jsonrpc": "2.0", "id": 1, "method": "initialize",
         "params": {"protocolVersion": "2025-06-18", "capabilities": {},
                    "clientInfo": {"name": "test", "version": "0"}}})
-    assert status == 200 and reply["result"]["serverInfo"]["name"] == "counter-utility-matrix"
+    assert status == 200 and reply["result"]["serverInfo"]["name"] == "countrix"
     assert headers.get("Mcp-Session-Id")
     status, _, reply = _post(http_server, {"jsonrpc": "2.0",
                                            "method": "notifications/initialized"})

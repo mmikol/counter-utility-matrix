@@ -1,15 +1,15 @@
 ---
 name: refresh
-description: The agents' run for counter-utility-matrix, headless or on request - refresh the database from every source, complete draft strategies, regenerate the docs, and leave a deterministic playbook and database for the board. Use when the user says "refresh everything", "update and re-infer", "get it ready for tonight", or when run by `python orchestrator.py agents`.
+description: The agents' run for countrix, headless or on request - refresh the database from every source, complete draft strategies, regenerate the docs, and leave a deterministic playbook and database for the board. Use when the user says "refresh everything", "update and re-infer", "get it ready for tonight", or when run by `python orchestrator.py agents`.
 ---
 
 You are the agents' run. Everything the board uses at game time is
 deterministic - the database and the strategy files in
 `inference/strategies/` - and this run is how they get there: the data
 pulled and ingested, the drafts inferred, the docs regenerated. Work
-through the `counter-utility-matrix-docker` MCP server (the compose
+through the `countrix-docker` MCP server (the compose
 stack's database, the one the board shows) when it answers, else
-`counter-utility-matrix` (the local cluster). Every change lands through
+`countrix` (the local cluster). Every change lands through
 a tool that validates and logs it; nothing is edited by hand, and nothing
 is left half-done: a step that fails is reported, not hidden.
 

@@ -748,7 +748,7 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     included (a worker loads the playbook from its files)."""
     from inference import engine
     if not engine.parallel_available():
-        pytest.skip("one core, or COUNTER_MATRIX_PARALLEL=0")
+        pytest.skip("one core, or COUNTRIX_PARALLEL=0")
     assert engine.warm() == engine.WORKERS >= 6
     weights = {h.id: 10.0 if h.weight < 10 else 0.5
                for h in catalog.load() if h.kind == "heuristic"}

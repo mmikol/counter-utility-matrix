@@ -212,7 +212,9 @@ def test_the_page_is_a_shell_over_static_files():
     assert targets and all(("id='%s'" % t) in page for t in targets), targets
     for name in ("likely-comp", "counter", "weights", "what-100-means", "argmax"):
         assert name in targets
-    assert "<h2 id='equation'>The Counter Utility Matrix</h2>" in page   # the name is the equation
+    assert "<h2 id='equation'>The Counter Utility Matrix</h2>" in page  # the name is the equation
+    # and the page says what the short name stands for
+    assert "<b>Countrix</b> is short for <b>Counter Utility Matrix</b>" in page
     assert "likelihood(h) = pick(h, map) + 2 &times; partners(h, the six so far)" in page
     assert "game plan" in script and "d.plan" in script
     assert "paintSuggestions" in script and "slot suggested" in script and "bluescore" in script
@@ -264,9 +266,9 @@ def test_the_page_is_a_shell_over_static_files():
     # the suggestions fill blue's empty slots alone
     suggestions = script[script.index("function paintSuggestions"):script.index("function showTab")]
     assert "el('blueslots')" in suggestions and "el('redslots')" not in suggestions
-    # writes nothing by default; pinned so an exported COUNTER_MATRIX_READ_ONLY
+    # writes nothing by default; pinned so an exported COUNTRIX_READ_ONLY
     # cannot decide an unrelated assertion
-    assert board.READ_ONLY is True, "run the suite without COUNTER_MATRIX_READ_ONLY set"
+    assert board.READ_ONLY is True, "run the suite without COUNTRIX_READ_ONLY set"
     assert "var TEAM = 6, BANS = 5, READ_ONLY = true;" in body
     data, ctype = board.static_file("board.js")
     assert ctype.startswith("application/javascript") and b"function paint" in data

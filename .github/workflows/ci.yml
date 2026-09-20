@@ -2,7 +2,7 @@
 #
 # CI never builds the database: a build scrapes Blizzard and the wiki, slow and
 # unkind to the sources on every push. Tests marked `invariant` skip themselves
-# when db/psql/cluster is absent (tests/conftest.py; COUNTER_MATRIX_NO_DATABASE=1
+# when db/psql/cluster is absent (tests/conftest.py; COUNTRIX_NO_DATABASE=1
 # reproduces that locally), so what runs here is ruff plus every test that needs
 # no database. Coverage is reported without the bar; the runs with a database -
 # the local one and `orchestrator.py test` inside the image - enforce the 75%

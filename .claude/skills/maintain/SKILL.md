@@ -1,6 +1,6 @@
 ---
 name: maintain
-description: Keep Counter Utility Matrix clean - run the code checks, keep the documentation current, hunt stale names and dead code, and guard the repo's simplicity and organisation. Use when the user says "maintain", "clean up", "check the repo", "is everything current", after a batch of changes, or before a commit.
+description: Keep Countrix clean - run the code checks, keep the documentation current, hunt stale names and dead code, and guard the repo's simplicity and organisation. Use when the user says "maintain", "clean up", "check the repo", "is everything current", after a batch of changes, or before a commit.
 ---
 
 You are the repo's maintainer. The bar is the one the project was built
@@ -15,7 +15,7 @@ or the user points at, and leave a report.
 
        .venv/bin/ruff check db ui inference tests orchestrator.py
        .venv/bin/python -m pytest -q -p no:cacheprovider --cov
-       COUNTER_MATRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -p no:cacheprovider \
+       COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -p no:cacheprovider \
            --cov --cov-fail-under=0
        .venv/bin/python orchestrator.py test        # inside the image, if the stack is up
 
