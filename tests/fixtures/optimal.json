@@ -1,0 +1,565 @@
+[
+ {
+  "board": {
+   "map": "Busan",
+   "side": "attack",
+   "red": [
+    "Sigma"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Ana",
+   "Cassidy",
+   "D.Mon",
+   "Lifeweaver",
+   "Reaper",
+   "Reinhardt"
+  ],
+  "score": 20.469041,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Busan",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "D.Mon",
+   "Juno",
+   "Mercy",
+   "Roadhog",
+   "Soldier: 76",
+   "Widowmaker"
+  ],
+  "score": 22.310514,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Busan",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [],
+   "locked": [
+    "Reinhardt"
+   ]
+  },
+  "six": [
+   "Bastion",
+   "Cassidy",
+   "D.Mon",
+   "Juno",
+   "Lifeweaver",
+   "Reinhardt"
+  ],
+  "score": 21.828526,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Busan",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [
+    "Sombra",
+    "Widowmaker"
+   ],
+   "locked": []
+  },
+  "six": [
+   "Bastion",
+   "Cassidy",
+   "D.Mon",
+   "D.Va",
+   "Juno",
+   "Mercy"
+  ],
+  "score": 21.531262,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Busan",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [
+    "Sombra",
+    "Widowmaker",
+    "Mei",
+    "Symmetra",
+    "Torbj\u00f6rn"
+   ],
+   "locked": []
+  },
+  "six": [
+   "Bastion",
+   "Cassidy",
+   "D.Mon",
+   "D.Va",
+   "Juno",
+   "Mercy"
+  ],
+  "score": 21.577464,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Busan",
+   "side": "attack",
+   "red": [
+    "Reinhardt",
+    "Ana",
+    "Sombra"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Cassidy",
+   "D.Mon",
+   "Juno",
+   "Mercy",
+   "Reaper",
+   "Roadhog"
+  ],
+  "score": 28.136495,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Circuit Royal",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "D.Va",
+   "Domina",
+   "Juno",
+   "Soldier: 76",
+   "Widowmaker",
+   "Zenyatta"
+  ],
+  "score": 21.611978,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Circuit Royal",
+   "side": "attack",
+   "red": [
+    "Reinhardt",
+    "Zarya",
+    "Bastion",
+    "Ashe",
+    "Ana",
+    "Kiriko"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Cassidy",
+   "D.Mon",
+   "D.Va",
+   "Juno",
+   "Lifeweaver",
+   "Widowmaker"
+  ],
+  "score": 31.84348,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Dorado",
+   "side": "attack",
+   "red": [],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Ashe",
+   "D.Va",
+   "Doomfist",
+   "Juno",
+   "Mercy",
+   "Reaper"
+  ],
+  "score": 18.527441,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Dorado",
+   "side": "attack",
+   "red": [
+    "Sigma"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Ashe",
+   "D.Va",
+   "Doomfist",
+   "Juno",
+   "Mercy",
+   "Reaper"
+  ],
+  "score": 20.774295,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Dorado",
+   "side": "attack",
+   "red": [
+    "Reinhardt",
+    "Ana",
+    "Sombra"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Ana",
+   "Cassidy",
+   "D.Mon",
+   "Moira",
+   "Reaper",
+   "Winston"
+  ],
+  "score": 30.602586,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Dorado",
+   "side": "attack",
+   "red": [
+    "Reinhardt",
+    "Zarya",
+    "Bastion",
+    "Ashe",
+    "Ana",
+    "Kiriko"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Ana",
+   "D.Mon",
+   "D.Va",
+   "Mercy",
+   "Vendetta",
+   "Widowmaker"
+  ],
+  "score": 32.316504,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Ilios",
+   "side": "attack",
+   "red": [],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Ana",
+   "Brigitte",
+   "D.Mon",
+   "Pharah",
+   "Reaper",
+   "Roadhog"
+  ],
+  "score": 19.063282,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Ilios",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "D.Mon",
+   "D.Va",
+   "Echo",
+   "Juno",
+   "Mercy",
+   "Soldier: 76"
+  ],
+  "score": 21.400128,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Ilios",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [],
+   "locked": [
+    "Reinhardt"
+   ]
+  },
+  "six": [
+   "Bastion",
+   "Cassidy",
+   "D.Mon",
+   "Juno",
+   "Lifeweaver",
+   "Reinhardt"
+  ],
+  "score": 20.713727,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Ilios",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [],
+   "locked": [
+    "Reinhardt",
+    "Ana"
+   ]
+  },
+  "six": [
+   "Ana",
+   "Bastion",
+   "Cassidy",
+   "D.Mon",
+   "Reinhardt",
+   "Zenyatta"
+  ],
+  "score": 20.26667,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Ilios",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [
+    "Sombra",
+    "Widowmaker"
+   ],
+   "locked": []
+  },
+  "six": [
+   "Bastion",
+   "D.Mon",
+   "D.Va",
+   "Juno",
+   "Mercy",
+   "Pharah"
+  ],
+  "score": 20.796533,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Ilios",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [
+    "Sombra",
+    "Widowmaker",
+    "Mei",
+    "Symmetra",
+    "Torbj\u00f6rn"
+   ],
+   "locked": []
+  },
+  "six": [
+   "Bastion",
+   "D.Mon",
+   "D.Va",
+   "Juno",
+   "Mercy",
+   "Pharah"
+  ],
+  "score": 20.913878,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Ilios",
+   "side": "attack",
+   "red": [
+    "Reinhardt",
+    "Ana",
+    "Sombra"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Ana",
+   "Cassidy",
+   "D.Mon",
+   "Moira",
+   "Reaper",
+   "Winston"
+  ],
+  "score": 31.289471,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Ilios",
+   "side": "attack",
+   "red": [
+    "Winston",
+    "D.Va",
+    "Genji",
+    "Tracer"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Brigitte",
+   "D.Mon",
+   "Mei",
+   "Moira",
+   "Reaper",
+   "Winston"
+  ],
+  "score": 29.779487,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "Ilios",
+   "side": "attack",
+   "red": [
+    "Winston",
+    "D.Va",
+    "Genji",
+    "Tracer"
+   ],
+   "bans": [
+    "Sombra",
+    "Widowmaker"
+   ],
+   "locked": []
+  },
+  "six": [
+   "Brigitte",
+   "D.Mon",
+   "Mei",
+   "Moira",
+   "Reaper",
+   "Winston"
+  ],
+  "score": 28.975347,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "King's Row",
+   "side": "attack",
+   "red": [],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Ana",
+   "Cassidy",
+   "D.Mon",
+   "Lifeweaver",
+   "Reaper",
+   "Reinhardt"
+  ],
+  "score": 19.251292,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "King's Row",
+   "side": "attack",
+   "red": [
+    "Sigma"
+   ],
+   "bans": [],
+   "locked": []
+  },
+  "six": [
+   "Ana",
+   "Doomfist",
+   "Juno",
+   "Reaper",
+   "Reinhardt",
+   "Widowmaker"
+  ],
+  "score": 21.670027,
+  "needed_outside": true
+ },
+ {
+  "board": {
+   "map": "King's Row",
+   "side": "attack",
+   "red": [
+    "Zarya",
+    "Pharah"
+   ],
+   "bans": [],
+   "locked": [
+    "Genji",
+    "Mercy",
+    "Winston"
+   ]
+  },
+  "six": [
+   "D.Mon",
+   "Genji",
+   "Juno",
+   "Mercy",
+   "Widowmaker",
+   "Winston"
+  ],
+  "score": 19.856767,
+  "needed_outside": true
+ }
+]

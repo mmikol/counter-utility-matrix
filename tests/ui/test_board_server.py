@@ -74,6 +74,9 @@ def test_the_page_the_statics_the_math_and_the_strategies_need_no_database(serve
     monkeypatch.setattr(board, "dsn", lambda: "postgresql://nobody@127.0.0.1:9/nowhere")
     code, ctype, body = get(served + "/")
     assert code == 200 and "text/html" in ctype and b"Countrix" in body
+    code, ctype, body = get(served + "/tests")
+    assert code == 200 and "text/html" in ctype
+    assert b"What is claimed" in body and b"What is not proven" in body
     code, ctype, body = get(served + "/static/board.css")
     assert code == 200 and "text/css" in ctype and b".tile" in body
     assert get(served + "/static/nope.txt")[0] == 404

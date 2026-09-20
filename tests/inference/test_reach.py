@@ -27,7 +27,7 @@ UNSEATED = {"Freja", "Shion"}       # named, not waived - see the test
 
 
 @pytest.mark.invariant
-def test_every_released_hero_is_optimal_on_some_board(world):
+def test_every_hero_reach_finds_a_board_for_is_still_seated_and_none_is_newly_lost(world):
     with open(FIXTURE, encoding="utf-8") as handle:
         boards = json.load(handle)
     released = {h.name for h in world.heroes.values() if h.released}
@@ -36,8 +36,11 @@ def test_every_released_hero_is_optimal_on_some_board(world):
     fell = [b["hero"] for b in boards if b["hero"] in released and not reach.seated(world, b)]
     lost = [name for name in sorted((released - recorded) | set(fell))
             if reach.search(world, name)["bans"] is None]
-    # Two heroes no board seats. They are named, not waived: a third one joining
-    # them fails here. Both were recorded as seated while the reference sample was
+    # Two heroes reach.search finds no board for. That is not a proof none exists -
+    # the search tries four maps and a few reds per hero, so a board it never
+    # visits could seat either of them - but it is what the search establishes,
+    # and they are named rather than waived: a third joining them fails here.
+    # Both were recorded as seated while the reference sample was
     # drawn per ban list - spending a hero's five bans redrew the scale that
     # normalises every heuristic, so the bans flattered the hero as well as
     # clearing its rivals. With the scale held still, Freja reaches 0.34 of the

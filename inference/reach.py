@@ -1,10 +1,17 @@
-"""Reach: every hero is the right pick somewhere.
+"""Reach: is a hero the right pick somewhere?
 
-The playbook may make a hero rare; it may not make one impossible. For a hero this finds
-a board that suits it - one of its maps, a red it answers, a side - on which it is in the
-optimal six, banning the rivals that hold its seat where it must, up to the five bans a
-match has. A hero with no such board is one the facts or the strategies cannot
-see: a wrong number, a tool no metric reads, a rule that charges it for what it is not.
+The intent is that the playbook makes a hero rare but never impossible. This is the
+check, not the guarantee: for a hero it looks for a board that suits it - one of its
+maps, a red it answers, a side - on which it is in the optimal six, banning the rivals
+that hold its seat where it must, up to the five bans a match has.
+
+The two answers it gives are not symmetric. A board found is a proof: the hero seats
+there, and re-solving that board shows it. A board not found is not a proof of the
+opposite - the search tries a few maps and a few reds, and a board it never visits could
+seat the hero. A hero it finds nothing for is one worth looking at: a wrong number, a
+tool no metric reads, a rule that charges it for what it is not, or a board this search
+does not reach. Fifty-one of the fifty-three released heroes have a board; Freja and
+Shion do not, as of the scale that stopped moving with the bans.
 
     maps   the four its map rates lift it most on (its three best maps are among them)
     reds   none (blue counters the likely six); the heroes it answers, two a role, the

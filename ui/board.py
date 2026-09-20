@@ -244,6 +244,7 @@ def view_board():
             "clear all</button>"
             "<span class='flash' id='flash'></span></div>"
             "<span class='links'><a class='mathlink' href='/math'>the math</a>"
+            "<a class='mathlink' href='/tests'>the tests</a>"
             "<a class='gh' href='%s' target='_blank' rel='noopener'>%s GitHub</a>"
             "</span>"
             "</header>"
@@ -305,6 +306,12 @@ def view_math():
         return _page("the math", handle.read())
 
 
+def view_tests():
+    """The tests page: what is checked, how, and what none of it proves."""
+    with open(os.path.join(STATIC_DIR, "tests.html"), encoding="utf-8") as handle:
+        return _page("the tests", handle.read())
+
+
 # --- server -----------------------------------------------------------------
 
 class Handler(BaseHTTPRequestHandler):
@@ -363,6 +370,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(api_strategies())
             if path == "/math":
                 return self._send(view_math())
+            if path == "/tests":
+                return self._send(view_tests())
             if path not in ("/api/roster", "/api/facts", "/api/infer"):
                 return self._send(_page("not found", "<p>Nothing here.</p>"), 404)
             with psycopg.connect(dsn()) as cx:      # only the data routes touch the database

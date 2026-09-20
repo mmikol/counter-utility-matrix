@@ -264,6 +264,7 @@ def test_the_page_is_a_shell_over_static_files():
     links = header[header.index("<span class='links'>"):]
     assert "href='/math'" in links
     assert board.REPO_URL in links
+    assert "href='/tests'" in links            # the checks, beside the math
     assert links.rstrip().endswith("GitHub</a></span>")
     # a team's clear button empties that team only
     assert "near('[data-clear]')" in script

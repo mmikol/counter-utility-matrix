@@ -1,0 +1,111 @@
+<article class='math'>
+<nav class='toc'>
+<a href='#claim'>what is claimed</a>
+<a href='#three'>three kinds of check</a>
+<a class='sub' href='#designed'>the designed proof</a>
+<a class='sub' href='#hunt'>the adversarial hunt</a>
+<a class='sub' href='#random'>the random sample</a>
+<a href='#gate'>the regression gate</a>
+<a href='#suite'>the suite</a>
+<a href='#open'>what is not proven</a>
+</nav>
+
+<h2 id='claim'>What is claimed</h2>
+<p>One thing, precisely: <b>the six this board returns is the highest-scoring six the
+playbook allows</b> &mdash; the argmax of the function the <a href='/math'>math page</a>
+sets out, over every legal team.</p>
+<p>That is a claim about the search, not about the game. Whether a higher score wins more
+matches is a separate question, and one this app cannot currently answer: no outcomes are
+recorded anywhere, so nothing here is fitted or validated against a match being won. The
+checks below establish that the solver optimises its own objective. They establish nothing
+about whether that objective is right.</p>
+
+<h2 id='three'>Three kinds of check</h2>
+<p>There are about <b>9.6 &times; 10<sup>21</sup></b> distinct boards &mdash; a map, a side,
+any red of nought to six, any bans of nought to five, any locks. No sample covers that, so
+three different checks are run, each answering what the others cannot.</p>
+
+<div class='tw'><table>
+<thead><tr><th>check</th><th>what it establishes</th><th>what it cannot</th></tr></thead>
+<tbody>
+<tr><td><b>designed</b> 100 boards</td><td>no systematic bug: every input dial is varied on purpose, so a flaw in ban handling or lock seating has somewhere to appear</td><td>nothing about a rate &mdash; it is not a sample of anything</td></tr>
+<tr><td><b>random</b> 200 boards</td><td>a bounded failure rate: <i>n</i> clean out of <i>n</i>, drawn uniformly, puts the rate under 3/<i>n</i> at 95% confidence</td><td>a rare structured bug a uniform draw seldom reaches</td></tr>
+<tr><td><b>adversarial</b> 399 boards</td><td>a counterexample, if one exists &mdash; worth more than any number of confirmations</td><td>absence; and a miss the oracle also makes stays invisible</td></tr>
+</tbody></table></div>
+
+<h3 id='designed'>The designed proof</h3>
+<p>Every legal six is enumerated and scored, and the true maximum compared with what the
+solver returns. A board with no bans has <b>18,040,386</b> legal sixes across all eighteen
+role shapes; bans cut that.</p>
+<pre class='eq'>boards             100        22 maps, attack and defense
+red revealed       0 1 2 3 4 6
+bans               0 2 5
+blue locked        0 1 2 3    and locks under bans
+candidates scored  1,352,230,508
+exact maximum      100 of 100
+non-zero gaps      0</pre>
+<p>The figure that matters most is not the hundred. On <b>37% of these boards the winning six
+held a hero the per-role pool had cut</b>, and the local search reached back out of the pool
+and found it. Without the restarts and the two-at-once swap the solver would return a beaten
+comp on about one board in three.</p>
+
+<h3 id='hunt'>The adversarial hunt</h3>
+<p>Enumerating a board costs minutes, so it is not how to search widely. A
+<i>stronger</i> searcher is the oracle instead: the same objective over a field seven times
+wider. Where the shipped solver and the oracle agree, the board passes; where they differ the
+oracle has found something better, and that board is escalated to a real enumeration.</p>
+<p>The boards are drawn to be awkward on purpose &mdash; bans that evict the heroes a board
+would otherwise lean on, locks on weak picks, reds of every size.</p>
+<pre class='eq'>boards   399
+misses     0</pre>
+<p>This is the check that was expected to find something. A search over seven times the field
+found nothing the shipped search had missed.</p>
+
+<h3 id='random'>The random sample</h3>
+<p>The designed set varies each dial deliberately, which is how a bug is found and not how a
+rate is estimated. This draws boards uniformly instead &mdash; any map, any side, a red of
+nought to six, bans of nought to five, locks of nought to three &mdash; so the result bounds
+how often the solver is wrong.</p>
+<p>By the rule of three, <b>200 clean boards puts the failure rate under 1.5% at 95%
+confidence</b>. A thousand would put it under 0.3%.</p>
+
+<h2 id='gate'>The regression gate</h2>
+<p>Proving a board costs a full enumeration, which is far too slow to run on every change. So
+the expensive part is done once and the answer recorded: <code>tests/fixtures/optimal.json</code>
+holds, per board, the six a brute force found and what it scored. The suite re-solves each and
+checks the solver still reaches it.</p>
+<p>That is what stops a later change quietly undoing this &mdash; a narrowed pool, a dropped
+two-swap, a broken constraint shows up as a board that used to be exact and is not.</p>
+
+<h2 id='suite'>The suite</h2>
+<p>Beyond the boards, the properties the engine has to hold whatever it is asked:</p>
+<div class='tw'><table>
+<thead><tr><th>property</th><th>why it matters</th></tr></thead>
+<tbody>
+<tr><td>a ban that touches neither team moves no score</td><td>otherwise the best six here is not a function of the six, and a smaller feasible set can report a larger maximum</td></tr>
+<tr><td>one scale per board, whatever is locked and whatever pool is searched</td><td>a current comp and the optimal it is a percentage of must be measured on one ruler</td></tr>
+<tr><td>a set's ranking does not depend on the order its seats were filled</td><td>one hero set could otherwise key seven hundred and twenty ways</td></tr>
+<tr><td>no team picks one hero twice</td><td>a six with Ana twice is a five that counts her kit twice</td></tr>
+<tr><td>no released hero is missing a core kit number</td><td>a tank that deals no damage still scores, just wrongly</td></tr>
+<tr><td>an unguarded heuristic never opposes a guarded one on its metric</td><td>weight is otherwise spent on both sides of one question</td></tr>
+<tr><td>the parallel and single-process paths agree bit for bit</td><td>a worker split must not decide an answer</td></tr>
+</tbody></table></div>
+<p>A hard limit is enforced with nothing rewarding it; an extreme heuristic drives the pick to
+its metric's true optimum over the whole legal space; the two compose. Each was checked against
+a playbook holding that one rule, where the right answer can be worked out without the solver.</p>
+
+<h2 id='open'>What is not proven</h2>
+<ul>
+<li><b>That the objective is right.</b> The checks show the solver maximises its own score.
+Nothing shows a higher score wins more games, because no outcomes are recorded. The weights
+are a judgement, not a fit.</li>
+<li><b>That the answer is optimal against every red.</b> It is a best reply to the red you can
+see, and it changes as red reveals. The <i>if countered optimally</i> row is the hedge.</li>
+<li><b>That no board fails.</b> A hundred designed and a few hundred sampled boards are a
+vanishing fraction of the space. What is established is a bounded rate and no systematic bug,
+which is not the same as none.</li>
+<li><b>That every hero is pickable.</b> Fifty-one of the fifty-three released heroes have a
+board found for them, each a proof they seat. Two have none found - which is not a proof
+that none exists. The reach search is a limited one, and its silence is not a theorem.</li>
+</ul>
+</article>
