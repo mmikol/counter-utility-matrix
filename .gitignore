@@ -18,6 +18,11 @@ __pycache__/
 db/raw/
 *.csv
 
+# scratch: a throwaway script at the root is never part of the project, and
+# `git add -A` has committed two of them
+/_*.py
+/_*.json
+
 # what the sentry set aside; never committed
 *.md.quarantined
 
