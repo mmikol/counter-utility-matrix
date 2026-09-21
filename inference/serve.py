@@ -79,10 +79,15 @@ def handle_strategies():
 def handle_health():
     cat = catalog_module.load()
     out = {"status": "ok", "strategies": len(cat), "pending": sum(1 for h in cat if h.pending)}
+    # Degraded is the answer to every way the database can be out of reach,
+    # and finding it is one of them: default_dsn imports pgserver to locate
+    # the embedded cluster, so a machine without that package raised
+    # ModuleNotFoundError out of a handler whose whole job is to say what is
+    # wrong. A health endpoint that crashes reports nothing.
     try:
         with psycopg.connect(psql.default_dsn()) as cx:
             out["heroes"] = cx.execute("select count(*) from heroes").fetchone()[0]
-    except psycopg.Error as error:
+    except (psycopg.Error, ImportError, OSError, ValueError) as error:
         out["status"], out["error"] = "degraded", str(error)
     return out, 200
 
