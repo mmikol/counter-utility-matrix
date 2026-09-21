@@ -339,8 +339,13 @@ class Solver:
         the optimal it is a share of two different numbers."""
         ranked = {}
         for role in ROLE_COUNT:
+            # not filtered by the bans, on purpose, exactly as sample() is not:
+            # this field is half the population that fixes the scale, and a ban
+            # that moved it would move the score of an unchanged six. Bans keep
+            # banned heroes out of the CANDIDATE field in pools(); the measuring
+            # stick has to hold still
             heroes = [h for h in self.world.heroes.values()
-                      if h.role == role and h.released and h.id not in self.banned]
+                      if h.role == role and h.released]
             heroes.sort(key=lambda h: (-self._board_prior(h), h.name))
             ranked[role] = heroes[:SCALE_POOL]
         for t, d, s in legal_shapes(self.catalog):

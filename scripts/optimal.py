@@ -14,6 +14,7 @@ SOURCES = ["/Users/milianomikol/Documents/countrix-study/brute/proof100.jsonl",
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    "tests", "fixtures", "optimal.json")
 KEEP = int(os.environ.get("OPTIMAL_KEEP", "20"))
+STALE_BANNED = os.environ.get("OPTIMAL_STALE_BANNED", "1") == "1"
 
 
 def main():
@@ -24,6 +25,11 @@ def main():
         with open(path, encoding="utf-8") as handle:
             for line in handle:
                 row = json.loads(line)
+                # a board's proof is only as current as the objective it was
+                # enumerated under; STALE_BANNED says the banned boards predate
+                # the scale going ban-blind, and are out until re-proven
+                if STALE_BANNED and row["board"].get("bans"):
+                    continue
                 if row.get("exact") and "true_six" in row:
                     rows.append({"board": row["board"], "six": row["true_six"],
                                  "score": row["true_score"],
