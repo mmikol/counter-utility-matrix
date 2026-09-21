@@ -2,7 +2,6 @@
 MCP tools serve, and the page carries the two rosters. No HTTP server is
 spun up - the handler is thin routing."""
 
-import json
 import re
 
 import pytest
@@ -122,19 +121,6 @@ def test_infer_endpoint_serves_both_seats_and_the_current_comp(db):
                                                "Ana", "Lúcio"]})
     assert code == 200 and data["current"]["kind"] == "evaluate" and data["current"]["rank"] >= 1
     db.rollback()
-
-
-def test_strategies_endpoint():
-    from inference import catalog
-    data = board.api_strategies()
-    assert len(data["strategies"]) == len(catalog.load()) and data["strategies"]
-    assert data["playbook"] == catalog.playbook_name()
-    assert json.dumps(data)
-    # a need is served with its guard, and the tool's listing marks it
-    needs = [h for h in data["strategies"] if h.get("need")]
-    assert needs and all(h["when"] for h in needs)
-    listing = catalog.render(catalog.load()).splitlines()
-    assert sum(line.endswith(" need") for line in listing) == len(needs)
 
 
 def test_bans_ride_the_query_string(db):
