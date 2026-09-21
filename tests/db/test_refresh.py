@@ -3,6 +3,7 @@ when the source fails) and the scheduler's arithmetic. Pure - fake sessions,
 no network, no database."""
 
 import os
+import threading
 import time
 from datetime import datetime
 
@@ -50,6 +51,23 @@ def _old_file(path, text, hours=48):
     path.write_text(text, encoding="utf-8")
     stamp = time.time() - hours * 3600
     os.utime(str(path), (stamp, stamp))
+
+
+def test_the_freshness_policy_is_per_thread_and_a_block_restores_it():
+    """The door serves calls on threads, so one caller's refresh must not decide
+    another caller's pull; and max_age() puts back whatever it found."""
+    seen = {}
+    fetch.set_max_age(0)
+    thread = threading.Thread(target=lambda: seen.setdefault("age", fetch._max_age()))
+    thread.start()
+    thread.join()
+    assert seen["age"] is None and fetch._max_age() == 0
+    with fetch.max_age(3600):
+        assert fetch._max_age() == 3600
+    assert fetch._max_age() == 0
+    with pytest.raises(RuntimeError), fetch.max_age(7):
+        raise RuntimeError("the block leaves by the other door")
+    assert fetch._max_age() == 0
 
 
 def test_a_fresh_cache_is_read_without_fetching(tmp_path):

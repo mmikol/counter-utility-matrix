@@ -69,8 +69,15 @@ def search(world, name):
     near.sort(key=lambda t: (t[0], t[1], t[3]))
     for _, map_name, red, side in near[:CLOSEST]:
         banned = []
-        for _ in range(MAX_BANS):
+        # one solve of this board per ban, not two: the board a ban produces is
+        # the board the next round starts from, so the round reads it
+        for _ in range(MAX_BANS + 1):
             top = engine.infer(world, map_name, red, [], side=side, bans=banned, top=1)
+            if banned and hero.name in top.blue:
+                return {"hero": hero.name, "bans": len(banned), "map": map_name, "side": side,
+                        "red": red, "banned": banned, "six": top.blue, "gap": 0.0}
+            if len(banned) == MAX_BANS:
+                break
             held = engine.infer(world, map_name, red, [hero.name], side=side, bans=banned,
                                 top=1)
             rivals = [h for h in top.blue if world.hero(h).role == hero.role
@@ -78,10 +85,6 @@ def search(world, name):
             if not rivals:
                 break
             banned = [*banned, rivals[0]]
-            top = engine.infer(world, map_name, red, [], side=side, bans=banned, top=1)
-            if hero.name in top.blue:
-                return {"hero": hero.name, "bans": len(banned), "map": map_name, "side": side,
-                        "red": red, "banned": banned, "six": top.blue, "gap": 0.0}
     gap, map_name, red, side = near[0]
     return {"hero": hero.name, "bans": None, "map": map_name, "side": side, "red": red,
             "banned": [], "six": [], "gap": round(gap, 3)}

@@ -9,14 +9,43 @@ from inference import catalog, serve
 from ui import board
 
 
+def test_the_board_survives_the_round_trip_through_a_query_string():
+    """One owner for the wire: what board_query writes, parse_board reads back,
+    so the two doors cannot drift apart on a spelling."""
+    from urllib.parse import parse_qs, urlencode
+
+    from ui.facts.compute import board_query, parse_board
+    for named in (("King's Row", ["Zarya", "Pharah"], ["Ana"], ["Widowmaker"], "attack"),
+                  (None, [], [], [], "")):
+        written = urlencode(board_query(*named), doseq=True)
+        assert parse_board(parse_qs(written)) == named
+
+
+def test_both_doors_bound_the_search_with_one_clamp():
+    """A caller naming pool or top reaches the same bounds through the service
+    as through the MCP tools: the engine owns the definition."""
+    from inference.engine import clamp_search
+    assert clamp_search(None, None) == (6, 5)                  # the defaults
+    assert clamp_search(0, 0) == (6, 5)                        # falsy reads as unset
+    assert clamp_search(1, 0.5) == (2, 1)
+    assert clamp_search(99, 99) == (12, 20)
+    assert clamp_search("8", "3") == (8, 3)                    # a query string is text
+    for junk in ("x", [1], object()):                          # a refusal, not a crash
+        with pytest.raises(ValueError, match="must be numbers"):
+            clamp_search(junk)
+    assert clamp_search([], []) == (6, 5)                      # empty is unset, like None
+
+
 @pytest.mark.invariant
 def test_service_infers_evaluates_and_lists(db):
     data, code = serve.handle_infer(db, {"map": ["King's Row"], "red": ["Zarya"],
                                          "blue": ["Ana"]})
     assert code == 200 and data["kind"] == "infer" and len(data["blue"]) == 6
-    data, code = serve.handle_infer(db, {"blue": ["Reinhardt", "Zarya", "Widowmaker",
-                                                  "Bastion", "Ana", "Lúcio"]})
-    assert code == 200 and data["kind"] == "evaluate"
+    six = ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]
+    data, code = serve.handle_infer(db, {"blue": six})
+    # /infer infers whatever blue holds; ranking a full six against the field is
+    # /evaluate's question, and the MCP tool of the same name draws the line here too
+    assert code == 200 and data["kind"] == "infer" and sorted(data["blue"]) == sorted(six)
     data, code = serve.handle_evaluate(db, {"blue": ["Ana"]})
     assert code == 400 and "exactly 6" in data["error"]
     data, code = serve.handle_strategies()
@@ -46,10 +75,12 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
     assert board.api_infer(None, {"map": ["Ilios"], "red": ["Zarya"], "blue": []}) == (
         {"forwarded": True}, 200)
     assert calls[-1] == ("/board", {"map": "Ilios", "side": "", "red": ["Zarya"],
-                                    "blue": [], "ban": []}, None)
-    board.api_infer(None, {"map": ["Ilios"], "weight": ["healing-floor:9.99", "x:12", "junk"]})
-    assert calls[-1][1]["weight"] == ["healing-floor:9.99", "x:10"]   # clamped, junk dropped
-    assert board.api_strategies() == {"forwarded": True}
+                                    "blue": [], "bans": []}, None)
+    board.api_infer(None, {"map": ["Ilios"],
+                           "weights": ["healing-floor:9.99", "x:12", "junk"]})
+    assert calls[-1][1]["weights"] == ["healing-floor:9.99", "x:10"]  # clamped, junk dropped
+    # the status rides along now: a 502 from the service is not served as a 200
+    assert board.api_strategies() == ({"forwarded": True}, 200)
 
 
 def test_board_reports_an_unreachable_inference_service(monkeypatch):

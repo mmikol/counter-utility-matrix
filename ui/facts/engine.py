@@ -99,13 +99,17 @@ class FactSet:
         self._n = {"F": 0, "S": 0}
 
     def add(self, scope, subject, key, text, value=None, unit=None,
-            source="", team=None):
+            source="", team=None, also=()):
+        """`also` names the other metrics this one sentence states, so a caller
+        looking for one of them finds the fact that carries it. The fact keeps
+        the key it is worded around; `also` only adds index entries."""
         prefix = "S" if scope == PLAYBOOK_SCOPE else "F"
         self._n[prefix] += 1
         fid = "%s%d" % (prefix, self._n[prefix])
         fact = Fact(fid, scope, subject, team, key, text, value, unit, source)
         self.facts.append(fact)
-        self._by_key.setdefault((key, subject), []).append(fact)
+        for under in (key, *also):
+            self._by_key.setdefault((under, subject), []).append(fact)
         return fid
 
     @property
@@ -351,7 +355,7 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
     fs.add("hero", name, "hero.pool", "%s pool: %d (%d health, %d shield, %d armor)%s"
            % (name, h.pool, h.health, h.shield, h.armor,
               ", %g more armor from its forms, time-averaged" % h.form_armor
-              if getattr(h, "form_armor", 0) else ""),
+              if h.form_armor else ""),
            value=h.pool, unit="hp", source="heroes", team=team)
     passive = world.subrole_passives.get(h.subrole)
     if passive:
@@ -571,9 +575,9 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
     label = "%s team" % team
     side = "red" if team == "blue" else "blue"
 
-    def add(key, text, unit=None):
+    def add(key, text, unit=None, also=()):
         fs.add("team", team, "team." + key, text, value=t[key], unit=unit,
-               source="derived:team." + key, team=team)
+               source="derived:team." + key, team=team, also=also)
 
     def listed(key, unit=None):
         """A metric worded by its registry line, once compute carries it."""
@@ -585,14 +589,16 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
         "" if t["open_slots"] == 1 else "s"))
     add("tanks", "%s shape: %d tank / %d dps / %d support%s" % (
         label, t["tanks"], t["damage"], t["supports"],
-        " - " + "; ".join(t["shape_flags"]) if t["shape_flags"] else ""))
+        " - " + "; ".join(t["shape_flags"]) if t["shape_flags"] else ""),
+            also=("team.damage", "team.supports"))
     add("subrole_diversity", "%s subrole diversity: %d distinct jobs across %d picks (%s)"
         % (label, len(t["subroles"]), t["size"], ", ".join(t["subroles"])))
     if t["style_counts"]:
         add("style_top", "%s style profile: %s%s" % (label, ", ".join(
             "%s %d/%d" % (s, c, t["size"]) for s, c in sorted(
                 t["style_counts"].items(), key=lambda kv: (-kv[1], kv[0]))),
-            " - leans %s" % t["style_lean"] if t["style_lean"] else " - no majority style"))
+            " - leans %s" % t["style_lean"] if t["style_lean"] else " - no majority style"),
+                also=("team.style_lean",))
     if m is not None and m.style_top:
         add("style_fit", "%s fit with the %s style %s rewards: %.0f%% of picks"
             % (label, m.style_top, m.name, 100 * t["style_fit"]))
@@ -604,10 +610,12 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
         % (label, t["weakest"], t["pool_min"]), "hp")
     if t["armor_total"]:
         add("armor_share", "%s armor: %d of %d pool (%.0f%%) discounts sustained fire"
-            % (label, t["armor_total"], t["pool_total"], 100 * t["armor_share"]))
+            % (label, t["armor_total"], t["pool_total"], 100 * t["armor_share"]),
+                also=("team.armor_total",))
     if t["shield_total"]:
         add("shield_share", "%s recharging shields: %d of %d pool (%.0f%%) - rewards"
-            " disengages" % (label, t["shield_total"], t["pool_total"], 100 * t["shield_share"]))
+            " disengages" % (label, t["shield_total"], t["pool_total"], 100 * t["shield_share"]),
+                also=("team.shield_total",))
     if t["squishies"]:
         add("squish_count", "%s squish index: %d/%d picks at %d pool or less (%s)"
             % (label, t["squish_count"], t["size"], SQUISHY_POOL,
@@ -616,20 +624,22 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
         add("overhealth_total", "%s overhealth: %g granted, outside the healing figures"
             % (label, t["overhealth_total"]), "hp")
     add("dps_floor", "%s sustained damage: %g per second, held weapons summed, %d of %d"
-        " picks with a figure" % (label, t["dps_floor"], t["dps_count"], t["size"]), "hp/s")
+        " picks with a figure" % (label, t["dps_floor"], t["dps_count"], t["size"]), "hp/s",
+            also=("team.dps_count",))
     if t["burst_max"]:
         add("burst_max", "%s burst ceiling: %s's %g in one hit"
-            % (label, t["burst_hero"], t["burst_max"]), "hp")
+            % (label, t["burst_hero"], t["burst_max"]), "hp", also=("team.burst_ranged",))
     listed("burst_ranged", "hp")
     if t["one_shots"]:
         add("one_shots", "%s one-shots: %s whose biggest hit, a melee swing aside,"
             " kills a %d pool" % (label, _count(t["one_shots"]), SQUISHY_POOL))
     add("dmg_ults", "%s damage ultimates: %d of %d carry damage, %g summed"
-        % (label, t["dmg_ults"], t["size"], t["ult_damage_total"]))
+        % (label, t["dmg_ults"], t["size"], t["ult_damage_total"]), also=("team.ult_damage_total",))
     if t["ult_cost_mean"]:
         add("ult_cost_mean", "%s mean ultimate cost: %.0f charge" % (label, t["ult_cost_mean"]))
     add("hitscan", "%s damage identity: %d hitscan, %d projectile, %d beam, %d melee"
-        % (label, t["hitscan"], t["projectile"], t["beam"], t["melee"]))
+        % (label, t["hitscan"], t["projectile"], t["beam"], t["melee"]),
+            also=("team.melee", "team.projectile", "team.beam"))
     listed("hitscan_reach")
     if t["aoe_count"]:
         add("aoe_count", "%s area-damage volume: %d kit pieces tagged area of effect"
@@ -639,7 +649,8 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
             " publish one (%gm to %gm) - reads as %s"
             % (label, t["range_median"], sum(1 for h in heroes if h.max_range), t["size"],
                t["range_min"], t["range_max"],
-               "poke" if t["range_median"] >= 20 else "brawl"), "m")
+               "poke" if t["range_median"] >= 20 else "brawl"), "m",
+                   also=("team.range_max", "team.range_min"))
     if t["dmg_amp"]:
         add("dmg_amp", "%s damage amplification: %s boost someone's damage"
             % (label, _count(t["dmg_amp"])))
@@ -650,29 +661,31 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
             " the roster's ~%.0f two-support bench (ratio %.2f)%s"
             % (label, t["hps_supports"], world.hps_bench, t["hps_ratio"],
                " - UNDER-HEALED" if t["supports"] >= 2 and t["hps_ratio"] < UNDER_HEALED else ""),
-            "hp/s")
+            "hp/s", also=("team.hps_ratio",))
         add("heal_peak_supports", "%s biggest single heals: %g summed across the supports vs"
             " the roster's ~%.0f two-support bench (ratio %.2f)"
-            % (label, t["heal_peak_supports"], world.heal_bench, t["heal_ratio"]), "hp")
+            % (label, t["heal_peak_supports"], world.heal_bench, t["heal_ratio"]), "hp",
+                also=("team.heal_ratio",))
     if t["heal_peak_total"]:
         add("heal_peak_total", "%s single heals: %g summed, one cast per pick, self-heals"
             " included" % (label, t["heal_peak_total"]), "hp")
     add("lifelines", "%s lifelines: %d of %d picks carry any healing"
-        % (label, t["lifelines"], t["size"]))
+        % (label, t["lifelines"], t["size"]), also=("team.heal_peak_total",))
     if t["heal_amp"]:
         add("heal_amp", "%s healing amplification: %s" % (label, _count(t["heal_amp"])))
     if t["antiheal"]:
         add("antiheal", "%s anti-heal: %s can shut healing off" % (label, _count(t["antiheal"])))
     if t["cleanse"] or t["invuln"]:
         add("invuln", "%s defensive answers: %d invulnerability, %d cleanse"
-            % (label, t["invuln"], t["cleanse"]))
+            % (label, t["invuln"], t["cleanse"]),
+                also=("team.cleanse", "team.team_cleanse", "team.team_saves"))
     listed("team_cleanse")
     listed("team_saves")
     if t["cooldown_count"]:
         add("cooldown_median", "%s cooldown tempo: median %gs across %d cooldowns - %s"
             % (label, t["cooldown_median"], t["cooldown_count"],
                "high-uptime brawl tempo" if t["cooldown_median"] <= 8 else
-               "cooldown-bound; pick your fights"), "s")
+               "cooldown-bound; pick your fights"), "s", also=("team.cooldown_count",))
     add("cc_count", "%s crowd control: %s%s" % (
         label, _count(t["cc_count"]), "; " + "; ".join(t["cc_tools"]) if t["cc_tools"] else ""))
     add("mobility_count", "%s engage/escape tools: %s%s" % (
@@ -682,7 +695,8 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
         add("flyers", "%s vertical threats: %s fly" % (label, _count(t["flyers"])))
     if t["barrier_hp"]:
         add("barrier_hp", "%s barriers: %g hp across %s"
-            % (label, t["barrier_hp"], _count(t["barrier_count"])), "hp")
+            % (label, t["barrier_hp"], _count(t["barrier_count"])), "hp",
+                also=("team.barrier_count",))
     if t["barrier_piercers"]:
         add("barrier_piercers", "%s barrier-piercers: %s ignore barriers"
             % (label, _count(t["barrier_piercers"])))
@@ -693,7 +707,8 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
             " score sum %d)%s" % (label, t["synergy_edges"], t["size"] * (t["size"] - 1) // 2,
                                   t["synergy_density"], t["synergy_score"],
                                   " - " + "; ".join("%s+%s" % p[:2] for p in t["pairs"])
-                                  if t["pairs"] else " - no documented pair"))
+                                  if t["pairs"] else " - no documented pair"),
+                                      also=("team.synergy_score", "team.synergy_density"))
         add("core_size", "%s synergy core: the largest documented group is %s"
             % (label, _count(t["core_size"])))
         if t["isolated"]:
@@ -710,7 +725,7 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
     add("availability", "%s expected availability: %.0f%% chance every pick survives the"
         " ban screen%s" % (label, 100 * t["availability"],
                            " (%s at %.0f%% ban)" % (t["max_ban_hero"], t["max_ban_rate"])
-                           if t["max_ban_hero"] else ""))
+                           if t["max_ban_hero"] else ""), also=("team.max_ban_rate",))
     if t["rank_sensitive_count"]:
         add("rank_sensitive_count", "%s rank-sensitive picks: %d swing %g+ points across"
             " ranks" % (label, t["rank_sensitive_count"], RANK_SENSITIVE))
@@ -723,17 +738,20 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
         add("map_specialists", "%s map fit on %s: %s, %d off-map, %d with"
             " this map among their three best by rate"
             % (label, m.name, _count(t["map_specialists"], "specialist"),
-               t["map_offmap"], t["map_strategy_hits"]))
+               t["map_offmap"], t["map_strategy_hits"]),
+                   also=("team.map_strategy_hits", "team.map_offmap"))
     if enemies:
         add("coverage", "%s coverage: answers %d/%d %s picks%s" % (
             label, t["coverage"], len(enemies), side,
-            "; still unanswered: " + ", ".join(t["unanswered"]) if t["unanswered"] else ""))
+            "; still unanswered: " + ", ".join(t["unanswered"]) if t["unanswered"] else ""),
+                also=("team.coverage_share", "team.unanswered"))
         add("net_edges", "%s net matchup: %d answer-edges into %s vs %d %s answer-edges"
             " back (%+d)" % (label, t["answer_edges"], side, t["exposure_edges"], side,
-                             t["net_edges"]))
+                             t["net_edges"]), also=("team.answer_edges", "team.exposure_edges"))
         if t["exposed"]:
             add("exposed_count", "%s exposed: %s answered by at least one %s pick; %d safe"
-                % (label, ", ".join(t["exposed"]), side, t["safe_count"]))
+                % (label, ", ".join(t["exposed"]), side, t["safe_count"]),
+                    also=("team.safe_count",))
         if t["double_covered"]:
             add("double_covered", "%s double-covered: %s on %s answered by two or"
                 " more" % (label, _count(t["double_covered"]), side))
@@ -751,12 +769,12 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
 def _matchup_facts(fs, blue_t, red_t):
     x = compute.matchup_metrics(blue_t, red_t)
 
-    def add(key, text, unit=None, value=None):
+    def add(key, text, unit=None, value=None, also=()):
         # a few board facts read blue's own metric: matchup carries only what
         # reading both sides produces, so those pass their value in
         fs.add("matchup", "blue vs red", "matchup." + key, text,
                value=x[key] if value is None else value,
-               unit=unit, source="derived:matchup." + key)
+               unit=unit, source="derived:matchup." + key, also=also)
 
     add("pool_diff", "pool differential: blue's %d picks carry %d hp vs red's %d picks' %d"
         " - %+d raw material" % (blue_t["size"], blue_t["pool_total"], red_t["size"],
@@ -772,7 +790,8 @@ def _matchup_facts(fs, blue_t, red_t):
     add("heal_vs_burst", "burst-vs-heal, red's way: red's best hit %g vs blue's best save %g"
         " - %s" % (red_t["burst_max"], blue_t["heal_peak_max"],
                    "blue's saves keep pace" if x["heal_vs_burst"] >= 0
-                   else "red's burst outruns blue's save; do not trade in the open"))
+                   else "red's burst outruns blue's save; do not trade in the open"),
+                       also=("team.heal_peak_max",))
     add("chew_time_ours", "chew-time floor, blue into red: %d pool / %g per second = %.1fs of"
         " unmitigated fire (no healing, no misses)" % (
             red_t["pool_total"], blue_t["dps_floor"], x["chew_time_ours"]), "s")
@@ -795,7 +814,7 @@ def _matchup_facts(fs, blue_t, red_t):
                          if net < 0 else "dead even"), value=net)
     add("coverage_share", "coverage: blue answers %.0f%% of red; red answers %.0f%% of blue"
         % (100 * blue_t["coverage_share"], 100 * x["exposure_share"]),
-        value=blue_t["coverage_share"])
+        value=blue_t["coverage_share"], also=("matchup.exposure_share",))
     if x["dive_pressure"]:
         add("dive_pressure", "dive pressure: %s on red carry engage tools; blue peel"
             " (%s) must hold" % (_count(x["dive_pressure"]),
@@ -815,7 +834,8 @@ def _matchup_facts(fs, blue_t, red_t):
     if x["ult_threat"]:
         add("ult_threat", "ult threat: red's damage ultimates total %g against %s on blue"
             % (x["ult_threat"],
-               _count(x["ult_answers"], "invulnerability or cleanse answer")), "hp")
+               _count(x["ult_answers"], "invulnerability or cleanse answer")), "hp",
+                   also=("matchup.ult_answers",))
     if x["style_lean_red"] or blue_t["style_lean"]:
         add("style_lean_red", "style war: red leans %s, blue leans %s" % (
             x["style_lean_red"] or "nothing yet", blue_t["style_lean"] or "nothing yet"),

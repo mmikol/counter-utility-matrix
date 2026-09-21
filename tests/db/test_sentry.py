@@ -8,14 +8,17 @@ import shutil
 import time
 from datetime import UTC, datetime
 
+import pytest
+
 from db import sentry
 from inference import catalog
 
 
 def _playbook(tmp_path):
-    for name in os.listdir(catalog.STRATEGIES_DIR):
+    shipped = catalog.strategies_dir()
+    for name in os.listdir(shipped):
         if name.endswith(".md") and name not in catalog.NOT_STRATEGIES:
-            shutil.copy(os.path.join(catalog.STRATEGIES_DIR, name), tmp_path / name)
+            shutil.copy(os.path.join(shipped, name), tmp_path / name)
     return str(tmp_path)
 
 
@@ -84,6 +87,32 @@ def test_one_pass_writes_the_report(tmp_path, monkeypatch):
     assert clean["ok"] is True and clean["flags"] == []
 
 
+def test_a_column_the_scan_cannot_read_is_a_flag_and_a_missing_one_is_not():
+    """A schema this build does not have is nothing to read. Anything else -
+    a revoked grant, a lock, a dead connection - has to reach the report, or
+    the guard says clean about text it never saw."""
+    import psycopg
+
+    class Cursor:
+        def __init__(self, error):
+            self.error, self.rollbacks = error, 0
+
+        def execute(self, sql):
+            raise self.error
+
+        def rollback(self):
+            self.rollbacks += 1
+
+    absent = Cursor(psycopg.errors.UndefinedTable("relation does not exist"))
+    assert sentry.scan(absent) == []
+    assert absent.rollbacks == sum(len(c) for _, c in sentry.TEXT_COLUMNS)
+    refused = Cursor(psycopg.errors.InsufficientPrivilege("permission denied"))
+    flags = sentry.scan(refused)
+    assert len(flags) == sum(len(c) for _, c in sentry.TEXT_COLUMNS)
+    assert all("not scanned: InsufficientPrivilege" in f for f in flags)
+
+
+@pytest.mark.invariant
 def test_the_database_scan_flags_a_hostile_note_and_names_its_column(db, dsn):
     import psycopg
     with psycopg.connect(dsn) as cx:
@@ -97,6 +126,7 @@ def test_the_database_scan_flags_a_hostile_note_and_names_its_column(db, dsn):
     assert {t for t, _ in sentry.TEXT_COLUMNS} >= {"synergies", "seasons", "strategies"}
 
 
+@pytest.mark.invariant
 def test_every_scanned_column_exists(rows):
     # a column the database lacks is skipped in silence: the list once named two
     # dropped tables and a column on the wrong table

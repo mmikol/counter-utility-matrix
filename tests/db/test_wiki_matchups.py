@@ -5,7 +5,6 @@ skipped without the cache or the database."""
 
 import os
 
-import psycopg
 import pytest
 
 from db import CACHE_DIRS
@@ -250,16 +249,6 @@ def test_two_articles_agree_into_one_edge_and_contradict_into_none():
 
 
 # --- the page cache -> the table ---------------------------------------------
-
-@pytest.fixture()
-def sandbox(db, dsn):
-    """A connection run() may commit on: nothing lands."""
-    connection = psycopg.connect(dsn)
-    connection.commit = lambda: None
-    yield connection
-    connection.rollback()
-    connection.close()
-
 
 @needs_cache
 @pytest.mark.invariant

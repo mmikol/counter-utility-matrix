@@ -12,7 +12,9 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# without pgserver: the embedded cluster is a host build target, and inside the
+# image every layer reaches a real postgres service over DATABASE_URL
+RUN grep -v '^pgserver' requirements.txt | pip install --no-cache-dir -r /dev/stdin
 
 COPY . .
 RUN mkdir -p db/raw .cache-blizzard .cache-wiki \

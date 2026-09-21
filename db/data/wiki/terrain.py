@@ -9,9 +9,11 @@ has about that stage. Both tables are reloaded wholesale.
 
 import re
 
+import requests
+
 from db import psql
 from db.data import fetch
-from db.data.wiki import WIKI, fetch_wikitext, markup
+from db.data.wiki import WIKI, WikiError, fetch_wikitext, markup
 from db.data.wiki.maps import parse_stretches
 
 # --- extract: article -> the text about the ground -------------------------
@@ -288,7 +290,8 @@ def _store(cursor, table, key, key_id, counts, words, source_id):
     for feature, mentions in counts.items():
         cursor.execute(
             "INSERT INTO %s (%s, feature, mentions, per_thousand, source_id)"
-            " VALUES (%%s, %%s, %%s, %%s, %%s)" % (table, key),
+            " VALUES (%%s, %%s, %%s, %%s, %%s)"
+            % (psql.identifier(table), psql.identifier(key)),
             (key_id, feature, mentions, per_thousand(mentions, words), source_id))
     return len(counts)
 
@@ -313,9 +316,14 @@ def run(connection, cache_dir=None, session=None, log=print):
         stages.setdefault(map_id, (hybrid, {}))[1][stage] = stage_id
 
     rows, words_read, without_text = 0, 0, []
-    stage_rows, stages_read = 0, 0
+    stage_rows, stages_read, missing = 0, 0, []
     for map_id, name in maps:
-        article = fetch_wikitext(session, name.replace(" ", "_"), cache_dir)
+        try:
+            article = fetch_wikitext(session, name.replace(" ", "_"), cache_dir)
+        except (WikiError, requests.RequestException) as error:
+            missing.append("%s: %s" % (name, error))
+            log("  %-22s %s" % (name, error))
+            continue
         text = terrain_text(article)
         words = word_count(text)
         if words < MIN_WORDS:
@@ -340,7 +348,8 @@ def run(connection, cache_dir=None, session=None, log=print):
             log("    %-30s %4d words  %s" % (stage, words, _counted(counts)))
     connection.commit()
     total_stages = sum(len(stage_ids) for _, stage_ids in stages.values())
-    return {"maps": len(maps) - len(without_text), "without_text": without_text,
+    return {"maps": len(maps) - len(without_text) - len(missing),
+            "without_text": without_text, "missing": missing,
             "rows": rows, "words": words_read,
             "stages": stages_read, "stages_no_text": total_stages - stages_read,
             "stage_rows": stage_rows, "tables": ["map_terrain", "stage_terrain"]}

@@ -15,14 +15,6 @@ FIXTURE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
                        "fixtures", "reach.json")
 
 
-@pytest.fixture(scope="module")
-def world(db):
-    from ui.facts import model
-    w = model.load(db)
-    db.rollback()
-    return w
-
-
 UNSEATED = {"Freja", "Shion"}       # named, not waived - see the test
 
 

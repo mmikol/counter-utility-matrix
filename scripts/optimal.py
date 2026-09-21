@@ -1,27 +1,34 @@
 """Record the true maximum of a set of boards, by enumerating every legal six.
 
-Offline: minutes a board. Writes tests/fixtures/optimal.json, which
-tests/inference/test_optimal.py then checks the solver still reaches.
+Offline: minutes a board. Reads the brute force's .jsonl output - the paths
+named by OPTIMAL_SOURCES, separated the way PATH is - and writes
+tests/fixtures/optimal.json, which tests/inference/test_optimal.py then checks
+the solver still reaches.
+
+    OPTIMAL_SOURCES=~/countrix-study/brute/proof100.jsonl python scripts/optimal.py
 """
 import json
 import os
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-SOURCES = ["/Users/milianomikol/Documents/countrix-study/brute/proof100.jsonl",
-           "/Users/milianomikol/Documents/countrix-study/brute/random200.jsonl"]
-OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                   "tests", "fixtures", "optimal.json")
+# the enumerations live outside the repo - hours of compute a file, kept
+# where they were produced
+SOURCES = [os.path.expanduser(p)
+           for p in os.environ.get("OPTIMAL_SOURCES", "").split(os.pathsep) if p]
+OUT = os.path.join(ROOT, "tests", "fixtures", "optimal.json")
 KEEP = int(os.environ.get("OPTIMAL_KEEP", "20"))
 STALE_BANNED = os.environ.get("OPTIMAL_STALE_BANNED", "1") == "1"
 
 
 def main():
+    if not SOURCES:
+        raise SystemExit("set OPTIMAL_SOURCES to the brute force's .jsonl files"
+                         " (%s-separated)" % os.pathsep)
     rows = []
     for path in SOURCES:
         if not os.path.exists(path):
-            continue
+            raise SystemExit("no such file: %s" % path)
         with open(path, encoding="utf-8") as handle:
             for line in handle:
                 row = json.loads(line)

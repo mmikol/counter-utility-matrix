@@ -217,7 +217,8 @@ def test_derive_without_a_signed_in_cli_leaves_drafts_pending(catalog_copy, monk
     def not_logged_in(text):
         raise derive.CliUnavailableError("the claude CLI is not signed in: run `claude login` once")
     result = derive.derive(directory=catalog_copy, runner=not_logged_in, log=lambda m: None)
-    assert "not signed in" in result["skipped"] and "not signed in" in derive.rendered(result)
+    assert "not signed in" in result["skipped"]
+    assert "not signed in" in derive.derive_rendered(result)
     assert next(h for h in catalog.load(catalog_copy) if h.id == "heal-line").pending
 
 
@@ -247,6 +248,17 @@ def test_frontmatter_cannot_be_injected_through_a_field_or_a_value(catalog_copy)
         encoding="utf-8")
     with pytest.raises(catalog.CatalogError, match=r"within 0\.\.10"):
         catalog.load(catalog_copy)
+
+
+def test_a_file_whose_frontmatter_never_closes_is_refused():
+    """find() gives -1 for a missing fence, and -1 slices from the tail: the
+    edit would have silently rewritten the end of the file."""
+    for broken in ("---\nname: X\nweight: 1\n", "---\n", "---"):
+        with pytest.raises(tune.TuneError, match="frontmatter"):
+            tune.edit_frontmatter(broken, "weight", 2)
+    whole = "---\nname: X\nweight: 1\n---\nbody\n"
+    assert tune.edit_frontmatter(whole, "weight", 2) == (
+        "---\nname: X\nweight: 2\n---\nbody\n", "1")
 
 
 def test_the_deriver_accepts_only_a_strategys_fields():
@@ -285,6 +297,5 @@ def test_another_playbook_is_chosen_by_the_environment(monkeypatch, tmp_path):
     assert chosen == str(other)
     one = catalog.load(chosen)
     assert {h.id for h in one} == {"open-queue-tanks"}
-    monkeypatch.setattr(catalog, "STRATEGIES_DIR", chosen)
     assert catalog.write_docs(one, path=str(tmp_path / "never.md")) is None
     assert not (tmp_path / "never.md").exists()

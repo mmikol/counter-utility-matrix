@@ -1,6 +1,8 @@
 """Fetching: the page cache and its freshness policy, shared by every source.
 
     cached_get       one page, from the cache if it is there and fresh
+    max_age          the policy for a block, restored after it - what a pull
+                     wraps its run in; set_max_age sets it outright
     set_max_age      the policy: None keeps a page forever (a build from
                      the caches), 0 refetches every page (the refresh); a
                      page that fails to refetch keeps its cached copy, so
@@ -14,10 +16,12 @@ and its own `sources` row, so provenance lives with the source. Fetching
 yields raw markup; reading it is the package's job.
 """
 
+import contextlib
 import os
 import random
 import re
 import sys
+import threading
 import time
 
 import requests
@@ -27,8 +31,14 @@ DEFAULT_TIMEOUT = 30
 DEFAULT_BACKOFF = 1.0
 MAX_BACKOFF = 60.0
 
-# Seconds a cached page stays fresh; None means forever.
-MAX_AGE = None
+# Seconds a cached page stays fresh; None means forever. The policy is per
+# thread because the door serves calls on threads: one caller's refresh must
+# not decide another caller's pull.
+_policy = threading.local()
+
+
+def _max_age():
+    return getattr(_policy, "seconds", None)
 
 
 class FetchError(Exception):
@@ -36,16 +46,28 @@ class FetchError(Exception):
 
 
 def set_max_age(seconds):
-    """The freshness policy for every fetch that follows (None = forever)."""
-    global MAX_AGE
-    MAX_AGE = seconds
+    """The freshness policy for every fetch that follows on this thread
+    (None = forever)."""
+    _policy.seconds = seconds
+
+
+@contextlib.contextmanager
+def max_age(seconds):
+    """The policy for one block, whatever it was before restored after it."""
+    held = _max_age()
+    _policy.seconds = seconds
+    try:
+        yield
+    finally:
+        _policy.seconds = held
 
 
 def is_stale(path):
-    """A cached page older than the policy allows (never, when MAX_AGE is None)."""
-    if MAX_AGE is None or not path or not os.path.exists(path):
+    """A cached page older than the policy allows (never, when it is None)."""
+    seconds = _max_age()
+    if seconds is None or not path or not os.path.exists(path):
         return False
-    return time.time() - os.path.getmtime(path) > MAX_AGE
+    return time.time() - os.path.getmtime(path) > seconds
 
 
 def read_cache(path):

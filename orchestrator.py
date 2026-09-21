@@ -70,7 +70,9 @@ def health():
 
 
 def probe():
-    """One board solved through the inference service -> {"seconds", "picks"}."""
+    """One board solved through the inference service -> {"seconds", "picks"},
+    or None when the service did not answer with a six: unreachable, erroring,
+    or a playbook whose limits seat no composition."""
     started = time.time()
     data = get_json(PROBE, timeout=120)
     picks = (data or {}).get("blue", {}).get("blue") or []
@@ -96,7 +98,7 @@ def verdict(h):
             ok = False
             lines.append("data layer: the database holds no heroes yet")
         lines.append("data layer: %d tables, %d heroes%s, rates captured %s"
-                     % (data.get("tables", 0), data.get("heroes", 0),
+                     % (data.get("table_count", 0), data.get("heroes", 0),
                         " (%d announced, not yet playable)" % data["announced"]
                         if data.get("announced") else "",
                         data.get("newest_capture") or "never"))

@@ -1,6 +1,13 @@
 # The playbook's sources
 
-One entry per strategy file in `strategies/`: the community's rules, the
+**The playbook was emptied on purpose.** `strategies/` now holds five
+assumptions and no scored rule. This file is the record of the 244 entries it
+held, with the citation behind each, and it is the source the playbook is being
+rebuilt from by hand - so it describes more than the folder does, and is meant
+to. `docs/inference.md` is generated from the folder and says what is in force
+today.
+
+One entry per strategy the playbook has held: the community's rules, the
 queue's limit and the user's assumptions. The rules come from
 r/OverwatchUniversity, r/Competitiveoverwatch and r/Overwatch; every citation
 links to reddit itself, and new mining reads reddit's own feeds only. Each rule

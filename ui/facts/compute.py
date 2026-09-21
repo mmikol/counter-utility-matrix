@@ -12,6 +12,10 @@ vocabulary a strategy's frontmatter may use: `team.<key>`,
 Unknowns are numeric, never None: a metric that needs a map reads 0 (or
 falls back to the roster-wide figure where that is the honest substitute,
 which the description says) and `map.known` tells a strategy which.
+
+The board's own vocabulary sits here too - TEAM_SIZE, MAX_BANS, the sides,
+and the parse_board/board_query pair the two HTTP doors read and write a
+board with - because both packages already import this module.
 """
 
 import statistics
@@ -298,10 +302,9 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     # ties fall to the alphabetically first style: the answer must not depend on
     # the order a set of names happens to iterate in (hash randomisation)
     # and a six that is as much one style as another plays the one the map rewards
-    here = m.style_top if m is not None else None
-    t["style_lean"] = (sorted(majority, key=lambda s: (-counts[s], s != here, s))[0]
-                       if majority else "")
     map_style = m.style_top if m is not None else None
+    t["style_lean"] = (sorted(majority, key=lambda s: (-counts[s], s != map_style, s))[0]
+                       if majority else "")
     t["style_fit"] = (sum(1 for h in heroes if map_style in h.styles) / n
                       if n and map_style else 0.0)
     dev = 0
@@ -407,12 +410,12 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     for h in heroes:
         avail *= 1.0 - (h.ban or 0) / 100.0
     t["availability"] = avail
-    here = 1.0
+    map_avail = 1.0
     for h in heroes:
         ban = h.map_ban(m.id) if m is not None else None
         rate = h.ban if ban is None else ban            # this map's ban, else all-ranks
-        here *= 1.0 - (rate or 0) / 100.0
-    t["map_availability"] = here
+        map_avail *= 1.0 - (rate or 0) / 100.0
+    t["map_availability"] = map_avail
     banned = max(heroes, key=lambda h: h.ban or 0) if heroes else None
     t["max_ban_rate"] = (banned.ban or 0) if banned else 0.0
     t["max_ban_hero"] = banned.name if banned and banned.ban else ""
@@ -454,9 +457,8 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["net_edges"] = t["answer_edges"] - t["exposure_edges"]
     t["double_covered"] = sum(1 for v in answered.values() if len(v) >= 2)
     if enemies and heroes:
-        risky = max(heroes, key=lambda h: h.ban or 0)
         t["banproof_coverage"] = sum(
-            1 for e in enemies if any(x != risky.name for x in answered[e.id]))
+            1 for e in enemies if any(x != banned.name for x in answered[e.id]))
     else:
         t["banproof_coverage"] = 0
     t["_answered"] = {} if lean else {e.name: answered[e.id] for e in enemies}
@@ -519,6 +521,28 @@ def matchup_metrics(blue_t, red_t):
     x.update(red_matchup(red_t))
     x["ult_answers"] = blue_t["invuln"] + blue_t["cleanse"]
     return x
+
+
+# --- the board as query parameters ---------------------------------------------
+#
+# Both doors - ui/board.py and inference/serve.py - name a board the same way on
+# the wire, and the two halves live here, beside the limits they enforce, so
+# neither door owns the other's spelling.
+
+def parse_board(query):
+    """The board a parsed query names: (map, red, blue, bans, side)."""
+    map_name = (query.get("map") or [None])[0] or None
+    red = [x for x in query.get("red", []) if x]
+    blue = [x for x in query.get("blue", []) if x]
+    bans = [x for x in query.get("bans", []) if x][:MAX_BANS]
+    side = (query.get("side") or [""])[0]
+    return map_name, red, blue, bans, side
+
+
+def board_query(map_name=None, red=(), blue=(), bans=(), side=""):
+    """A board as query parameters, in the spelling parse_board reads back."""
+    return {"map": map_name or "", "side": side, "red": list(red),
+            "blue": list(blue), "bans": list(bans)}
 
 
 def is_sided(m):

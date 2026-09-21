@@ -14,18 +14,18 @@ REFRESH_SKILL = os.path.join(orchestrator.ROOT, ".claude", "skills", "refresh", 
 
 def test_verdict_reads_the_three_health_replies():
     ok, lines = orchestrator.verdict({
-        "data": {"status": "ok", "tables": 42, "heroes": 53,
+        "data": {"status": "ok", "table_count": 42, "heroes": 53,
                  "pending_migrations": [], "newest_capture": "2026-09-13"},
         "inference": {"status": "ok", "strategies": 38, "heroes": 53},
         "ui": {"heroes": [{}] * 53, "maps": [{}] * 30}})
     assert ok and any("rates captured 2026-09-13" in line for line in lines)
     ok, lines = orchestrator.verdict({
-        "data": {"status": "ok", "tables": 36, "heroes": 54, "announced": 1,
+        "data": {"status": "ok", "table_count": 36, "heroes": 54, "announced": 1,
                  "pending_migrations": [], "newest_capture": "2026-09-14"},
         "inference": {"status": "ok", "strategies": 38, "heroes": 54},
         "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}})
     assert ok and any("54 heroes (1 announced, not yet playable)" in line for line in lines)
-    ok, lines = orchestrator.verdict({"data": {"status": "ok", "tables": 42, "heroes": 53,
+    ok, lines = orchestrator.verdict({"data": {"status": "ok", "table_count": 42, "heroes": 53,
                                         "pending_migrations": ["099_future.sql"]},
                                "inference": {"status": "ok", "strategies": 0},
                                "ui": None})
@@ -94,7 +94,7 @@ def test_drafts_are_derived_on_the_host_then_the_stack_remirrors(monkeypatch):
 def stubbed(monkeypatch):
     """Every side effect of the orchestrator recorded instead of run."""
     calls = []
-    healthy = {"data": {"status": "ok", "tables": 36, "heroes": 54, "announced": 1,
+    healthy = {"data": {"status": "ok", "table_count": 36, "heroes": 54, "announced": 1,
                         "pending_migrations": [], "newest_capture": "2026-09-14"},
                "inference": {"status": "ok", "strategies": 38, "heroes": 54, "pending": 0},
                "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
@@ -226,7 +226,7 @@ def test_readiness_solves_one_board_through_the_service(monkeypatch):
     monkeypatch.setattr(orchestrator, "get_json", lambda url, timeout=10: {"error": "died"})
     assert orchestrator.probe() is None
     inf = {"status": "ok", "strategies": 300, "heroes": 54}
-    served = {"data": {"status": "ok", "tables": 36, "heroes": 54}, "inference": inf,
+    served = {"data": {"status": "ok", "table_count": 36, "heroes": 54}, "inference": inf,
               "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
     ok, lines = orchestrator.verdict(dict(served, board={"seconds": 2.4, "picks": six}))
     assert ok and any(line.endswith("a board in 2.4s") for line in lines)

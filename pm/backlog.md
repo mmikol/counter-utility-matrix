@@ -227,7 +227,7 @@ few match-ups the wiki rates (the counters table is a list).
 - **A heuristic's weight is a slider under its card** - `2156473`. Only
   heuristics have one; 1 to 10 to the hundredth with a number box for the
   exact figure; the file's weight is the inferred default and a reset; a
-  setting rides with the board request (`weight=id:value`, `weights` on
+  setting rides with the board request (`weights=id:value`, `weights` on
   the `board` tool) and never touches the file.
 - **Unscored, never 100 / 100** - `0c10dd7`. A playbook with no scoring
   term ties every legal six at zero; the board now says so.

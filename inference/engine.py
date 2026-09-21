@@ -17,13 +17,17 @@ import os
 import pickle
 import threading
 import time
+from collections import namedtuple
+from collections.abc import Sequence
+from concurrent.futures.process import BrokenProcessPool
 
 from inference import catalog as catalog_module
+from inference.catalog import Strategy
 from inference.solver import Candidate, Solver, evaluate_comp, legal_shapes
 from ui.facts import compute
 from ui.facts import engine as facts_engine
 from ui.facts.compute import TEAM_SIZE, is_sided, opposite
-from ui.facts.model import ROLES
+from ui.facts.model import ROLES, World
 
 
 def _pct(score, best):
@@ -101,6 +105,9 @@ class Result:
         self.rank = None
         self.playstyle = ""
         self.best = None            # the board's best score: what 100 means here
+        # the Solver that produced this result, set by infer(): current() scores a
+        # partial team against the bounds its seat's optimal search froze
+        self.solver = None
         # the assumptions - nothing to score: what the agent reconciles the
         # facts against beyond the arithmetic
         self.considerations = [{"id": h.id, "name": h.name}
@@ -174,7 +181,7 @@ class Result:
                                             p["why"]))
         parts = ["%s %+.2f%s" % (c["id"], c["weighted"], " (need)" if c.get("need") else "")
                  for c in self.contributions
-                 if c.get("applies") and abs(c["weighted"]) >= 0.005]
+                 if c["applies"] and abs(c["weighted"]) >= 0.005]
         lines.append("  breakdown: " + " · ".join(parts))
         for i, alt in enumerate(self.alternatives, start=1):
             lines.append("  alt %d: %s (%.2f)" % (i, ", ".join(alt["blue"]), alt["score"]))
@@ -250,45 +257,15 @@ def _fill(result, cand, fs, solver):
             c["fact"], c["text"] = fact.id, fact.text
 
 
-# a metric whose number rides inside another metric's fact line
-FACT_ALIASES = {
-    "team.coverage_share": "team.coverage", "team.unanswered": "team.coverage",
-    "team.answer_edges": "team.net_edges", "team.exposure_edges": "team.net_edges",
-    "team.synergy_score": "team.synergy_edges", "team.synergy_density": "team.synergy_edges",
-    "team.max_ban_rate": "team.availability", "team.map_strategy_hits": "team.map_specialists",
-    "team.heal_ratio": "team.heal_peak_supports", "team.ult_damage_total": "team.dmg_ults",
-    "team.damage": "team.tanks", "team.supports": "team.tanks",
-    "team.barrier_count": "team.barrier_hp", "team.style_lean": "team.style_top",
-    "matchup.ult_answers": "matchup.ult_threat",
-    "team.range_max": "team.range_median", "team.range_min": "team.range_median",
-    "team.melee": "team.hitscan", "team.projectile": "team.hitscan", "team.beam": "team.hitscan",
-    "team.armor_total": "team.armor_share", "team.shield_total": "team.shield_share",
-    "team.cleanse": "team.invuln", "team.team_cleanse": "team.invuln",
-    "team.team_saves": "team.invuln", "team.map_offmap": "team.map_specialists",
-    "team.safe_count": "team.exposed_count", "team.dps_count": "team.dps_floor",
-    "team.cooldown_count": "team.cooldown_median", "team.burst_ranged": "team.burst_max",
-    "team.hps_ratio": "team.hps_supports", "team.heal_peak_total": "team.lifelines",
-    "team.heal_peak_max": "matchup.heal_vs_burst",
-    # a fact key, not a metric: the matchup coverage fact states both shares
-    "matchup.exposure_share": "matchup.coverage_share",
-}
-
-
 def _cited_fact(fs, keys):
-    """The first board fact that carries one of these metrics: the key
-    itself, its alias, or the key with trailing words stripped
-    (team.coverage_share -> team.coverage), falling back through the list."""
+    """The first board fact that states one of these metrics. A fact is indexed
+    under the key it is worded around and under every other metric its sentence
+    carries (FactSet.add's `also`), so the lookup is the metric itself. A team
+    metric is stated about blue; a matchup metric about the two sides, and one
+    team metric is only ever stated in a matchup sentence."""
     for key in keys:
-        candidates = [key, FACT_ALIASES.get(key)]
-        parts = key.split("_")
-        while len(parts) > 1:
-            parts.pop()
-            candidates.append("_".join(parts))
-        for candidate in candidates:
-            if not candidate:
-                continue
-            subject = "blue" if candidate.startswith("team.") else "blue vs red"
-            found = fs.find(candidate, subject)
+        for subject in ("blue", "blue vs red"):
+            found = fs.find(key, subject)
             if found:
                 return found[0]
     return None
@@ -304,8 +281,22 @@ def _side(m, side):
     return side if is_sided(m) else ""
 
 
-def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=None,
-          bans=(), side="", seat="blue", solved=None):
+def clamp_search(pool=None, top=None):
+    """Bounds on the search: pool 2..12 candidates per role, top 1..20
+    alternatives. Every door that takes the two from a caller - the MCP tools
+    and the HTTP service - passes them through here, so the search is bounded
+    by one definition. Junk raises ValueError, which each door already turns
+    into its own refusal."""
+    try:
+        return max(2, min(int(pool or 6), 12)), max(1, min(int(top or 5), 20))
+    except (TypeError, ValueError) as error:
+        raise ValueError("pool and top must be numbers: %s" % error) from error
+
+
+def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
+          blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "", *,
+          catalog: list[Strategy] | None = None, pool_size: int = 6, top: int = 5,
+          seat: str = "blue", solved: tuple | None = None) -> "Result":
     """The optimal six for `seat` around its locked picks (`blue`) against
     the other seat's revealed picks (`red`), on `side` of a sided map.
     `solved` takes a (solver, ranked) the caller already has - a board's
@@ -321,7 +312,8 @@ def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=Non
     if solved is not None:
         solver, ranked = solved
     else:
-        solver = Solver(world, m, red_h, blue_h, catalog, pool_size, bans_h, side)
+        solver = Solver(world, m, red_h, blue_h, bans_h, side, catalog=catalog,
+                        pool_size=pool_size)
         ranked = solver.solve(top=max(top, 1) + 1)
     if not ranked:
         raise ValueError("no composition satisfies the limits around the"
@@ -340,8 +332,10 @@ def infer(world, map_name=None, red=(), blue=(), top=5, pool_size=6, catalog=Non
     return result
 
 
-def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
-             bans=(), side="", seat="blue", swept=None):
+def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
+             blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "", *,
+             catalog: list[Strategy] | None = None, pool_size: int = 6,
+             seat: str = "blue", swept: tuple | None = None) -> "Result":
     """A full six for `seat`, scored and ranked against the field the solver
     would have searched. `swept` takes that field from a search the caller
     already ran on this board."""
@@ -355,8 +349,9 @@ def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
     result = Result("evaluate", m.name if m else None, [h.name for h in red_h],
                     [h.name for h in blue_h], [], catalog, [h.name for h in bans_h], side,
                     seat)
-    target, field, rank, solver = evaluate_comp(world, m, red_h, blue_h, catalog,
-                                                pool_size, bans_h, side, swept)
+    target, field, rank, solver = evaluate_comp(world, m, red_h, blue_h, bans_h, side,
+                                                catalog=catalog, pool_size=pool_size,
+                                                swept=swept)
     fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans,
                                side)
     _fill(result, target, fs, solver)
@@ -370,15 +365,22 @@ def evaluate(world, map_name=None, red=(), blue=(), pool_size=6, catalog=None,
     return result
 
 
-def current(world, blue_result, map_name=None, red=(), blue=(), catalog=None, bans=(),
-            side="", pool_size=6, seat="blue", swept=None):
+def current(world: World, blue_result: "Result", map_name: str | None = None,
+            red: Sequence[str] = (), blue: Sequence[str] = (), bans: Sequence[str] = (),
+            side: str = "", *, catalog: list[Strategy] | None = None, pool_size: int = 6,
+            seat: str = "blue", swept: tuple | None = None) -> "Result":
     """`seat`'s current picks (`blue`, from that seat's perspective) as they
     stand against the other seat's (`red`): a full six is evaluated against
     the field; a partial team is scored with the bounds of the optimal
-    search it came from, and says so."""
+    search it came from, and says so. `blue_result` is that seat's infer()
+    result - the partial branch reads its `.solver`."""
     if len(blue) == TEAM_SIZE:
-        return evaluate(world, map_name, red, blue, pool_size, catalog, bans, side, seat,
-                        swept)
+        return evaluate(world, map_name, red, blue, bans, side, catalog=catalog,
+                        pool_size=pool_size, seat=seat, swept=swept)
+    # The partial branch hands the catalog to Result, which iterates it, so the
+    # declared default has to be loaded the way infer() and evaluate() load
+    # theirs. Both callers pass one today, so this never fired.
+    catalog = catalog or catalog_module.load()
     started = time.time()
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
@@ -390,6 +392,10 @@ def current(world, blue_result, map_name=None, red=(), blue=(), catalog=None, ba
         result.seconds = time.time() - started
         return result
     solver = blue_result.solver
+    if solver is None:
+        raise ValueError("current() scores a partial team against the bounds of its"
+                         " seat's optimal search: blue_result must be an infer() result,"
+                         " which carries the solver that drew them")
     result.best = blue_result.score
     cand = solver.prepare(Candidate(blue_h))
     solver.score(cand)
@@ -400,27 +406,41 @@ def current(world, blue_result, map_name=None, red=(), blue=(), catalog=None, ba
     return result
 
 
-def board_dict(b):
-    """The board() result as JSON-ready data."""
-    return {"map": b["map"], "side": b["side"], "bans": b["bans"], "plan": b["plan"],
-            "blue": b["blue"].to_dict(), "red": b["red"].to_dict(),
-            "current": b["current"].to_dict(), "red_current": b["red_current"].to_dict(),
-            "countered": b["countered"].to_dict() if b["countered"] else None,
-            "fill": b["fill"].to_dict() if b["fill"] else None, "momentum": b["momentum"],
-            "shapes": b["shapes"],
-            "expected": b["expected"].to_dict()}
+class Board:
+    """Both seats of one draft: the seven Results board() solves, the verdict
+    and prose it reads off them, and the shape limits the roster enforces.
+    Carries the same to_dict()/rendered() pair as Result, so the shells hand a
+    board to the caller the way they hand a single seat."""
 
+    def __init__(self, map_name, side, bans, blue, red, current, red_current, fill,
+                 countered, momentum, plan, shapes, expected):
+        self.map_name, self.side, self.bans = map_name, side, bans
+        self.blue, self.red = blue, red
+        self.current, self.red_current = current, red_current
+        self.fill, self.countered = fill, countered
+        self.momentum, self.plan = momentum, plan
+        self.shapes, self.expected = shapes, expected
 
-def board_rendered(b):
-    parts = ["game plan:\n" + b["plan"]]
-    parts += [r.rendered() for r in (b["blue"], b["red"], b["current"], b["red_current"])
-              if r.blue or r.kind != "current"]
-    if b["fill"]:
-        parts.append(b["fill"].rendered())
-    if b["countered"]:
-        parts.append(b["countered"].rendered())
-    parts.append(b["expected"].rendered())
-    return "\n\n".join([*parts, "momentum: " + b["momentum"]["verdict"]])
+    def to_dict(self):
+        """The board as JSON-ready data."""
+        return {"map": self.map_name, "side": self.side, "bans": self.bans, "plan": self.plan,
+                "blue": self.blue.to_dict(), "red": self.red.to_dict(),
+                "current": self.current.to_dict(), "red_current": self.red_current.to_dict(),
+                "countered": self.countered.to_dict() if self.countered else None,
+                "fill": self.fill.to_dict() if self.fill else None, "momentum": self.momentum,
+                "shapes": self.shapes,
+                "expected": self.expected.to_dict()}
+
+    def rendered(self):
+        parts = ["game plan:\n" + self.plan]
+        parts += [r.rendered() for r in (self.blue, self.red, self.current, self.red_current)
+                  if r.blue or r.kind != "current"]
+        if self.fill:
+            parts.append(self.fill.rendered())
+        if self.countered:
+            parts.append(self.countered.rendered())
+        parts.append(self.expected.rendered())
+        return "\n\n".join([*parts, "momentum: " + self.momentum["verdict"]])
 
 
 def _momentum(cur, red_cur, countered, blue_r=None, red_r=None, fill=None):
@@ -579,7 +599,7 @@ def _plan(world, m, side, bans, red_h, blue_r):
         ground = MODE_GROUND.get(m.mode, "the fight follows the objective")
         read = ["%s is a %s map: %s." % (m.name, m.mode, ground)]
         # the ground the wiki's article stresses: the map.terrain facts above the ordinary map
-        facts = getattr(blue_r, "facts", None)
+        facts = blue_r.facts
         stressed = [f.value["feature"] for f in (facts.find("map.terrain", m.name)
                                                  if facts is not None else ())
                     if f.value["z"] > 0][:TERRAIN_NAMED]
@@ -665,7 +685,7 @@ def _plan(world, m, side, bans, red_h, blue_r):
             or (h.name.split()[0].lower() in STYLE_PLAY and h.name.split()[0].lower() != lean
                 and not (h.when and "map.style_top" in h.when.names))}
     top = sorted((c for c in blue_r.contributions
-                  if c.get("applies") and c.get("weighted", 0) > 0.05
+                  if c["applies"] and c["weighted"] > 0.05
                   and c["id"] not in skip),
                  key=lambda c: -c["weighted"])[:4]
     if top:
@@ -745,7 +765,10 @@ def _drop_workers():
 
 
 def parallel_available(catalog=None):
-    """Whether board() splits its search across workers here."""
+    """Whether board() splits its search across workers here. A caller's own
+    catalog keeps the solve in this process: a strategy carries compiled
+    expressions, which do not pickle, so a worker can only rebuild the playbook
+    by reading the files (_playbook) and applying the weights on top."""
     return PARALLEL and catalog is None and (os.cpu_count() or 1) > 1
 
 
@@ -807,7 +830,7 @@ def _world(token, data):
 def _playbook():
     """The playbook, read once per worker and again whenever a file changes."""
     global _held_playbook
-    directory = catalog_module.STRATEGIES_DIR
+    directory = catalog_module.strategies_dir()
     stamp = sorted((e.name, e.stat().st_mtime_ns, e.stat().st_size)
                    for e in os.scandir(directory)
                    if e.name.endswith(".md")) if os.path.isdir(directory) else None
@@ -829,10 +852,15 @@ def _revive(world, verdict):
     return cand
 
 
+# the board one worker solves, named: it crosses the pool as a plain tuple does
+Spec = namedtuple("Spec", "map_name enemy locked pool_size bans side")
+
+
 def _solver(world, catalog, spec):
-    map_name, enemy, locked, pool_size, bans, side = spec
-    m, red_h, locked_h, bans_h = world.resolve(map_name, enemy, locked, bans)
-    return Solver(world, m, red_h, locked_h, catalog, pool_size, bans_h, _side(m, side))
+    m, red_h, locked_h, bans_h = world.resolve(spec.map_name, spec.enemy, spec.locked,
+                                               spec.bans)
+    return Solver(world, m, red_h, locked_h, bans_h, _side(m, spec.side),
+                  catalog=catalog, pool_size=spec.pool_size)
 
 
 def _bounds(token, data, spec, weights, index, count):
@@ -960,22 +988,24 @@ class _Split:
 COUNTERED_POOL = 4          # a what-if: a smaller field is enough
 
 
-def _countered(world, map_name, blue, red_optimal, catalog, bans, side, pool_size, top,
-               solved=None, swept=None):
+def _countered(world, map_name, red_optimal, blue, bans=(), side="", *,
+               catalog=None, pool_size=6, top=5, solved=None, swept=None):
     """Blue's picks against red's optimal six: how they hold if red answers
     perfectly."""
     hypothetical = min(pool_size, COUNTERED_POOL)
-    against = infer(world, map_name, red_optimal, [], top, hypothetical, catalog, bans,
-                    side, "blue", solved=solved)
-    result = current(world, against, map_name, red_optimal, blue, catalog, bans, side,
-                     hypothetical, swept=swept)
+    against = infer(world, map_name, red_optimal, [], bans, side, catalog=catalog,
+                    pool_size=hypothetical, top=top, solved=solved)
+    result = current(world, against, map_name, red_optimal, blue, bans, side,
+                     catalog=catalog, pool_size=hypothetical, swept=swept)
     result.kind = "countered"
     _finish(result, against.score)
     return result
 
 
-def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
-          catalog=None, top=5, weights=None):
+def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
+          blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "", *,
+          catalog: list[Strategy] | None = None, pool_size: int = 6, top: int = 5,
+          weights: dict[str, float] | None = None) -> "Board":
     """The whole board in one pass, at whatever stage the draft is - no map
     (the meta's best six), a map, a map and a side, bans, red's picks as
     they reveal:
@@ -1024,88 +1054,87 @@ def board(world, map_name=None, red=(), blue=(), bans=(), side="", pool_size=6,
     enemy = list(red) if red else expected.blue
     blue_list, bans_list = list(blue), list(bans)
     wants_fill = 0 < len(blue_list) < TEAM_SIZE
-    fill = countered = None
-    if parallel:
+    # One orchestration, run once. Across the pool the four searches are split
+    # and handed to the same six calls; in this process every split is None and
+    # each call searches for itself. A worker dying anywhere in the pooled pass
+    # drops the pool and runs the very same sequence here.
+    for pooled in [True, False] if parallel else [False]:
         try:
-            pool = _workers()
-            want = max(top, 1) + 1
-            half = max(1, WORKERS // 2)
-            rest = max(1, WORKERS - half)
-            blue_split = _Split(pool, world, catalog,
-                                (map_name, enemy, [], pool_size, bans_list, side),
-                                weights, want, half)
-            red_split = _Split(pool, world, catalog,
-                               (map_name, blue_list, [], pool_size, bans_list,
-                                opposite(side)), weights, want, rest)
-            blue_split.rank_roster()
-            red_split.rank_roster()
-            blue_split.sweep()
-            red_split.sweep()
-            # the fill is blue's board, so it takes blue's scale and draws none
-            fill_split = _Split(pool, world, catalog,
-                                (map_name, enemy, blue_list, pool_size, bans_list, side),
-                                weights, want, half, blue_split.bounds,
-                                blue_split.standing) if wants_fill else None
-            if fill_split is not None:
-                fill_split.sweep()
-            blue_split.merge()
-            red_split.merge()
-            blue_r = infer(world, map_name, enemy, [], top, pool_size, catalog, bans,
-                           side, "blue", solved=blue_split.solved())
-            red_r = infer(world, map_name, blue_list, [], top, pool_size, catalog, bans,
-                          opposite(side), "red", solved=red_split.solved())
-            countered_split = _Split(
-                pool, world, catalog,
-                (map_name, red_r.blue, [], min(pool_size, COUNTERED_POOL), bans_list, side),
-                weights, want, rest) if (blue_list and red_r.blue) else None
-            if countered_split is not None:
+            fill = countered = None
+            blue_split = red_split = fill_split = countered_split = None
+            if pooled:
+                pool = _workers()
+                want = max(top, 1) + 1
+                half = max(1, WORKERS // 2)
+                rest = max(1, WORKERS - half)
+                blue_split = _Split(pool, world, catalog,
+                                    Spec(map_name, enemy, [], pool_size, bans_list, side),
+                                    weights, want, half)
+                red_split = _Split(pool, world, catalog,
+                                   Spec(map_name, blue_list, [], pool_size, bans_list,
+                                        opposite(side)), weights, want, rest)
+                blue_split.rank_roster()
+                red_split.rank_roster()
+                blue_split.sweep()
+                red_split.sweep()
+                if wants_fill:
+                    # the fill is blue's board, so it takes blue's scale and draws none
+                    fill_split = _Split(pool, world, catalog,
+                                        Spec(map_name, enemy, blue_list, pool_size,
+                                             bans_list, side),
+                                        weights, want, half, blue_split.bounds,
+                                        blue_split.standing)
+                    fill_split.sweep()
+                blue_split.merge()
+                red_split.merge()
+            blue_r = infer(world, map_name, enemy, [], bans, side, catalog=catalog,
+                           pool_size=pool_size, top=top,
+                           solved=blue_split.solved() if blue_split else None)
+            red_r = infer(world, map_name, blue_list, [], bans, opposite(side),
+                          catalog=catalog, pool_size=pool_size, top=top, seat="red",
+                          solved=red_split.solved() if red_split else None)
+            if pooled and blue_list and red_r.blue:
+                countered_split = _Split(
+                    pool, world, catalog,
+                    Spec(map_name, red_r.blue, [], min(pool_size, COUNTERED_POOL),
+                         bans_list, side),
+                    weights, want, rest)
                 countered_split.sweep()
             if fill_split is not None:
                 fill_split.merge()
             if countered_split is not None:
                 countered_split.merge()
             # a full six is ranked against the field its seat's search just swept
-            cur = current(world, blue_r, map_name, enemy, blue, catalog, bans, side,
-                          pool_size, swept=blue_split.swept()
-                          if len(blue_list) == TEAM_SIZE else None)
+            cur = current(world, blue_r, map_name, enemy, blue, bans, side,
+                          catalog=catalog, pool_size=pool_size,
+                          swept=blue_split.swept()
+                          if blue_split and len(blue_list) == TEAM_SIZE else None)
             _finish(cur, blue_r.score)             # 100 is blue's optimal, whatever you hold
-            red_cur = current(world, red_r, map_name, blue, red, catalog, bans,
-                              opposite(side), pool_size, "red",
-                              swept=red_split.swept() if len(red) == TEAM_SIZE else None)
+            red_cur = current(world, red_r, map_name, blue, red, bans, opposite(side),
+                              catalog=catalog, pool_size=pool_size, seat="red",
+                              swept=red_split.swept()
+                              if red_split and len(red) == TEAM_SIZE else None)
             _finish(red_cur, red_r.score)
-            if fill_split is not None:
-                fill = infer(world, map_name, enemy, blue, top, pool_size, catalog, bans,
-                             side, "blue", solved=fill_split.solved())
-            if countered_split is not None:
-                countered = _countered(world, map_name, blue, red_r.blue, catalog, bans,
-                                       side, pool_size, top, countered_split.solved(),
-                                       countered_split.swept()
-                                       if len(blue_list) == TEAM_SIZE else None)
-        except concurrent.futures.process.BrokenProcessPool:
-            _drop_workers()                          # a worker died: this board, sequentially
-            parallel = False
-            fill = countered = None
-    if not parallel:
-        blue_r = infer(world, map_name, enemy, [], top, pool_size, catalog, bans, side, "blue")
-        red_r = infer(world, map_name, blue, [], top, pool_size, catalog, bans, opposite(side),
-                      "red")
-        cur = current(world, blue_r, map_name, enemy, blue, catalog, bans, side, pool_size)
-        _finish(cur, blue_r.score)                 # 100 is blue's optimal, whatever you hold
-        red_cur = current(world, red_r, map_name, blue, red, catalog, bans, opposite(side),
-                          pool_size, "red")
-        _finish(red_cur, red_r.score)
-        if blue_list and red_r.blue:
-            countered = _countered(world, map_name, blue, red_r.blue, catalog, bans, side,
-                                   pool_size, top)
-        if wants_fill:
-            fill = infer(world, map_name, enemy, blue, top, pool_size, catalog, bans, side,
-                         "blue")
+            if wants_fill:
+                fill = infer(world, map_name, enemy, blue, bans, side, catalog=catalog,
+                             pool_size=pool_size, top=top,
+                             solved=fill_split.solved() if fill_split else None)
+            if blue_list and red_r.blue:
+                countered = _countered(
+                    world, map_name, red_r.blue, blue, bans, side, catalog=catalog,
+                    pool_size=pool_size, top=top,
+                    solved=countered_split.solved() if countered_split else None,
+                    swept=countered_split.swept()
+                    if countered_split and len(blue_list) == TEAM_SIZE else None)
+            break
+        except BrokenProcessPool:
+            if not pooled:
+                raise                  # nothing was pooled: the pool is not the fault
+            _drop_workers()            # a worker died: this board, in this process
     if fill is not None:
         fill.kind = "fill"
         _finish(fill, blue_r.score)                # how close the best completion comes
-    return {"map": m.name if m else None, "side": side, "bans": list(bans),
-            "blue": blue_r, "red": red_r, "current": cur, "red_current": red_cur, "fill": fill,
-            "countered": countered,
-            "momentum": _momentum(cur, red_cur, countered, blue_r, red_r, fill),
-            "plan": _plan(world, m, side, list(bans), red_h, blue_r),
-            "shapes": [list(s) for s in legal_shapes(catalog)], "expected": expected}
+    return Board(m.name if m else None, side, list(bans), blue_r, red_r, cur, red_cur, fill,
+                 countered, _momentum(cur, red_cur, countered, blue_r, red_r, fill),
+                 _plan(world, m, side, list(bans), red_h, blue_r),
+                 [list(s) for s in legal_shapes(catalog)], expected)

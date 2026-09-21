@@ -14,7 +14,7 @@ Every COUNTRIX_SENTRY_EVERY seconds (30):
     the database   the same scan over the free text in the database
                    (descriptions, the wiki's notes, strategy bodies); those
                    are flagged, not removed - a person decides
-    the door       the audit log the MCP server writes (db/raw/audit.jsonl):
+    the door       the audit log every tool call writes (db/raw/audit.jsonl):
                    calls in the last minute, refusals, crashes, and any
                    client past the rate limit
     the report     db/raw/sentry.json - ok or not, what was quarantined, the
@@ -32,7 +32,7 @@ import time
 import unicodedata
 from datetime import UTC, datetime
 
-from db import RAW_DIR
+from db import RAW_DIR, psql
 from db.mcp.server import AUDIT_PATH, RATE_LIMIT  # one definition: the door's own
 from inference import catalog as catalog_module
 
@@ -95,14 +95,14 @@ def _quarantine(directory, name, why, log):
 def check_playbook(directory=None, log=print):
     """Load the catalog; quarantine what will not load or reads like an
     instruction -> (quarantined names, catalog or None)."""
-    directory = directory or catalog_module.STRATEGIES_DIR
+    directory = directory or catalog_module.strategies_dir()
     quarantined = []
     for _ in range(100):
         try:
             cat = catalog_module.load(directory)
         except catalog_module.CatalogError as error:
             text = str(error)
-            name = getattr(error, "file", None)
+            name = error.file
             if not name or not os.path.exists(os.path.join(directory, name)):
                 log("sentry: the playbook will not load and the file is unclear: %s" % text)
                 return quarantined, None
@@ -126,16 +126,25 @@ def check_playbook(directory=None, log=print):
 
 def scan(cx):
     """Instruction-like text in TEXT_COLUMNS over one connection -> flags, one
-    per column at most. A table or column the database lacks is skipped."""
+    per column at most. A table or column the database lacks is skipped; any
+    other failure is a flag of its own, so the guard never reports clean about
+    text it could not read."""
     import psycopg
     flags = []
     for table, columns in TEXT_COLUMNS:
         for column in columns:
             try:
-                rows = cx.execute("SELECT %s FROM %s WHERE %s IS NOT NULL"
-                                  % (column, table, column)).fetchall()
-            except psycopg.Error:
+                rows = cx.execute(
+                    "SELECT %s FROM %s WHERE %s IS NOT NULL"
+                    % (psql.identifier(column), psql.identifier(table),
+                       psql.identifier(column))).fetchall()
+            except (psycopg.errors.UndefinedTable, psycopg.errors.UndefinedColumn):
+                cx.rollback()        # a schema this build does not have: nothing to read
+                continue
+            except psycopg.Error as error:
                 cx.rollback()
+                flags.append("%s.%s not scanned: %s: %s"
+                             % (table, column, type(error).__name__, error))
                 continue
             for (value,) in rows:
                 why = injected(value)

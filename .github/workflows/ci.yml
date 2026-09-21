@@ -26,11 +26,13 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      # without pgserver: CI builds no cluster, so the embedded Postgres would
+      # be 33 MB downloaded and never started
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: grep -v '^pgserver' requirements.txt | pip install -r /dev/stdin
 
       - name: Lint (ruff)
-        run: python -m ruff check db ui inference tests orchestrator.py
+        run: python -m ruff check db ui inference tests scripts orchestrator.py
 
       - name: Tests (db-bound tests skip without a built cluster)
         run: >-

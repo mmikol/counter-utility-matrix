@@ -242,5 +242,3 @@ def test_load_authored_mirrors_the_strategies_and_nothing_else(ctx):
     assert text.startswith("load_authored: strategies ") and set(data) == {"strategies"}
     assert data["strategies"]["total"] == len(catalog.load())
     assert data["strategies"]["tables"] == ["strategies"]
-    # `only` is accepted from older callers and changes nothing
-    assert set(tools.run_tool(ctx, "load_authored", only=["strategies"])[1]) == {"strategies"}

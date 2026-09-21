@@ -57,15 +57,18 @@ SHIPPED_DIR = os.path.join(ROOT, "inference", "strategies")
 
 def strategies_dir():
     """The playbook in force: the shipped one, unless COUNTRIX_STRATEGIES
-    names another folder - a path relative to the repo root or absolute."""
+    names another folder - a path relative to the repo root or absolute. Read
+    where it is needed rather than snapshotted at import, so the setting means
+    what it says and no module can freeze it before another reads it."""
     chosen = os.environ.get("COUNTRIX_STRATEGIES", "").strip()
     return os.path.abspath(os.path.join(ROOT, chosen)) if chosen else SHIPPED_DIR
 
 
-STRATEGIES_DIR = strategies_dir()
 DOCS_PATH = os.path.join(ROOT, "docs", "inference.md")
 KINDS = ("constraint", "heuristic", "assumption")
-FORMS = ("limit", "scored", "draft", "heuristic", "assumption")
+# load() sorts by this index within a kind, so draft sits last for a
+# heuristic draft as well as a constraint one
+FORMS = ("limit", "scored", "heuristic", "assumption", "draft")
 NOT_STRATEGIES = ("README.md", "tuning-log.md")     # markdown that lives beside the files
 KIND_ORDER = {k: i for i, k in enumerate(KINDS)}
 
@@ -186,7 +189,6 @@ class Strategy:
             if self.metric in compute.TEXT_METRICS:
                 raise CatalogError("%s: metric %r is text, not a number" % (self.id, self.metric))
         if self.confidence is not None:
-            known = compute.registry()
             if self.confidence not in known:
                 raise CatalogError("%s: confidence %r is not a metric"
                                    % (self.id, self.confidence))
@@ -280,9 +282,10 @@ class Strategy:
                 "params": self.params, "body": self.body}
 
 
-def load(directory=STRATEGIES_DIR):
+def load(directory=None):
     """Every strategy file, validated, ordered constraints (limits, scored) then
     heuristics, then assumptions; drafts sit last within their kind."""
+    directory = directory or strategies_dir()
     if not os.path.isdir(directory):
         raise CatalogError("no strategies directory at %s" % directory)
     out, ids = [], set()
@@ -367,7 +370,7 @@ def counts(catalog):
 
 def playbook_name(directory=None):
     """How the database names a playbook: its folder, relative to the repo."""
-    return os.path.relpath(directory or STRATEGIES_DIR, ROOT).replace(os.sep, "/")
+    return os.path.relpath(directory or strategies_dir(), ROOT).replace(os.sep, "/")
 
 
 def mirror(cx, catalog, directory=None):
@@ -413,7 +416,7 @@ def write_docs(catalog, path=DOCS_PATH):
     playbook only: while another folder is in force the docs keep describing
     the shipped one, and this returns None."""
     from db.psql.schema import embed
-    if STRATEGIES_DIR != SHIPPED_DIR:
+    if strategies_dir() != SHIPPED_DIR:
         return None
     kinds = counts(catalog)
     forms = {f: sum(1 for h in catalog if h.form == f) for f in FORMS}

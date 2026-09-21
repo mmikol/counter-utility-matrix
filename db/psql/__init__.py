@@ -16,6 +16,7 @@ generated docs - is db.psql.schema. Nothing here knows a particular source.
 
 import json
 import os
+import re
 from datetime import UTC, datetime
 
 from db import DEFAULT_DB_DIR, RAW_DIR
@@ -42,12 +43,26 @@ def default_dsn():
         return pgserver.get_server(DEFAULT_DB_DIR).get_uri()
 
 
+IDENTIFIER_RE = re.compile(r"[a-z_][a-z0-9_]*\Z")
+
+
+def identifier(name):
+    """A table or column name on its way into SQL text, checked. psycopg
+    parameterises values and never identifiers, so every writer that names a
+    table in the statement itself passes it through here: the names all come
+    from a literal or from the catalog today, and this is what keeps it so."""
+    if not IDENTIFIER_RE.match(name or ""):
+        raise ValueError("not a SQL identifier: %r" % (name,))
+    return name
+
+
 def lookup_ids(cursor, table, name_column, id_column):
     """{lowercased name: id} for matching scraped names against loaded rows."""
     return {
         row[0].lower(): row[1]
         for row in cursor.execute(
-            "SELECT %s, %s FROM %s" % (name_column, id_column, table)
+            "SELECT %s, %s FROM %s"
+            % (identifier(name_column), identifier(id_column), identifier(table))
         ).fetchall()
     }
 
@@ -115,21 +130,24 @@ def database_identity(connection):
 
 def export(connection, raw_dir=RAW_DIR):
     """Write one CSV per table, and EXPORT.json saying which database they
-    came from and when. Returns [(table, row_count)]."""
+    came from and when. Any other CSV in `raw_dir` is removed, so the mirror
+    holds the schema's tables and nothing else. Returns [(table, row_count)]."""
     if not os.path.isdir(raw_dir):
         os.makedirs(raw_dir)
     counts = []
     for table in table_names(connection):
         path = os.path.join(raw_dir, table + ".csv")
         with open(path, "w", encoding="utf-8", newline="") as handle, connection.cursor().copy(
-                "COPY (SELECT * FROM %s) TO STDOUT WITH (FORMAT csv, HEADER true)" % table
+                "COPY (SELECT * FROM %s) TO STDOUT WITH (FORMAT csv, HEADER true)"
+                % identifier(table)
                 ) as copy:
             for chunk in copy:
                 handle.write(bytes(chunk).decode("utf-8"))
         # Counted from the database, not by counting newlines: descriptions
         # embed newlines, which inflates the latter.
         counts.append(
-            (table, connection.execute("SELECT count(*) FROM " + table).fetchone()[0])
+            (table, connection.execute(
+                "SELECT count(*) FROM " + identifier(table)).fetchone()[0])
         )
     current = {table + ".csv" for table, _ in counts}
     for stale in sorted(set(os.listdir(raw_dir)) - current):
@@ -137,12 +155,13 @@ def export(connection, raw_dir=RAW_DIR):
             os.remove(os.path.join(raw_dir, stale))
     with open(os.path.join(raw_dir, EXPORT_MARK), "w", encoding="utf-8") as handle:
         json.dump({"system_identifier": database_identity(connection),
-                   "exported_at": now().isoformat(), "tables": len(counts)}, handle)
+                   "exported_at": now().isoformat(),
+                   "table_count": len(counts)}, handle)
     return counts
 
 
 def export_mark(raw_dir=RAW_DIR):
-    """{system_identifier, exported_at, tables} of the mirror, or None."""
+    """{system_identifier, exported_at, table_count} of the mirror, or None."""
     path = os.path.join(raw_dir, EXPORT_MARK)
     if not os.path.exists(path):
         return None

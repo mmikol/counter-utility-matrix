@@ -60,4 +60,4 @@ def test_the_mirror_names_its_database(db):
     if mark is None:
         pytest.skip("db/raw not exported yet")
     assert mark["system_identifier"] == database_identity(db)
-    assert mark["tables"] == len(_tables(lambda sql: db.execute(sql).fetchall()))
+    assert mark["table_count"] == len(_tables(lambda sql: db.execute(sql).fetchall()))

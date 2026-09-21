@@ -70,7 +70,7 @@ RATE_UNITS = {
 }
 
 
-def normalize_unit(unit):
+def normalise_unit(unit):
     """Recognised units: (numerator, denominator). Denominator None if not a rate."""
     unit = (unit or "").strip().lower()
     if unit in RATE_UNITS:
@@ -111,14 +111,14 @@ def _measure(text, condition, default_unit):
         head = body[: window.start()].strip()
         number = NUMBER_UNIT_RE.match(head)
         if number:
-            numerator, _ = normalize_unit(number.group(2))
+            numerator, _ = normalise_unit(number.group(2))
             seconds = float(window.group(1)) if window.group(1) else 1.0
             return [(float(number.group(1)), numerator or default_unit,
                      "seconds", seconds, condition)]
 
     spread = RANGE_RE.match(body)
     if spread:
-        numerator, denominator = normalize_unit(
+        numerator, denominator = normalise_unit(
             spread.group(3).split()[0] if spread.group(3) else ""
         )
         low, high = sorted((float(spread.group(1)), float(spread.group(2))))
@@ -132,7 +132,7 @@ def _measure(text, condition, default_unit):
 
     number = NUMBER_UNIT_RE.match(body)
     if number:
-        numerator, denominator = normalize_unit(number.group(2))
+        numerator, denominator = normalise_unit(number.group(2))
         return [(float(number.group(1)), numerator or default_unit, denominator,
                  1 if denominator else None, condition)]
 

@@ -94,6 +94,28 @@ def test_server_reports_a_refused_tool_as_is_error():
     assert reply["result"]["isError"] is True
 
 
+def test_a_fault_inside_a_tool_is_internal_and_logged_not_a_bad_parameter(tmp_path):
+    """INVALID_PARAMS is for what the request got wrong. A KeyError raised deep
+    inside a tool is the server's own fault: it reads as INTERNAL and leaves a
+    traceback in the log."""
+    def crash(**kw):
+        raise KeyError("a lookup inside the tool")
+    logged = []
+    server = Server([Tool("t", "d", {"type": "object", "properties": {}}, crash)],
+                    log=logged.append, audit_path=str(tmp_path / "audit.jsonl"))
+    call = lambda method, params: server.handle(                      # noqa: E731
+        {"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+    fault = call("tools/call", {"name": "t", "arguments": {}})["error"]
+    assert fault["code"] == -32603 and "KeyError" in fault["message"]
+    assert logged and "Traceback" in logged[0]
+    assert call("tools/call", {})["error"] == {
+        "code": -32602, "message": "missing parameter 'name'"}
+    assert call("tools/call", {"name": "nope"})["error"] == {
+        "code": -32602, "message": "no tool named 'nope'"}
+    assert call("resources/read", {})["error"]["code"] == -32602
+    assert call("resources/read", {"uri": "strategy://x"})["error"]["code"] == -32602
+
+
 # --- the tools against the built database ------------------------------------
 
 @pytest.fixture(scope="module")
@@ -115,7 +137,7 @@ def test_query_is_read_only(ctx):
 def test_db_status_and_roster(ctx):
     _, status = tools.run_tool(ctx, "db_status")
     # 33: map_strategy went with counterpick.gg (migration 019)
-    assert status["tables"] >= 33 and status["counts"]["heroes"] > 40
+    assert status["table_count"] >= 33 and status["counts"]["heroes"] > 40
     assert status["counts"]["counters"] >= 100
     assert {s["source"] for s in status["snapshots"]} == {"blizzard"}
     _, roster = tools.run_tool(ctx, "roster")
@@ -218,6 +240,19 @@ def test_http_transport_guards_get_origin_and_health(http_server):
     assert status == 403
     health = json.load(urllib.request.urlopen(http_server + "/health", timeout=10))
     assert health["status"] in ("ok", "degraded")
+
+    def delete(path="/mcp", headers=None):
+        request = urllib.request.Request(http_server + path, method="DELETE",
+                                         headers=headers or {})
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status
+        except urllib.error.HTTPError as error:
+            return error.code
+
+    assert delete() == 200                                   # ends a session it never kept
+    assert delete(headers={"Origin": "https://evil.example"}) == 403
+    assert delete("/nope") == 404
 
 
 @pytest.mark.invariant
@@ -328,6 +363,22 @@ def test_the_entry_point_calls_a_tool(capsys, dsn, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", dsn)
     assert main(["call", "db_status"]) == 0
     assert "tables" in capsys.readouterr().out
+
+
+def test_an_in_process_tool_call_leaves_one_audit_line(tmp_path, monkeypatch):
+    """The sentry's window is the audit log, so the refresher's and the shell's
+    path has to appear in it like a call through either door."""
+    from db.mcp import server
+    path = tmp_path / "audit.jsonl"
+    monkeypatch.setattr(server, "AUDIT_PATH", str(path))
+    ctx = tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x")
+    tools.run_tool(ctx, "list_sources")
+    with pytest.raises(KeyError):
+        tools.run_tool(ctx, "no_such_tool")          # never reached a tool: no line
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [e["tool"] for e in lines] == ["list_sources"]
+    assert lines[0]["transport"] == "in-process" and lines[0]["ok"] is True
+    assert lines[0]["client"] is None and "ms" in lines[0]
 
 
 def test_a_tool_argument_named_name_reaches_the_tool():

@@ -15,6 +15,8 @@ under 120 characters. The table is reloaded wholesale.
 
 import re
 
+import requests
+
 from db import psql
 from db.data import fetch
 from db.data.names import index, name_key
@@ -234,7 +236,7 @@ def run(connection, cache_dir=None, session=None, log=print):
     for name in released:
         try:
             claims[name] = parse_synergies(fetch_wikitext(session, name, cache_dir))
-        except WikiError as error:
+        except (WikiError, requests.RequestException) as error:
             missing.append("%s: %s" % (name, error))
     if not any(claims.values()):
         raise WikiError("no hero article has a synergy claim")

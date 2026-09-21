@@ -1,4 +1,11 @@
-"""The DATA LAYER: pull, clean, store - and the tools that drive it.
+"""The DATA LAYER, and the door and the guard that stand over all three layers.
+
+`data/`, `psql/` and `refresh` are the layer itself: pull, clean, store. `mcp/`
+and `sentry` sit above it and are the only code here that imports upward - the
+door serves the UI layer's facts and the inference layer's solver through the
+same tools, and the guard watches the playbook beside the database. So "the
+data layer owns every write" is a rule about which code writes; the folder
+boundary does not draw it.
 
     data/         the sources, one package each (blizzard, wiki; authored
                   names the playbook's source row), and what they
@@ -8,9 +15,11 @@
                   needs (psql), the schema, the ledger, rebuild and the
                   generated docs (psql.schema), the migrations, and the
                   embedded cluster a local build creates (gitignored)
-    mcp/          the MCP server and its tools - the one door to this
-                  layer, for a session, the refresher, Docker's entrypoint
-                  and the shell (`python -m db.mcp call <tool>`) alike
+    mcp/          the MCP server and its tools - the one door to all three
+                  layers, for a session, the refresher, Docker's entrypoint
+                  and the shell (`python -m db.mcp call <tool>`) alike. It
+                  gates every write and every pull; a read goes straight to
+                  Postgres over db.psql.default_dsn()
     refresh       the daily refresh
     sentry        the guard: the playbook, the free text in the database, the door
     raw/          the CSV mirror the tools export (gitignored)
@@ -39,6 +48,13 @@ CACHE_DIRS = {
     "blizzard": os.path.join(ROOT, ".cache-blizzard"),
     "wiki": os.path.join(ROOT, ".cache-wiki"),
 }
+
+# The ability vocabulary: db/psql/migrations/002_heroes.sql seeds ability_kinds
+# with these codes, db/data/wiki/heroes.py resolves each to its kind_id when it
+# writes, and the UI layer's model compares kits against them.
+KIND_WEAPON, KIND_ABILITY, KIND_ULTIMATE, KIND_PASSIVE = (
+    "weapon", "ability", "ultimate", "passive")
+ABILITY_KINDS = (KIND_WEAPON, KIND_ABILITY, KIND_ULTIMATE, KIND_PASSIVE)
 
 # The scope every rates snapshot is pinned to. Blizzard spells these its own
 # way (input=Console); these are the codes the database stores.

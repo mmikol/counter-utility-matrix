@@ -6,7 +6,6 @@ database."""
 import os
 from datetime import date
 
-import psycopg
 import pytest
 
 from db import CACHE_DIRS
@@ -220,16 +219,6 @@ def test_a_story_arc_subpage_prefixes_its_seasons_with_the_arc():
 
 
 # --- the page cache -> the tables ----------------------------------------------
-
-@pytest.fixture()
-def sandbox(db, dsn):
-    """A connection run() may commit on: nothing lands."""
-    connection = psycopg.connect(dsn)
-    connection.commit = lambda: None
-    yield connection
-    connection.rollback()
-    connection.close()
-
 
 @needs_cache
 @pytest.mark.invariant

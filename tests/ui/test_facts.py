@@ -9,11 +9,20 @@ from ui.facts import compute, engine, model
 pytestmark = pytest.mark.invariant
 
 
-@pytest.fixture(scope="module")
-def world(db):
-    w = model.load(db)
-    db.rollback()
-    return w
+def test_every_metric_a_strategy_can_name_reaches_the_fact_that_states_it(world):
+    """The citation path, end to end: for every registered team and matchup
+    metric, either a board fact states it or none does - and the ones that do
+    are found by the metric's own name."""
+    from inference import engine
+    from ui.facts import compute
+    from ui.facts import engine as facts_engine
+    fs = facts_engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+                               [], "")
+    metrics = [k for k in compute.registry() if k.startswith(("team.", "matchup."))]
+    cited = [k for k in metrics if engine._cited_fact(fs, [k]) is not None]
+    assert len(cited) > 60, len(cited)
+    for key in cited:
+        assert engine._cited_fact(fs, [key]).text
 
 
 def test_world_loads_the_whole_roster_with_kit_numbers(world):

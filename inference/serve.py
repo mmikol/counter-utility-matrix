@@ -3,9 +3,9 @@
     python -m inference.serve --port 8019
 
     GET  /health                       the catalog size and the database state
-    GET  /board?map=&side=&red=&blue=&ban=   both seats' optimal six + the current comp
-    GET  /infer?map=&side=&red=&blue=&ban=[&top=&pool=]   blue's optimal six
-    GET  /evaluate?map=&side=&red=&blue=&ban=   a full six scored against the field
+    GET  /board?map=&side=&red=&blue=&bans=   both seats' optimal six + the current comp
+    GET  /infer?map=&side=&red=&blue=&bans=[&top=&pool=]   blue's optimal six
+    GET  /evaluate?map=&side=&red=&blue=&bans=   a full six scored against the field
     GET  /strategies                   the catalog
 
 The same functions ui/board.py calls in-process when no INFERENCE_URL is set.
@@ -25,33 +25,23 @@ from db import psql
 from inference import catalog as catalog_module
 from inference import engine
 from ui.facts import model
-from ui.facts.compute import MAX_BANS, TEAM_SIZE
+from ui.facts.compute import parse_board
 
 PORT = int(os.environ.get("COUNTRIX_INFERENCE_PORT", "8019"))
 
 
-def parse_board(query):
-    """The board a query names: (map, red, blue, bans, side)."""
-    map_name = (query.get("map") or [None])[0] or None
-    red = [x for x in query.get("red", []) if x]
-    blue = [x for x in query.get("blue", []) if x]
-    bans = [x for x in query.get("ban", []) if x][:MAX_BANS]
-    side = (query.get("side") or [""])[0]
-    return map_name, red, blue, bans, side
-
-
 def handle_infer(cx, query):
+    """Blue's optimal six around its locked picks, at any stage of the draft.
+    Ranking a full six against the field is /evaluate's question, so this door
+    infers whatever blue holds and honours the `top` it was given. The MCP tool
+    of the same name draws the line in the same place."""
     map_name, red, blue, bans, side = parse_board(query)
-    top = int((query.get("top") or ["5"])[0])
-    pool = int((query.get("pool") or ["6"])[0])
     world = model.load(cx)
     try:
-        if len(blue) == TEAM_SIZE:
-            result = engine.evaluate(world, map_name, red, blue, pool_size=pool, bans=bans,
-                                     side=side)
-        else:
-            result = engine.infer(world, map_name, red, blue, top=top, pool_size=pool,
-                                  bans=bans, side=side)
+        pool, top = engine.clamp_search((query.get("pool") or [None])[0],
+                                        (query.get("top") or [None])[0])
+        result = engine.infer(world, map_name, red, blue, bans=bans, side=side,
+                              pool_size=pool, top=top)
     except ValueError as error:
         return {"error": str(error)}, 400
     return result.to_dict(), 200
@@ -70,15 +60,15 @@ def handle_evaluate(cx, query):
 def handle_board(cx, query):
     """Both seats and the current comp - what the board's two displays show."""
     map_name, red, blue, bans, side = parse_board(query)
-    pool = int((query.get("pool") or ["6"])[0])
-    weights = catalog_module.parse_weights(query.get("weight", []))
+    weights = catalog_module.parse_weights(query.get("weights", []))
     world = model.load(cx)
     try:
+        pool, _ = engine.clamp_search((query.get("pool") or [None])[0])
         b = engine.board(world, map_name, red, blue, bans, side, pool_size=pool,
                          weights=weights)
     except ValueError as error:
         return {"error": str(error)}, 400
-    return engine.board_dict(b), 200
+    return b.to_dict(), 200
 
 
 def handle_strategies():

@@ -95,11 +95,13 @@ def refresh_once(ctx, log=print, full=None, full_days=DEFAULT_FULL_DAYS):
     or full (every source) - decided by full_due() unless `full` is given.
     Never raises; a failure returns (False, the error)."""
     started = time.time()
-    if full is None:
-        full = full_due(full_days)
-    log("refresh: starting a %s refresh at %s" % (
-        "FULL" if full else "daily", datetime.now().strftime("%Y-%m-%d %H:%M")))
     try:
+        # inside the try: full_due() reads the database, so the decision can
+        # fail like the refresh it decides, and the promise above has to hold
+        if full is None:
+            full = full_due(full_days)
+        log("refresh: starting a %s refresh at %s" % (
+            "FULL" if full else "daily", datetime.now().strftime("%Y-%m-%d %H:%M")))
         if full:
             text, _ = tools.run_tool(ctx, "sync_all", refresh=True)
         else:

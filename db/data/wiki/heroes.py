@@ -17,12 +17,13 @@ the hero, ability and perk rows this fills in.
 """
 
 import collections
+import contextlib
 import datetime
 import re
 
 import requests
 
-from db import psql
+from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON, psql
 from db.data import fetch
 from db.data.names import abilities_named_in, ability_key
 from db.data.wiki import (
@@ -49,7 +50,6 @@ NON_STAT_FIELDS = frozenset(
 
 STAT_ALIASES = {"range_distance": "range"}
 
-WEAPON_KIND, ABILITY_KIND, ULTIMATE_KIND, PASSIVE_KIND = 1, 2, 3, 4
 
 # Cargo returns rows alphabetically, but weapon grouping needs firing order.
 SLOT_RANK = {
@@ -58,7 +58,7 @@ SLOT_RANK = {
 }
 
 
-def slot_rank(entry):
+def _slot_rank(entry):
     for token in (entry["mode"], entry["input_key"]):
         rank = SLOT_RANK.get((token or "").strip().lower())
         if rank is not None:
@@ -66,15 +66,18 @@ def slot_rank(entry):
     return 2
 
 
-def ability_kind(base_type):
+def _ability_kind(base_type):
+    """The wiki's ability_type -> a code from the shared vocabulary. The kind_id
+    behind it comes from the ability_kinds table at write time, so the parser
+    never has to know the numbers."""
     lowered = base_type.lower()
     if lowered.startswith("weapon"):
-        return WEAPON_KIND
+        return KIND_WEAPON
     if "ultimate" in lowered:
-        return ULTIMATE_KIND
+        return KIND_ULTIMATE
     if "passive" in lowered:
-        return PASSIVE_KIND
-    return ABILITY_KIND
+        return KIND_PASSIVE
+    return KIND_ABILITY
 
 
 def parse_rows(rows):
@@ -120,18 +123,18 @@ def parse_rows(rows):
             entry["tier"] = "major" if "major" in base_type.lower() else "minor"
             perks.append(entry)
         elif base_type.lower().startswith("weapon"):
-            entry["kind_id"] = WEAPON_KIND
+            entry["kind"] = KIND_WEAPON
             entry["weapon_type"] = (stats.get("shot_type", ("", ""))[0]
                                     .split(";")[0].strip().lower() or None)
             entry["display_name"] = name
             weapons.append(entry)
         else:
-            entry["kind_id"] = ability_kind(base_type)
+            entry["kind"] = _ability_kind(base_type)
             entry["display_name"] = name
             abilities.append(entry)
 
     for weapons, _, _ in heroes.values():
-        weapons.sort(key=slot_rank)
+        weapons.sort(key=_slot_rank)
     return heroes
 
 
@@ -173,10 +176,10 @@ def parse_announcement(text):
         released = RELEASE_RE.search(markup.wikitext_to_text(text))
         release_date = None
         if released:
-            try:
-                release_date = datetime.datetime.strptime(released.group(1), "%B %d, %Y").date()
-            except ValueError:
-                release_date = None
+            # a date the wiki spells another way leaves release_date as it is
+            with contextlib.suppress(ValueError):
+                release_date = datetime.datetime.strptime(released.group(1),
+                                                          "%B %d, %Y").date()
         return {"role": role, "subrole": subrole,
                 "health": int(health.group(1)) if health else None,
                 "release_date": release_date}
@@ -188,14 +191,17 @@ def announce_heroes(cursor, session, names, hero_ids, cache_dir, source_id, log=
     article is marked upcoming get a row - role, subrole, health, release
     day, status announced - so their kit loads and the board can show
     them; Blizzard listing them later flips the status to released. Returns
-    the names stored; the rest stay unknown."""
-    stored = []
+    (the names stored, the pages that would not fetch), and adds each stored
+    hero's id to `hero_ids`, which the kit and ability lookups that follow
+    read; the rest stay unknown."""
+    stored, missing = [], []
     for hero_name in sorted(names):
         if hero_name.lower() in hero_ids:
             continue
         try:
             text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
-        except (WikiError, requests.RequestException):
+        except (WikiError, requests.RequestException) as error:
+            missing.append("%s: %s" % (hero_name, error))
             continue
         found = parse_announcement(text)
         if not found:
@@ -222,7 +228,7 @@ def announce_heroes(cursor, session, names, hero_ids, cache_dir, source_id, log=
         log("announced hero stored: %s (%s, %s%s)" % (
             hero_name, found["role"], found["subrole"],
             ", releases %s" % found["release_date"] if found["release_date"] else ""))
-    return stored
+    return stored, missing
 
 
 # --- store ---------------------------------------------------------------------
@@ -282,12 +288,9 @@ REF_RE = re.compile(r"<ref\b[^>]*/>|<ref\b[^>]*>.*?</ref>", re.I | re.S)
 
 
 def supplement_from_wikitext(session, hero_name, cache_dir):
-    """One hero page -> ({ability ability_key: {stat: ...}}, {health/shield/armor})."""
-    try:
-        text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
-    except (WikiError, requests.RequestException):
-        return {}, {}
-
+    """One hero page -> ({ability ability_key: {stat: ...}}, {health/shield/armor}).
+    A page that will not fetch raises; run() records it among the pull's missing."""
+    text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
     extra = {}
     for block in markup.find_templates(text, r"Ability[ _]details"):
         params = markup.parse_params(block)
@@ -304,7 +307,7 @@ def supplement_from_wikitext(session, hero_name, cache_dir):
     return extra, parse_hero_profile(text)
 
 
-def record_modifiers(cursor, ability_id, entry, key_ids, source_id):
+def _insert_modifiers(cursor, ability_id, entry, key_ids, source_id):
     """Store the buffs and debuffs an ability applies to someone's numbers."""
     written = 0
     for code, (value_text, _) in entry["stats"].items():
@@ -333,7 +336,8 @@ def record_modifiers(cursor, ability_id, entry, key_ids, source_id):
     return written
 
 
-def stat_key_ids(cursor, codes, source_id):
+def _register_stat_keys(cursor, codes, source_id):
+    """Upsert the stat keys and return {code: stat_key_id}."""
     ids = {}
     for code in sorted(codes):
         cursor.execute(
@@ -347,8 +351,9 @@ def stat_key_ids(cursor, codes, source_id):
     return ids
 
 
-def insert_stats(cursor, table, owner_column, owner_id, stats, key_ids, source_id):
+def _insert_stats(cursor, table, owner_column, owner_id, stats, key_ids, source_id):
     """Write one row per measurement. Returns how many rows were written."""
+    table, owner_column = psql.identifier(table), psql.identifier(owner_column)
     written = 0
     for code, (value_text, raw) in stats.items():
         default_unit = STAT_UNITS.get(code)
@@ -374,7 +379,7 @@ def insert_stats(cursor, table, owner_column, owner_id, stats, key_ids, source_i
     return written
 
 
-def load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally):
+def _load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally):
     """Weapons, their firing configs (with keywords), and the stats on each."""
     for position, (weapon_name, configs) in enumerate(group_weapons(weapons)):
         cursor.execute(
@@ -403,13 +408,13 @@ def load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally):
             if config_row is None:
                 continue
             tally["configs"] += 1
-            tally["stats"] += insert_stats(
+            tally["stats"] += _insert_stats(
                 cursor, "weapon_stats", "config_id", config_row[0],
                 config["stats"], key_ids, source_id,
             )
 
 
-def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
+def _load_abilities(cursor, hero_id, weapon_entries, entries, key_ids, kind_ids,
                    source_id, tally):
     """Classify the abilities Blizzard loaded, add the ones it omits, stat
     them, store their keywords. Weapon entries take part ONLY to classify."""
@@ -432,7 +437,7 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
                 cursor.execute(
                     "UPDATE abilities SET kind_id = %s, keywords = %s"
                     " WHERE ability_id = %s",
-                    (entry["kind_id"], entry.get("keywords") or None, ability_id),
+                    (kind_ids[entry["kind"]], entry.get("keywords") or None, ability_id),
                 )
                 tally["classified"] += cursor.rowcount
                 break
@@ -445,7 +450,7 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
                 " keywords, position, source_id)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (hero_id, name) DO NOTHING RETURNING ability_id",
-                (hero_id, entry["kind_id"], entry["display_name"],
+                (hero_id, kind_ids[entry["kind"]], entry["display_name"],
                  entry["description"], entry.get("keywords") or None,
                  next_position, source_id),
             )
@@ -460,22 +465,22 @@ def load_abilities(cursor, hero_id, weapon_entries, entries, key_ids,
             cursor.execute(
                 "UPDATE abilities SET kind_id = %s, keywords = %s"
                 " WHERE ability_id = %s",
-                (entry["kind_id"], entry.get("keywords") or None, ability_id),
+                (kind_ids[entry["kind"]], entry.get("keywords") or None, ability_id),
             )
             tally["classified"] += 1
 
         if entry["stats"]:
             tally["abilities_with_stats"] += 1
-        tally["stats"] += insert_stats(
+        tally["stats"] += _insert_stats(
             cursor, "ability_stats", "ability_id", ability_id,
             entry["stats"], key_ids, source_id,
         )
-        tally["modifiers"] += record_modifiers(
+        tally["modifiers"] += _insert_modifiers(
             cursor, ability_id, entry, key_ids, source_id
         )
 
 
-def load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
+def _load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
     """Perk stats, and the link from a perk to the ability it alters."""
     ability_names = [
         row[0] for row in cursor.execute(
@@ -515,7 +520,7 @@ def load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
             continue  # a perk Blizzard does not currently publish
         if entry["stats"]:
             tally["perks_with_stats"] += 1
-        tally["stats"] += insert_stats(
+        tally["stats"] += _insert_stats(
             cursor, "perk_stats", "perk_id", perk_id, entry["stats"],
             key_ids, source_id,
         )
@@ -538,10 +543,14 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
     by_hero = parse_rows(rows)
     log("cargo rows: %d   heroes named: %d" % (len(rows), len(by_hero)))
 
-    profiles, supplemented = {}, 0
+    profiles, supplemented, missing = {}, 0, []
     if supplement:
         for hero_name, (weapons, abilities, perks) in sorted(by_hero.items()):
-            extra, profile = supplement_from_wikitext(session, hero_name, cache_dir)
+            try:
+                extra, profile = supplement_from_wikitext(session, hero_name, cache_dir)
+            except (WikiError, requests.RequestException) as error:
+                missing.append("%s: %s" % (hero_name, error))
+                continue
             if profile:
                 profiles[hero_name] = profile
             for entry in weapons + abilities + perks:
@@ -555,15 +564,18 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
     source_id = psql.register_source(cursor, WIKI, psql.now())
     for table in ("ability_modifiers", "perk_ability_effects", "perk_stats",
                   "weapon_stats", "ability_stats", "weapon_configs", "weapons"):
-        cursor.execute("DELETE FROM " + table)
+        cursor.execute("DELETE FROM " + psql.identifier(table))
 
     all_codes = set()
     for weapons, abilities, perks in by_hero.values():
         for entry in weapons + abilities + perks:
             all_codes.update(entry["stats"])
-    key_ids = stat_key_ids(cursor, all_codes, source_id)
+    key_ids = _register_stat_keys(cursor, all_codes, source_id)
     hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
-    announced = announce_heroes(cursor, session, by_hero, hero_ids, cache_dir, source_id, log)
+    kind_ids = psql.lookup_ids(cursor, "ability_kinds", "code", "kind_id")
+    announced, unfetched = announce_heroes(cursor, session, by_hero, hero_ids, cache_dir,
+                                           source_id, log)
+    missing += unfetched
 
     tally = collections.Counter()
     unknown_heroes = []
@@ -584,14 +596,15 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
         if hero_id is None:
             unknown_heroes.append(hero_name)
             continue
-        load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally)
-        load_abilities(cursor, hero_id, weapons, abilities, key_ids, source_id, tally)
-        load_perks(cursor, hero_id, perks, key_ids, source_id, tally)
+        _load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally)
+        _load_abilities(cursor, hero_id, weapons, abilities, key_ids, kind_ids,
+                        source_id, tally)
+        _load_perks(cursor, hero_id, perks, key_ids, source_id, tally)
     connection.commit()
 
     summary = dict(tally)
     summary.update({
-        "cargo_rows": len(rows), "supplemented": supplemented,
+        "cargo_rows": len(rows), "supplemented": supplemented, "missing": missing,
         "unknown_heroes": sorted(unknown_heroes), "announced": announced,
         "tables": ["abilities", "ability_stats", "ability_modifiers", "weapons",
                    "weapon_configs", "weapon_stats", "perk_stats",

@@ -87,7 +87,8 @@ class Candidate:
 
 
 class Solver:
-    def __init__(self, world, m, red, locked, catalog, pool_size=6, bans=(), side=""):
+    def __init__(self, world, m, red, locked, bans=(), side="", *, catalog,
+                 pool_size=6):
         self.world, self.m, self.red = world, m, list(red)
         self.locked = list(locked)
         self.banned = {h.id for h in bans}
@@ -442,7 +443,12 @@ class Solver:
         matchup.*) is a need - "a solo healer needs an escape" - and adds
         weight x (norm - 1): met in full it costs nothing, unmet it costs the
         weight, and entering the guarded state never pays. Needs written on
-        one guard are scaled to sum to NEED_BUDGET at most."""
+        one guard are scaled to sum to NEED_BUDGET at most.
+
+        With `detail`, every contribution carries id, kind, form, applies,
+        weighted and metric; the rest (ok, raw, norm, when, spread, need,
+        confidence) belong to the form that has them, so a reader asks for
+        those with .get()."""
         total, contributions = 0.0, []
         sc = cand.scope
         held = [None] * self.gate_slots
@@ -569,7 +575,7 @@ class Solver:
                 1 for a in self.locked if self.world.synergy(a.id, h.id))
         return (-(standing if standing is not None else float("-inf")), -self.prior(h), h.name)
 
-    def enumerate(self):
+    def legal_sixes(self):
         """Every legal six around the locked picks, as a list of heroes. A six's
         roles fix its shape and the pools hold neither the locked picks nor the
         bans, so no two of these are the same set. Lazy: a slice of the search
@@ -594,7 +600,7 @@ class Solver:
         slice). The slices of one field partition it, so any split of the
         work reaches the same set."""
         feasible, size = [], 0
-        for heroes in self.enumerate():
+        for heroes in self.legal_sixes():
             if size % count == index:
                 cand = self.prepare(Candidate(heroes))
                 if not cand.violations:
@@ -632,7 +638,15 @@ class Solver:
         six of every shape in it: an off-shape six can win only if its own
         shape was searched. Then the best SEEDS sixes try each of the wiki's synergy pairs
         brought in two slots at once, and the swaps run on from any that gained:
-        partners that pay only together are never met one swap at a time."""
+        partners that pay only together are never met one swap at a time.
+
+        An empty field refines to an empty field. `rank` guards its own call and
+        never reaches here with nothing, but `evaluate_comp` calls refine
+        directly, so the same board that gives a clean domain error through
+        `infer` gave `min() iterable argument is empty` through `evaluate`.
+        """
+        if not ranked:
+            return []
         known = {c.key: c for c in ranked}
         starts, shapes = list(ranked[:SEEDS]), set()
         floor = ranked[0].score - SHAPE_REACH if ranked else 0.0
@@ -825,13 +839,14 @@ def legal_shapes(catalog, locked_counts=None):
     return out
 
 
-def evaluate_comp(world, m, red, heroes, catalog, pool_size=6, bans=(), side="",
+def evaluate_comp(world, m, red, heroes, bans=(), side="", *, catalog, pool_size=6,
                   swept=None):
     """Score one full six against the field the solver would search. `swept`
     takes a (solver, field size, feasible) swept elsewhere - the same board's
     optimal search, which sweeps the same field."""
     if swept is None:
-        solver = Solver(world, m, red, [], catalog, pool_size, bans, side)
+        solver = Solver(world, m, red, [], bans, side, catalog=catalog,
+                        pool_size=pool_size)
         solver.freeze_bounds()                # the same reference scale as infer
         solver.considered, feasible = solver.sweep()
     else:

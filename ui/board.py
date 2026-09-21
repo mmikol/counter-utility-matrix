@@ -4,13 +4,13 @@ and the inference layer.
 
     python -m ui.board            # serves http://localhost:8017
 
-Standard library only. Every click re-reads the database: the facts
-panel is the FactSet for (map, side, red, blue, bans); the comps panel is
-the inference layer's board - red's most likely starting comp, blue's
-optimal counter to the current picks, each seat's picks scored as a share
-of its own optimal, the fight odds and the game plan; the playbook panel
-is the strategies catalog as it sits on disk. JSON endpoints under /api/
-serve the same three things.
+http.server and psycopg, no web framework. Every click re-reads the
+database: the facts panel is the FactSet for (map, side, red, blue, bans);
+the comps panel is the inference layer's board - red's most likely
+starting comp, blue's optimal counter to the current picks, each seat's
+picks scored as a share of its own optimal, the fight odds and the game
+plan; the playbook panel is the strategies catalog as it sits on disk.
+JSON endpoints under /api/ serve the same three things.
 """
 
 import html
@@ -25,11 +25,18 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import psycopg
 
 from db import psql
+from db.mcp.server import LOCAL_HOSTS
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
 from ui.facts import engine as facts_engine
 from ui.facts import model
-from ui.facts.compute import MAX_BANS, SIDED_MODES, TEAM_SIZE
+from ui.facts.compute import (
+    MAX_BANS,
+    SIDED_MODES,
+    TEAM_SIZE,
+    board_query,
+    parse_board,
+)
 
 PORT = int(os.environ.get("COUNTRIX_UI_PORT", "8017"))
 
@@ -87,15 +94,6 @@ def esc(x):
 
 # --- JSON endpoints ---------------------------------------------------------
 
-def _board(query):
-    map_name = (query.get("map") or [None])[0] or None
-    red = [x for x in query.get("red", []) if x]
-    blue = [x for x in query.get("blue", []) if x]
-    bans = [x for x in query.get("ban", []) if x][:MAX_BANS]
-    side = (query.get("side") or [""])[0]
-    return map_name, red, blue, bans, side
-
-
 def api_roster(cx):
     world = model.load(cx)
     heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
@@ -106,11 +104,11 @@ def api_roster(cx):
              "sided": (m.mode or "") in SIDED_MODES}
             for m in world.maps_sorted()]
     return {"heroes": heroes, "maps": maps, "role_icons": world.role_icons,
-            "newer_patches": world.newer_patches}
+            "newer_patches": world.newer_patches}, 200
 
 
 def api_facts(cx, query):
-    map_name, red, blue, bans, side = _board(query)
+    map_name, red, blue, bans, side = parse_board(query)
     world = model.load(cx)
     try:
         fs = facts_engine.generate(world, map_name, red, blue, bans, side)
@@ -121,21 +119,21 @@ def api_facts(cx, query):
 
 def api_infer(cx, query):
     """The board solved at this stage of the draft - the inference layer's
-    `board()`. The playbook tab's sliders ride along as `weight=<id>:<0..10>`,
+    `board()`. The playbook tab's sliders ride along as `weights=<id>:<0..10>`,
     one per heuristic set away from its file."""
-    map_name, red, blue, bans, side = _board(query)
-    weights = catalog_module.parse_weights(query.get("weight", []))
+    map_name, red, blue, bans, side = parse_board(query)
+    weights = catalog_module.parse_weights(query.get("weights", []))
     if INFERENCE_URL:
-        query = {"map": map_name or "", "side": side, "red": red, "blue": blue, "ban": bans}
+        query = board_query(map_name, red, blue, bans, side)
         if weights:
-            query["weight"] = ["%s:%g" % kv for kv in sorted(weights.items())]
+            query["weights"] = ["%s:%g" % kv for kv in sorted(weights.items())]
         return remote("/board", query)
     world = model.load(cx)
     try:
         b = inference_engine.board(world, map_name, red, blue, bans, side, weights=weights)
     except ValueError as error:
         return {"error": str(error)}, 400
-    return inference_engine.board_dict(b), 200
+    return b.to_dict(), 200
 
 
 def mcp_call(name, arguments):
@@ -197,10 +195,13 @@ def api_weight(payload):
 
 def api_strategies():
     if INFERENCE_URL:
-        return remote("/strategies")[0]
-    catalog = catalog_module.load()
+        return remote("/strategies")
+    try:
+        catalog = catalog_module.load()
+    except ValueError as error:                  # a CatalogError is one
+        return {"error": str(error)}, 400
     return {"strategies": [h.to_dict() for h in catalog],
-            "playbook": catalog_module.playbook_name()}
+            "playbook": catalog_module.playbook_name()}, 200
 
 
 # --- the board page ---------------------------------------------------------
@@ -334,12 +335,38 @@ class Handler(BaseHTTPRequestHandler):
     def _json(self, payload, code=200):
         self._send(json.dumps(payload, ensure_ascii=False), code, "application/json")
 
+    def _origin_allowed(self):
+        """The same DNS-rebinding guard the data layer's door applies: a browser
+        sends Origin, and only a local one may reach the board's one write."""
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        return urlparse(origin).hostname in LOCAL_HOSTS
+
+    def _failed(self, path):
+        """A crash answers in the shape the route promised: JSON under /api/,
+        the error page for a page."""
+        if path.startswith("/api/"):
+            return self._json({"error": traceback.format_exc()}, 500)
+        return self._send(_page("error", "<pre class='warnbox'>%s</pre>"
+                                % esc(traceback.format_exc())), 500)
+
+    def _not_found(self, path):
+        if path.startswith("/api/"):
+            return self._json({"error": "nothing here"}, 404)
+        return self._send(_page("not found", "<p>Nothing here.</p>"), 404)
+
     def log_message(self, fmt, *args):
         pass
 
     def do_POST(self):
-        if urlparse(self.path).path != "/api/weight":
+        path = urlparse(self.path).path
+        if path != "/api/weight":
             return self._json({"error": "nothing here"}, 404)
+        if not self._origin_allowed():
+            return self._json({"error": "origin not allowed"}, 403)
+        if not (self.headers.get("Content-Type") or "").startswith("application/json"):
+            return self._json({"error": "a JSON body is required"}, 415)
         if READ_ONLY:
             return self._json({"error": "this board does not write: a weight applies to your"
                                         " session only"}, 403)
@@ -352,8 +379,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self._json({"error": "bad JSON"}, 400)
         except Exception:
-            self._send(_page("error", "<pre class='warnbox'>%s</pre>"
-                             % esc(traceback.format_exc())), 500)
+            return self._failed(path)
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -364,25 +390,24 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith("/static/"):
                 served = static_file(path[len("/static/"):])
                 if served is None:
-                    return self._send(_page("not found", "<p>Nothing here.</p>"), 404)
+                    return self._not_found(path)
                 return self._send_bytes(*served)
             if path == "/api/strategies":
-                return self._json(api_strategies())
+                return self._json(*api_strategies())
             if path == "/math":
                 return self._send(view_math())
             if path == "/tests":
                 return self._send(view_tests())
             if path not in ("/api/roster", "/api/facts", "/api/infer"):
-                return self._send(_page("not found", "<p>Nothing here.</p>"), 404)
+                return self._not_found(path)
             with psycopg.connect(dsn()) as cx:      # only the data routes touch the database
                 if path == "/api/roster":
-                    return self._json(api_roster(cx))
+                    return self._json(*api_roster(cx))
                 if path == "/api/facts":
                     return self._json(*api_facts(cx, query))
                 return self._json(*api_infer(cx, query))
         except Exception:
-            self._send(_page("error", "<pre class='warnbox'>%s</pre>"
-                             % esc(traceback.format_exc())), 500)
+            return self._failed(path)
 
 def main():
     import argparse

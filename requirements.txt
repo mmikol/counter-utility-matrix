@@ -1,13 +1,17 @@
-beautifulsoup4>=4.12
-psycopg[binary]>=3.1
-requests>=2.31
+# Runtime, pinned: the image is built from this file, and two builds of one
+# commit should ship the same code. Bump deliberately, run the suite, say so.
+beautifulsoup4==4.15.0
+psycopg[binary]==3.3.5
+requests==2.34.2
 
 # Development
 pytest>=7.0
 ruff>=0.16          # the linter: pycodestyle, pyflakes, isort, bugbear ... (pyproject.toml)
 pytest-cov>=7.0     # coverage; the bar is in pyproject.toml
 
-# The default local build target (db/psql/cluster) is an embedded Postgres.
-# Skipped where no wheel exists (linux/arm64 - i.e. inside the Docker image,
-# which talks to a real postgres service via DATABASE_URL instead).
+# A host build only. The default local build target (db/psql/cluster) is an
+# embedded Postgres; the image and CI never start one - they talk to a real
+# postgres service over DATABASE_URL, or skip the database-bound tests - so both
+# filter this line out rather than carry 33 MB they will not run. The marker
+# keeps it off the platforms with no wheel (linux/arm64).
 pgserver; sys_platform == "darwin" or platform_machine in "x86_64 AMD64"

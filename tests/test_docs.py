@@ -125,11 +125,14 @@ def _skills():
 
 @needs_skills
 def test_every_skill_has_frontmatter_and_names_its_tools():
+    """Coverage, not identity: a coding tool may install its own playbook
+    beside ours, and a skill this repo does not own does not decide the run."""
     from db.mcp import tools
     registered = {name for name, *_ in tools.REGISTRY}
     skills = _skills()
-    assert set(skills) == set(MUST_NAME)
-    for name, text in skills.items():
+    assert set(MUST_NAME) <= set(skills)
+    for name in MUST_NAME:
+        text = skills[name]
         head = text.split("---")[1]
         assert re.search(r"^name: %s$" % name, head, re.M), name
         assert re.search(r"^description: \S", head, re.M), name
@@ -140,8 +143,21 @@ def test_every_skill_has_frontmatter_and_names_its_tools():
 @needs_skills
 def test_the_skills_document_covers_every_skill(copy_of):
     doc = _read("docs", "skills.md")
-    for name in _skills():
+    for name in MUST_NAME:
         assert "## `/%s`" % name in doc, name
+
+
+def test_every_shipped_strategy_is_in_the_playbook_sources():
+    """inference/README.md is the record the playbook is rebuilt from, so it
+    holds more ids than the folder does. The other direction has to hold: a
+    file in inference/strategies/ that the record does not cite came from
+    nowhere."""
+    from inference import catalog
+    record = _read("inference", "README.md")
+    cited = set(re.findall(r"^- `([a-z0-9-]+)`", record, re.M))
+    shipped = {name[:-3] for name in os.listdir(catalog.SHIPPED_DIR)
+               if name.endswith(".md") and name not in catalog.NOT_STRATEGIES}
+    assert shipped and shipped <= cited, sorted(shipped - cited)
 
 
 def test_the_tool_reference_is_current(copy_of):

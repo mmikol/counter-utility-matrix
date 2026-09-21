@@ -59,6 +59,18 @@ def db():
     connection.close()
 
 
+@pytest.fixture(scope="module")
+def world(db):
+    """The World the facts and the inference tests read, built once per module.
+    The load runs a read transaction; rolling it back leaves the session
+    connection clean for the next fixture."""
+    from ui.facts import model
+
+    w = model.load(db)
+    db.rollback()
+    return w
+
+
 @pytest.fixture(scope="session")
 def rows(db):
     return lambda sql, *args: db.execute(sql, args or None).fetchall()

@@ -105,7 +105,7 @@ flowchart LR
 Weights do not learn on their own: no match signal is recorded, and the
 backlog holds what learning would take. The board's sliders (under each
 heuristic in the playbook tab) override a weight for one board at a time -
-`weight=<id>:<0..10>` on `/board`, `weights` on the `board` tool - and
+`weights=<id>:<0..10>` on `/board`, `weights` on the `board` tool - and
 the file is untouched until the slider's *store*, which is a `tune` call;
 every result names the weights it was scored under. One path changes a
 file, logged in `strategies/tuning-log.md` with a reason and who asked:
@@ -127,7 +127,7 @@ inference/
                    or assumption, and tuning-log.md
   catalog.py       reads, validates and mirrors the strategy files
   expr.py          the expression language the frontmatter uses
-  solver.py        enumerate, prune, normalise, score, refine
+  solver.py        legal_sixes, prune, normalise, score, refine
   engine.py        infer(), evaluate(), board(): the solver plus citations
   reach.py         a board on which a hero is the optimal pick
   tune.py          one validated, logged edit to a strategy file; add and complete

@@ -73,7 +73,9 @@ confidence</b>. A thousand would put it under 0.3%.</p>
 <p>Proving a board costs a full enumeration, which is far too slow to run on every change. So
 the expensive part is done once and the answer recorded: <code>tests/fixtures/optimal.json</code>
 holds, per board, the six a brute force found and what it scored. The suite re-solves each and
-checks the solver still reaches it.</p>
+checks the solver still reaches it. The enumerations the fixture is cut from are hours of compute
+and live outside this repository; <code>scripts/optimal.py</code> reads them from the paths in
+<code>OPTIMAL_SOURCES</code> and rewrites the fixture.</p>
 <p>That is what stops a later change quietly undoing this &mdash; a narrowed pool, a dropped
 two-swap, a broken constraint shows up as a board that used to be exact and is not.</p>
 

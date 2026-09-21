@@ -180,7 +180,7 @@ def run_cli(text, timeout=TIMEOUT):
 def derive(ids=None, directory=None, runner=run_cli, log=print, by="claude -p (derive)"):
     """Complete every draft (or the named ones) -> {"derived": [...], "failed": {...},
     "skipped": reason|None}."""
-    directory = directory or catalog_module.STRATEGIES_DIR
+    directory = directory or catalog_module.strategies_dir()
     catalog = catalog_module.load(directory)
     drafts = [h for h in catalog if h.pending and (not ids or h.id in ids)]
     out = {"derived": [], "failed": {}, "skipped": None}
@@ -205,7 +205,7 @@ def derive(ids=None, directory=None, runner=run_cli, log=print, by="claude -p (d
                     "%s=%s" % kv for kv in done["set"].items())))
                 out["derived"].append({"id": draft.id, "form": done["form"], "set": done["set"]})
                 break
-            except (tune.TuneError, ValueError) as error:
+            except ValueError as error:                 # a TuneError is one
                 objection = str(error)
                 log("derive: %s attempt %d refused: %s" % (draft.id, attempt, objection))
             except CliUnavailableError as error:
@@ -221,7 +221,9 @@ def derive(ids=None, directory=None, runner=run_cli, log=print, by="claude -p (d
     return out
 
 
-def rendered(result):
+def derive_rendered(result):
+    """The derive() bag as lines. A free <noun>_rendered() reads a result dict;
+    a bound .rendered() belongs to a result object."""
     parts = ["derive: %d completed" % len(result["derived"])] if result["derived"] else []
     if result["skipped"]:
         parts.append("derive: " + result["skipped"])

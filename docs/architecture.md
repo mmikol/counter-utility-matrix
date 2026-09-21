@@ -24,13 +24,13 @@ Code on your subscription, before a game, never during one.
 
 | folder | what it is | read |
 | --- | --- | --- |
-| `db/` | **DATA LAYER** - pulls every source, cleans it, stores it; the MCP server that is the one door to everything; the schema, its migrations and the embedded cluster | [db.md](db.md) |
+| `db/` | **DATA LAYER** - `data/` and `psql/` pull every source, clean it and store it, with the schema, its migrations and the embedded cluster. `mcp/` and `sentry` stand over all three layers rather than inside this one: the door serves the UI layer's facts and the inference layer's solver through the same tools, and the guard watches the playbook beside the database. The door gates every write; the other two layers read Postgres directly, over `db.psql.default_dsn()` | [db.md](db.md) |
 | `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet | [ui.md](ui.md) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints, heuristics and assumptions in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
-| `tests/` | one folder per layer (`tests/db`, `tests/ui`, `tests/inference`) and `tests/fixtures/playbook/`, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the community's rules and the user's assumptions. `pytest -q` runs them, skipping what needs a built database when there is none | |
+| `tests/` | one folder per layer (`tests/db`, `tests/ui`, `tests/inference`), the root files' tests beside them (`test_docs.py`, `test_orchestrator.py`), and `tests/fixtures/playbook/`, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the user's assumptions (its rules were emptied on purpose and are being rebuilt by hand; `inference/README.md` is the record). `pytest -q` runs them, skipping what needs a built database when there is none | |
 | `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain` | [skills.md](skills.md) |
 | `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
-| `scripts/` | `optimal.py`: records the true maximum of proven boards into `tests/fixtures/optimal.json`, which `tests/inference/test_optimal.py` re-solves on every run - the regression gate on the search. Run after a deliberate change to the objective, and say in the commit why every number moved | |
+| `scripts/` | `optimal.py`: records the true maximum of proven boards into `tests/fixtures/optimal.json`, which `tests/inference/test_optimal.py` re-solves on every run - the regression gate on the search. It reads the brute force's `.jsonl` output from the paths in `OPTIMAL_SOURCES`, which live outside the repo. Run after a deliberate change to the objective, and say in the commit why every number moved | |
 | `.github/workflows/` | `ci.yml`: lint and the tests that need no built database, on pushes to `main` and on pull requests | |
 | `.cache-blizzard/` `.cache-wiki/` | the page caches (gitignored): every build after the first costs almost no requests | |
 
@@ -112,7 +112,7 @@ mistaken for the other.
 | `Dockerfile` | the one image, run as an unprivileged user (uid 1000, or `COUNTRIX_UID`/`GID` from `.env` on a Linux host whose checkout is owned by someone else); `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty, unfilled or behind the migrations |
 | `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'` |
 | `.mcp.json` | registers the two MCP servers a Claude Code session sees: `countrix` (stdio, the local cluster) and `countrix-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
-| `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pytest-cov, ruff, and pgserver (the embedded PostgreSQL a local build uses) |
+| `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pytest-cov, ruff, and pgserver (the embedded PostgreSQL a host build uses; the image and CI filter it out, since neither starts a cluster) |
 | `pyproject.toml` | ruff's rules (line length 100); the coverage bar, 75% where a database exists |
 | `pytest.ini` | the `invariant` marker for tests that need a built database |
 | `SECURITY.md` | the terms - you run it at your own risk, no security commitment from the author - and how to report a vulnerability privately; the measures themselves are in [security.md](security.md) |
@@ -158,7 +158,7 @@ Settings, from the environment or `.env` (the refresh times are in [db.md](db.md
 
 | setting | default | meaning |
 | --- | --- | --- |
-| `COUNTRIX_STRATEGIES` | empty | a playbook folder other than `inference/strategies/` |
+| `COUNTRIX_STRATEGIES` | empty | a playbook folder other than `inference/strategies/`, relative to the repo root or absolute. Read where it is needed (`catalog.strategies_dir()`), so a change takes effect on the next call |
 | `COUNTRIX_WORKERS` | `max(6, min(cores, 12))` | the solver's worker processes |
 | `COUNTRIX_PARALLEL` | `1` | `0`: every board in one process |
 | `COUNTRIX_UI_HOST`, `COUNTRIX_UI_PORT` | `127.0.0.1`, `8017` | where the board listens |

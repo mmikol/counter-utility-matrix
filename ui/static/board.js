@@ -184,9 +184,9 @@ function qs() {
   if (st.map) q.push('map=' + encodeURIComponent(st.map));
   st.red.forEach(function (h) { q.push('red=' + encodeURIComponent(h)); });
   st.blue.forEach(function (h) { q.push('blue=' + encodeURIComponent(h)); });
-  st.bans.forEach(function (h) { q.push('ban=' + encodeURIComponent(h)); });
+  st.bans.forEach(function (h) { q.push('bans=' + encodeURIComponent(h)); });
   if (st.side) q.push('side=' + st.side);
-  Object.keys(st.weights || {}).sort().forEach(function (id) { q.push('weight=' + encodeURIComponent(id + ':' + st.weights[id])); });
+  Object.keys(st.weights || {}).sort().forEach(function (id) { q.push('weights=' + encodeURIComponent(id + ':' + st.weights[id])); });
   return q.join('&');
 }
 

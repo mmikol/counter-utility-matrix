@@ -7,6 +7,7 @@ dependency order. A session, the refresher or a shell (`python -m db.mcp
 call`) decides what to pull and when, and reads the summary back.
 """
 
+import functools
 import json
 import os
 import re
@@ -16,7 +17,11 @@ import psycopg
 
 from db import CACHE_DIRS, ROOT, psql
 from db.data import fetch
-from db.mcp.server import Tool, ToolError
+from db.mcp.server import Tool, ToolError, audited
+from db.psql import schema
+from inference import catalog, derive, engine, reach, tune
+from ui.facts import compute, model
+from ui.facts import engine as facts_engine
 
 
 class Context:
@@ -46,12 +51,13 @@ REGISTRY = []
 
 
 def tool(name, description, properties=None, required=()):
-    schema = {"type": "object", "properties": properties or {},
-              "required": list(required), "additionalProperties": False}
+    # json_schema, not schema: db.psql.schema is imported above
+    json_schema = {"type": "object", "properties": properties or {},
+                   "required": list(required), "additionalProperties": False}
 
     def decorate(fn):
         fn.tool_name = name
-        REGISTRY.append((name, description, schema, fn))
+        REGISTRY.append((name, description, json_schema, fn))
         return fn
     return decorate
 
@@ -59,20 +65,22 @@ def tool(name, description, properties=None, required=()):
 def build(ctx):
     """Bind every registered tool to a context -> [Tool]."""
     out = []
-    for name, description, schema, fn in REGISTRY:
+    for name, description, json_schema, fn in REGISTRY:
         def bound(fn=fn, **arguments):
             return fn(ctx, **arguments)
-        out.append(Tool(name, description, schema, bound))
+        out.append(Tool(name, description, json_schema, bound))
     return out
 
 
 def run_tool(ctx, name, /, **arguments):
     """Call a registered tool by name, in-process (the refresher's and the shell's
-    path). The tool's name is positional only, so a tool argument called `name`
-    (add_strategy has one) reaches the tool instead of colliding here."""
+    path), audited like a call through either door. The tool's name is positional
+    only, so a tool argument called `name` (add_strategy has one) reaches the tool
+    instead of colliding here."""
     for tool_name, _, _schema, fn in REGISTRY:
         if tool_name == name:
-            return fn(ctx, **arguments)
+            return audited(name, arguments, functools.partial(fn, ctx, **arguments),
+                           "in-process")
     raise KeyError(name)
 
 
@@ -119,12 +127,8 @@ def _pull(ctx, source, module_path, refresh=False, **options):
     cache = ctx.cache(source)
     # refresh: every cached page counts as stale and is fetched again; the
     # cached copy survives a failed fetch (see db.data.fetch.keep_stale)
-    fetch.set_max_age(0 if refresh else None)
-    try:
-        with ctx.connect() as cx:
-            summary = module.run(cx, cache, log=ctx.log, **options)
-    finally:
-        fetch.set_max_age(None)
+    with fetch.max_age(0 if refresh else None), ctx.connect() as cx:
+        summary = module.run(cx, cache, log=ctx.log, **options)
     return summary
 
 
@@ -227,34 +231,23 @@ PULLS = [("pull_heroes", "blizzard"), ("pull_kits", "wiki"),
          ("pull_rates", "blizzard"), ("pull_playstyles", "wiki"),
          ("pull_synergies", "wiki"), ("pull_counters", "wiki")]
 
-# The one input a user writes. Every other table is pulled.
-AUTHORED_INPUTS = ("strategies",)
-
-
 @tool("load_authored", "Store the one input a user writes: the mirror of the"
-      " strategies in inference/strategies/. A whole-truth reload.",
-      {"only": {"type": "array", "items": {"type": "string",
-                                            "enum": list(AUTHORED_INPUTS)},
-                "description": "accepted for older callers; strategies is the"
-                               " only input"}})
-def load_authored(ctx, only=None):
-    from inference import catalog, derive
-    summaries = {}
+      " strategies in inference/strategies/. A whole-truth reload.")
+def load_authored(ctx):
     with ctx.connect() as cx:
         cat = catalog.load()
         if any(h.pending for h in cat) and derive.available():
             # drafts on a host with the CLI: the engine derives them now
-            ctx.log(derive.rendered(derive.derive(log=ctx.log)))
+            ctx.log(derive.derive_rendered(derive.derive(log=ctx.log)))
             cat = catalog.load()
-        summaries["strategies"] = catalog.mirror(cx, cat)
+        summary = catalog.mirror(cx, cat)
         pending = [h.id for h in cat if h.pending]
         if pending:
-            summaries["strategies"]["pending"] = len(pending)
-    text = "load_authored: " + "; ".join(
-        "%s %s" % (name, ", ".join("%s=%s" % (k, v) for k, v in s.items()
-                                    if k != "tables"))
-        for name, s in summaries.items())
-    return text, summaries
+            summary["pending"] = len(pending)
+    text = "load_authored: strategies " + ", ".join(
+        "%s=%s" % (k, v) for k, v in summary.items() if k != "tables")
+    # the payload still names what was loaded, so a caller reads it the same way
+    return text, {"strategies": summary}
 
 
 @tool("sync_all", "Every pull_* tool in dependency order, then the strategies"
@@ -276,7 +269,6 @@ def sync_all(ctx, refresh=False):
 @tool("db_status", "Which database the tools are pointed at, its table and"
       " row counts, and the rates snapshots it holds.")
 def db_status(ctx):
-    from db.psql import schema
     with ctx.connect() as cx:
         tables = schema.table_count(cx)
         counts, snaps = {}, []
@@ -284,7 +276,8 @@ def db_status(ctx):
             for t in ("heroes", "abilities", "maps", "hero_meta", "map_meta",
                       "counters", "synergies", "strategies"):
                 if cx.execute("select to_regclass(%s)", (t,)).fetchone()[0]:
-                    counts[t] = cx.execute("select count(*) from " + t).fetchone()[0]
+                    counts[t] = cx.execute(
+                        "select count(*) from " + psql.identifier(t)).fetchone()[0]
             if "heroes" in counts:
                 counts["announced"] = cx.execute(
                     "select count(*) from heroes where status = 'announced'").fetchone()[0]
@@ -302,7 +295,7 @@ def db_status(ctx):
         len(snaps), ", newest capture %s" % newest if newest else "",
         "\nPENDING MIGRATIONS (rebuild): %s" % ", ".join(missing)
         if missing else "")
-    return text, {"dsn": dsn, "tables": tables, "counts": counts,
+    return text, {"dsn": dsn, "table_count": tables, "counts": counts,
                   "snapshots": snaps, "newest_capture": newest,
                   "pending_migrations": missing}
 
@@ -310,21 +303,19 @@ def db_status(ctx):
 @tool("db_init", "Apply the migrations to an EMPTY database (schema only;"
       " sync_all fills it). Refuses a database that already has tables.")
 def db_init(ctx):
-    from db.psql import schema
     with ctx.connect() as cx:
         if schema.table_count(cx):
             raise ToolError("the database already has tables; db_rebuild"
                             " starts over")
         schema.apply(cx, schema.read_migrations(), quiet=True)
         n = schema.table_count(cx)
-    return "db_init: %d tables, no data" % n, {"tables": n}
+    return "db_init: %d tables, no data" % n, {"table_count": n}
 
 
 @tool("db_migrate", "Apply the migrations the ledger has not recorded, in"
       " place: a populated database catching up with the files without a"
       " rebuild. Nothing pending is not an error.")
 def db_migrate(ctx):
-    from db.psql import schema
     with ctx.connect() as cx:
         names = schema.pending(cx)
         todo = [(p, sql) for p, sql in schema.read_migrations()
@@ -337,7 +328,6 @@ def db_migrate(ctx):
 @tool("db_rebuild", "Drop everything, reapply the migrations and run"
       " sync_all.", REFRESH)
 def db_rebuild(ctx, refresh=False):
-    from db.psql import schema
     with ctx.connect() as cx:
         dropped = schema.rebuild(cx, quiet=True)
     results = run_tool(ctx, "sync_all", refresh=refresh)[1]
@@ -350,21 +340,20 @@ def export_csv(ctx):
     with ctx.connect() as cx:
         counts = psql.export(cx)
     return ("export_csv: %d tables mirrored to db/raw" % len(counts),
-            {"tables": dict(counts)})
+            {"row_counts": dict(counts)})
 
 
 def write_tool_docs(path=None):
     """The tool reference - every registered tool, its description and its
     arguments - generated into docs/mcp.md between its markers."""
-    from db.psql.schema import embed
     path = path or os.path.join(ROOT, "docs", "mcp.md")
     out = ["%d tools, in the order the server lists them. Regenerated by"
            " `python -m db.mcp call db_docs`." % len(REGISTRY), "",
            "| tool | does | arguments |", "| --- | --- | --- |"]
-    for name, description, schema, _ in REGISTRY:
-        required = set(schema.get("required", ()))
+    for name, description, json_schema, _ in REGISTRY:
+        required = set(json_schema.get("required", ()))
         args = []
-        for arg, spec in schema.get("properties", {}).items():
+        for arg, spec in json_schema.get("properties", {}).items():
             kind = spec.get("type") or "any"
             if "enum" in spec:
                 kind = " \\| ".join(str(v) for v in spec["enum"])
@@ -373,7 +362,7 @@ def write_tool_docs(path=None):
                                             if spec.get("description") else ""))
         out.append("| `%s` | %s | %s |" % (name, description.replace("|", "\\|"),
                                           "<br>".join(args) if args else "none"))
-    embed(path, "tools", "\n".join(out))
+    schema.embed(path, "tools", "\n".join(out))
     return path
 
 
@@ -381,14 +370,12 @@ def write_tool_docs(path=None):
       " dictionary in docs/db.md from the live schema, the catalog and vocabulary in"
       " docs/inference.md from the strategies files, the tool reference in docs/mcp.md.")
 def db_docs(ctx):
-    from db.psql import schema
-    from inference import catalog
     with ctx.connect() as cx:
         text = schema.generate_docs(cx)
     paths = [p for p in (catalog.write_docs(catalog.load()), write_tool_docs()) if p]
-    if catalog.STRATEGIES_DIR != catalog.SHIPPED_DIR:
+    if catalog.strategies_dir() != catalog.SHIPPED_DIR:
         ctx.log("db_docs: another playbook folder is in force (%s); the catalog section"
-                " of docs/inference.md was left as the shipped playbook" % catalog.STRATEGIES_DIR)
+                " of docs/inference.md was left as the shipped playbook" % catalog.strategies_dir())
     return text + "; wrote " + ", ".join(os.path.relpath(p, ROOT) for p in paths), {}
 
 
@@ -483,7 +470,6 @@ BOARD = {
       " (released, or announced with its release day - shown, never picked), plus"
       " the map pool with modes - the vocabulary the board tools accept.")
 def roster(ctx):
-    from ui.facts import model
     with ctx.connect() as cx:
         world = model.load(cx)
     heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
@@ -507,12 +493,12 @@ def roster(ctx):
       " once both teams have picks. Numbered F1.. for citation.",
       dict(BOARD, format={"type": "string", "enum": ["lines", "json"],
                           "description": "lines (default) or json"}))
-def facts_tool(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines"):
-    from ui.facts import engine, model
+def facts(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines"):
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
-        fs = engine.generate(world, map, list(red), list(blue), list(bans), side)
+        fs = facts_engine.generate(world, map, list(red), list(blue), list(bans),
+                                   side)
     except ValueError as error:
         raise ToolError(str(error)) from error
     payload = fs.to_dict()
@@ -520,9 +506,7 @@ def facts_tool(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines")
     return text, payload
 
 
-def _clamp(pool, top=5):
-    """Bounds on the search: pool 2..12 per role, top 1..20."""
-    return max(2, min(int(pool or 6), 12)), max(1, min(int(top or 5), 20))
+COMPACT_TERMS = 15        # the heaviest terms a compact reply carries
 
 
 @tool("infer", "The INFERENCE LAYER: the optimal six for this board under"
@@ -534,18 +518,22 @@ def _clamp(pool, top=5):
                                                          " return (default 5)"},
            pool={"type": "integer", "description": "candidates per role the"
                                                    " search keeps (default 6)"},
-           compact={"type": "boolean", "description": "true: the comp, the silent"
-                                                      " heuristics (applying, metric"
-                                                      " not varying on this board) and"
-                                                      " the largest terms only"}))
-def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6,
-               compact=False):
-    pool, top = _clamp(pool, top)
-    from inference import engine
-    from ui.facts import model
+           compact={"type": "boolean", "description": "true: a reply small enough"
+                                                      " to carry under a playbook of"
+                                                      " hundreds. The structured payload"
+                                                      " then has its own keys: map, side,"
+                                                      " red, blue, score, strategies,"
+                                                      " idle, silent (applying, metric not"
+                                                      " varying on this board) and largest"
+                                                      " (the %d heaviest terms, each an id"
+                                                      " and its weighted value)"
+                                                      % COMPACT_TERMS}))
+def infer(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6,
+          compact=False):
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
+        pool, top = engine.clamp_search(pool, top)
         result = engine.infer(world, map, list(red), list(blue), top=top,
                               pool_size=pool, bans=list(bans), side=side)
     except ValueError as error:
@@ -553,9 +541,6 @@ def infer_tool(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6,
     if compact:
         return _compact(result)
     return result.rendered(), result.to_dict()
-
-
-COMPACT_TERMS = 15
 
 
 def _compact(result):
@@ -585,9 +570,9 @@ def _compact(result):
 @tool("evaluate", "Score a FULL blue six against the strategies without"
       " searching: the breakdown per strategy, constraint violations, and"
       " how it ranks against the optimum.", BOARD, ["blue"])
-def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
-    from inference import engine
-    from ui.facts import model
+def evaluate(ctx, blue, map=None, red=(), bans=(), side=""):
+    # blue has no default: the schema marks it required and the engine takes a
+    # full six, so an empty one was never a call worth reaching the engine
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
@@ -604,9 +589,7 @@ def evaluate_tool(ctx, map=None, red=(), blue=(), bans=(), side=""):
       " cannot be reached is one the facts or the strategies cannot see.",
       {"hero": {"type": "string", "description": "a released hero (any spelling)"}},
       ["hero"])
-def reach_tool(ctx, hero):
-    from inference import reach
-    from ui.facts import model
+def reach_tool(ctx, hero):          # _tool: inference.reach holds the bare name
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
@@ -641,32 +624,29 @@ def reach_tool(ctx, hero):
                     "description": "{heuristic id: 0..10} - weights to score this board"
                                    " under instead of the files' (the playbook tab's"
                                    " sliders); the files are untouched"}))
-def board_tool(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6, weights=None):
-    pool, _ = _clamp(pool)
-    from inference import catalog, engine
-    from ui.facts import model
+def board(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6, weights=None):
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
+        pool, _ = engine.clamp_search(pool)
         b = engine.board(world, map, list(red), list(blue), list(bans), side,
                          pool_size=pool, weights=catalog.parse_weights(weights or {}))
     except ValueError as error:
         raise ToolError(str(error)) from error
-    return engine.board_rendered(b), engine.board_dict(b)
+    return b.rendered(), b.to_dict()
 
 
 @tool("strategies", "The inference layer's catalog - STRATEGIES = CONSTRAINTS ∪ HEURISTICS"
       " ∪ ASSUMPTIONS: every markdown strategy with its kind (constraint, heuristic or"
       " assumption), a constraint's form (limit, scored, draft), metric, direction, weight"
       " and expressions.")
-def strategies_tool(ctx):
-    from inference import catalog
+def strategies(ctx):
     cat = catalog.load()
     pending = [h.id for h in cat if h.pending]
     text = catalog.render(cat)
-    if catalog.STRATEGIES_DIR != catalog.SHIPPED_DIR:
+    if catalog.strategies_dir() != catalog.SHIPPED_DIR:
         text = "playbook in force: %s (the shipped one is %s)\n\n%s" % (
-            os.path.relpath(catalog.STRATEGIES_DIR, ROOT),
+            os.path.relpath(catalog.strategies_dir(), ROOT),
             os.path.relpath(catalog.SHIPPED_DIR, ROOT), text)
     if pending:
         text += "\n\n%d draft(s) awaiting /strategy: %s" % (len(pending), ", ".join(pending))
@@ -686,13 +666,13 @@ def strategies_tool(ctx):
        "by": {"type": "string", "description": "who asked, for the log line (default"
                                               " claude-code-session; the board says so)"}},
       ["id", "field", "value", "reason"])
-def tune_tool(ctx, id, field, value, reason, by="claude-code-session"):
-    from inference import catalog, tune
+def tune_tool(ctx, id, field, value, reason,   # _tool: inference.tune holds the bare name
+              by="claude-code-session"):
     try:
         change = tune.tune(id, field, value, reason, by=str(by or "claude-code-session")[:40])
         with ctx.connect() as cx:
             catalog.mirror(cx, catalog.load())
-    except (tune.TuneError, ValueError) as error:
+    except ValueError as error:                 # a TuneError is one
         raise ToolError(str(error)) from error
     return "tuned %s: %s %s -> %s\n%s" % (change["id"], change["field"], change["old"],
                                          change["new"], change["line"]), change
@@ -702,8 +682,7 @@ def tune_tool(ctx, id, field, value, reason, by="claude-code-session"):
       " meaning - team.*, enemy.* (the same for the red side), matchup.*, map.*,"
       " world.* - and which are text. What /strategy reads to infer a heuristic's"
       " metric or a constraint's expression from prose.")
-def metrics_tool(ctx):
-    from ui.facts import compute
+def metrics(ctx):
     reg = compute.registry()
     numeric = {k: v for k, v in reg.items() if k not in compute.TEXT_METRICS}
     lines = ["%-32s %s%s" % (k, v, "  (text)" if k in compute.TEXT_METRICS else "")
@@ -745,14 +724,13 @@ STRATEGY_FIELDS = {
            **STRATEGY_FIELDS),
       ["id", "name", "kind", "body"])
 def add_strategy(ctx, id, name, kind, body, reason="", **fields):
-    from inference import catalog, tune
     try:
         category = fields.pop("category", "general")
         fields.pop("kind", None)
         added = tune.add(id, name, kind, body, fields, reason, category=category)
         with ctx.connect() as cx:
             catalog.mirror(cx, catalog.load())
-    except (tune.TuneError, ValueError) as error:
+    except ValueError as error:                 # a TuneError is one
         raise ToolError(str(error)) from error
     note = ("\nstored as a DRAFT: the solver ignores it until /strategy infers its frontmatter"
             if added["form"] == "draft" else "")
@@ -768,12 +746,11 @@ def add_strategy(ctx, id, name, kind, body, reason="", **fields):
            **STRATEGY_FIELDS),
       ["id", "reason"])
 def infer_strategy(ctx, id, reason, **fields):
-    from inference import catalog, tune
     try:
         done = tune.complete(id, fields, reason)
         with ctx.connect() as cx:
             catalog.mirror(cx, catalog.load())
-    except (tune.TuneError, ValueError) as error:
+    except ValueError as error:                 # a TuneError is one
         raise ToolError(str(error)) from error
     return "%s is now %s: %s\n%s" % (id, done["form"], ", ".join(
         "%s=%s" % kv for kv in done["set"].items()), done["line"]), done
@@ -786,19 +763,17 @@ def infer_strategy(ctx, id, reason, **fields):
       {"ids": {"type": "array", "items": {"type": "string"},
                "description": "which drafts (default: all)"}})
 def derive_strategies(ctx, ids=None):
-    from inference import catalog, derive
     result = derive.derive(ids, log=ctx.log)
     if result["derived"]:
         with ctx.connect() as cx:
             catalog.mirror(cx, catalog.load())
-    return derive.rendered(result), result
+    return derive.derive_rendered(result), result
 
 
 @tool("tuning_log", "The audit trail of every change to the strategies'"
       " frontmatter, newest last.",
       {"lines": {"type": "integer", "description": "how many (default 20)"}})
-def tuning_log_tool(ctx, lines=20):
-    from inference import tune
+def tuning_log(ctx, lines=20):
     tail = tune.log_tail(lines)
     return "\n".join(tail) or "no tuning yet", {"lines": tail}
 
@@ -807,7 +782,6 @@ class StrategyResources:
     """The strategies files (and the tuning log), readable as MCP resources."""
 
     def list(self):
-        from inference import catalog
         out = [{"uri": "strategy://" + h.id, "name": h.name,
                 "description": "%s (%s)" % (h.kind, h.category),
                 "mimeType": "text/markdown"} for h in catalog.load()]
@@ -817,7 +791,6 @@ class StrategyResources:
         return out
 
     def read(self, uri):
-        from inference import catalog, tune
         hid = uri.replace("strategy://", "", 1)
         if hid == "tuning-log":
             return {"uri": uri, "mimeType": "text/markdown",

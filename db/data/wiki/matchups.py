@@ -26,6 +26,8 @@ import re
 import unicodedata
 from collections import namedtuple
 
+import requests
+
 from db import psql
 from db.data import fetch
 from db.data.names import index, name_key
@@ -423,7 +425,7 @@ def run(connection, cache_dir=None, session=None, log=print):
     for name in released:
         try:
             articles[name] = fetch_wikitext(session, name, cache_dir)
-        except WikiError as error:
+        except (WikiError, requests.RequestException) as error:
             missing.append("%s: %s" % (name, error))
     known = {name_key(name): Known(name, pronoun(articles.get(name, ""))) for name in released}
     readings = {name: parse_matchups(text, name, known) for name, text in articles.items()}

@@ -241,6 +241,47 @@ KIT_ARTICLE = """{{Ability details
        " ''YouTube''</ref>")
 
 
+def test_the_ability_vocabulary_is_one_list():
+    """The codes db.ABILITY_KINDS names are the rows 002_heroes.sql seeds, in
+    the same order, so the writer, the reader and the table cannot drift."""
+    import os
+    import re
+
+    import db
+    from db.data.wiki.heroes import _ability_kind
+    path = os.path.join(db.ROOT, "db", "psql", "migrations", "002_heroes.sql")
+    with open(path, encoding="utf-8") as handle:
+        sql = handle.read()
+    block = sql[sql.index("INSERT INTO ability_kinds"):sql.index("AS v(kind_id, code)")]
+    seeded = re.findall(r"\(\s*\d+\s*,\s*'([a-z]+)'\s*\)", block)
+    assert tuple(seeded) == db.ABILITY_KINDS
+    # and the wiki's ability_type maps onto that vocabulary and nothing else
+    for base_type, code in (("Weapon;;Hip Fire", db.KIND_WEAPON),
+                            ("Ultimate Ability", db.KIND_ULTIMATE),
+                            ("Passive", db.KIND_PASSIVE),
+                            ("Ability", db.KIND_ABILITY),
+                            ("", db.KIND_ABILITY)):
+        assert _ability_kind(base_type) == code
+    assert all(_ability_kind(t) in db.ABILITY_KINDS
+               for t in ("weapon", "WEAPON x", "an ultimate", "a passive", "anything"))
+
+
+def test_an_unfetchable_hero_page_is_reported_rather_than_read_as_empty(tmp_path):
+    """Every per-entity wiki fetch keeps one contract: the failure is recorded
+    by name, so a pull that read nothing cannot look like a pull that found
+    nothing. supplement_from_wikitext raises and run() collects it."""
+    import requests
+
+    from db.data.wiki.heroes import supplement_from_wikitext
+
+    class Down:
+        def get(self, *a, **kw):
+            raise requests.ConnectionError("the wiki is unreachable")
+
+    with pytest.raises((WikiError, requests.RequestException)):
+        supplement_from_wikitext(Down(), "Mizuki", str(tmp_path))
+
+
 def test_supplement_reads_heal_and_skips_a_retired_block(tmp_path):
     from db.data.wiki.heroes import supplement_from_wikitext
     (tmp_path / "Mizuki.wikitext").write_text(KIT_ARTICLE, encoding="utf-8")

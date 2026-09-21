@@ -6,10 +6,13 @@ board's facts are derived from. Every row carries a `source_id`, and that
 is the only distinction drawn between what was measured, what was judged
 and what was written by hand. Only the strategies are written by hand.
 
-**One door.** The MCP tools in `mcp/tools.py` are the only way in. A
-Claude Code session calls them over MCP, the `refresher` container calls
-them in-process, Docker's entrypoint calls them to build the database, and
-a shell calls them the same way:
+**One door.** The MCP tools in `mcp/tools.py` are the only way to drive
+the layer, and the only way in for a write. A Claude Code session calls
+them over MCP, the `refresher` container calls them in-process, Docker's
+entrypoint calls them to build the database, and a shell calls them the
+same way. Reads are not gated: the UI and inference layers open their own
+connection through `db.psql.default_dsn()`, which is what lets the board
+load a World per request:
 
 ```bash
 .venv/bin/python -m db.mcp list                        # the tools

@@ -31,7 +31,6 @@ from datetime import UTC, datetime
 
 from inference import catalog as catalog_module
 
-LOG_PATH = os.path.join(catalog_module.STRATEGIES_DIR, "tuning-log.md")
 SCALARS = ("weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric",
            "kind", "category")
 WEIGHT_RANGE = (0.0, 10.0)
@@ -59,6 +58,8 @@ def edit_frontmatter(text, field, value):
                                    or value.lstrip().startswith("---")):
         raise TuneError("a value is one line")
     end = text.find("\n---", 3)
+    if end < 0:                       # find() gives -1, which slices from the tail
+        raise TuneError("unterminated frontmatter")
     header, rest = text[3:end], text[end:]
     lines = header.split("\n")
     old = None
@@ -165,13 +166,13 @@ def _stamp():
 
 def _where(directory):
     """The playbook in force and its log: (directory, log path)."""
-    directory = directory or catalog_module.STRATEGIES_DIR
+    directory = directory or catalog_module.strategies_dir()
     return directory, os.path.join(directory, "tuning-log.md")
 
 
 def _document(directory, loaded):
     """The catalog document follows the files, for the shipped playbook only."""
-    if os.path.abspath(directory) == os.path.abspath(catalog_module.STRATEGIES_DIR):
+    if os.path.abspath(directory) == os.path.abspath(catalog_module.strategies_dir()):
         catalog_module.write_docs(loaded)
 
 
@@ -283,7 +284,9 @@ def add(hid, name, kind, body, fields=None, reason="", directory=None,
     return {"id": hid, "form": form, "path": path, "line": line}
 
 
-def log_tail(n=20, log_path=LOG_PATH):
+def log_tail(n=20, log_path=None):
+    """The last n lines of the log beside the playbook in force."""
+    log_path = log_path or _where(None)[1]
     if not os.path.exists(log_path):
         return []
     with open(log_path, encoding="utf-8") as handle:

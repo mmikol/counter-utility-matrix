@@ -8,6 +8,7 @@ import shutil
 import pytest
 
 from inference import catalog
+from inference.engine import BrokenProcessPool
 from inference.expr import Expr, ExprError
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts import compute
@@ -80,6 +81,125 @@ def test_catalog_rejects_a_goal_on_an_unknown_metric(tmp_path):
         catalog.load(str(tmp_path))
 
 
+class _Call:
+    """One orchestration call, as the trace records it."""
+
+    def __init__(self, what, **kw):
+        self.what, self.kw = what, kw
+
+    def __eq__(self, other):
+        return (self.what, self.kw) == (other.what, other.kw)
+
+    def __repr__(self):
+        return "%s(%s)" % (self.what, ", ".join("%s=%r" % kv for kv in sorted(self.kw.items())))
+
+
+def _traced_board(monkeypatch, *, parallel, breaks_after=None, blue=("Ana",), red=("Zarya",)):
+    """Run board()'s orchestration with every call it makes stubbed out, and
+    return the trace. The World, the facts and the solver never run: what is
+    under test is the sequence, which is the one thing the pooled and the
+    in-process passes have to agree on."""
+    from inference import engine
+    trace = []
+
+    class Split:
+        def __init__(self, pool, world, catalog, spec, weights, top, slices,
+                     bounds=None, standing=None):
+            self.spec, self.bounds, self.standing = spec, bounds, standing
+            trace.append(_Call("split", locked=tuple(spec.locked), enemy=tuple(spec.enemy)))
+
+        def _step(self, name):
+            trace.append(_Call(name, enemy=tuple(self.spec.enemy)))
+            if breaks_after is not None and len(trace) >= breaks_after:
+                raise BrokenProcessPool("a worker died")
+
+        def rank_roster(self):
+            self._step("rank_roster")
+
+        def sweep(self):
+            self._step("sweep")
+
+        def merge(self):
+            self._step("merge")
+
+        def solved(self):
+            self._step("solved")
+            return "solved"
+
+        def swept(self):
+            self._step("swept")
+            return "swept"
+
+    class Fake:
+        kind, blue, red, score, seconds = "infer", ["A", "B"], [], 1.0, 0.0
+        picks, contributions, partial, facts = [], [], False, None
+
+        def resolve(self, *a):
+            return None, [], [], []
+
+    def infer(world, map_name=None, red=(), blue=(), bans=(), side="", *, solved=None, **kw):
+        trace.append(_Call("infer", enemy=tuple(red), locked=tuple(blue), solved=solved,
+                           seat=kw.get("seat", "blue")))
+        return Fake()
+
+    def current(world, blue_result, map_name=None, red=(), blue=(), bans=(), side="", *,
+                swept=None, **kw):
+        trace.append(_Call("current", enemy=tuple(red), picks=tuple(blue), swept=swept,
+                           seat=kw.get("seat", "blue")))
+        return Fake()
+
+    def countered(world, map_name, red_optimal, blue, bans=(), side="", *, solved=None,
+                  swept=None, **kw):
+        trace.append(_Call("countered", against=tuple(red_optimal), picks=tuple(blue),
+                           solved=solved, swept=swept))
+        return Fake()
+
+    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: parallel)
+    monkeypatch.setattr(engine, "_workers", lambda: "pool")
+    monkeypatch.setattr(engine, "_drop_workers", lambda: trace.append(_Call("drop_workers")))
+    monkeypatch.setattr(engine, "_Split", Split)
+    monkeypatch.setattr(engine, "infer", infer)
+    monkeypatch.setattr(engine, "current", current)
+    monkeypatch.setattr(engine, "_countered", countered)
+    monkeypatch.setattr(engine, "_finish", lambda result, best: None)
+    monkeypatch.setattr(engine, "_momentum", lambda *a, **kw: {"verdict": "-"})
+    monkeypatch.setattr(engine, "_plan", lambda *a: "-")
+    monkeypatch.setattr(engine, "legal_shapes", lambda catalog: [])
+    monkeypatch.setattr(engine.compute, "expected_picks", lambda *a: [])
+    engine.board(Fake(), None, list(red), list(blue), catalog=catalog.load(FIXTURE_PLAYBOOK))
+    return trace
+
+
+def test_the_pooled_and_the_in_process_board_run_one_orchestration(monkeypatch):
+    """The six calls are written once. Pooled, each is handed its split's
+    result; in this process every split is None and the call searches for
+    itself. Nothing else about the sequence may differ."""
+    pooled = _traced_board(monkeypatch, parallel=True)
+    alone = _traced_board(monkeypatch, parallel=False)
+    assert [c.what for c in alone] == ["infer", "infer", "current", "current",
+                                       "infer", "countered"]
+    assert all(c.kw["solved"] is None for c in alone if c.what == "infer")
+    assert all(c.kw["swept"] is None for c in alone if c.what in ("current", "countered"))
+    # the same six calls, in the same order, with the same boards
+    def shape(trace):
+        return [(c.what, {k: v for k, v in c.kw.items() if k not in ("solved", "swept")})
+                for c in trace if c.what in ("infer", "current", "countered")]
+    assert shape(pooled) == shape(alone)
+    # pooled, each call takes its split's work instead of searching
+    assert [c.kw["solved"] for c in pooled if c.what == "infer"] == ["solved"] * 3
+
+
+def test_a_dying_worker_reruns_the_same_board_in_this_process(monkeypatch):
+    """A BrokenProcessPool anywhere in the pooled pass drops the pool and runs
+    the identical sequence here - not a second, differently written one."""
+    alone = _traced_board(monkeypatch, parallel=False)
+    for breaks_after in (1, 4, 8, 12):
+        trace = _traced_board(monkeypatch, parallel=True, breaks_after=breaks_after)
+        assert _Call("drop_workers") in trace, breaks_after
+        after = trace[[c.what for c in trace].index("drop_workers") + 1:]
+        assert after == alone, (breaks_after, after)
+
+
 # --- the solver against the built database ------------------------------------
 
 @pytest.fixture(scope="module")
@@ -90,14 +210,6 @@ def kings_row_board(world):
     from inference import engine
     return engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                         catalog=catalog.load(FIXTURE_PLAYBOOK))
-
-
-@pytest.fixture(scope="module")
-def world(db):
-    from ui.facts import model
-    w = model.load(db)
-    db.rollback()
-    return w
 
 
 @pytest.mark.invariant
@@ -181,7 +293,7 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     from inference import engine
     fix = catalog.load(FIXTURE_PLAYBOOK)        # the reference playbook has the side rules
     b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack", catalog=fix)
-    blue, red, cur = b["blue"], b["red"], b["current"]
+    blue, red, cur = b.blue, b.red, b.current
     assert blue.seat == "blue" and blue.side == "attack" and blue.locked == []
     absolute = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], side="attack",
                             catalog=fix)
@@ -194,14 +306,14 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert red.blue == theirs.blue
     assert cur.kind == "current" and cur.partial and cur.blue == ["Ana"]
     assert cur.contributions and cur.score is not None
-    rc = b["red_current"]                                  # their comp as revealed, scored vs ours
+    rc = b.red_current                                  # their comp as revealed, scored vs ours
     assert rc.seat == "red"
     assert set(rc.blue) == {"Zarya", "Pharah"}
     assert rc.red == ["Ana"]
     assert rc.partial
     assert rc.to_dict()["normalized"] is None        # a partial team has no share
-    assert b["countered"] is not None and b["countered"].kind == "countered"
-    fill = b["fill"]                                       # the empty slots, filled around Ana
+    assert b.countered is not None and b.countered.kind == "countered"
+    fill = b.fill                                       # the empty slots, filled around Ana
     assert fill.kind == "fill"
     assert fill.locked == ["Ana"]
     assert len(fill.blue) == 6
@@ -211,7 +323,7 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     around = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack",
                           catalog=fix)
     assert fill.blue == around.blue
-    mo = b["momentum"]
+    mo = b.momentum
     assert set(mo) >= {"blue", "red", "countered", "verdict", "partial"} and mo["partial"]
     # blue is half-drafted, so its share is read through the fill - the best six
     # reachable from its picks - not off the picks alone. Red has no fill computed,
@@ -222,7 +334,7 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert ("ahead by" in mo["verdict"] or mo["verdict"].startswith("even"))
     assert "best counter" in mo["verdict"]
     # prose: the ground, what to play, them, the family
-    plan = b["plan"]
+    plan = b.plan
     assert plan.startswith("King's Row is a Hybrid map: a capture point and then the payload path")
     assert "You are attacking: you have to break their hold" in plan
     assert "The map rewards %s" % world.map("King's Row").style_top in plan
@@ -231,13 +343,13 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert "Above all: " in plan
     assert plan.endswith("Based on: the rates and counters, the map, the side,"
                          " red's 2 revealed picks.")
-    d = engine.board_dict(b)
+    d = b.to_dict()
     assert d["side"] == "attack" and d["red"]["seat"] == "red" and d["current"]["partial"]
     assert d["red_current"]["seat"] == "red"
     assert d["momentum"]["verdict"] == mo["verdict"]
     assert d["plan"] == plan
-    assert d["fill"]["kind"] == "fill" and "the rest filled" in engine.board_rendered(b)
-    assert "current comp" in engine.board_rendered(b) and "momentum:" in engine.board_rendered(b)
+    assert d["fill"]["kind"] == "fill" and "the rest filled" in b.rendered()
+    assert "current comp" in b.rendered() and "momentum:" in b.rendered()
     # the side constraints fire on the right seat
     ids = {c["id"] for c in blue.contributions if c.get("applies")}
     assert "attack-breaks-the-hold" in ids and "defense-holds-the-ground" not in ids
@@ -272,15 +384,15 @@ def test_the_board_scores_under_the_weights_it_is_given(world, kings_row_board):
     plain = kings_row_board
     fix = catalog.load(FIXTURE_PLAYBOOK)
     # a heuristic that actually moves this comp's score (one at the reference floor would not)
-    moving = next(c["id"] for c in plain["current"].contributions
+    moving = next(c["id"] for c in plain.current.contributions
                   if c["kind"] == "heuristic" and c.get("weighted"))
     heuristic = next(h for h in fix if h.id == moving)
     weights = {heuristic.id: 10.0 if heuristic.weight < 10 else 0.5}
     tilted = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                           catalog=fix, weights=weights)
-    assert tilted["current"].to_dict()["weights"][heuristic.id] == weights[heuristic.id]
-    assert plain["current"].to_dict()["weights"][heuristic.id] == heuristic.weight
-    assert tilted["current"].score != plain["current"].score
+    assert tilted.current.to_dict()["weights"][heuristic.id] == weights[heuristic.id]
+    assert plain.current.to_dict()["weights"][heuristic.id] == heuristic.weight
+    assert tilted.current.score != plain.current.score
     assert next(h for h in catalog.load(FIXTURE_PLAYBOOK)
                 if h.id == heuristic.id).weight == heuristic.weight
 
@@ -291,15 +403,15 @@ def test_fight_odds_pit_the_two_shares_against_each_other(world, kings_row_board
     sum, the pair splits 100, and the verdict says so; one seat unscored or
     empty: no odds."""
     from inference import engine
-    b = engine.board_dict(kings_row_board)
+    b = kings_row_board.to_dict()
     mo = b["momentum"]
     n, m = mo["blue"], mo["red"]
     assert isinstance(n, int) and isinstance(m, int) and n + m > 0
     blue_odds = round(100.0 * n / (n + m))
     assert mo["odds"] == {"blue": blue_odds, "red": 100 - blue_odds}
     assert "fight odds blue %d%%, red %d%%" % (blue_odds, 100 - blue_odds) in mo["verdict"]
-    alone = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"], [],
-                                           catalog=catalog.load(FIXTURE_PLAYBOOK)))
+    alone = engine.board(world, "King's Row", ["Zarya", "Pharah"], [],
+                         catalog=catalog.load(FIXTURE_PLAYBOOK)).to_dict()
     assert alone["momentum"]["blue"] is None and alone["momentum"]["odds"] is None
 
 
@@ -314,16 +426,16 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world):
     assert limit_only and not catalog.scores(limit_only)
     b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                      catalog=limit_only)
-    d = engine.board_dict(b)
+    d = b.to_dict()
     for key in ("blue", "red"):                     # the optimal is the reference: 100, always
         assert d[key]["scoring"] is True and d[key]["normalized"] == 100
     for key in ("current", "red_current", "fill", "countered"):
         assert d[key]["scoring"] is False and d[key]["normalized"] is None
         assert all(a["normalized"] is None for a in d[key]["alternatives"])
     assert d["momentum"]["verdict"].startswith("unscored") and d["momentum"]["blue"] is None
-    assert "(unscored)" in b["current"].rendered() and "UNSCORED:" in b["current"].rendered()
-    scored = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
-                                            ["Ana", "Reinhardt"], catalog=reference))
+    assert "(unscored)" in b.current.rendered() and "UNSCORED:" in b.current.rendered()
+    scored = engine.board(world, "King's Row", ["Zarya", "Pharah"],
+                          ["Ana", "Reinhardt"], catalog=reference).to_dict()
     assert scored["current"]["scoring"] is True
     assert scored["current"]["normalized"] is None   # two picks of six: no share to give
     assert 0 < scored["fill"]["normalized"] <= 100   # the filled six carries it
@@ -345,8 +457,8 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
         "metric: team.hitscan\nweight: 1\nwhen: matchup.flyers >= 1\n---\nx\n", "utf-8")
     scratch = catalog.load(str(tmp_path))
     assert catalog.scores(scratch)
-    grounded = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Ana"],
-                                              ["Reinhardt", "Cassidy"], catalog=scratch))
+    grounded = engine.board(world, "King's Row", ["Zarya", "Ana"],
+                            ["Reinhardt", "Cassidy"], catalog=scratch).to_dict()
     for key in ("blue", "red"):
         assert grounded[key]["scoring"] is True and grounded[key]["normalized"] == 100
     for key in ("current", "red_current", "fill"):
@@ -361,7 +473,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     assert "waits for matchup.flyers >= 1" in grounded["momentum"]["verdict"]
     # no picks at all: blue's seat counters red's likely six, the optimal is the
     # reference (100), and the verdict is the plain "no picks yet"
-    empty = engine.board_dict(engine.board(world, None, [], [], catalog=scratch))
+    empty = engine.board(world, None, [], [], catalog=scratch).to_dict()
     assert empty["blue"]["normalized"] == 100 and empty["blue"]["unscored"] is None
     # matchup.flyers counts fliers tanks aside: a flying tank does not raise the guard
     if any(world.hero(name).flyer and world.hero(name).role != "tank"
@@ -370,8 +482,8 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     else:                         # the likely six fields no such flier: the one rule waits here too
         assert "waits for matchup.flyers >= 1" in empty["momentum"]["verdict"]
     assert empty["blue"]["red"] == empty["expected"]["blue"]           # countering the likely six
-    flying = engine.board_dict(engine.board(world, "King's Row", ["Zarya", "Pharah"],
-                                            ["Reinhardt", "Cassidy"], catalog=scratch))
+    flying = engine.board(world, "King's Row", ["Zarya", "Pharah"],
+                          ["Reinhardt", "Cassidy"], catalog=scratch).to_dict()
     assert flying["blue"]["scoring"] is True and flying["blue"]["normalized"] == 100
     assert flying["current"]["unscored"] is None
     assert flying["current"]["normalized"] is None   # partial: the fill holds the share
@@ -399,9 +511,9 @@ def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
     seated = legal_shapes(cat, {"tank": 2, "damage": 3, "support": 0})
     assert seated and all(t == 2 and d >= 3 for t, d, _ in seated)
     b = engine.board(world, "King's Row", ["Zarya"], ["Ana"], catalog=cat)
-    assert b["shapes"] == [list(s) for s in shapes]
-    d = engine.board_dict(b)
-    assert d["shapes"] == b["shapes"]
+    assert b.shapes == [list(s) for s in shapes]
+    d = b.to_dict()
+    assert d["shapes"] == b.shapes
     # red's likely six rides along - static: the map and the meta, not their reveal
     assert d["expected"]["kind"] == "expected" and "Zarya" not in d["expected"]["blue"]
     assert len(d["expected"]["picks"]) == 6 and all(p["why"] for p in d["expected"]["picks"])
@@ -418,13 +530,13 @@ def test_blue_counters_the_likely_six_until_red_reveals_a_pick(world, monkeypatc
     m = world.map("King's Row")
     likely = [p["hero"] for p in compute.expected_picks(world, m, [], [])]
     b = engine.board(world, "King's Row", [], ["Ana"])
-    assert b["blue"].red == likely and b["current"].red == likely and b["fill"].red == likely
-    assert b["expected"].blue == likely and b["expected"].kind == "expected"
-    assert [p["hero"] for p in b["expected"].picks] == likely
-    assert "their likely starting comp" in engine.board_rendered(b)
+    assert b.blue.red == likely and b.current.red == likely and b.fill.red == likely
+    assert b.expected.blue == likely and b.expected.kind == "expected"
+    assert [p["hero"] for p in b.expected.picks] == likely
+    assert "their likely starting comp" in b.rendered()
     revealed = engine.board(world, "King's Row", ["Zarya"], ["Ana"])
-    assert revealed["blue"].red == ["Zarya"] and revealed["current"].red == ["Zarya"]
-    assert revealed["expected"].blue == likely                      # static
+    assert revealed.blue.red == ["Zarya"] and revealed.current.red == ["Zarya"]
+    assert revealed.expected.blue == likely                      # static
 
 
 @pytest.mark.invariant
@@ -433,24 +545,24 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     fix = catalog.load(FIXTURE_PLAYBOOK)
     six = ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]
     b = engine.board(world, "Ilios", ["Pharah"], six, side="attack", catalog=fix)
-    assert b["side"] == "" and b["blue"].side == "" and b["red"].side == ""
-    assert b["current"].kind == "evaluate" and b["current"].rank >= 1
-    assert set(b["current"].blue) == set(six)
-    assert b["blue"].locked == [] and b["blue"].to_dict()["normalized"] == 100
-    assert 0 <= b["current"].to_dict()["normalized"] <= 100      # against the absolute optimal
+    assert b.side == "" and b.blue.side == "" and b.red.side == ""
+    assert b.current.kind == "evaluate" and b.current.rank >= 1
+    assert set(b.current.blue) == set(six)
+    assert b.blue.locked == [] and b.blue.to_dict()["normalized"] == 100
+    assert 0 <= b.current.to_dict()["normalized"] <= 100      # against the absolute optimal
     b = engine.board(world, None, [], [], catalog=fix)
-    assert not b["current"].blue and b["current"].partial
+    assert not b.current.blue and b.current.partial
     # nothing locked: the optimal is the fill
-    assert b["countered"] is None and b["fill"] is None
-    assert b["momentum"]["verdict"] == "no picks yet on either side"
-    assert b["momentum"]["blue"] is None and b["momentum"]["red"] is None
-    assert b["plan"].startswith("No map yet, so this is the meta's best six")
-    assert b["plan"].endswith("Based on: the rates and counters.")
-    assert len(b["blue"].blue) == 6                      # the meta's best six, before any map
+    assert b.countered is None and b.fill is None
+    assert b.momentum["verdict"] == "no picks yet on either side"
+    assert b.momentum["blue"] is None and b.momentum["red"] is None
+    assert b.plan.startswith("No map yet, so this is the meta's best six")
+    assert b.plan.endswith("Based on: the rates and counters.")
+    assert len(b.blue.blue) == 6                      # the meta's best six, before any map
     b = engine.board(world, "Ilios", [], [], bans=["Widowmaker"], catalog=fix)
-    assert b["plan"].endswith("the map, 1 ban.") and b["plan"].count("\n") >= 2
-    assert b["plan"].startswith("Ilios is a Control map: one point in three arenas")
-    assert "The map rewards %s" % world.map("Ilios").style_top in b["plan"]
+    assert b.plan.endswith("the map, 1 ban.") and b.plan.count("\n") >= 2
+    assert b.plan.startswith("Ilios is a Control map: one point in three arenas")
+    assert "The map rewards %s" % world.map("Ilios").style_top in b.plan
 
 
 @pytest.mark.invariant
@@ -473,10 +585,10 @@ def test_scores_share_one_scale_per_board(world):
     assert r.alternatives[0]["normalized"] <= 100
     best = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], catalog=fix)
     b = engine.board(world, "King's Row", ["Zarya", "Pharah"], best.blue, catalog=fix)
-    assert abs(b["current"].score - best.score) < 1e-9 and b["blue"].blue == best.blue
-    assert b["current"].to_dict()["normalized"] == 100 and b["red"].to_dict()["normalized"] == 100
+    assert abs(b.current.score - best.score) < 1e-9 and b.blue.blue == best.blue
+    assert b.current.to_dict()["normalized"] == 100 and b.red.to_dict()["normalized"] == 100
     b = engine.board(world, "King's Row", ["Zarya", "Pharah"], r.blue, catalog=fix)  # around Ana
-    assert b["blue"].blue == best.blue and b["current"].to_dict()["normalized"] <= 100
+    assert b.blue.blue == best.blue and b.current.to_dict()["normalized"] <= 100
     again = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], pool_size=4,
                          catalog=fix)
     assert abs(again.score - engine.evaluate(
@@ -546,10 +658,10 @@ def test_the_plan_names_every_maps_derived_style(world, kings_row_board):
     map has none. One board is solved through the public path; the other maps'
     plans are composed from that board's optimal."""
     from inference import engine
-    blue_r = kings_row_board["blue"]
+    blue_r = kings_row_board.blue
     for m in world.maps.values():
         assert m.style_top and all(note is None for _, note in m.styles.values()), m.name
-        plan = (kings_row_board["plan"] if m.name == "King's Row"
+        plan = (kings_row_board.plan if m.name == "King's Row"
                 else engine._plan(world, m, "", [], [], blue_r))
         assert "The map rewards %s" % m.style_top in plan, m.name
         assert "archetype" not in plan and "authored" not in plan, m.name
@@ -562,14 +674,14 @@ def test_the_plan_names_the_terrain_the_facts_hold_and_no_other(world, kings_row
     first; a board whose facts hold none for the map names none."""
     from inference import engine
     from ui.facts import model
-    blue_r = kings_row_board["blue"]
+    blue_r = kings_row_board.blue
     above = [f.value["feature"] for f in blue_r.facts.find("map.terrain", "King's Row")
              if f.value["z"] > 0][:engine.TERRAIN_NAMED]
     assert above and above[0] == "chokes"
     assert set(engine.TERRAIN_GROUND) == set(model.TERRAIN_FEATURES)
     sentence = "The wiki's article stresses %s." % engine._and(
         engine.TERRAIN_GROUND[f] for f in above)
-    assert sentence in kings_row_board["plan"].split("\n")[0]
+    assert sentence in kings_row_board.plan.split("\n")[0]
     # these facts are King's Row's: another map's plan reads none of them
     assert "stresses" not in engine._plan(world, world.map("Ilios"), "", [], [], blue_r)
 
@@ -582,13 +694,13 @@ def test_the_plan_names_the_stages_the_facts_hold_and_no_other(world, kings_row_
 
     from inference import engine
     from ui.facts import engine as facts_engine
-    blue_r = kings_row_board["blue"]
+    blue_r = kings_row_board.blue
     held = blue_r.facts.find("map.stage_terrain", "King's Row")
     assert [f.value["stage"] for f in held] == ["Assault", "Escort"]
     named = [engine._and(engine.TERRAIN_GROUND[x["feature"]] for x in f.value["features"])
              for f in held]
     sentence = "Assault has the %s; Escort the %s." % tuple(named)
-    assert sentence in kings_row_board["plan"].split("\n")[0]
+    assert sentence in kings_row_board.plan.split("\n")[0]
 
     def plan(name):
         r = copy.copy(blue_r)
@@ -614,6 +726,7 @@ def test_the_plan_names_the_stages_the_facts_hold_and_no_other(world, kings_row_
         assert not any(stage in plan(name) for stage in world.map(name).stages), name
 
 
+@pytest.mark.invariant
 def test_the_plan_says_nothing_the_board_contradicts(world):
     """A mirror is told as one, a six solved before red reveals a pick names the
     likely six it counters, "Above all" leaves out the shape every six pays and
@@ -624,23 +737,25 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     m = copy.copy(world.map("King's Row"))
     m.styles = {"brawl": (1.0, None), "dive": (-0.5, None), "poke": (0.0, None)}   # a brawl map
     rules = [Ns(id="two-supports-hold", name="Two supports hold a six", kind="constraint",
-                category="shape", when=None),
+                category="shape", when=None, pending=False),
              Ns(id="dive-the-pocket", name="Dive the pocket", kind="constraint",
-                category="matchup", when=Expr("enemy.dmg_amp >= 2")),
+                category="matchup", when=Expr("enemy.dmg_amp >= 2"), pending=False),
              Ns(id="brawl-maps", name="Brawl maps reward durability", kind="heuristic",
-                category="map", when=Expr("map.style_top == 'brawl'")),
+                category="map", when=Expr("map.style_top == 'brawl'"), pending=False),
              Ns(id="poke-needs-reach", name="Poke needs reach", kind="heuristic",
-                category="shape", when=Expr("team.style_lean == 'poke'")),
+                category="shape", when=Expr("team.style_lean == 'poke'"), pending=False),
              Ns(id="unmet", name="An unmet need", kind="heuristic", category="general",
-                when=None)]
+                when=None, pending=False)]
     terms = [{"id": r.id, "applies": True, "weighted": 2.0} for r in rules[:4]]
     terms.append({"id": "unmet", "applies": True, "weighted": -0.5, "need": True})
     red_h = [world.hero("Reinhardt"), world.hero("Zarya")]
     theirs = compute.team_metrics(world, red_h, m, [])
     red_lean = theirs["style_lean"] or theirs["style_top"]
     assert red_lean == "brawl"
-    six = Ns(playstyle="brawl", picks=[], catalog=rules, contributions=terms,
-             red=["Reinhardt", "Zarya"])
+    # a real Result, not a stand-in: _plan reads .facts, which Result defines
+    six = engine.Result("infer", m.name, ["Reinhardt", "Zarya"], [], [], rules)
+    six.playstyle = "brawl"
+    six.contributions = terms
     plan = engine._plan(world, m, "", [], red_h, six)                   # a mirror
     assert "(Reinhardt, Zarya) lean brawl too: %s." % engine.SAME_LEAN["brawl"] in plan
     assert engine.THEIR_LEAN["brawl"] not in plan
@@ -680,6 +795,7 @@ def test_the_rendered_breakdown_marks_a_need():
     assert [c["need"] for c in r.to_dict()["contributions"]] == [False, True]
 
 
+@pytest.mark.invariant
 def test_a_metric_printed_inside_another_fact_cites_that_fact(world):
     """team.range_max rides the range_median line and team.cleanse the invuln
     line; a rule on either cites that fact, not its guard's."""
@@ -762,20 +878,20 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
                for h in catalog.load() if h.kind == "heuristic"}
     split = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                          side="attack", weights=weights)
-    assert split["blue"].to_dict()["weights"] == weights         # the override reached the worker
+    assert split.blue.to_dict()["weights"] == weights         # the override reached the worker
     monkeypatch.setattr(engine, "PARALLEL", False)
     assert not engine.parallel_available()
     straight = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                             side="attack", weights=weights)
 
     def timeless(b):
-        d = engine.board_dict(b)
+        d = b.to_dict()
         for key in ("blue", "red", "current", "red_current", "fill", "countered"):
             if d.get(key):
                 d[key].pop("seconds", None)
         return d
     assert timeless(split) == timeless(straight)
-    first_line = lambda b: engine.board_rendered(b).split("\n")[0]   # noqa: E731
+    first_line = lambda b: b.rendered().split("\n")[0]   # noqa: E731
     assert first_line(split) == first_line(straight)
     assert engine.parallel_available(catalog=[]) is False   # a caller's catalog stays in-process
 
@@ -845,7 +961,8 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
     locked, banned = [world.hero("Reinhardt")], [world.hero("Mercy")]
 
     def solver_on(w):
-        return solver_module.Solver(w, None, [], locked, scratch, pool_size=3, bans=banned)
+        return solver_module.Solver(w, None, [], locked, banned, catalog=scratch,
+                                    pool_size=3)
 
     alone = copy.copy(world)                   # the same roster, no synergy pair yet
     alone.synergies, alone.partners = {}, {}
@@ -899,7 +1016,8 @@ def test_a_ban_does_not_rescale_the_board(world):
 
     def score_under(bans):
         m, red_h, _, bans_h = world.resolve("King's Row", red, [], bans)
-        solver = solver_module.Solver(world, m, red_h, [], catalog, 6, bans_h, "attack")
+        solver = solver_module.Solver(world, m, red_h, [], bans_h, "attack",
+                                      catalog=catalog)
         solver.freeze_bounds()
         cand = solver.prepare(solver_module.Candidate([world.hero(n) for n in six]))
         return solver.score(cand, detail=False).score
@@ -923,6 +1041,7 @@ def test_the_order_of_a_six_does_not_decide_the_ranking(world):
     assert solver_module.Solver._rank_key(one) == solver_module.Solver._rank_key(other)
 
 
+@pytest.mark.invariant
 def test_one_hero_cannot_hold_two_seats(world):
     """A six with a hero twice is a five, and team_metrics would count it twice."""
     import pytest as _pytest
@@ -950,8 +1069,8 @@ def test_a_rule_scales_by_the_metric_it_names(world):
 
     def points(map_name, strategy_id):
         m, red, _, _ = world.resolve(map_name, ["Zarya", "Pharah"], [], [])
-        solver = solver_module.Solver(world, m, red, [], catalog, 6, [],
-                                      engine._side(m, "attack"))
+        solver = solver_module.Solver(world, m, red, [], [], engine._side(m, "attack"),
+                                      catalog=catalog)
         solver.freeze_bounds()
         best = engine.infer(world, map_name, ["Zarya", "Pharah"], [],
                             side=engine._side(m, "attack"), top=1)

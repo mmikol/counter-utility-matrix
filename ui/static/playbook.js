@@ -5,7 +5,7 @@
 /* a heuristic's weight is the user's to set: a slider under its card, 0 to 10
    to the hundredth (0.25, 9.99), with a number box for the exact figure,
    starting at the weight the file infers; a setting rides with every board
-   request (weight=id:value) and never touches the file. Only heuristics have
+   request (weights=id:value) and never touches the file. Only heuristics have
    weights to set - a scored constraint's stays its own. */
 function weightRow(h) {
   var set = st.weights && st.weights.hasOwnProperty(h.id), v = set ? st.weights[h.id] : h.weight;

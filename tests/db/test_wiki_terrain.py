@@ -5,7 +5,6 @@ rolled back, skipped without the cache or the database."""
 
 import os
 
-import psycopg
 import pytest
 
 from db import CACHE_DIRS
@@ -347,16 +346,6 @@ def test_the_lexicon_is_the_fixed_set_of_features():
 
 # --- the page cache -> the table -----------------------------------------------
 
-@pytest.fixture()
-def sandbox(db, dsn):
-    """A connection run() may commit on: nothing lands."""
-    connection = psycopg.connect(dsn)
-    connection.commit = lambda: None
-    yield connection
-    connection.rollback()
-    connection.close()
-
-
 def terrain_of(connection, name):
     return {feature: (mentions, per_thousand) for feature, mentions, per_thousand
             in connection.execute(
@@ -373,8 +362,9 @@ def test_terrain_pulls_from_the_cache(sandbox):
         " from map_terrain t join sources src using (source_id)").fetchall()
     total = sandbox.execute("select count(*) from maps").fetchone()[0]
 
-    assert set(data) == {"maps", "without_text", "rows", "words", "stages",
+    assert set(data) == {"maps", "without_text", "missing", "rows", "words", "stages",
                          "stages_no_text", "stage_rows", "tables"}
+    assert data["missing"] == []                  # every article fetched from the cache
     assert data["tables"] == ["map_terrain", "stage_terrain"]
     assert data["rows"] == len(rows) == data["maps"] * len(FEATURES)
     assert data["maps"] + len(data["without_text"]) == total

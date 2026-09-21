@@ -50,7 +50,9 @@ set on a slider is the session's own and reaches no file. The data
 layer's `tune` tool is deliberately unaffected - a Claude Code session
 still writes weights through it. With `COUNTRIX_READ_ONLY=0` the
 write comes back: `POST /api/weight` on the board (bound to 127.0.0.1
-like everything else), which the board turns into a `tune` call - over HTTP to the MCP server with the bearer token in the
+like everything else, and behind the data layer's two browser guards - a
+non-local `Origin` is refused with 403, a body that does not claim
+`application/json` with 415), which the board turns into a `tune` call - over HTTP to the MCP server with the bearer token in the
 compose stack, in-process through the same tool registry on the local
 cluster - so the change is validated against the catalog, logged with its
 reason and mirrored like any other. The board never opens a playbook
@@ -63,10 +65,11 @@ calls per client address per minute (the limit is per address, not per
 claimed session id) and answers 429 past that, and - when
 `COUNTRIX_MCP_TOKEN` is set in `.env` - requires
 `Authorization: Bearer <token>` on every call (the session sends it from
-`.mcp.json`; `/health` stays open for the healthchecks). Every tool call,
-over either transport, is one line in the audit log
-`db/raw/audit.jsonl`: when, transport, client, tool, the names and sizes
-of its arguments (never their values), outcome, duration.
+`.mcp.json`; `/health` stays open for the healthchecks). Every tool call is
+one line in the audit log `db/raw/audit.jsonl`: when, transport (`stdio`,
+`http` or `in-process`, the last being the refresher's and the shell's
+direct calls), client, tool, the names and sizes of its arguments (never
+their values), outcome, duration.
 
 **SQL reads tables, not disks.** The `query` tool accepts one statement
 that starts `SELECT`, `WITH`, `EXPLAIN`, `SHOW`, `TABLE` or `VALUES`,
@@ -78,6 +81,14 @@ there is no superuser session to climb back to. The functions that run
 text as SQL or change settings are withdrawn from `PUBLIC`. The statement
 runs read-only under a ten-second timeout; the first 200 rows come back,
 a result is capped at a megabyte, cells at two thousand characters.
+
+**A table name in the statement is checked.** psycopg parameterises values
+and never identifiers, so the writers that name a table or column in the
+SQL text itself - the exports, the stat inserts, the terrain store, the
+lookups, the sentry's scan - pass the name through `psql.identifier()`,
+which refuses anything but lowercase, digits and underscores. Every such
+name comes from a literal or from the catalog today; the check is what
+keeps a later caller from changing that quietly.
 
 **Files are written by validated tools only.** A strategy's id is its
 filename, lowercase-kebab and nothing else, so no path leaves the folder

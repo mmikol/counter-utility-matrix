@@ -1,6 +1,10 @@
 # Tuning log
 
 Every change to a strategy's frontmatter, newest last: when, what, why, and who.
+Most of what it records is the history of a playbook no longer shipped: the
+rules were removed on purpose and are being rebuilt by hand, so an id here
+usually has no file beside it. `../README.md` holds the sources they came
+from.
 
 - 2026-09-14T16:08Z `optimal-play` added as assumption/assumption (the experiment keeps the ground rule the solver and the session hold every comp to: players play optimally) [claude-code-session]
 - 2026-09-14T16:25Z `healing-floor` weight: 1 -> 10 (testing an extreme: healing dominates everything else) [claude-code-session]

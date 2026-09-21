@@ -56,12 +56,12 @@ the scripts have no constant to keep in step with the Python.
 | `/` | the board: map selector, attack/defense switch (Escort and Hybrid maps), the bans bar, the red and blue rosters grouped by role with the announced hero at the end, and three panels - **comps**, **facts**, **playbook** |
 | `/static/<file>` | `board.css`, `board.js`, `comps.js`, `playbook.js` - stylesheets and scripts, nothing else |
 | `/api/roster` | every hero (role, subrole, portrait, status, release day), every map (mode, top style, sided or not), the role icons, and the patches newer than the rates |
-| `/api/facts?map=&side=&red=&blue=&ban=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
-| `/api/infer?map=&side=&red=&blue=&ban=` | the board solved at any stage - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, red's likely starting comp, the fight odds, the game plan and the shapes the limits allow |
+| `/api/facts?map=&side=&red=&blue=&bans=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
+| `/api/infer?map=&side=&red=&blue=&bans=` | the board solved at any stage - the inference layer's `board()` in-process, or the service's `/board` when `INFERENCE_URL` is set: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, blue's picks against red's best counter, the empty blue slots filled, red's likely starting comp, the fight odds, the game plan and the shapes the limits allow |
 | `/api/strategies` | the strategies catalog: every constraint, heuristic and assumption with its kind, form, frontmatter and body |
 | `/math` | `static/math.html` in the page shell: the equation, the scoring function (what 100 means, fight odds, the argmax), the board (red's likely starting comp and its formula, blue's optimal counter, the weights) and how the layers fit, with a table of contents; linked from the board's header |
 | `/tests` | `static/tests.html` in the page shell: what the engine is checked against - the designed proof over every legal six, the adversarial hunt against a wider search, the random sample and the rate it bounds, the regression gate, the properties the suite holds, and what none of it proves |
-| `POST /api/weight` `{id, weight}` | the board's one write, a `tune` call - off by default (403): a weight applies to the session only; `COUNTRIX_READ_ONLY=0` turns it and the *store* button on |
+| `POST /api/weight` `{id, weight}` | the board's one write, a `tune` call - off by default (403): a weight applies to the session only; `COUNTRIX_READ_ONLY=0` turns it and the *store* button on. A non-local `Origin` is refused with 403 and a body that does not claim `application/json` with 415, the same guards the data layer's door applies |
 
 Every request opens its own connection and loads a fresh World, so a
 `pull_rates` or a tune shows on the next click without a restart.
@@ -145,7 +145,7 @@ metric, weight, *need* where it is one, its `when`. Under each heuristic a
 slider for its weight - 0 to 10 to the hundredth, a number box for the
 exact figure, the file's weight as the inferred default, a reset. A
 setting is kept in the browser, rides with every board request as
-`weight=<id>:<value>`, is applied by the solver for that board only (each
+`weights=<id>:<value>`, is applied by the solver for that board only (each
 result names the `weights` it was scored under) and never touches the
 file. By default that is the whole story: the board is read-only, there
 is no *store* button and `POST /api/weight` answers 403. With
@@ -187,7 +187,7 @@ win rate on the map minus its overall win rate, z-scored across the maps.
 `style_top` is the highest, ties by name; `style_margin` is the top minus
 the runner-up. `best_maps` derives each hero's best maps: the three with
 the largest map win rate minus overall win rate, only where positive,
-ties by map name. `Hero.finish()` derives the hero's numbers from weapons, abilities
+ties by map name. `Hero.derive_scalars()` derives the hero's numbers from weapons, abilities
 and passives; ultimates add tools only, perks nothing. dps: the held
 weapon, sustained, reload in. burst: the biggest single hit, a headshot
 where one counts. hps and peak heal: healing onto teammates, per second
@@ -222,7 +222,10 @@ prints them as the vocabulary a strategy may reference):
 expression reads. `expected_picks` is red's likely six from the data
 alone, filled into `EXPECTED_SHAPE` (two per role). `TEAM_SIZE` (six,
 6v6 Open Queue), `MAX_BANS` (five), `SIDED_MODES` (Escort, Hybrid),
-`SIDES`, `is_sided` and `opposite` live here too.
+`SIDES`, `is_sided` and `opposite` live here too, and with them the
+board's query vocabulary: `parse_board(query)` reads a board off a parsed
+query string and `board_query(...)` writes one back, so this board and
+the inference service spell a board the same way.
 
 ### `engine.py` - the FactSet
 

@@ -24,9 +24,11 @@ from db import RAW_DIR
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "countrix", "version": "2.1.0"}
 
-# Every tools/call is one JSON line here: when, over which transport, from
-# whom, which tool, the shape of its arguments (names and sizes, never the
-# values), whether it succeeded, and how long it took. The sentry reads it.
+# Every tool call is one JSON line here - through either transport, and
+# in-process where the refresher and the shell call one directly: when, over
+# which transport, from whom, which tool, the shape of its arguments (names and
+# sizes, never the values), whether it succeeded, and how long it took. The
+# sentry reads it.
 AUDIT_PATH = os.environ.get("COUNTRIX_AUDIT", os.path.join(RAW_DIR, "audit.jsonl"))
 _client = threading.local()
 
@@ -60,6 +62,37 @@ PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL = (
 
 class ToolError(Exception):
     """A tool refusing its input: reported as isError, not as a crash."""
+
+
+def audited(name, arguments, call, transport, client=None, audit_path=None):
+    """Run one tool call and leave exactly one audit line for it. Every path to
+    a tool - stdio, HTTP and the in-process calls the refresher and the shell
+    make - comes through here, so the sentry's window covers all three."""
+    entry = {"t": datetime.now(UTC).isoformat(timespec="seconds"),
+             "transport": transport, "client": client,
+             "tool": name, "args": _shape(arguments)}
+    started = time.time()
+
+    def spent():
+        return int((time.time() - started) * 1000)
+
+    try:
+        result = call()
+    except ToolError as refused:
+        audit(dict(entry, ok=False, refused=str(refused)[:200], ms=spent()), audit_path)
+        raise
+    except Exception:
+        audit(dict(entry, ok=False, crashed=True, ms=spent()), audit_path)
+        raise
+    audit(dict(entry, ok=True, ms=spent()), audit_path)
+    return result
+
+
+class InvalidParamsError(Exception):
+    """The request left out a field this method needs, or named something the
+    server does not serve: the wire's INVALID_PARAMS. Raised only where that is
+    what went wrong, so anything else escaping a handler is the server's own
+    fault and reaches the branch that logs a traceback."""
 
 
 class Server:
@@ -99,9 +132,8 @@ class Server:
                 return self._error(msg_id, METHOD_NOT_FOUND,
                                    "unknown method %r" % method)
             return {"jsonrpc": "2.0", "id": msg_id, "result": handler(params)}
-        except KeyError as missing:
-            return self._error(msg_id, INVALID_PARAMS,
-                               "missing parameter %s" % missing)
+        except InvalidParamsError as bad:
+            return self._error(msg_id, INVALID_PARAMS, str(bad))
         except Exception as error:      # never let one request kill the wire
             self.log(traceback.format_exc())
             return self._error(msg_id, INTERNAL, "%s: %s"
@@ -137,27 +169,20 @@ class Server:
         return {"tools": [t.describe() for t in self.tools.values()]}
 
     def _tools_call(self, params):
+        if "name" not in params:
+            raise InvalidParamsError("missing parameter 'name'")
         name = params["name"]
         tool = self.tools.get(name)
         if tool is None:
-            raise KeyError("tool %r" % name)
+            raise InvalidParamsError("no tool named %r" % name)
         arguments = params.get("arguments") or {}
-        started = time.time()
-        entry = {"t": datetime.now(UTC).isoformat(timespec="seconds"),
-                 "transport": self.transport, "client": getattr(_client, "id", None),
-                 "tool": name, "args": _shape(arguments)}
         try:
-            text, structured = tool(arguments)
+            text, structured = audited(name, arguments, lambda: tool(arguments),
+                                       self.transport, getattr(_client, "id", None),
+                                       self.audit_path)
         except ToolError as refused:
-            audit(dict(entry, ok=False, refused=str(refused)[:200],
-                       ms=int((time.time() - started) * 1000)), self.audit_path)
             return {"content": [{"type": "text", "text": str(refused)}],
                     "isError": True}
-        except Exception:
-            audit(dict(entry, ok=False, crashed=True,
-                       ms=int((time.time() - started) * 1000)), self.audit_path)
-            raise
-        audit(dict(entry, ok=True, ms=int((time.time() - started) * 1000)), self.audit_path)
         result = {"content": [{"type": "text", "text": text}],
                   "isError": False}
         if structured is not None:
@@ -170,9 +195,14 @@ class Server:
         return {"resources": self.resources.list()}
 
     def _resources_read(self, params):
+        if "uri" not in params:
+            raise InvalidParamsError("missing parameter 'uri'")
         if self.resources is None:
-            raise KeyError("uri")
-        return {"contents": [self.resources.read(params["uri"])]}
+            raise InvalidParamsError("this server serves no resources")
+        try:
+            return {"contents": [self.resources.read(params["uri"])]}
+        except KeyError as unknown:
+            raise InvalidParamsError("no resource at %s" % unknown) from unknown
 
     # --- the wire ------------------------------------------------------
 
@@ -280,9 +310,6 @@ class HttpHandler(BaseHTTPRequestHandler):
                                {"Allow": "POST, DELETE"})
         self._reply(404, {"error": "nothing here"})
 
-    def do_DELETE(self):
-        self._reply(200 if urlparse(self.path).path == "/mcp" else 404)
-
     def _authorized(self):
         """With a token configured, every /mcp request must carry it."""
         token = self.server.token
@@ -290,6 +317,19 @@ class HttpHandler(BaseHTTPRequestHandler):
             return True
         header = self.headers.get("Authorization") or ""
         return header.startswith("Bearer ") and hmac.compare_digest(header[7:].strip(), token)
+
+    def do_DELETE(self):
+        """Ends a session. This server keeps no session state to end, and the
+        request runs the door's two checks anyway, so every method on /mcp is
+        guarded alike."""
+        if urlparse(self.path).path != "/mcp":
+            return self._reply(404, {"error": "nothing here"})
+        if not self._origin_allowed():
+            return self._reply(403, {"error": "origin not allowed"})
+        if not self._authorized():
+            return self._reply(401, {"error": "a bearer token is required"},
+                               {"WWW-Authenticate": "Bearer"})
+        return self._reply(200)
 
     def do_POST(self):
         if urlparse(self.path).path != "/mcp":

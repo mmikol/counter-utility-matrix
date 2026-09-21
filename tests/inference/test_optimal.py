@@ -21,14 +21,6 @@ FIXTURE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
                        "fixtures", "optimal.json")
 
 
-@pytest.fixture(scope="module")
-def world(db):
-    from ui.facts import model
-    w = model.load(db)
-    db.rollback()
-    return w
-
-
 def _boards():
     with open(FIXTURE, encoding="utf-8") as handle:
         return json.load(handle)
@@ -51,11 +43,14 @@ def test_the_solver_reaches_the_proven_maximum(world):
     assert not missed, "the solver no longer reaches the proven maximum:\n  " + "\n  ".join(missed)
 
 
-@pytest.mark.invariant
-def test_the_proven_boards_cover_every_input(world):
-    """A regression set that exercised one shape would gate nothing."""
+def test_the_proven_boards_cover_every_input():
+    """A regression set that exercised one shape would gate nothing. Bans are
+    not among the shapes: a board proved under the old scale was proved against
+    an objective that read the bans, so scripts/optimal.py holds them out
+    (OPTIMAL_STALE_BANNED) until they are enumerated again. Needs no database -
+    it reads the fixture - so the pull-request gate checks it."""
     boards = [row["board"] for row in _boards()]
     assert len({b["map"] for b in boards}) >= 5
     assert {len(b["red"]) for b in boards} >= {0, 2}
-    assert max(len(b["bans"]) for b in boards) >= 2
     assert max(len(b["locked"]) for b in boards) >= 2
+    assert not any(b["bans"] for b in boards), "re-proven with bans: restore the bans clause"

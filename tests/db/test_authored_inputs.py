@@ -32,9 +32,9 @@ def test_the_authored_package_holds_the_source_row_and_no_loader():
 
 
 def test_load_authored_takes_strategies_and_nothing_else():
-    assert tools.AUTHORED_INPUTS == ("strategies",)
+    """One input, and no argument to narrow it to: the tool takes none."""
     [schema] = [s for name, _, s, _ in tools.REGISTRY if name == "load_authored"]
-    assert schema["properties"]["only"]["items"]["enum"] == ["strategies"]
+    assert schema["properties"] == {} and schema["required"] == []
 
 
 def test_seasons_and_synergies_are_pulls_in_dependency_order():
@@ -148,12 +148,25 @@ def test_the_migration_that_drops_counterpick_is_one_transaction():
     assert order == sorted(order)
 
 
+def test_a_table_name_that_reaches_sql_text_is_checked():
+    """psycopg parameterises values, never identifiers, so every writer that
+    names a table in the statement itself goes through psql.identifier. The
+    names all come from a literal or the catalog; this is what keeps it so."""
+    from db.psql import identifier
+    for good in ("heroes", "ability_stats", "weapon_configs", "hero_id", "_x9"):
+        assert identifier(good) == good
+    for bad in ("heroes; drop table heroes", "Heroes", "hero-id", "", None, "1table",
+                "heroes ", "heroes--", "*"):
+        with pytest.raises(ValueError, match="not a SQL identifier"):
+            identifier(bad)
+
+
 def test_every_path_the_layer_declares_exists():
     # the folder move once doubled a segment of one of these; the containers
     # found out, the suite did not - now it does
     from db.psql import schema
     from inference import catalog
-    for path in (schema.MIGRATIONS_DIR, catalog.STRATEGIES_DIR,
+    for path in (schema.MIGRATIONS_DIR, catalog.strategies_dir(),
                  os.path.join(db.ROOT, "docs")):
         assert os.path.isdir(path), path
     # the CSV mirror is created on first export and never committed: scraped

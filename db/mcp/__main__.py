@@ -14,7 +14,7 @@ def _status(ctx):
     def status():
         try:
             _, data = tools.run_tool(ctx, "db_status")
-            return {"status": "ok", "tables": data["tables"],
+            return {"status": "ok", "table_count": data["table_count"],
                     "pending_migrations": data["pending_migrations"],
                     "heroes": data["counts"].get("heroes", 0),
                     "announced": data["counts"].get("announced", 0),
