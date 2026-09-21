@@ -14,11 +14,10 @@
 <a href='#pieces'>how the pieces fit</a>
 </nav>
 <h2 id='equation'>The Counter Utility Matrix</h2>
-<p><b>Countrix</b> is short for <b>Counter Utility Matrix</b>, which is the thing
-below: the counter is who answers whom, the utility is what a pick is worth once
-the facts are counted, and the matrix is every selection crossed with every other -
-heroes against heroes, heroes against maps, both against the meta. A comp is the
-argmax over that matrix.</p>
+<p><b>Countrix</b> is short for <b>Counter Utility Matrix</b>, the equation below. The
+counter is who answers whom. The utility is what a pick is worth once the facts are
+counted. The matrix is every selection crossed with every other: heroes against heroes,
+heroes against maps, both against the meta. A comp is the argmax over that matrix.</p>
 <pre class='eq'>DATA           = HEROES &cup; MAPS &cup; META
 for each domain D in { HEROES, MAPS, META }:
   INDEPENDENT(D) = &#8899; facts(s)      over each selection s in D
@@ -30,36 +29,37 @@ STRATEGIES     = CONSTRAINTS &cup; HEURISTICS &cup; ASSUMPTIONS
 COMP           = ARGMAX[ STRATEGIES( FACTS ) ]
 </pre>
 <p><b>DATA</b>: the tables as pulled. HEROES: kits, their published numbers, playstyles,
-counters, synergies. MAPS: mode, stages, sides, and the terrain the wiki's articles describe
-(chokes, interiors, high ground, flanks, sightlines, open ground, hazards, cover: mentions per
-thousand words). META: win, pick and ban rates per hero and per
+counters, synergies. MAPS: mode, stages, sides, and the terrain the wiki's articles
+describe, counted as mentions per thousand words (chokes, interiors, high ground, flanks,
+sightlines, open ground, hazards, cover). META: win, pick and ban rates per hero and per
 map, dated.</p>
-<p><b>FACTS</b>: what the fact engine derives for one board. The <b>independent</b> facts of a
-domain come from one row: a hero's pool, range and rates; a map's mode, stages and terrain
-(each feature z-scored across the maps with text); the meta's vintage. The <b>dependent</b> facts are joins (&#8904;): a hero's rate on this map
-(heroes &#8904; map_meta &#8904; maps), the style a map rewards (the rates' lift + the terrain's lean. Lift, playstyle &#8904;
-map_meta: a style's heroes' win rate there over their own, z-scored across the maps. Lean:
-brawl from chokes and interiors, dive from high ground, flanks and hazards, poke from
-sightlines and open ground, averaged, z-scored across the maps with text), who it
-answers (heroes &#8904; counters &#8904; heroes), who it pairs with, the six aggregated, the twelve compared, a ban against both teams' counters.
-Facts are numbered F1, F2, ...; every claim on the board cites one.</p>
+<p><b>FACTS</b>: what the fact engine derives for one board. The <b>independent</b> facts of
+a domain come from one row: a hero's pool, range and rates; a map's mode, stages and
+terrain, each feature z-scored across the maps with text; the meta's vintage.</p>
+<p>The <b>dependent</b> facts are joins (&#8904;). A hero's rate on this map is heroes &#8904;
+map_meta &#8904; maps. The style a map rewards adds the rates' lift to the terrain's lean:
+lift is playstyle &#8904; map_meta, a style's heroes' win rate there over their own, z-scored
+across the maps; lean reads brawl from chokes and interiors, dive from high ground, flanks
+and hazards, poke from sightlines and open ground, then averages and z-scores across the
+maps with text. The rest are who a hero answers (heroes &#8904; counters &#8904; heroes), who
+it pairs with, the six aggregated, the twelve compared, and a ban weighed against both
+teams' counters. Facts are numbered F1, F2, &hellip;; every claim on the board cites one.</p>
 <p><b>STRATEGIES</b>: the playbook, one markdown file each. A <b>constraint</b> is a hard limit,
 or a bonus or penalty under a condition. A <b>heuristic</b> is a metric, a direction and a
 weight. An <b>assumption</b> is prose: shown, never scored.</p>
-<p><b>COMP</b>: of every legal six, the one the function scores highest on this board.
-Deterministic: the same board gives the same six.</p>
+<p><b>COMP</b>: of every legal six, the one the function scores highest on this board. The
+same board gives the same six.</p>
 <h2 id='function'>The function: STRATEGIES( FACTS )</h2>
 <p>One six in, one number out. The facts are its namespace: <code>team</code>,
-<code>enemy</code>, <code>matchup</code>, <code>map</code>, <code>world</code> - the facts tab's
-own numbers.</p>
+<code>enemy</code>, <code>matchup</code>, <code>map</code> and <code>world</code>, the facts
+tab's own numbers.</p>
 <p>A hard limit that fails removes the six; a soft one subtracts its penalty. A heuristic
 normalises its metric to 0..1 against 1,200 random legal sixes for the board (seeded from map,
-side, enemies and bans), flips it when minimising, and multiplies by its weight. A heuristic
-guarded on the six's own state (<code>team.*</code>, or a <code>matchup.*</code> blue decides) is
-a <i>need</i>: met in full it costs nothing, unmet it costs its weight, so entering the guarded
-state never pays. A scored
-constraint adds bonus minus penalty while its <code>when</code> holds. An assumption adds
-nothing.</p>
+side, enemies and bans), flips it when minimising, then multiplies by its weight. A heuristic
+guarded on the six's own state (<code>team.*</code>, or a <code>matchup.*</code> blue decides)
+is a <i>need</i>: met in full it costs nothing, unmet it costs its weight, so entering the
+guarded state never pays. A scored constraint adds bonus minus penalty while its
+<code>when</code> holds. An assumption adds nothing.</p>
 <pre class='eq'>for one six x, with every hard limit holding:
 
 score(x) = &Sigma; heuristics h     w_h &middot; norm_h( metric_h(x) )
@@ -72,47 +72,48 @@ norm_h(v) = clamp( (v &minus; min_ref) / (max_ref &minus; min_ref), 0, 1 )
             min_ref, max_ref: over the reference sixes h's guard holds on
             max_ref = min_ref: a reward reads 0.5, a need costs nothing
 s_n       = min( 1, 2 / &Sigma; w over the needs on n's guard ): one state costs 2 at most</pre>
-<p id='what-100-means'><b>What 100 means.</b> Each seat's best six on this board is its optimal,
-100. An optimal at or below zero has no share to give: every other comp reads <i>unscored</i>. The badge above a picker is that seat's picks as a share of its optimal under this
-playbook, not a win probability. A seat with nothing to score against reads <i>unscored</i>;
-the reason is on hover.</p>
+<p id='what-100-means'><b>What 100 means.</b> Each seat's best six on this board is its
+optimal, 100. The badge above a picker is that seat's picks as a share of its optimal under
+this playbook, not a win probability. An optimal at or below zero leaves no share to divide,
+so every other comp reads <i>unscored</i>, and the reason is on hover.</p>
 <p id='fight-odds'><b>Fight odds.</b> Blue's share over the sum of both shares; red's is the
-rest. With one seat unscored the bars show the shares alone. Not a fitted probability.</p>
+rest. With one seat unscored the bars show the shares alone. This is not a fitted
+probability.</p>
 <p id='argmax'><b>The argmax.</b> Each role's pool is the six heroes of highest standing: a
-hero's mean score across the reference sixes it is in, plus 0.5 per locked partner. Every legal
-shape is filled around the locked picks, each six is scored, and a local search swaps same-role
-heroes while the score rises, from the best six sixes and the best six of every shape within 4 points
-of the top; then it brings the wiki's synergy pairs into the best sixes two slots at a time. Ties break by mean map win rate, then by name.</p>
+hero's mean score across the reference sixes it appears in, plus 0.5 for each locked partner.
+Every legal shape is filled around the locked picks and scored. A local search then swaps
+same-role heroes while the score rises, starting from the best six sixes and from the best six
+of every shape within 4 points of the top, and finally brings the wiki's synergy pairs into the
+leading sixes two slots at a time. Ties break by mean map win rate, then by name.</p>
 <p id='searched'><b>What is searched, and what is not.</b> There are
 <b>18,040,386</b> legal sixes. The search scores about <b>14,500</b> of them, near enough
 0.08%, so the answer is not a proof that nothing better exists. Two things cut the space.
-The <b>pool</b> keeps each role's six highest-standing heroes, which is a truncation: it can
-drop a hero that is weak alone and decisive beside one partner. The <b>local search</b> then
-reaches back out of the pool - it swaps against the whole released roster, restarts two dozen
-times inside the leading shape, and changes two seats at once, which is how a pair that only
-pays together is found. On 30 boards brute-forced over all 18 shapes the answer was the exact
-maximum every time, and on 13 of those the winning six held a hero the pool had cut - so the
-reaching-back is doing the work, not the pool.</p>
+The <b>pool</b> keeps each role's six highest-standing heroes, a truncation that can drop a
+hero who is weak alone and decisive beside one partner. The <b>local search</b> reaches back
+out of the pool: it swaps against the whole released roster, restarts two dozen times inside
+the leading shape, and changes two seats at once, which is how a pair that only pays together
+is found. On 30 boards brute-forced over all 18 shapes the search returned the exact maximum
+every time, and on 13 of those the winning six held a hero the pool had cut. The reaching
+back is what found them.</p>
 <p id='against-red'><b>What it is optimal against.</b> A comp is optimal <i>against the red
 you can see</i>, not against every red they might pick. Before red reveals anything the board
 answers their most likely starting comp, drawn from the map's pick rates; each pick they show
-re-solves against what is now known. So it is a best reply to present information, and it
-changes as that information does - it is not a strategy that holds whatever red does next. The
-<i>if countered optimally</i> row is the hedge: it scores your six against red's best reply to
-it, so a comp that wins only while red plays badly shows up there.</p>
-<p id='reach'><b>Reach.</b> The intent is that the weights make a hero common or rare
-and never impossible. What is established is less: 51 of the 53 released heroes have a
-board found for them on which they are in the optimal six, within a match's five bans, and
-each such board is a proof. For Freja and Shion the search found none - which is not a
-proof that none exists, only that a search over a few maps and a few reds did not find
-one. No rule forbids either; the playbook does not value what they do on the boards it
-tried.</p>
-<p><b>When nothing scores</b>: every legal six is zero, the board reads <i>unscored</i>, and the
-optimal is the tie-break alone.</p>
+re-solves against what is now known. It is a best reply to present information and changes as
+that information does. The <i>if countered optimally</i> row is the hedge: it scores your six
+against red's best reply to it, so a comp that wins only while red plays badly shows up
+there.</p>
+<p id='reach'><b>Reach.</b> The weights are meant to make a hero common or rare, never
+impossible. What is established is narrower: 51 of the 53 released heroes have a board on
+which they are in the optimal six, within a match's five bans, and each such board is a proof.
+The search found none for Freja and Shion. That is not evidence that no such board exists,
+only that a search over a few maps and a few reds did not find one. No rule forbids either
+hero; the playbook does not value what they do on the boards it tried.</p>
+<p>When every legal six scores zero the board reads <i>unscored</i>, and the optimal is the
+tie-break alone.</p>
 <h2 id='board'>The board</h2>
 <p id='likely-comp'><b>Red's most likely starting comp</b>: a two-two-two, filled slot by slot
 with the likeliest hero from the map's pick rates and the synergy table, past the bans. No
-strategy is read. It does not change when red reveals a pick.</p>
+strategy is read, and it does not change when red reveals a pick.</p>
 <pre class='eq'>likelihood(h) = pick(h, map) + 2 &times; partners(h, the six so far)
 
 pick(h, map)   the hero's pick rate on this map (overall with no map set)
@@ -123,20 +124,21 @@ blue's own picks. The suggestion tiles are a second solve that keeps your locked
 optimal is solved as the scale for red's score and not shown.</p>
 <p id='weights'><b>The weights.</b> A heuristic's weight is the slider under its card. It stays
 in your browser and rides with every request until reset; the file's weight is the default.
-Store writes it to the file through the tune tool, logged. Only a heuristic's weight
-has a slider, 0 to 10; a scored constraint keeps its file's.</p>
+Store writes it into the file through the tune tool, and logs it. Only a heuristic has a
+slider, 0 to 10; a scored constraint keeps the weight in its file.</p>
 <h2 id='pieces'>How the pieces fit</h2>
 <pre class='eq'>sources → db/data (fetch) → db/psql (the database) → ui/facts (FACTS of a board)
                                                                     &darr;
                    inference/strategies (STRATEGIES) → inference/solver (ARGMAX) → the board</pre>
-<p><b>The data layer</b> (<code>db/</code>): the sources in one Postgres schema; the MCP tools
-are the one door. A sentry watches the strategy files, the database's free text and the audit log.</p>
-<p><b>The inference layer</b> (<code>inference/</code>): the playbook and the solver. Expressions
-compiled once and whitelisted; no model, no network.</p>
+<p><b>The data layer</b> (<code>db/</code>): the sources in one Postgres schema, with the MCP
+tools as the one door. A sentry watches the strategy files, the database's free text and the
+audit log.</p>
+<p><b>The inference layer</b> (<code>inference/</code>): the playbook and the solver.
+Expressions are compiled once and whitelisted; it runs no model and opens no connection.</p>
 <p><b>The board</b> (<code>ui/</code>): the facts of one board and the inference layer's answer
 at each stage of a draft. It never calls a language model.</p>
-<p><b>Claude</b>: runs when you ask. Refreshes the sources, derives a strategy's mathematics from
-its prose, tunes weights. <code>/comp</code> is the same solver in chat.</p>
+<p><b>Claude</b>: runs when you ask. It refreshes the sources, derives a strategy's mathematics
+from its prose, and tunes weights. <code>/comp</code> is the same solver in chat.</p>
 <p class='legend'><code>docs/architecture.md</code>, <code>docs/db.md</code>,
 <code>docs/inference.md</code>.</p>
 </article>

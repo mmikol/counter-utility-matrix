@@ -22,29 +22,29 @@ function verdictOf(c) {
    board quietly ignored */
 function why(c) {
   var n = function (x) { return typeof x === 'number' ? +x.toFixed(2) : x; };
-  if (c.form === 'limit') return c.ok ? 'A hard limit, and this six keeps it.'
-                                      : 'A hard limit, and this six breaks it.';
+  if (c.form === 'limit') return c.ok ? 'A hard limit. This six keeps it.'
+                                      : 'A hard limit. This six breaks it.';
   if (!c.applies) {
-    return c.when ? 'Did not read: its guard ' + c.when + ' does not hold on this board.'
-                  : 'Did not read: nothing on this board gives it a number.';
+    return c.when ? 'Never read. Its guard (' + c.when + ') does not hold here.'
+                  : 'Never read. Nothing on this board gives it a number.';
   }
   if (c.form === 'scored') {
     var net = (c.bonus || 0) - (c.penalty || 0);
     return net > 0 ? 'Paid ' + n(c.weighted) + ': bonus ' + n(c.bonus) + ' over penalty ' + n(c.penalty) + '.'
          : net < 0 ? 'Charged ' + n(c.weighted) + ': penalty ' + n(c.penalty) + ' over bonus ' + n(c.bonus) + '.'
-                   : 'Read, and bonus and penalty cancelled.';
+                   : 'Read. Bonus and penalty cancelled.';
   }
   var pos = Math.round((c.norm || 0) * 100);
-  var where = c.spread === false ? 'the sample never moved this metric, so it reads the middle'
-            : pos >= 100 ? 'at the top of the reference range, so more would not pay further'
-            : pos <= 0 ? 'at the bottom of the reference range'
-            : pos + '% of the way up the reference range';
+  var where = c.spread === false ? 'the sample never moved this metric, so it reads as the middle'
+            : pos >= 100 ? 'the top of the reference range, where more stops paying'
+            : pos <= 0 ? 'the bottom of the reference range'
+            : pos + '% up the reference range';
   if (c.need) {
     return (c.weighted || 0) < -1e-9
-      ? 'A need this six only part meets: ' + c.metric + ' = ' + n(c.raw) + ', ' + where + ', costing ' + n(c.weighted) + '.'
-      : 'A need this six meets in full: ' + c.metric + ' = ' + n(c.raw) + ', so it costs nothing.';
+      ? 'A need this six meets only in part: ' + c.metric + ' = ' + n(c.raw) + ', ' + where + '. Costs ' + n(c.weighted) + '.'
+      : 'A need this six meets in full: ' + c.metric + ' = ' + n(c.raw) + '. Costs nothing.';
   }
-  return 'Read ' + c.metric + ' = ' + n(c.raw) + ', ' + where + ', worth ' + n(c.weighted) + '.';
+  return c.metric + ' = ' + n(c.raw) + ', ' + where + '. Worth ' + n(c.weighted) + '.';
 }
 
 function barRow(c, mx) {
@@ -52,7 +52,7 @@ function barRow(c, mx) {
   var detail = why(c);
   if (c.confidence) detail += ' Scaled by ' + c.confidence + (typeof c.confidence_raw === 'number' ? ' = ' + (+c.confidence_raw).toFixed(2) : '') + '.';
   return "<div class='bar" + ((c.weighted || 0) < 0 ? ' neg' : '') + (c.applies === false ? ' off' : '') +
-    "' data-id='" + esc(c.id) + "' title=\"" + esc(detail + (c.text ? ' - ' + c.text : '')) + "\"><span class='lbl'>" +
+    "' data-id='" + esc(c.id) + "' title=\"" + esc(detail + (c.text ? '\n' + c.text : '')) + "\"><span class='lbl'>" +
     esc(c.id) + (c.fact ? " <span class='ev'>" + c.fact + '</span>' : '') +
     "</span><span class='trk'><span class='fill' style='width:" + w.toFixed(1) + "%'></span></span><span class='val'>" +
     ((c.weighted || 0) >= 0 ? '+' : '') + (+(c.weighted || 0)).toFixed(2) + '</span></div>';
