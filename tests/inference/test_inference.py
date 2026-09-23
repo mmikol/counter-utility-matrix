@@ -1055,25 +1055,32 @@ def test_one_hero_cannot_hold_two_seats(world):
 
 
 @pytest.mark.invariant
-def test_a_rule_scales_by_the_metric_it_names(world):
+def test_a_rule_scales_by_the_metric_it_names(world, tmp_path):
     """`confidence:` is an engine field, not a rule: a heuristic names any numeric
     metric and its weight rides on that metric's place between the low and high of
     whatever population the metric actually varies over. Nothing in the code knows
-    which metric any rule names."""
-    from inference import catalog as catalog_module
+    which metric any rule names. The rule is written here, beside the reference
+    playbook, so the test holds whatever the shipped playbook carries."""
     from inference import engine
     from inference import solver as solver_module
-    catalog = catalog_module.load()
-    scaled = [s for s in catalog if getattr(s, "confidence", None)]
-    assert scaled, "no rule declares a confidence - this test guards a live feature"
+    shutil.copytree(FIXTURE_PLAYBOOK, tmp_path, dirs_exist_ok=True)
+    (tmp_path / "fit-the-map-style.md").write_text(
+        "---\nname: Pick into what the map rewards\nkind: heuristic\ncategory: map\n"
+        "metric: team.style_fit\ndirection: maximize\nweight: 2.5\nwhen: map.known == 1\n"
+        "confidence: map.style_margin\n---\n# Pick into what the map rewards\n\n"
+        "The share of the six tagged with the style the map rewards, weighed by how "
+        "hard the map leans.\n", encoding="utf-8")
+    playbook = catalog.load(str(tmp_path))
+    scaled = [s for s in playbook if getattr(s, "confidence", None)]
+    assert [s.id for s in scaled] == ["fit-the-map-style"]
 
     def points(map_name, strategy_id):
         m, red, _, _ = world.resolve(map_name, ["Zarya", "Pharah"], [], [])
         solver = solver_module.Solver(world, m, red, [], [], engine._side(m, "attack"),
-                                      catalog=catalog)
+                                      catalog=playbook)
         solver.freeze_bounds()
         best = engine.infer(world, map_name, ["Zarya", "Pharah"], [],
-                            side=engine._side(m, "attack"), top=1)
+                            side=engine._side(m, "attack"), top=1, catalog=playbook)
         cand = solver.prepare(solver_module.Candidate([world.hero(n) for n in best.blue]))
         solver.score(cand, detail=True)
         return next(c for c in cand.contributions if c["id"] == strategy_id)
