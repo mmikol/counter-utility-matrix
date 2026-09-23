@@ -210,8 +210,11 @@ for p in .venv .cache-blizzard .cache-wiki db/psql/cluster db/raw; do .venv/bin/
 .venv/bin/desloppify config set target_strict_score 98
 ```
 
-The loop: `.venv/bin/desloppify scan --path .`, then `next`, fix, `plan
-resolve <id> --attest "I have actually ... not gaming ..."` (`next` prints
-the exact command), repeat; `status` shows the scores. Follow the scan's own
+The loop, from the repo root:
+`PATH="$PWD/.venv/bin:$PATH" .venv/bin/desloppify scan --path .` (the scan
+counts bandit as installed only when PATH finds it; without it Security
+confidence stays at 0.6), then `next`, fix, `plan resolve <id> --attest
+"I have actually ... not gaming ..."` (`next` prints the exact command),
+repeat; `status` shows the scores. Follow the scan's own
 instructions. Its commits follow the house style above, not its
 `desloppify: ...` template.
