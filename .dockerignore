@@ -13,3 +13,5 @@ __pycache__
 .coverage.*
 .DS_Store
 .claude
+.desloppify
+scorecard.png

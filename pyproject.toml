@@ -11,9 +11,8 @@ extend-exclude = ["db/psql/cluster", "db/raw", ".cache-*"]
 # naming, ruff's own checks, misc lints - the standard set, minus what the
 # house style does on purpose: %-formatting (UP031/UP032), the ∪ and · in
 # prose (RUF001-003), mutable class attributes as vocabulary (RUF012).
-# Type annotations are confined to the layer boundaries - inference.engine's
-# infer/evaluate/current/board and ui.facts.model.load - where a caller cannot
-# read the callee. Their absence anywhere else is a decision, not an omission.
+# Public functions carry full type annotations, and a record that crosses a
+# module boundary is a dataclass or TypedDict rather than a bare dict or tuple.
 select = ["E", "W", "F", "I", "B", "C4", "SIM", "UP", "N", "RUF", "PIE"]
 ignore = ["UP031", "UP032", "RUF001", "RUF002", "RUF003", "RUF012"]
 

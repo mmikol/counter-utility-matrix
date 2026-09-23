@@ -41,5 +41,3 @@ db/raw/
 # desloppify writes a scorecard image on every scan
 scorecard.png
 
-# desloppify installs its own skill playbook here; the tool owns it
-/.claude/skills/desloppify/

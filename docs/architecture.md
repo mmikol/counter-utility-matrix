@@ -115,6 +115,7 @@ mistaken for the other.
 | `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pytest-cov, ruff, and pgserver (the embedded PostgreSQL a host build uses; the image and CI filter it out, since neither starts a cluster) |
 | `pyproject.toml` | ruff's rules (line length 100); the coverage bar, 75% where a database exists |
 | `pytest.ini` | the `invariant` marker for tests that need a built database |
+| `CLAUDE.md` | what a Claude Code session reads before it changes code: the commands, the layers in brief, what the tests hold a change to, the house rules and style |
 | `SECURITY.md` | the terms - you run it at your own risk, no security commitment from the author - and how to report a vulnerability privately; the measures themselves are in [security.md](security.md) |
 | `LICENSE` | PolyForm Strict 1.0.0: noncommercial use only, no redistribution, no changes or new works; anything else needs a separate license from the author |
 | `.gitignore` `.dockerignore` | the caches, the cluster, the mirror, the venv, `.env` |
