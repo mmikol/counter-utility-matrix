@@ -68,10 +68,7 @@ def parse_filter_options(html, select_id):
 
 # ~40 sequential pages is more load than the source will take at speed.
 # Slower here is faster overall: being cut off costs the whole stage.
-REQUEST_DELAY = 5.0
-REQUEST_TIMEOUT = 90
-RETRIES = 6
-RETRY_BACKOFF = 5.0
+RATES_POLICY = fetch.RequestPolicy(attempts=6, backoff=5.0, timeout=90, delay=5.0)
 
 QUEUE_NAME = "competitive_role_queue"
 QUEUE_LABEL = "Competitive - Role Queue"
@@ -88,8 +85,7 @@ def competitive_rq(session, cache_dir):
         cache_key("rates", "queue-vocabulary",
                   "input-%s" % INPUT_PARAM, "region-%s" % REGION_PARAM),
         params={"input": INPUT_PARAM, "region": REGION_PARAM},
-        timeout=REQUEST_TIMEOUT, retries=RETRIES,
-        delay=REQUEST_DELAY, backoff=RETRY_BACKOFF,
+        policy=RATES_POLICY,
     )
     options = parse_filter_options(page, "filter-rq-select")
     codes = [code for code, label in options if label == QUEUE_LABEL]
@@ -106,8 +102,7 @@ def fetch_slice(session, params, cache_dir, rq):
     return cached_get(
         session, RATES_URL, cache_dir,
         cache_key("rates", *("%s-%s" % kv for kv in sorted(query.items()))),
-        params=query, timeout=REQUEST_TIMEOUT, retries=RETRIES,
-        delay=REQUEST_DELAY, backoff=RETRY_BACKOFF,
+        params=query, policy=RATES_POLICY,
     )
 
 

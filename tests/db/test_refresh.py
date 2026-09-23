@@ -13,6 +13,8 @@ import requests
 from db import refresh
 from db.data import fetch, wiki
 
+INSTANT = fetch.RequestPolicy(backoff=0, delay=0)
+
 
 class FakeResponse:
     def __init__(self, text, payload=None):
@@ -73,7 +75,7 @@ def test_the_freshness_policy_is_per_thread_and_a_block_restores_it():
 def test_a_fresh_cache_is_read_without_fetching(tmp_path):
     _old_file(tmp_path / "k.html", "cached")
     session = FakeSession()
-    assert fetch.cached_get(session, "u", str(tmp_path), "k", delay=0) == "cached"
+    assert fetch.cached_get(session, "u", str(tmp_path), "k", policy=INSTANT) == "cached"
     assert session.calls == 0
 
 
@@ -81,7 +83,7 @@ def test_refresh_refetches_a_stale_page_and_rewrites_the_cache(tmp_path):
     _old_file(tmp_path / "k.html", "cached")
     fetch.set_max_age(0)
     session = FakeSession("new page")
-    assert fetch.cached_get(session, "u", str(tmp_path), "k", delay=0) == "new page"
+    assert fetch.cached_get(session, "u", str(tmp_path), "k", policy=INSTANT) == "new page"
     assert session.calls == 1
     assert (tmp_path / "k.html").read_text(encoding="utf-8") == "new page"
     # the rewritten page is fresh under any finite policy but the refresh one
@@ -95,12 +97,19 @@ def test_a_failed_refetch_keeps_the_cached_copy(tmp_path, capsys):
     _old_file(tmp_path / "k.html", "yesterday")
     fetch.set_max_age(0)
     session = FakeSession(fail=True)
-    assert fetch.cached_get(session, "u", str(tmp_path), "k", delay=0,
-                              retries=2, backoff=0) == "yesterday"
+    twice = fetch.RequestPolicy(attempts=2, backoff=0, delay=0)
+    assert fetch.cached_get(session, "u", str(tmp_path), "k", policy=twice) == "yesterday"
     assert "keeping the cached copy" in capsys.readouterr().err
     with pytest.raises(fetch.FetchError):     # nothing cached: the failure surfaces
-        fetch.cached_get(FakeSession(fail=True), "u", str(tmp_path), "other",
-                           delay=0, backoff=0)
+        fetch.cached_get(FakeSession(fail=True), "u", str(tmp_path), "other", policy=INSTANT)
+
+
+def test_attempts_count_every_request_the_first_included():
+    session = FakeSession(fail=True)
+    with pytest.raises(fetch.FetchError, match="after 3 attempts"):
+        fetch.cached_get(session, "u", None, "k",
+                         policy=fetch.RequestPolicy(attempts=3, backoff=0, delay=0))
+    assert session.calls == 3
 
 
 def test_wiki_cargo_and_wikitext_keep_stale_copies_too(tmp_path):

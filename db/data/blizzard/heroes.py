@@ -16,6 +16,10 @@ from db.data import fetch
 from db.data.blizzard import BASE_URL, BLIZZARD, HEROES_URL
 from db.data.fetch import cache_key, cached_get
 
+# One host serves every page. A keep-alive socket it drops fails one request,
+# and a retry on a fresh connection saves the pull.
+PAGE_POLICY = fetch.RequestPolicy(attempts=3)
+
 # --- extract: markup -> Python ---------------------------------------------
 
 def html_to_text(node):
@@ -275,8 +279,8 @@ def run(connection, cache_dir=None, session=None, log=print):
     Returns a summary dict."""
     session = fetch.session(session)
 
-    roster_soup = BeautifulSoup(cached_get(session, HEROES_URL, cache_dir,
-                                           cache_key(HEROES_URL)), "html.parser")
+    roster_soup = BeautifulSoup(cached_get(session, HEROES_URL, cache_dir, cache_key(HEROES_URL),
+                                           policy=PAGE_POLICY), "html.parser")
     subroles = parse_subroles(roster_soup)
     heroes = parse_roster(roster_soup)
     icons = parse_icons(roster_soup)
@@ -286,7 +290,7 @@ def run(connection, cache_dir=None, session=None, log=print):
     for index, hero in enumerate(heroes, start=1):
         slug = hero["slug"]
         page = cached_get(session, "%s/heroes/%s/" % (BASE_URL, slug),
-                          cache_dir, cache_key(slug))
+                          cache_dir, cache_key(slug), policy=PAGE_POLICY)
         soup = BeautifulSoup(page, "html.parser")
         abilities_by_slug[slug] = parse_abilities(soup, slug)
         perks_by_slug[slug] = parse_perks(soup, slug)

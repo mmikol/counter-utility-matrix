@@ -1,6 +1,12 @@
-"""Fetching: the page cache and its freshness policy, shared by every source.
+"""Fetching: the page cache, its freshness policy and the request loop,
+shared by every source.
 
     cached_get       one page, from the cache if it is there and fresh
+    cached           the cache sequence every reader runs through: the fresh
+                     copy, else what it produces, else the stale copy
+    request          one page asked for under a RequestPolicy and handed to
+                     a reader; a failure is retried while attempts remain
+    RequestPolicy    a source's attempts, backoff, timeout and pace
     max_age          the policy for a block, restored after it - what a pull
                      wraps its run in; set_max_age sets it outright
     set_max_age      the policy: None keeps a page forever (a build from
@@ -17,18 +23,17 @@ yields raw markup; reading it is the package's job.
 """
 
 import contextlib
+import dataclasses
 import os
 import random
 import re
 import sys
 import threading
 import time
+from collections.abc import Callable, Iterator, Mapping
 
 import requests
 
-DEFAULT_DELAY = 1.0
-DEFAULT_TIMEOUT = 30
-DEFAULT_BACKOFF = 1.0
 MAX_BACKOFF = 60.0
 
 # Seconds a cached page stays fresh; None means forever. The policy is per
@@ -37,12 +42,40 @@ MAX_BACKOFF = 60.0
 _policy = threading.local()
 
 
-def _max_age():
+def _max_age() -> float | None:
     return getattr(_policy, "seconds", None)
 
 
 class FetchError(Exception):
-    pass
+    """A page that could not be had."""
+
+
+class RateLimitError(FetchError):
+    """The source answered, and its answer says to slow down."""
+
+
+@dataclasses.dataclass(frozen=True)
+class RequestPolicy:
+    """How a source is asked for a page.
+
+    attempts counts every request, the first included, so 1 means no retry.
+    backoff is the first wait after a failure and doubles each attempt, up to
+    MAX_BACKOFF. delay is the pause after a page, jittered.
+
+    Attempts are for a source that stalls under load and does not fail
+    outright - Blizzard's rates page answers a few hundred sequential
+    requests with a 504. A source that needs hundreds of pages raises both
+    attempts and backoff: giving up mid-run loses the whole stage, and the
+    wait is cheap next to refetching everything.
+    """
+
+    attempts: int = 1
+    backoff: float = 1.0
+    timeout: float = 30
+    delay: float = 1.0
+
+
+DEFAULT_POLICY = RequestPolicy()
 
 
 def set_max_age(seconds):
@@ -52,7 +85,7 @@ def set_max_age(seconds):
 
 
 @contextlib.contextmanager
-def max_age(seconds):
+def max_age(seconds: float | None) -> Iterator[None]:
     """The policy for one block, whatever it was before restored after it."""
     held = _max_age()
     _policy.seconds = seconds
@@ -62,25 +95,25 @@ def max_age(seconds):
         _policy.seconds = held
 
 
-def is_stale(path):
+def is_stale(path: str) -> bool:
     """A cached page older than the policy allows (never, when it is None)."""
     seconds = _max_age()
-    if seconds is None or not path or not os.path.exists(path):
+    if seconds is None or not os.path.exists(path):
         return False
     return time.time() - os.path.getmtime(path) > seconds
 
 
-def read_cache(path):
+def read_cache(path: str) -> str:
     with open(path, encoding="utf-8") as handle:
         return handle.read()
 
 
-def write_cache(path, text):
+def write_cache(path: str, text: str) -> None:
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(text)
 
 
-def keep_stale(path, error):
+def keep_stale(path: str, error: Exception) -> str:
     """A refetch failed: fall back to the cached copy, saying so."""
     age = (time.time() - os.path.getmtime(path)) / 3600.0
     sys.stderr.write("warning: %s; keeping the cached copy from %.0fh ago (%s)\n"
@@ -88,67 +121,83 @@ def keep_stale(path, error):
     return read_cache(path)
 
 
-def cache_key(*parts):
+def cache_key(*parts: object) -> str:
     """A filesystem-safe name for a request."""
     return re.sub(r"[^A-Za-z0-9]+", "_", "_".join(str(p) for p in parts)).strip("_")
 
 
-def cached_get(session, url, cache_dir, key, params=None,
-               timeout=DEFAULT_TIMEOUT, retries=1, delay=DEFAULT_DELAY,
-               backoff=DEFAULT_BACKOFF):
-    """Fetch one page as text, reading and writing a local cache.
+def request[T](session: requests.Session, url: str, params: Mapping[str, str] | None,
+               policy: RequestPolicy, read: Callable[[requests.Response], T]) -> T:
+    """One page asked for under `policy`, and what `read` makes of it.
 
-    retries applies to a source that stalls under load rather than failing
-    outright - Blizzard's rates page answers a few hundred sequential requests
-    with a 504 - and waits `backoff` seconds, doubling each attempt, before
-    trying again. A source that needs hundreds of pages should raise both:
-    giving up mid-run loses the whole stage, and the delay is cheap next to
-    refetching everything.
+    A requests failure or a RateLimitError from `read` is retried while attempts
+    remain, and raises FetchError when they run out. Any other FetchError
+    from `read` is the answer, and is not retried.
     """
-    path = os.path.join(cache_dir, key + ".html") if cache_dir else None
-    if path and os.path.exists(path) and not is_stale(path):
-        return read_cache(path)
-
-    text, last_error = None, None
-    for attempt in range(retries):
+    last_error: Exception | None = None
+    for attempt in range(policy.attempts):
         try:
-            response = session.get(url, params=params, timeout=timeout)
+            response = session.get(url, params=params, timeout=policy.timeout)
             response.raise_for_status()
-            text = response.text
-            break
-        except requests.RequestException as error:
+            result = read(response)
+        except (requests.RequestException, RateLimitError) as error:
             last_error = error
-            if attempt + 1 < retries:            # no point waiting to give up
+            if attempt + 1 < policy.attempts:     # no point waiting to give up
                 # Drop the pooled connections before trying again. A source
                 # that answers "Remote end closed connection without response"
                 # has hung up on a keep-alive socket, and retrying down the
                 # same dead socket fails identically however long we wait.
                 session.close()
-                time.sleep(min(MAX_BACKOFF, backoff * (2 ** attempt)))
-    if text is None:
-        error = FetchError("%s failed after %d attempts: %s" % (url, retries, last_error))
-        if path and os.path.exists(path):
-            return keep_stale(path, error)
-        raise error
+                time.sleep(min(MAX_BACKOFF, policy.backoff * 2 ** attempt))
+        else:
+            # Jittered, so a few hundred sequential requests do not arrive as a clock.
+            time.sleep(policy.delay * random.uniform(0.75, 1.5))
+            return result
+    raise FetchError("%s failed after %d attempts: %s" % (url, policy.attempts, last_error))
 
-    if path:
-        write_cache(path, text)
-    # Jittered, so a few hundred sequential requests do not arrive as a clock.
-    time.sleep(delay * random.uniform(0.75, 1.5))
+
+def cached(cache_dir: str | None, name: str, produce: Callable[[], str]) -> str:
+    """The text of cache file `name`, fresh from the cache or from produce().
+
+    A fresh copy is read and nothing is asked for. Otherwise produce() runs
+    and its text is written. When it fails with a FetchError, the stale copy
+    is kept, and the failure surfaces only when there is none. Without a
+    cache_dir it only produces.
+    """
+    if not cache_dir:
+        return produce()
+    path = os.path.join(cache_dir, name)
+    if os.path.exists(path) and not is_stale(path):
+        return read_cache(path)
+    try:
+        text = produce()
+    except FetchError as error:
+        if os.path.exists(path):
+            return keep_stale(path, error)
+        raise
+    write_cache(path, text)
     return text
+
+
+def cached_get(session: requests.Session, url: str, cache_dir: str | None, key: str,
+               params: Mapping[str, str] | None = None,
+               policy: RequestPolicy = DEFAULT_POLICY) -> str:
+    """One page as text, through the page cache as `key`.html."""
+    return cached(cache_dir, key + ".html",
+                  lambda: request(session, url, params, policy, lambda response: response.text))
 
 
 USER_AGENT = "countrix/0.1 (personal project; contact via repo)"
 
 
-def session(existing=None):
+def session(existing: requests.Session | None = None) -> requests.Session:
     """A requests session (the given one, or a new one) that says who we are."""
     s = existing or requests.Session()
     s.headers.update({"User-Agent": USER_AGENT})
     return s
 
 
-def prepare_cache(path):
+def prepare_cache(path: str | None) -> str | None:
     """Create a page cache directory; '' or None disables caching."""
     if path and not os.path.isdir(path):
         os.makedirs(path)
