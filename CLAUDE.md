@@ -158,9 +158,10 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   playbook, so tests pass a temporary copy.
 - Migrations are `db/psql/migrations/NNN_name.sql`; new ones wrap in
   `BEGIN;`/`COMMIT;` (010-013 do not, and `schema.apply` commits after each
-  file either way). The ledger records filenames only: never edit an
-  applied migration, add the next number. Locally, `db_migrate` keeps the
-  data; `db_rebuild` drops it.
+  file either way). The ledger records filenames only: never edit a
+  statement in an applied migration, add the next number. The `--` prose
+  is documentation the data dictionary reads, and is kept current.
+  Locally, `db_migrate` keeps the data; `db_rebuild` drops it.
 - Over stdio, stdout is the JSON-RPC wire. Code reachable from a tool logs
   through `ctx.log` or stderr, never `print`. A refusal raises `ToolError`.
 - SQL identifiers go through `db.psql.identifier()`; values are always

@@ -82,6 +82,17 @@ def test_every_setting_the_code_reads_is_documented():
     assert not missing, missing
 
 
+def test_the_migrations_row_names_every_migration():
+    # the migrations/ row of docs/db.md is the one inventory of the schema's
+    # steps, so a new file is named there by its number
+    [row] = [line for line in _read("docs", "db.md").splitlines()
+             if line.startswith("| `migrations/` |")]
+    folder = os.path.join(ROOT, "db", "psql", "migrations")
+    missing = sorted(name for name in os.listdir(folder)
+                     if name.endswith(".sql") and "`%s`" % name[:3] not in row)
+    assert not missing, missing
+
+
 @needs_git
 def test_the_overview_names_everything_at_the_root():
     tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True,

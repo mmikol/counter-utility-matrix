@@ -125,8 +125,9 @@ def _migration_tables():
             prose = " ".join(line.lstrip("-").strip() for line in m.group(1).splitlines()
                              if line.strip() not in ("--", ""))
             out[m.group(2)] = (fn, prose.strip())
-        # a later COMMENT ON TABLE rewrites the prose: applied migrations are
-        # never edited, so this is how a table's description is corrected
+        # a later COMMENT ON TABLE rewrites the prose: a statement in an applied
+        # migration is never edited, so this is how a stored description is
+        # corrected
         for m in COMMENT_RE.finditer(text):
             if m.group(1) in out:
                 out[m.group(1)] = (out[m.group(1)][0], m.group(2).replace("''", "'").strip())

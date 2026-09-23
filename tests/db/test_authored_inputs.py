@@ -108,8 +108,8 @@ def test_the_dropped_tables_are_named_nowhere_in_the_data_layer():
 
 
 def test_the_data_dictionary_says_where_seasons_and_synergies_come_from():
-    # an applied migration is never edited: 018's COMMENT ON TABLE replaces the
-    # prose 004 and 005 wrote above their CREATE TABLE
+    # a statement in an applied migration is never edited: 018's COMMENT ON
+    # TABLE replaces the prose 004 and 005 wrote above their CREATE TABLE
     from db.psql import schema
     described = schema._migration_tables()
     assert described["seasons"][0] == "004_meta.sql"           # the domain stays the creator's
