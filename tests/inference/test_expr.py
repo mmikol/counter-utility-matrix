@@ -16,6 +16,21 @@ def test_expressions_read_dotted_names_and_arithmetic():
     assert Expr("team.tanks / 0").evaluate(ns) == 0.0
 
 
+def test_a_division_by_zero_reads_zero_for_that_division_alone():
+    """/, // and % by zero each read 0, and the rest of the expression is
+    evaluated as written: a guard with a zero divisor on one side of an `or`
+    still reads the other side."""
+    ns = {"team": {"x": 3, "y": 0, "tanks": 1}}
+    assert Expr("team.x / team.y > 1 or team.tanks == 1").evaluate(ns) is True
+    assert Expr("team.x // team.y + team.x % team.y + 2").evaluate(ns) == 2
+    assert Expr("min(team.x / team.y, 1) + 1").evaluate(ns) == 1
+    assert Expr("team.x / (team.y / team.y)").evaluate(ns) == 0.0
+    assert Expr("team.x / 2 + team.x // 2 + team.x % 2").evaluate(ns) == 1.5 + 1 + 1
+    # a division nested in each divisor grows the code by one call a level
+    nested = Expr("team.x / (" * 30 + "team.y" + ")" * 30)
+    assert nested.evaluate(ns) == 0.0
+
+
 def test_expressions_refuse_anything_beyond_the_whitelist():
     for bad in ("__import__('os')", "team.__class__", "[x for x in y]",
                 "lambda: 1", "open('f')", "team.tanks = 2"):
@@ -35,7 +50,7 @@ def test_expression_names_are_the_full_dotted_keys():
 def test_the_sandbox_refuses_what_would_hang_or_exhaust_it():
     from inference.expr import Expr, ExprError
     for bomb in ("9 ** 9 ** 9", "2 ** team.tanks", "'a' * 1000000000", "'x' + 'y'",
-                 "'" + "s" * 201 + "' == team.style_lean", "-" * 45 + "1"):
+                 "'" + "s" * 201 + "' == team.style_lean", "-" * 45 + "1", "'%s' % team.x"):
         with pytest.raises(ExprError):
             Expr(bomb)
     assert Expr("team.tanks ** 2").evaluate({"team": {"tanks": 3}}) == 9

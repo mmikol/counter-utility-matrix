@@ -10,7 +10,8 @@ the handful of arithmetic helpers below, no names but the namespaces -
 and then compiled to a code object, so evaluating a strategy on a
 candidate is a native expression, not a tree walk. Names are dotted keys
 into a namespace of dicts ({"team": {...}, "enemy": {...}, "matchup": ...,
-"map": ..., "world": ..., "params": ...}); a key a namespace lacks reads 0.
+"map": ..., "world": ..., "params": ...}); a key a namespace lacks reads 0,
+and a division by zero reads 0 - that division alone.
 """
 
 import ast
@@ -20,6 +21,44 @@ from types import CodeType
 FUNCTIONS: dict[str, Callable[..., object]] = {
     "min": min, "max": max, "abs": abs, "round": round,
     "len": len, "int": int, "float": float, "bool": bool}
+
+
+# --- a division by zero reads 0, for that division alone ----------------------------
+
+def _div(a: float, b: float) -> float:
+    return a / b if b else 0.0
+
+
+def _floordiv(a: float, b: float) -> float:
+    return a // b if b else 0.0
+
+
+def _mod(a: float, b: float) -> float:
+    return a % b if b else 0.0
+
+
+# the helpers the compiled code calls in place of /, // and %: an expression's
+# source cannot name one - the underscore check and the call rule refuse it -
+# so only the rewrite (_ZeroDivisor) reaches them
+ZERO_SAFE: dict[str, Callable[[float, float], float]] = {
+    "_div": _div, "_floordiv": _floordiv, "_mod": _mod}
+_ZERO_SAFE_OP: dict[type[ast.operator], str] = {
+    ast.Div: "_div", ast.FloorDiv: "_floordiv", ast.Mod: "_mod"}
+
+
+class _ZeroDivisor(ast.NodeTransformer):
+    """Each /, // and % becomes a call to its ZERO_SAFE helper, innermost
+    first. Each operand is still evaluated once and the tree grows by one
+    node a division - a conditional over a copied divisor would double it at
+    every level a division nests in a divisor."""
+
+    def visit_BinOp(self, node: ast.BinOp) -> ast.expr:
+        self.generic_visit(node)
+        helper = _ZERO_SAFE_OP.get(type(node.op))
+        if helper is None:
+            return node
+        return ast.Call(func=ast.Name(id=helper, ctx=ast.Load()),
+                        args=[node.left, node.right], keywords=[])
 
 # the operators the whitelist admits; the compiled code object does the arithmetic
 BINARY = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)
@@ -58,11 +97,15 @@ class Section:
 
 class Scope(dict[str, Section]):
     """The eval locals: every namespace a Section, absent ones empty, and
-    the arithmetic helpers by name."""
+    the arithmetic helpers and the zero-safe divisions by name. eval reads a
+    name here before its globals, so every callable the code names is
+    served here."""
 
     def __missing__(self, key: str) -> Section | Callable[..., object]:
         if key in FUNCTIONS:
             return FUNCTIONS[key]
+        if key in ZERO_SAFE:
+            return ZERO_SAFE[key]
         return Section({})
 
 
@@ -82,9 +125,12 @@ class Expr:
                 raise ExprError("%r: underscore names are not allowed" % name)
         self._check(tree)
         self._guard(tree, 0)
-        # the code object is what a candidate is evaluated against; the tree
-        # is dropped, so a playbook keeps no syntax trees in any worker
-        self.code: CodeType = compile(ast.Expression(body=tree), "<strategy>", "eval")
+        # the code object is what a candidate is evaluated against, each
+        # division in it zero-safe; the tree is dropped, so a playbook keeps
+        # no syntax trees in any worker
+        self.code: CodeType = compile(
+            ast.fix_missing_locations(ast.Expression(body=_ZeroDivisor().visit(tree))),
+            "<strategy>", "eval")
 
     def __repr__(self) -> str:
         return "Expr(%r)" % self.source
@@ -129,19 +175,19 @@ class Expr:
             self._guard(child, depth + 1)
 
     def _guard_binop(self, node: ast.BinOp) -> None:
-        """An exponent is a small constant; strings are compared, never added or
-        multiplied."""
+        """An exponent is a small constant; strings are compared, not added,
+        multiplied or formatted."""
         if isinstance(node.op, ast.Pow):
             exp = node.right
             if not (isinstance(exp, ast.Constant) and isinstance(exp.value, (int, float))
                     and not isinstance(exp.value, bool) and 0 <= exp.value <= 8):
                 raise ExprError("%r: an exponent must be a number between 0 and 8"
                                 % self.source)
-        if isinstance(node.op, (ast.Mult, ast.Add)):
+        if isinstance(node.op, (ast.Mult, ast.Add, ast.Mod)):
             for side in (node.left, node.right):
                 if isinstance(side, ast.Constant) and isinstance(side.value, str):
-                    raise ExprError("%r: strings are compared, not added or multiplied"
-                                    % self.source)
+                    raise ExprError("%r: strings are compared, not added, multiplied or"
+                                    " formatted" % self.source)
 
     # --- the whitelist: one rule per node type -------------------------------
 
@@ -214,8 +260,6 @@ class Expr:
             (k, Section(v)) for k, v in namespace.items())
         try:
             return eval(self.code, _GLOBALS, scope)  # nosec B307  # whitelisted AST, no builtins
-        except ZeroDivisionError:
-            return 0.0
         except TypeError as error:            # e.g. a text metric in arithmetic
             raise ExprError("%r: %s" % (self.source, error)) from error
         except (RecursionError, MemoryError, OverflowError) as error:

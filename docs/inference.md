@@ -86,8 +86,11 @@ metrics registry when the catalog loads: the `team`, `enemy`, `matchup`,
 `or`, `not`, `x if c else y`, and `min`, `max`, `abs`, `round`, `len`,
 `int`, `float`, `bool`. A key that is not in the registry, or a
 `params.NAME` not declared under `params:`, is refused at load, so a typo
-never scores silently. `params:` (an indented block of NAME: number) are
-the dials an expression reads as `params.NAME`.
+never scores silently. A key a section lacks reads 0, and a division,
+floor division or remainder by zero reads 0 for that operation alone: the
+rest of the expression is evaluated as written. `params:` (an indented
+block of NAME: number) are the dials an expression reads as
+`params.NAME`.
 
 The catalog - every file, and the full vocabulary a strategy may
 reference - is generated into the end of this document.
@@ -153,7 +156,7 @@ inference/
 | `frontmatter.py` | The dialect a strategy file opens with: flat `key: value` lines between two `---` fences and one indented mapping (`params:`), each value a string, a number, a boolean, null or a list (`parse_frontmatter`); text outside it is a `FrontmatterError`. |
 | `strategy.py` | One strategy (`Strategy`): a file's fields, its `kind`, the `form` they make it, its compiled expressions and the checks every file passes against the metrics registry, the first failure raised as a `CatalogError`; `to_dict` is the `StrategyRecord` the tools, the service and the board serve. `FIELDS` names what each frontmatter field holds - one line of text, a choice, the weight, a flag, an expression or the params block - and `checked_value` applies that rule for every writer, the rule the loader reads each file by; the door declares its strategy arguments from the same table. |
 | `catalog.py` | Reads the playbook in force (`strategies_dir`: the shipped folder, or the one `COUNTRIX_STRATEGIES` names), each file parsed and checked into a `Strategy` and any failure a `CatalogError` naming the file, orders the catalog (constraints - limits, then scored - heuristics, assumptions), mirrors it into the `strategies` table, and writes the catalog at the end of this document. `strategy_files` names a playbook's strategy files (its markdown less `README.md` and `tuning-log.md`), and `playbook_digest` hashes them, names and bytes, into the digest a proven fixture records. |
-| `expr.py` | A safe subset of Python expressions: the AST is checked once, compiled, and evaluated over a scope whose missing keys read as zero, so a metric that does not apply to a board never crashes a score. |
+| `expr.py` | A safe subset of Python expressions: the AST is checked once, compiled with each `/`, `//` and `%` turned into a call that reads 0 on a zero divisor - for that operation alone - and evaluated over a scope whose missing keys read as zero, so a metric that does not apply to a board never crashes a score. |
 | `scoring.py` | The objective on one board (`Objective`): each strategy's `when` read once where the board settles it, then every candidate prepared (namespace, limit check, raw metric values) and scored with the frozen bounds - a hard limit prunes, a soft one charges, a heuristic normalises and weighs, a scored constraint adds - its breakdown one `Contribution` per strategy. |
 | `shapes.py` | `legal_shapes`: every (tanks, damage, supports) triple the queue (at most two tanks, whatever the playbook holds) and the hard shape limits allow around the locked picks, counted per role as a `Shape` like the triples it returns. |
 | `scale.py` | The board's one scale: a seeded reference sample of 1200 legal sixes (every one, on a roster that holds fewer) for that map and side, prepared against the enemy, and the field the board would search with nothing locked, which together bound each heuristic, so `infer`, `evaluate` and the current comp share one scale and a score means the same thing across calls; and each hero's standing, its mean score across the reference sixes it is in. Both are drawn in slices, so the pool spreads them across workers; a heuristic a slice never values is left out of that slice's bounds, as it is left out of the whole population's. |
