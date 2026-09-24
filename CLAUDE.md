@@ -19,7 +19,7 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/ruff check db ui inference tests scripts orchestrator.py    # the paths CI lints
 
 .venv/bin/python -m pytest -q -p no:cacheprovider --cov              # full suite, 75% bar, needs the built database
-COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=0   # as CI runs it
+COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=70   # as CI runs it
 .venv/bin/python -m pytest -q tests/test_docs.py                     # one file
 .venv/bin/python -m pytest -q 'tests/test_docs.py::test_the_overview_names_everything_at_the_root'   # one test
 .venv/bin/python -m pytest -q -m 'not invariant'                     # everything that needs no database
@@ -38,9 +38,12 @@ agents, which refetch the sources and may tune the playbook. Pulls and
 true}'` refetches everything from the network, minutes at the polite pace.
 
 Tests marked `invariant` need the database and skip without one, through
-the `db` fixture - except `test_health_reports_the_catalog_and_the_database`,
-which calls `default_dsn()` and boots the cluster even under
-`COUNTRIX_NO_DATABASE=1`. The suite targets `db/psql/cluster` whenever that
+the `db` fixture. Two paths reach `default_dsn()` even under
+`COUNTRIX_NO_DATABASE=1` - `test_health_reports_the_catalog_and_the_database`
+and the `/health` of the MCP server the HTTP tests start - and boot the
+cluster, a new empty one where `db/psql/cluster` is absent;
+`DATABASE_URL=postgresql://127.0.0.1:1/none` keeps both off it, as CI's
+coverage figure assumes. The suite targets `db/psql/cluster` whenever that
 folder exists; `DATABASE_URL` or `./docker-db <command>` points at another
 Postgres. CI sets no variable: it has no cluster and no pgserver.
 

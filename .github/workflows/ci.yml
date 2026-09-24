@@ -4,9 +4,9 @@
 # unkind to the sources on every push. Tests marked `invariant` skip themselves
 # when db/psql/cluster is absent (tests/conftest.py; COUNTRIX_NO_DATABASE=1
 # reproduces that locally), so what runs here is ruff plus every test that needs
-# no database. Coverage is reported without the bar; the runs with a database -
-# the local one and `orchestrator.py test` inside the image - enforce the 75%
-# pyproject.toml sets.
+# no database, and CI holds that suite to 70% coverage. The runs with a
+# database - the local one and `orchestrator.py test` inside the image -
+# enforce the 75% pyproject.toml sets.
 
 name: ci
 
@@ -36,4 +36,4 @@ jobs:
 
       - name: Tests (db-bound tests skip without a built cluster)
         run: >-
-          python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=0
+          python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=70

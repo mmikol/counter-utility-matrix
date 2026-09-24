@@ -26,7 +26,7 @@ source = ["db", "ui", "inference", "orchestrator"]
 
 [tool.coverage.report]
 # the bar where the database exists (locally, and inside the image); CI builds
-# no database and reports only
+# no database and passes its own lower floor, in .github/workflows/ci.yml
 fail_under = 75
 show_missing = true
 skip_covered = true
