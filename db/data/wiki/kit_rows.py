@@ -142,22 +142,20 @@ def parse_rows(rows: Iterable[Mapping[str, str]]) -> dict[str, HeroKit]:
         if not hero_name or not name:
             continue
 
-        base_type, mode = markup.split_type(
-            markup.html_to_text(fields.get("ability_type"))
-        )
-        if not base_type:
+        ability_type = markup.split_type(markup.html_to_text(fields.get("ability_type")))
+        if not ability_type.base:
             continue
 
-        base = _entry(fields, name, mode)
+        base = _entry(fields, name, ability_type.mode)
         kit = heroes.setdefault(hero_name, HeroKit([], [], []))
-        lowered = base_type.lower()
+        lowered = ability_type.base.lower()
         if "perk" in lowered:
             kit.perks.append(PerkEntry(**base, tier="major" if "major" in lowered else "minor"))
         elif lowered.startswith("weapon"):
             kit.weapons.append(WeaponEntry(**base, kind=KIND_WEAPON, display_name=name,
                                            weapon_type=_weapon_type(fields)))
         else:
-            kit.abilities.append(AbilityEntry(**base, kind=ability_kind(base_type),
+            kit.abilities.append(AbilityEntry(**base, kind=ability_kind(ability_type.base),
                                               display_name=name))
 
     for kit in heroes.values():

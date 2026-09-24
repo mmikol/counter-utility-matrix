@@ -10,13 +10,14 @@ The wiki serves data two ways and both need parsing:
 They are different grammars, but the wiki mixes the same furniture through
 both - file links, comments, <br>, bare URLs - so the tidying is shared.
 
-split_type unpicks Cargo's typed fields, where a kind and a firing mode are
-packed into one string: "Weapon;;Hip Fire". section_body cuts an article's
+split_type unpicks Cargo's typed fields, where a base type and a firing mode
+are packed into one string: "Weapon;;Hip Fire". section_body cuts an article's
 section at the next heading of any depth.
 """
 
 import re
 from collections.abc import Iterator
+from typing import NamedTuple
 
 from bs4 import BeautifulSoup
 
@@ -59,13 +60,22 @@ def html_to_text(value: str | None) -> str:
 TYPE_SPLIT_RE = re.compile(r"^(.*?)\s*(?:;;\s*(.+)|\(([^)]*)\))\s*$")
 
 
-def split_type(ability_type: str | None) -> tuple[str, str | None]:
-    """'Weapon;;Hip Fire' -> ('Weapon', 'Hip Fire'). No suffix -> (type, None)."""
+class AbilityType(NamedTuple):
+    """A Cargo ability type unpicked: the base type, and the firing mode
+    packed in with it or None."""
+    base: str
+    mode: str | None
+
+
+def split_type(ability_type: str | None) -> AbilityType:
+    """'Weapon;;Hip Fire' -> AbilityType('Weapon', 'Hip Fire'). No suffix ->
+    the type and None."""
     text = (ability_type or "").strip()
     match = TYPE_SPLIT_RE.match(text)
     if not match:
-        return text, None
-    return match.group(1).strip(), (match.group(2) or match.group(3) or "").strip() or None
+        return AbilityType(text, None)
+    mode = (match.group(2) or match.group(3) or "").strip() or None
+    return AbilityType(match.group(1).strip(), mode)
 
 
 # --- article wikitext --------------------------------------------------
