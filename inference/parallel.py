@@ -10,10 +10,17 @@ enumeration, prepared and scored; then one worker ranks and refines the
 merged field. Only verdicts cross - hero ids, score, tie-break - and slices
 partition their round, so nothing depends on how the work was split.
 
-The board runs four searches. Blue's and red's go first. The fill is blue's
-board (same map, side, enemies and bans), so it takes blue's bounds and
-standing and draws no sample of its own; the countered case follows red's
-six. A full six is ranked against the field its seat's search already swept.
+A board runs up to six searches. Blue's and red's go first. A seat's fill
+is that seat's board (same map, side, enemies and bans), so it takes the
+seat's bounds and standing and draws no sample of its own; the countered
+case's two - blue's best counter to red's six, and blue's picks filled on
+its scale - follow red's six. A full six is ranked against the field its
+seat's search already swept.
+
+A board a newer request replaced stops at its next round: Latest hands a
+server one ticket per request and client, and each board's Watch, which
+sees every task its searches submit, cancels the ones no worker has taken
+and raises Superseded.
 
 The world crosses as bytes pickled once and cached per worker; so is the
 playbook, reread when a file changes. Off with COUNTRIX_PARALLEL=0 (read on
