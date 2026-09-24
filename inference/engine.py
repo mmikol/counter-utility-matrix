@@ -12,6 +12,7 @@ current blue picks as they stand. The records are result.py's, the prose
 plan.py's and the process pool parallel.py's.
 """
 
+import dataclasses
 import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -117,8 +118,7 @@ def _board_facts(world: World, result: Result, side: str) -> FactSet:
 
 
 def _side(m: Map | None, side: str) -> str:
-    if side not in ("", "attack", "defense"):
-        raise Refusal("side must be attack or defense, got %r" % side)
+    """The draft's side where the map has sides; none on any other map."""
     return side if is_sided(m) else ""
 
 
@@ -331,15 +331,15 @@ def _board_once(
     on their seats' scales, the seats merge and are solved, and the countered
     case, which needs red's six, sweeps while the fills merge."""
     m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
-    draft = draft._replace(side=_side(m, draft.side))
+    draft = dataclasses.replace(draft, side=_side(m, draft.side))
     _check_teams(red_h, blue_h)
     expected = _expected(world, m, bans_h, draft, catalog)
     enemy = draft.red or tuple(expected.blue)
     # each seat's draft, from that seat's perspective: its own picks are `blue`
-    blue_seat = draft._replace(red=enemy, blue=())
+    blue_seat = dataclasses.replace(draft, red=enemy, blue=())
     red_seat = Draft(map_name=draft.map_name, red=draft.blue, blue=(), bans=draft.bans,
                      side=opposite(draft.side))
-    ours = draft._replace(red=enemy)                   # blue's current comp and fill
+    ours = dataclasses.replace(draft, red=enemy)       # blue's current comp and fill
     theirs = Draft(map_name=draft.map_name, red=draft.blue, blue=draft.red, bans=draft.bans,
                    side=opposite(draft.side))
     solve = _Pass(world, catalog, brief, workers, watch)
@@ -357,7 +357,7 @@ def _board_once(
     red_split.merge()
     blue = solve.optimal(blue_seat, blue_split, seat="blue")
     red = solve.optimal(red_seat, red_split, seat="red")
-    countered_seat = draft._replace(red=tuple(red.result.blue))
+    countered_seat = dataclasses.replace(draft, red=tuple(red.result.blue))
     against_split, answer_split = solve.sweep_countered(countered_seat)
     for split in (fill_split, red_fill_split, against_split, answer_split):
         split.merge()
@@ -459,7 +459,7 @@ class _Pass:
         filled against that six on the same scale - the second only while
         blue is half-drafted."""
         wanted = self._wants_countered(draft)
-        against = self.split(draft._replace(blue=()), self.rest, wanted=wanted,
+        against = self.split(dataclasses.replace(draft, blue=()), self.rest, wanted=wanted,
                              pool_size=self.countered_pool)
         against.sweep()
         answer = self.split(draft, self.rest, wanted=wanted and _drafting(draft),
@@ -475,7 +475,7 @@ class _Pass:
         None where the countered case is not solved."""
         if not self._wants_countered(draft):
             return None
-        top = self.optimal(draft._replace(blue=()), against, seat="blue",
+        top = self.optimal(dataclasses.replace(draft, blue=()), against, seat="blue",
                            pool_size=self.countered_pool)
         if _drafting(draft):
             return self.filled(draft, answer, seat="blue", best=top.result.score,

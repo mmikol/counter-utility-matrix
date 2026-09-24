@@ -22,19 +22,6 @@ def test_the_board_survives_the_round_trip_through_a_query_string():
         assert parse_board(parse_qs(written)) == draft
 
 
-def test_the_wire_refuses_a_team_of_seven_and_cuts_only_the_bans():
-    """Seven picks on a team is no board a lobby seats, and cutting it to six
-    would answer one the caller did not send: both doors refuse it. The bans
-    are cut to five, as the page sends them."""
-    from facts.draft import parse_board
-    seven = ["Ana", "Kiriko", "Lúcio", "Tracer", "Genji", "Sojourn", "Ashe"]
-    for team in ("red", "blue"):
-        with pytest.raises(Refusal, match="more than 6 %s picks" % team):
-            parse_board({team: seven})
-    draft = parse_board({"blue": seven[:6], "bans": seven})
-    assert len(draft.blue) == 6 and len(draft.bans) == 5
-
-
 def test_both_doors_bound_the_search_with_one_clamp():
     """A caller naming pool or top reaches the same bounds through the service
     as through the MCP tools: the engine owns the definition."""

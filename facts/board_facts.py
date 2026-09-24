@@ -35,10 +35,9 @@ facts.hero_facts writes a hero's facts, and facts.team_facts a
 team's and the matchup's.
 """
 
-from db import Refusal
 from facts import compute, hero_facts, team_facts
 from facts.compute import TERRAIN_STANDOUT
-from facts.draft import MAX_BANS, SIDES, Draft, is_sided, opposite
+from facts.draft import MAX_BANS, Draft, is_sided, opposite
 from facts.factset import PLAYBOOK_SCOPE, FactSet
 from facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Map, Resolved, World
 
@@ -53,11 +52,8 @@ def generate(world: World, draft: Draft) -> FactSet:
     """The FactSet for a board: the map (and blue's side on a sided map),
     the red and blue picks, and the match's bans (each team's two and the
     lobby's - up to five, all optional). A banned hero cannot be picked and
-    cannot be recommended; a side that is not one, and every name World.resolve
-    refuses, is a Refusal. The FactSet's draft holds the resolved names and
-    the side the map keeps."""
-    if draft.side not in ("", *SIDES):
-        raise Refusal("side must be attack or defense, got %r" % draft.side)
+    cannot be recommended; every name World.resolve refuses is a Refusal. The
+    FactSet's draft holds the resolved names and the side the map keeps."""
     board = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans, allow_announced=True)
     side = draft.side if is_sided(board.map) else ""
     fs = FactSet(Draft(

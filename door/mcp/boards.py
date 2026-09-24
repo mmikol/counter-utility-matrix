@@ -21,9 +21,9 @@ BOARD: Properties = {
         "description": "your team's locked heroes"},
     "bans": {
         "type": "array", "items": {"type": "string"},
-        "description": "the match's bans, up to five (each team's two and"
-                       " the lobby's), all optional; neither team can"
-                       " pick them"},
+        "description": "the match's bans, at most five (each team's two and"
+                       " the lobby's), more refused; all optional; neither"
+                       " team can pick them"},
     "side": {
         "type": "string", "enum": ["attack", "defense", ""],
         "description": "blue's side on an Escort or Hybrid map (red gets"
@@ -41,7 +41,8 @@ def _names(value: object) -> tuple[str, ...]:
 
 def _draft(arguments: dict[str, object]) -> Draft:
     """The board BOARD's five arguments name, taken out of the call's
-    arguments: the lists as tuples, and what the call left out empty."""
+    arguments: the lists as tuples, and what the call left out empty. Draft
+    refuses a board past the lobby's limits, whichever door built it."""
     map_name = arguments.pop("map", None)
     return Draft(map_name=None if map_name is None else str(map_name),
                  red=_names(arguments.pop("red", ())),

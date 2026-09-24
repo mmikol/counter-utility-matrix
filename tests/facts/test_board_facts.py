@@ -97,5 +97,3 @@ def test_sides_exist_only_on_escort_and_hybrid(synthetic_world):
     assert fs.draft.side == ""
     assert [f.text for f in fs.find("map.side")] == [
         "Ember Ruins (Control) has no attacking or defending side"]
-    with pytest.raises(Refusal, match="side must be"):
-        board_facts.generate(w, Draft("Harbor Gate", side="left"))

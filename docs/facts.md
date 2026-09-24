@@ -119,12 +119,15 @@ holds), `MAX_BANS` (five), `EXPECTED_SHAPE` (two per role), `SIDED_MODES`
 (Escort, Hybrid), `SIDES`, `is_sided` and `opposite`; `check_team_size`
 and `check_tanks` refuse a team past the first two. `Draft` is the
 board at one stage of the pick-and-ban draft - the map, red's and blue's
-picks, the bans and blue's side, in that order, each list a tuple. A
-playbook draft is another thing: a strategy that awaits its frontmatter.
-`parse_board(query)` reads a Draft off a `Query`, a parsed query string,
-cutting the bans to five and refusing a team of seven, and
-`board_query(draft)` writes one back, so this board and the inference
-service spell a board the same way and take `Query` from here. The module
+picks, the bans and blue's side, in that order, each list a tuple - a
+frozen dataclass. Wherever a Draft is built, `dataclasses.replace`
+included, it refuses a team of seven, a sixth ban and a side that is not
+one, so the page, the inference service and the MCP board tools refuse
+the same boards. A playbook draft is another thing: a strategy that
+awaits its frontmatter. `parse_board(query)` reads a Draft off a `Query`,
+a parsed query string, dropping empty values, and `board_query(draft)`
+writes one back, so this board and the inference service spell a board
+the same way and take `Query` from here. The module
 imports only the model and `db.Refusal`, so the metrics can take its names
 without a cycle.
 

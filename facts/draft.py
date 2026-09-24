@@ -1,12 +1,13 @@
 """The board's vocabulary: a lobby's limits and the refusal of a team past
 them, the sides of a sided map, and the Draft - the board at one stage of
-the pick-and-ban draft - with the pair of functions both HTTP doors read
-and write one with. A leaf: it imports only the model and db's Refusal, so
-every other module in the package can take these names from it.
+the pick-and-ban draft, which refuses a board no lobby holds - with the
+pair of functions both HTTP doors read and write one with. A leaf: it
+imports only the model and db's Refusal, so every other module in the
+package can take these names from it.
 """
 
 from collections.abc import Iterable, Mapping, Sequence, Sized
-from typing import NamedTuple
+from dataclasses import dataclass
 
 from db import Refusal
 from facts.model import Hero, Map
@@ -34,37 +35,48 @@ def check_tanks(heroes: Iterable[Hero], seat: str) -> None:
                       % (MAX_TANKS, seat, tanks))
 
 
-class Draft(NamedTuple):
-    """The board at one stage of the pick-and-ban draft."""
+@dataclass(frozen=True)
+class Draft:
+    """The board at one stage of the pick-and-ban draft. It refuses a board
+    no lobby holds - a team past TEAM_SIZE picks, bans past MAX_BANS, a side
+    that is not one - when it is built, dataclasses.replace included, so
+    every door that builds one refuses the same boards."""
     map_name: str | None = None
     red: tuple[str, ...] = ()
     blue: tuple[str, ...] = ()
     bans: tuple[str, ...] = ()
     side: str = ""
 
+    def __post_init__(self) -> None:
+        check_team_size(self.red, "red")
+        check_team_size(self.blue, "blue")
+        if len(self.bans) > MAX_BANS:
+            raise Refusal("more than %d bans" % MAX_BANS)
+        if self.side not in ("", *SIDES):
+            raise Refusal("side must be attack or defense, got %r" % self.side)
+
 
 # --- the board as query parameters ---------------------------------------------
 #
-# Both doors - ui/board.py and inference/serve.py - name a board the same way on
-# the wire, and the two halves live here, beside the limits they enforce, so
-# neither door owns the other's spelling. A Draft holds tuples: a list in a field
-# makes an equal-looking Draft compare unequal.
+# Both HTTP doors - ui/board.py and inference/serve.py - name a board the same
+# way on the wire, and the two halves live here, so neither door owns the
+# other's spelling. The limits belong to Draft, so these doors and the MCP
+# board tools (door/mcp/boards.py) refuse the same boards. A Draft holds
+# tuples: a list in a field makes an equal-looking Draft compare unequal.
 
 # A parsed query string, as both doors hand it to parse_board
 type Query = Mapping[str, Sequence[str]]
 
 
 def parse_board(query: Query) -> Draft:
-    """The board a parsed query names, its bans cut to MAX_BANS. A team of
-    more than TEAM_SIZE picks is refused, not cut: no lobby seats it, and a
-    cut would answer a board the caller did not send."""
+    """The board a parsed query names, its empty values dropped. Draft
+    refuses any board no lobby holds, and nothing is cut: a cut would answer
+    a board the caller did not send."""
     maps, sides = query.get("map"), query.get("side")
-    red = tuple(x for x in query.get("red", ()) if x)
-    blue = tuple(x for x in query.get("blue", ()) if x)
-    check_team_size(red, "red")
-    check_team_size(blue, "blue")
-    return Draft(map_name=(maps[0] or None) if maps else None, red=red, blue=blue,
-                 bans=tuple(x for x in query.get("bans", ()) if x)[:MAX_BANS],
+    return Draft(map_name=(maps[0] or None) if maps else None,
+                 red=tuple(x for x in query.get("red", ()) if x),
+                 blue=tuple(x for x in query.get("blue", ()) if x),
+                 bans=tuple(x for x in query.get("bans", ()) if x),
                  side=sides[0] if sides else "")
 
 
