@@ -284,6 +284,27 @@ def test_the_math_page_states_the_equation_and_the_layers():
     assert "never calls a language model" in page
 
 
+def test_a_service_url_that_is_not_http_is_refused(monkeypatch):
+    # the board opens these with urlopen, which would read a file: URL as a path
+    monkeypatch.setenv("COUNTRIX_INFERENCE_URL", "file:///etc/passwd")
+    monkeypatch.setenv("COUNTRIX_MCP_URL", "ftp://x")
+    with pytest.raises(ValueError, match="COUNTRIX_INFERENCE_URL must be an http or https URL"):
+        board.inference_url()
+    with pytest.raises(ValueError, match="COUNTRIX_MCP_URL must be an http or https URL"):
+        board.mcp_url()
+    monkeypatch.setattr(board, "ThreadingHTTPServer",
+                        lambda *a: pytest.fail("the board bound its port"))
+    with pytest.raises(SystemExit, match="COUNTRIX_INFERENCE_URL"):   # the board never starts
+        board.main([])
+    monkeypatch.setenv("COUNTRIX_INFERENCE_URL", "http://inference:8019/")
+    assert board.inference_url() == "http://inference:8019"
+    monkeypatch.setenv("COUNTRIX_MCP_URL", "https://data:8020/mcp")
+    assert board.mcp_url() == "https://data:8020/mcp"
+    monkeypatch.delenv("COUNTRIX_INFERENCE_URL")
+    monkeypatch.delenv("COUNTRIX_MCP_URL")
+    assert board.inference_url() == "" and board.mcp_url() == ""
+
+
 # --- the board's one write: a weight stored through the tune tool ------------------
 
 

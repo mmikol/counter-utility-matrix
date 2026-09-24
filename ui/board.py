@@ -64,10 +64,20 @@ GITHUB_MARK = ("<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='tru
 # Each is read when it is used, so a change in the environment holds from the
 # next request. Where the board listens is read once, by command_line().
 
+def _http_url(setting: str) -> str:
+    """A service URL from the environment without its trailing slash, "" when
+    unset. The board speaks HTTP to its services, so any other scheme - a
+    file: path, say - is refused."""
+    value = os.environ.get(setting, "").rstrip("/")
+    if value and urlparse(value).scheme not in ("http", "https"):
+        raise ValueError("%s must be an http or https URL, got %r" % (setting, value))
+    return value
+
+
 # The inference layer runs in-process unless a service is named: in the
 # compose stack the `inference` container serves it (inference/serve.py).
 def inference_url() -> str:
-    return os.environ.get("COUNTRIX_INFERENCE_URL", "").rstrip("/")
+    return _http_url("COUNTRIX_INFERENCE_URL")
 
 
 # the board's one write - storing a heuristic's weight - goes to the data
@@ -75,7 +85,7 @@ def inference_url() -> str:
 # compose stack), in-process through the same registry otherwise. read_only()
 # below is what decides whether that write is offered at all.
 def mcp_url() -> str:
-    return os.environ.get("COUNTRIX_MCP_URL", "").rstrip("/")
+    return _http_url("COUNTRIX_MCP_URL")
 
 
 def mcp_token() -> str:
@@ -109,7 +119,8 @@ def remote(
     request = urllib.request.Request(
         url, data=data, headers={"Content-Type": "application/json"} if data else {})
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
+        # the scheme is http or https: inference_url() refuses any other
+        with urllib.request.urlopen(request, timeout=180) as response:  # nosec B310
             return json.loads(response.read().decode("utf-8")), response.status
     except urllib.error.HTTPError as error:
         try:
@@ -450,9 +461,16 @@ def command_line(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Serve the board. A service URL with a scheme other than http or https
+    stops it here, before it binds the port."""
     args = command_line(argv)
+    try:
+        inference = inference_url()
+        mcp_url()
+    except ValueError as error:
+        raise SystemExit(str(error)) from None
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    workers = 0 if inference_url() else inference_engine.warm()   # in-process boards split too
+    workers = 0 if inference else inference_engine.warm()   # in-process boards split too
     print("Countrix: http://%s:%d%s" % (
         args.host, args.port, " (%d solver workers)" % workers if workers else ""))
     server.serve_forever()

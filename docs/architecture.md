@@ -170,12 +170,12 @@ Settings, from the environment or `.env` (the refresh times are in [db.md](db.md
 | `COUNTRIX_UI_HOST`, `COUNTRIX_UI_PORT` | `127.0.0.1`, `8017` | where the board listens |
 | `COUNTRIX_READ_ONLY` | `1` | the board writes nothing: a slider's weight is the session's own; `0` brings back *store* |
 | `COUNTRIX_INFERENCE_HOST`, `COUNTRIX_INFERENCE_PORT` | `127.0.0.1`, `8019` | where the inference service listens |
-| `COUNTRIX_INFERENCE_URL` | unset | the inference service the board delegates to; the engine runs in-process when unset |
+| `COUNTRIX_INFERENCE_URL` | unset | the inference service the board delegates to; the engine runs in-process when unset. http or https: any other scheme stops the board at launch |
 | `COUNTRIX_MCP_TOKEN` | unset | bearer token the MCP server requires over HTTP |
 | `COUNTRIX_AUDIT` | `db/raw/audit.jsonl` | the MCP server's audit log |
 | `COUNTRIX_SENTRY_EVERY` | `30` | seconds between sentry sweeps |
 | `COUNTRIX_CLAUDE` | the `claude` on `PATH` | the CLI the agents and `derive` run |
-| `COUNTRIX_MCP_URL` | unset | the MCP server the board's one write goes to; in-process through the same registry when unset |
+| `COUNTRIX_MCP_URL` | unset | the MCP server the board's one write goes to; in-process through the same registry when unset. http or https, like the inference URL |
 | `COUNTRIX_REPO_URL` | `https://github.com/mmikol/countrix` | the repository the board's header links to |
 | `DATABASE_URL` | unset | the PostgreSQL to use; the embedded cluster at `db/psql/cluster` when unset |
 
