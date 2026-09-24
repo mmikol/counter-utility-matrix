@@ -205,8 +205,9 @@ class Verdict(NamedTuple):
 
 
 def _verdict(cand: Candidate) -> Verdict:
-    """A candidate as the pool ships it: who is in it, what it scored, how it
-    breaks a tie. Everything else is rebuilt where it is needed."""
+    """A candidate cut to what crosses the pool; the parent rebuilds the
+    namespace, raw values and breakdown only for the winners it keeps
+    (Solver.hydrate in solved())."""
     return Verdict(ids=tuple(h.id for h in cand.heroes), score=cand.score,
                    tiebreak=cand.tiebreak)
 
