@@ -88,14 +88,27 @@ def test_the_allowlist_is_exactly_the_tools_the_refresh_skill_names():
     assert set(orchestrator.AGENT_TOOL_NAMES) == named & registered
 
 
-def test_no_verb_means_the_whole_run_and_a_bad_verb_prints_the_usage(monkeypatch):
+def test_no_verb_means_the_whole_run_and_a_bad_verb_prints_the_usage(monkeypatch, capsys):
     seen = []
     monkeypatch.setattr(orchestrator, "run", lambda: seen.append("run") or 0)
     monkeypatch.setattr(orchestrator, "status", lambda: seen.append("status") or 0)
     assert orchestrator.main([]) == 0 and orchestrator.main(["status"]) == 0
     assert seen == ["run", "status"]
-    with pytest.raises(SystemExit):
-        orchestrator.main(["dance"])
+    assert orchestrator.main(["dance"]) == 2
+    assert "python orchestrator.py status" in capsys.readouterr().err
+
+
+def test_sh_gives_up_on_a_command_past_its_timeout(monkeypatch):
+    import subprocess
+    given = []
+
+    def overrun(argv, timeout=None):
+        given.append(timeout)
+        raise subprocess.TimeoutExpired(argv, timeout)
+    monkeypatch.setattr(subprocess, "run", overrun)
+    with pytest.raises(SystemExit, match="compose build data did not finish within 30 minutes"):
+        orchestrator.sh("docker", "compose", "build", "data", timeout=30 * orchestrator.MINUTE)
+    assert given == [1800]
 
 
 def test_drafts_are_derived_on_the_host_then_the_stack_remirrors(monkeypatch):
@@ -128,7 +141,8 @@ def stubbed(monkeypatch):
                "inference": {"status": "ok", "strategies": 38, "heroes": 54, "pending": 0},
                "ui": {"heroes": [{}] * 54, "maps": [{}] * 30},
                "board": {"seconds": 1.0, "picks": []}}
-    monkeypatch.setattr(orchestrator, "sh", lambda *a, **k: calls.append(("sh", *a)) or "")
+    # every command is given a timeout: a call without one raises TypeError here
+    monkeypatch.setattr(orchestrator, "sh", lambda *a, timeout: calls.append(("sh", *a)) or "")
     monkeypatch.setattr(orchestrator, "wait_for", lambda url, s, what: calls.append(("wait", what)))
     monkeypatch.setattr(orchestrator, "health", lambda: healthy)
     monkeypatch.setattr(orchestrator, "mcp",
@@ -191,8 +205,9 @@ def test_refresh_test_down_and_main_dispatch(stubbed, monkeypatch, capsys):
     assert "COVERAGE_FILE=/tmp/.coverage" in suite and "COUNTRIX_STRATEGIES=" in suite
     assert orchestrator.down() == 0 and ("sh", "docker", "compose", "down") in calls
     assert orchestrator.main(["status"]) == 0
-    with pytest.raises(SystemExit):
-        orchestrator.main(["up", "status"])
+    capsys.readouterr()
+    assert orchestrator.main(["up", "status"]) == 2
+    assert "python orchestrator.py up" in capsys.readouterr().err
 
 
 def test_agents_reports_a_missing_cli_and_a_signed_out_one(stubbed, monkeypatch, capsys):
@@ -213,6 +228,13 @@ def test_agents_reports_a_missing_cli_and_a_signed_out_one(stubbed, monkeypatch,
         a, 3, stdout="boom", stderr=""))
     assert orchestrator.agents() == 1
 
+    def overrun(*a, **k):
+        raise subprocess.TimeoutExpired(a, k["timeout"])
+    monkeypatch.setattr(subprocess, "run", overrun)
+    capsys.readouterr()
+    assert orchestrator.agents() == 1
+    assert "did not finish within 4 hours" in capsys.readouterr().out
+
 
 def test_run_brings_the_stack_up_and_skips_the_agents_without_a_cli(stubbed, monkeypatch, capsys):
     from inference import derive
@@ -229,6 +251,10 @@ def test_dotenv_token_sentry_line_and_the_http_helpers(tmp_path, monkeypatch):
     monkeypatch.delenv("COUNTRIX_MCP_TOKEN", raising=False)
     assert orchestrator.dotenv() == {"COUNTRIX_MCP_TOKEN": "t0k", "X": "1"}
     assert orchestrator.token() == "t0k"
+    (tmp_path / ".env").unlink()
+    (tmp_path / ".env").mkdir()                   # there, and unreadable: said, not skipped
+    with pytest.raises(IsADirectoryError):
+        orchestrator.dotenv()
     raw = tmp_path / "db" / "raw"
     raw.mkdir(parents=True)
     (raw / "sentry.json").write_text(json.dumps({

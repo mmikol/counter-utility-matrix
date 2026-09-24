@@ -27,44 +27,70 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
+from datetime import timedelta
 from typing import Any, TypedDict
 
 from db import ROOT
 from inference import derive
 
-URLS = {"data": "http://localhost:8020/health",
-        "inference": "http://localhost:8019/health",
-        "ui": "http://localhost:8017/api/roster"}
+# the compose stack's ports on this host (compose.yaml)
+DATA = "http://localhost:8020"
+INFERENCE = "http://localhost:8019"
 BOARD = "http://localhost:8017"
+URLS = {"data": DATA + "/health", "inference": INFERENCE + "/health", "ui": BOARD + "/api/roster"}
+MCP_URL = DATA + "/mcp"
 # one board solved through the service before the stack is called ready: only
 # the container (1 GiB, a read-only root) shows whether this playbook fits its
 # memory and time
-PROBE = "http://localhost:8019/board?map=King%27s%20Row&red=Zarya&red=Pharah&side=attack"
+PROBE = INFERENCE + "/board?map=King%27s%20Row&red=Zarya&red=Pharah&side=attack"
+
+MINUTE = 60                         # seconds
+HOUR = 60 * MINUTE
+# a derive on the host: every draft refused once, each attempt at the CLI's
+# timeout, then the mirror
+DERIVE_TIMEOUT = 2 * derive.MAX_PER_RUN * derive.TIMEOUT + 5 * MINUTE
 
 
-def sh(*args: str) -> None:
-    result = subprocess.run(list(args))
+def sh(*args: str, timeout: float) -> None:
+    """Run one command; a failure or an overrun past `timeout` seconds stops
+    the run."""
+    try:
+        result = subprocess.run(  # nosec B603  # argv lists built here from literals and this interpreter, never a shell
+            list(args), timeout=timeout)
+    except subprocess.TimeoutExpired as error:
+        raise SystemExit("error: %s did not finish within %d minutes"
+                         % (" ".join(args), timeout // MINUTE)) from error
     if result.returncode:
         raise SystemExit("error: %s exited %d" % (" ".join(args), result.returncode))
 
 
-def get_json(url: str | urllib.request.Request, timeout: float = 10) -> Any:
-    """The JSON a URL or a request is answered with, an error status's body
-    included, or None when nothing answers with JSON. An error status whose
-    body is not JSON reads as {"status": "error", "error": "HTTP <code>"}."""
+def _json_object(raw: bytes) -> dict[str, Any]:
+    """The JSON object a body holds; ValueError for anything else."""
+    reply = json.loads(raw.decode("utf-8"))
+    if not isinstance(reply, dict):
+        raise ValueError("not a JSON object")
+    return reply
+
+
+def get_json(url: str | urllib.request.Request, timeout: float = 10) -> dict[str, Any] | None:
+    """The JSON object a URL or a request is answered with, an error status's
+    body included, or None when nothing answers with one. An error status
+    whose body is not a JSON object reads as {"status": "error", "error":
+    "HTTP <code>"}."""
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:  # nosec B310  # http literals from the URL table
-            return json.loads(response.read().decode("utf-8"))
+            return _json_object(response.read())
     except urllib.error.HTTPError as error:        # a URLError, so caught first
         try:
-            return json.loads(error.read().decode("utf-8"))
+            return _json_object(error.read())
         except ValueError:
             return {"status": "error", "error": "HTTP %d" % error.code}
     except (urllib.error.URLError, OSError, ValueError):
         return None
 
 
-def wait_for(url: str, seconds: int, what: str) -> Any:
+def wait_for(url: str, seconds: float, what: str) -> dict[str, Any]:
     """The first JSON the URL answers, an error included, polled until
     `seconds` pass; then the run stops."""
     started = time.time()
@@ -106,7 +132,7 @@ def probe() -> Probe | None:
     or None when the service did not answer with a six: unreachable, erroring,
     or a playbook whose limits seat no composition."""
     started = time.time()
-    data = get_json(PROBE, timeout=120)
+    data = get_json(PROBE, timeout=2 * MINUTE)
     picks = (data or {}).get("blue", {}).get("blue") or []
     if len(picks) != 6:                            # a six, or the service failed
         return None
@@ -185,25 +211,28 @@ def verdict(h: Health) -> tuple[bool, list[str]]:
 
 
 def dotenv() -> dict[str, str]:
-    """KEY=VALUE lines of .env beside this file, if any: what compose reads."""
-    out: dict[str, str] = {}
+    """KEY=VALUE lines of .env beside this file: what compose reads. No .env
+    reads as none; one that cannot be read raises."""
     try:
         with open(os.path.join(ROOT, ".env"), encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    key, _, value = line.partition("=")
-                    out[key.strip()] = value.strip().strip("'\"")
-    except OSError:
-        pass
+            text = handle.read()
+    except FileNotFoundError:
+        return {}
+    out: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            out[key.strip()] = value.strip().strip("'\"")
     return out
 
 
 def token() -> str | None:
+    """The MCP door's bearer token: the environment's, else .env's."""
     return os.environ.get("COUNTRIX_MCP_TOKEN") or dotenv().get("COUNTRIX_MCP_TOKEN")
 
 
-def mcp(name: str, arguments: dict[str, Any] | None = None, timeout: float = 600) -> str:
+def mcp(name: str, arguments: dict[str, Any] | None = None, timeout: float = 10 * MINUTE) -> str:
     """Call one tool on the stack's MCP endpoint -> its text. A reply that is
     not the tool's answer raises RuntimeError with its message: the tool's
     refusal, the door turning the call away, or no server answering."""
@@ -213,11 +242,10 @@ def mcp(name: str, arguments: dict[str, Any] | None = None, timeout: float = 600
     bearer = token()
     if bearer:
         headers["Authorization"] = "Bearer " + bearer
-    request = urllib.request.Request("http://localhost:8020/mcp", data=payload.encode(),
-                                     headers=headers)
+    request = urllib.request.Request(MCP_URL, data=payload.encode(), headers=headers)
     body = get_json(request, timeout=timeout)
     if body is None:
-        raise RuntimeError("the MCP server is unreachable at %s" % request.full_url)
+        raise RuntimeError("the MCP server is unreachable at %s" % MCP_URL)
     if "error" in body:                 # JSON-RPC's error object, or the door's string
         error = body["error"]
         raise RuntimeError(error.get("message", str(error)) if isinstance(error, dict)
@@ -236,7 +264,7 @@ def derive_pending(h: Health) -> bool:
     if not pending:
         return False
     print("%d draft strategy(ies) await frontmatter; deriving on the host..." % pending)
-    sh(sys.executable, "-m", "db.mcp", "call", "derive_strategies")
+    sh(sys.executable, "-m", "db.mcp", "call", "derive_strategies", timeout=DERIVE_TIMEOUT)
     try:
         mcp("load_authored")
     except RuntimeError as error:
@@ -245,22 +273,24 @@ def derive_pending(h: Health) -> bool:
 
 
 def up() -> int:
+    """Build the image, start the containers, wait for each layer, complete
+    pending drafts on the host -> the verdict's exit code."""
     print("building the image and starting the containers...")
-    sh("docker", "compose", "build", "data")
-    sh("docker", "compose", "up", "-d", "--remove-orphans")
+    sh("docker", "compose", "build", "data", timeout=30 * MINUTE)
+    sh("docker", "compose", "up", "-d", "--remove-orphans", timeout=10 * MINUTE)
     print("waiting for the layers (a first build scrapes the sources: minutes)...")
-    wait_for(URLS["data"], 1800, "the data layer")
-    wait_for(URLS["inference"], 600, "the inference engine")
-    wait_for(URLS["ui"], 300, "the board")
+    wait_for(URLS["data"], 30 * MINUTE, "the data layer")
+    wait_for(URLS["inference"], 10 * MINUTE, "the inference engine")
+    wait_for(URLS["ui"], 5 * MINUTE, "the board")
     h = health()
     if derive_pending(h):
         h = health()
     ok, lines = verdict(h)
     if not ok and h["inference"] and not h["inference"].get("strategies"):
         print("stale bind mounts detected; recreating the containers...")
-        sh("docker", "compose", "up", "-d", "--force-recreate")
-        wait_for(URLS["inference"], 300, "the inference engine")
-        wait_for(URLS["ui"], 120, "the board")
+        sh("docker", "compose", "up", "-d", "--force-recreate", timeout=10 * MINUTE)
+        wait_for(URLS["inference"], 5 * MINUTE, "the inference engine")
+        wait_for(URLS["ui"], 2 * MINUTE, "the board")
         ok, lines = verdict(health())
     return report(ok, lines)
 
@@ -284,6 +314,7 @@ def sentry_line() -> str | None:
 
 
 def status() -> int:
+    """The verdict and the sentry's last pass, touching nothing."""
     ok, lines = verdict(health())
     seen = sentry_line()
     if seen:
@@ -299,8 +330,10 @@ AGENT_TOOL_NAMES = ("db_status", "strategies", "tuning_log", "metrics", "facts",
                     "pull_seasons", "load_authored", "infer_strategy", "tune", "db_docs",
                     "export_csv", "reach")
 # A refresh pull fetches dozens of pages at a polite pace: minutes, not the
-# seconds a tool call is given by default.
-AGENT_TOOL_TIMEOUT_MS = str(45 * 60 * 1000)
+# seconds a tool call is given by default. MCP_TOOL_TIMEOUT is read in
+# milliseconds.
+AGENT_TOOL_TIMEOUT_MS = str(timedelta(minutes=45) // timedelta(milliseconds=1))
+AGENT_RUN_TIMEOUT = 4 * HOUR
 AGENT_TOOLS = ",".join("mcp__%s__%s" % (server, name)
                        for server in ("countrix-docker", "countrix")
                        for name in AGENT_TOOL_NAMES)
@@ -328,8 +361,13 @@ def agents() -> int:
     env.update({k: v for k, v in dotenv().items() if k not in env})   # the token, for .mcp.json
     env.setdefault("MCP_TOOL_TIMEOUT", AGENT_TOOL_TIMEOUT_MS)
     env.setdefault("MCP_TIMEOUT", AGENT_TOOL_TIMEOUT_MS)
-    done = subprocess.run(  # nosec B603  # argv from agents_command: the resolved claude binary and literal flags
-        command, cwd=ROOT, env=env, text=True, capture_output=True, timeout=4 * 3600)
+    try:
+        done = subprocess.run(  # nosec B603  # argv from agents_command: the resolved claude binary and literal flags
+            command, cwd=ROOT, env=env, text=True, capture_output=True,
+            timeout=AGENT_RUN_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return report(False, ["agents: claude -p did not finish within %d hours"
+                              % (AGENT_RUN_TIMEOUT // HOUR)])
     said = (done.stdout.strip() + "\n" + done.stderr.strip()).strip()
     if done.returncode != 0 and derive.not_signed_in(said):
         print("agents: skipped - the claude CLI is not signed in; run `%s login` once on"
@@ -358,17 +396,19 @@ def run() -> int:
 
 
 def report(ok: bool, lines: list[str]) -> int:
+    """Print the lines, then READY or NOT READY with the URLs -> the exit code."""
     for line in lines:
         print("  " + line)
-    print("%s - board %s, inference :8019, MCP over HTTP :8020/mcp"
-          % ("READY" if ok else "NOT READY", BOARD))
+    print("%s - board %s, inference %s, MCP over HTTP %s"
+          % ("READY" if ok else "NOT READY", BOARD, INFERENCE, MCP_URL))
     return 0 if ok else 1
 
 
 def refresh() -> int:
+    """Refetch every source through the data layer's sync_all, then the status."""
     print("refreshing every source through the data layer (minutes at a polite pace)...")
     try:
-        print(mcp("sync_all", {"refresh": True}, timeout=3600))
+        print(mcp("sync_all", {"refresh": True}, timeout=HOUR))
     except RuntimeError as error:
         return report(False, ["refresh: sync_all failed - %s" % error])
     return status()
@@ -379,25 +419,29 @@ def test() -> int:
     read-only); the shipped playbook is used whatever .env names."""
     sh("docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage",
        "-e", "COUNTRIX_STRATEGIES=", "data",
-       "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--cov")
+       "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--cov", timeout=HOUR)
     return 0
 
 
 def down() -> int:
-    sh("docker", "compose", "down")
+    """Stop the containers; the database volume stays."""
+    sh("docker", "compose", "down", timeout=5 * MINUTE)
     print("stopped; the database volume stays")
     return 0
 
 
 def main(argv: list[str]) -> int:
-    verbs = {"run": run, "up": up, "agents": agents, "status": status,
-             "refresh": refresh, "test": test, "down": down}
-    if not argv:
-        argv = ["run"]
-    if len(argv) != 1 or argv[0] not in verbs:
-        sys.exit(__doc__)
-    return verbs[argv[0]]()
+    """Run one verb, `run` when none is named -> its exit code; 2, with the
+    usage on stderr, for anything else."""
+    verbs: dict[str, Callable[[], int]] = {
+        "run": run, "up": up, "agents": agents, "status": status, "refresh": refresh,
+        "test": test, "down": down}
+    verb = argv[0] if argv else "run"
+    if len(argv) > 1 or verb not in verbs:
+        print(__doc__, file=sys.stderr)
+        return 2
+    return verbs[verb]()
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    raise SystemExit(main(sys.argv[1:]))
