@@ -14,8 +14,11 @@
                   every heuristic is normalised against, and each hero's standing
     solver        searches compositions under the constraints and heuristics;
                   players are assumed to play optimally
-    engine        infer(), evaluate() and board(): the solver plus citations
-                  into the facts the UI layer generated
+    engine        infer(), evaluate() and board(): the API over the solver
+    result        the Result and Board records and their citations into the
+                  facts the UI layer generated
+    plan          the game plan and the verdict in prose
+    parallel      the process pool the board splits its searches across
     tune          one validated, logged edit to a strategy file; add and complete
     derive        the engine asking the model for a draft's frontmatter
     reach         the board each released hero is optimal on, within a match's bans

@@ -124,7 +124,7 @@ class Contribution(TypedDict):
     confidence_raw: NotRequired[float | None]
     bonus: NotRequired[float]          # a scored constraint
     penalty: NotRequired[float]
-    fact: NotRequired[str]             # engine._fill, where a board fact states the metric
+    fact: NotRequired[str]             # the board fact that states the metric, if any
     text: NotRequired[str]
 
 

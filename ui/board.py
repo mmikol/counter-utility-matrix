@@ -33,6 +33,7 @@ from db import psql, web
 from db.mcp.server import LOCAL_HOSTS
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
+from inference import parallel
 from ui.facts import board_facts, tables
 from ui.facts.draft import (
     MAX_BANS,
@@ -469,7 +470,7 @@ def main(argv: list[str] | None = None) -> None:
     except ValueError as error:
         raise SystemExit(str(error)) from None
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    workers = 0 if inference else inference_engine.warm()   # in-process boards split too
+    workers = 0 if inference else parallel.warm()   # in-process boards split too
     print("Countrix: http://%s:%d%s" % (
         args.host, args.port, " (%d solver workers)" % workers if workers else ""))
     server.serve_forever()

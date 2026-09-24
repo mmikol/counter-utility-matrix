@@ -9,7 +9,7 @@ import statistics
 
 import pytest
 
-from inference import engine
+from inference.result import _cited_fact
 from ui.facts import board_facts, compute, model
 from ui.facts.compute import STAGE_FEATURES, STAGE_MENTIONS, TERRAIN_STANDOUT
 from ui.facts.draft import Draft
@@ -24,10 +24,10 @@ def test_every_metric_a_strategy_can_name_reaches_the_fact_that_states_it(world)
     fs = board_facts.generate(world, Draft("King's Row", ("Zarya", "Pharah"),
                                            ("Ana", "Reinhardt")))
     metrics = [k for k in compute.registry() if k.startswith(("team.", "matchup."))]
-    cited = [k for k in metrics if engine._cited_fact(fs, [k]) is not None]
+    cited = [k for k in metrics if _cited_fact(fs, [k]) is not None]
     assert len(cited) > 60, len(cited)
     for key in cited:
-        assert engine._cited_fact(fs, [key]).text
+        assert _cited_fact(fs, [key]).text
 
 
 def test_every_named_hero_gets_a_deep_stack_of_independent_facts(world):

@@ -4,12 +4,12 @@ solver and evaluation run against the built database."""
 import copy
 import os
 import shutil
+from concurrent.futures.process import BrokenProcessPool
 
 import pytest
 
 from db import Refusal
 from inference import catalog
-from inference.engine import BrokenProcessPool
 from inference.expr import Expr, ExprError
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts import board_facts, compute
@@ -92,7 +92,7 @@ def test_catalog_rejects_a_goal_on_an_unknown_metric(tmp_path):
 
 
 class _Call:
-    """One orchestration call, as the trace records it."""
+    """One round of the pool, as the trace records it."""
 
     def __init__(self, what, **kw):
         self.what, self.kw = what, kw
@@ -104,111 +104,111 @@ class _Call:
         return "%s(%s)" % (self.what, ", ".join("%s=%r" % kv for kv in sorted(self.kw.items())))
 
 
-def _traced_board(monkeypatch, *, parallel, breaks_after=None, blue=("Ana",), red=("Zarya",)):
-    """Run board()'s orchestration with every call it makes stubbed out, and
-    return the trace. The World, the facts and the solver never run: what is
-    under test is the sequence, which is the one thing the pooled and the
-    in-process passes have to agree on."""
-    from inference import engine
+# red revealed and one blue pick locked on a sided map: all four searches run
+TRACED = Draft("Harbor Gate", ("Anvil",), ("Balm",), side="attack")
+
+
+def _scratch_playbook(tmp_path):
+    """The reference playbook's two-tank limit and its one heuristic on
+    team.win_mean: enough for every seat to score."""
+    for name in ("open-queue-tanks.md", "meta-strength.md"):
+        shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
+    return catalog.load(str(tmp_path))
+
+
+def _traced_board(monkeypatch, world, playbook, *, pooled, breaks_after=None):
+    """board() for real, in this process, on the synthetic World. Pooled, a
+    recording Split with the real one's constructor stands in for the workers:
+    it traces each round, hands back None from solved() and swept() so each
+    seat searches for itself, and after `breaks_after` rounds a worker dies.
+    Only the pool module's public names are patched. -> (the Board, the
+    trace)."""
+    from inference import engine, parallel
     trace = []
 
     class Split:
         def __init__(self, pool, world, catalog, spec, weights, top, slices,
                      bounds=None, standing=None):
             self.spec, self.bounds, self.standing = spec, bounds, standing
-            trace.append(_Call("split", locked=spec.draft.blue, enemy=spec.draft.red))
 
-        def _step(self, name):
-            trace.append(_Call(name, enemy=self.spec.draft.red))
+        def _round(self, name):
+            seat = self.spec.draft
+            trace.append(_Call(name, locked=seat.blue, enemy=seat.red, pool=self.spec.pool_size))
             if breaks_after is not None and len(trace) >= breaks_after:
                 raise BrokenProcessPool("a worker died")
 
         def rank_roster(self):
-            self._step("rank_roster")
+            self._round("rank_roster")
 
         def sweep(self):
-            self._step("sweep")
+            self._round("sweep")
 
         def merge(self):
-            self._step("merge")
+            self._round("merge")
 
         def solved(self):
-            self._step("solved")
-            return "solved"
+            self._round("solved")
 
         def swept(self):
-            self._step("swept")
-            return "swept"
+            self._round("swept")
 
-    class Fake:
-        kind, blue, red, score, seconds = "infer", ["A", "B"], [], 1.0, 0.0
-        picks, contributions, partial, facts = [], [], False, None
-
-        def resolve(self, *a):
-            return None, [], [], []
-
-        def scale_to(self, best):
-            pass
-
-    def optimal(world, draft, *, solved, seat, **kw):
-        trace.append(_Call("infer", enemy=draft.red, locked=draft.blue, solved=solved,
-                           seat=seat))
-        return engine._Optimal(Fake(), None)
-
-    def current(world, draft, *, swept, seat, **kw):
-        trace.append(_Call("current", enemy=draft.red, picks=draft.blue, swept=swept,
-                           seat=seat))
-        return Fake()
-
-    def countered(world, draft, *, solved, swept, **kw):
-        trace.append(_Call("countered", against=draft.red, picks=draft.blue,
-                           solved=solved, swept=swept))
-        return Fake()
-
-    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: parallel)
-    monkeypatch.setattr(engine._POOL, "executor", lambda: engine.Workers("pool", 6))
-    monkeypatch.setattr(engine._POOL, "drop", lambda: trace.append(_Call("drop_workers")))
-    monkeypatch.setattr(engine, "_Split", Split)
-    monkeypatch.setattr(engine, "_optimal", optimal)
-    monkeypatch.setattr(engine, "_current", current)
-    monkeypatch.setattr(engine, "_countered", countered)
-    monkeypatch.setattr(engine, "_momentum", lambda *a, **kw: {"verdict": "-"})
-    monkeypatch.setattr(engine, "_plan", lambda *a: "-")
-    monkeypatch.setattr(engine, "legal_shapes", lambda catalog: [])
-    monkeypatch.setattr(engine.compute, "expected_picks", lambda *a, **kw: [])
-    engine.board(Fake(), Draft(None, tuple(red), tuple(blue)),
-                 catalog=catalog.load(FIXTURE_PLAYBOOK))
-    return trace
+    monkeypatch.setattr(parallel, "available", lambda catalog=None: pooled)
+    monkeypatch.setattr(parallel.POOL, "executor",
+                        lambda: parallel.Workers(executor=None, size=6))
+    monkeypatch.setattr(parallel.POOL, "drop", lambda: trace.append(_Call("drop")))
+    monkeypatch.setattr(parallel, "Split", Split)
+    return engine.board(world, TRACED, catalog=playbook), trace
 
 
-def test_the_pooled_and_the_in_process_board_run_one_orchestration(monkeypatch):
-    """The six calls are written once. Pooled, each is handed its split's
-    result; in this process every split is None and the call searches for
-    itself. Nothing else about the sequence may differ."""
-    pooled = _traced_board(monkeypatch, parallel=True)
-    alone = _traced_board(monkeypatch, parallel=False)
-    assert [c.what for c in alone] == ["infer", "infer", "current", "current",
-                                       "infer", "countered"]
-    assert all(c.kw["solved"] is None for c in alone if c.what == "infer")
-    assert all(c.kw["swept"] is None for c in alone if c.what in ("current", "countered"))
-    # the same six calls, in the same order, with the same boards
-    def shape(trace):
-        return [(c.what, {k: v for k, v in c.kw.items() if k not in ("solved", "swept")})
-                for c in trace if c.what in ("infer", "current", "countered")]
-    assert shape(pooled) == shape(alone)
-    # pooled, each call takes its split's work instead of searching
-    assert [c.kw["solved"] for c in pooled if c.what == "infer"] == ["solved"] * 3
+def _timeless(board):
+    """The board as data, less the seconds each result took."""
+    d = board.to_dict()
+    for value in d.values():
+        if isinstance(value, dict) and "seconds" in value:
+            value.pop("seconds")
+    return d
 
 
-def test_a_dying_worker_reruns_the_same_board_in_this_process(monkeypatch):
+def test_the_pooled_and_the_in_process_board_run_one_orchestration(
+        monkeypatch, synthetic_world, tmp_path):
+    """Pooled, the four searches walk the rounds together in the order that
+    keeps the pool full: blue and red rank their rosters and sweep, the fill
+    sweeps on blue's scale, blue and red merge and are solved, and only then
+    does the countered case sweep, against red's six. In this process no
+    split is built. Both answer the same Board."""
+    playbook = _scratch_playbook(tmp_path)
+    alone, none = _traced_board(monkeypatch, synthetic_world, playbook, pooled=False)
+    pooled, trace = _traced_board(monkeypatch, synthetic_world, playbook, pooled=True)
+    assert none == []
+    enemy, ours = TRACED.red, TRACED.blue
+    blue = {"locked": (), "enemy": enemy, "pool": 6}
+    red = {"locked": (), "enemy": ours, "pool": 6}
+    fill = {"locked": ours, "enemy": enemy, "pool": 6}
+    countered = {"locked": (), "enemy": tuple(alone.red.blue), "pool": 4}
+    assert trace == [
+        _Call("rank_roster", **blue), _Call("rank_roster", **red),
+        _Call("sweep", **blue), _Call("sweep", **red), _Call("sweep", **fill),
+        _Call("merge", **blue), _Call("merge", **red),
+        _Call("solved", **blue), _Call("solved", **red),
+        _Call("sweep", **countered), _Call("merge", **fill), _Call("merge", **countered),
+        _Call("solved", **fill), _Call("solved", **countered)]
+    assert _timeless(pooled) == _timeless(alone)
+
+
+def test_a_dying_worker_reruns_the_same_board_in_this_process(
+        monkeypatch, synthetic_world, tmp_path):
     """A BrokenProcessPool anywhere in the pooled pass drops the pool and runs
-    the identical sequence here - not a second, differently written one."""
-    alone = _traced_board(monkeypatch, parallel=False)
-    for breaks_after in (1, 4, 8, 12):
-        trace = _traced_board(monkeypatch, parallel=True, breaks_after=breaks_after)
-        assert _Call("drop_workers") in trace, breaks_after
-        after = trace[[c.what for c in trace].index("drop_workers") + 1:]
-        assert after == alone, (breaks_after, after)
+    the board again here: at the first round, and after the two optimal seats
+    are solved, the Board is the one this process answers alone."""
+    playbook = _scratch_playbook(tmp_path)
+    alone, _ = _traced_board(monkeypatch, synthetic_world, playbook, pooled=False)
+    _, whole = _traced_board(monkeypatch, synthetic_world, playbook, pooled=True)
+    seated = [i for i, c in enumerate(whole) if c.what == "solved"][1] + 2
+    for breaks_after in (1, seated):
+        board, trace = _traced_board(monkeypatch, synthetic_world, playbook, pooled=True,
+                                     breaks_after=breaks_after)
+        assert trace[breaks_after:] == [_Call("drop")], breaks_after
+        assert _timeless(board) == _timeless(alone), breaks_after
 
 
 # --- the solver against the built database ------------------------------------
@@ -599,8 +599,8 @@ def test_blue_counters_the_likely_six_until_red_reveals_a_pick(world, monkeypatc
     """With no red pick the board solves blue against red's likely six, so the
     opening suggestion is a counter to what the map and the meta say red
     fields; the first reveal replaces that with red's actual picks."""
-    from inference import engine
-    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
+    from inference import engine, parallel
+    monkeypatch.setattr(parallel, "available", lambda catalog=None: False)
     m = world.map("King's Row")
     likely = [p["hero"] for p in compute.expected_picks(world, m)]
     b = engine.board(world, Draft("King's Row", (), ("Ana",)))
@@ -710,21 +710,22 @@ def test_the_sandbox_refuses_what_would_hang_or_exhaust_it():
 
 
 def test_the_momentum_verdict_reads_the_two_current_comps():
-    from inference import engine
+    from inference import plan
+    from inference.result import Result
     fix = catalog.load(FIXTURE_PLAYBOOK)
 
     def comp(blue, score, best, partial=False):
-        return engine.Result(kind="current", map_name=None, red=[], blue=blue, locked=blue,
-                             catalog=fix, score=score, best=best, partial=partial)
-    even = engine._momentum(comp(["a"], 8, 10), comp(["b"], 7.8, 10), None)
+        return Result(kind="current", map_name=None, red=[], blue=blue, locked=blue,
+                      catalog=fix, score=score, best=best, partial=partial)
+    even = plan.momentum(comp(["a"], 8, 10), comp(["b"], 7.8, 10), None)
     assert even["verdict"].startswith("even") and even["blue"] == 80 and even["red"] == 78
-    blue = engine._momentum(comp(["a"] * 6, 9, 10), comp(["b"] * 6, 5, 10),
-                            comp(["a"] * 6, 3, 10))
+    blue = plan.momentum(comp(["a"] * 6, 9, 10), comp(["b"] * 6, 5, 10),
+                         comp(["a"] * 6, 3, 10))
     assert blue["verdict"].startswith("blue ahead by 40") and blue["countered"] == 30
     assert "your picks hold 30 / 100" in blue["verdict"] and not blue["partial"]
-    red = engine._momentum(comp(["a"], 2, 10, partial=True), comp(["b"] * 6, 9, 10), None)
+    red = plan.momentum(comp(["a"], 2, 10, partial=True), comp(["b"] * 6, 9, 10), None)
     assert red["verdict"].startswith("red ahead by 70") and "(partial picks)" in red["verdict"]
-    only_red = engine._momentum(comp([], 0, 10), comp(["b"], 5, 10), None)
+    only_red = plan.momentum(comp([], 0, 10), comp(["b"], 5, 10), None)
     assert only_red["verdict"].startswith("red has revealed")
 
 
@@ -733,33 +734,33 @@ def test_the_plan_names_every_maps_derived_style(world, kings_row_board):
     """Every map's plan names the style its rates reward and cites no note: a
     map has none. One board is solved through the public path; the other maps'
     plans are composed from that board's optimal."""
-    from inference import engine
+    from inference import plan
     blue_r = kings_row_board.blue
     for m in world.maps.values():
         assert m.style_top and all(note is None for _, note in m.styles.values()), m.name
-        plan = (kings_row_board.plan if m.name == "King's Row"
-                else engine._plan(world, m, "", [], [], blue_r))
-        assert "The map rewards %s" % m.style_top in plan, m.name
-        assert "archetype" not in plan and "authored" not in plan, m.name
-    assert engine._and(["A"]) == "A" and engine._and(["A", "B", "C"]) == "A, B and C"
+        said = (kings_row_board.plan if m.name == "King's Row"
+                else plan.plan(world, m, "", [], [], blue_r))
+        assert "The map rewards %s" % m.style_top in said, m.name
+        assert "archetype" not in said and "authored" not in said, m.name
+    assert plan._and(["A"]) == "A" and plan._and(["A", "B", "C"]) == "A, B and C"
 
 
 @pytest.mark.invariant
 def test_the_plan_names_the_terrain_the_facts_hold_and_no_other(world, kings_row_board):
     """The map sentence names the map.terrain facts above the ordinary map, largest
     first; a board whose facts hold none for the map names none."""
-    from inference import engine
+    from inference import plan
     from ui.facts import model
     blue_r = kings_row_board.blue
     above = [f.value["feature"] for f in blue_r.facts.find("map.terrain", "King's Row")
-             if f.value["z"] > 0][:engine.TERRAIN_NAMED]
+             if f.value["z"] > 0][:plan.TERRAIN_NAMED]
     assert above and above[0] == "chokes"
-    assert set(engine.TERRAIN_GROUND) == set(model.TERRAIN_FEATURES)
-    sentence = "The wiki's article stresses %s." % engine._and(
-        engine.TERRAIN_GROUND[f] for f in above)
+    assert set(plan.TERRAIN_GROUND) == set(model.TERRAIN_FEATURES)
+    sentence = "The wiki's article stresses %s." % plan._and(
+        plan.TERRAIN_GROUND[f] for f in above)
     assert sentence in kings_row_board.plan.split("\n")[0]
     # these facts are King's Row's: another map's plan reads none of them
-    assert "stresses" not in engine._plan(world, world.map("Ilios"), "", [], [], blue_r)
+    assert "stresses" not in plan.plan(world, world.map("Ilios"), "", [], [], blue_r)
 
 
 @pytest.mark.invariant
@@ -768,21 +769,21 @@ def test_the_plan_names_the_stages_the_facts_hold_and_no_other(world, kings_row_
     STAGES_NAMED at most, each by the features its fact holds; no fact, no sentence."""
     import copy
 
-    from inference import engine
+    from inference import plan
     blue_r = kings_row_board.blue
     held = blue_r.facts.find("map.stage_terrain", "King's Row")
     assert [f.value["stage"] for f in held] == ["Assault", "Escort"]
-    named = [engine._and(engine.TERRAIN_GROUND[x["feature"]] for x in f.value["features"])
+    named = [plan._and(plan.TERRAIN_GROUND[x["feature"]] for x in f.value["features"])
              for f in held]
     sentence = "Assault has the %s; Escort the %s." % tuple(named)
     assert sentence in kings_row_board.plan.split("\n")[0]
 
-    def plan(name):
+    def first_line(name):
         r = copy.copy(blue_r)
         r.facts = board_facts.generate(world, Draft(name))
-        return engine._plan(world, world.map(name), "", [], [], r).split("\n")[0]
-    assert "Well has the environmental hazards." in plan("Ilios")
-    assert "Lighthouse" not in plan("Ilios") and "Ruins" not in plan("Ilios")
+        return plan.plan(world, world.map(name), "", [], [], r).split("\n")[0]
+    assert "Well has the environmental hazards." in first_line("Ilios")
+    assert "Lighthouse" not in first_line("Ilios") and "Ruins" not in first_line("Ilios")
     # three stages at most: the largest, told in play order
     suravasa = world.map("Suravasa")
     r = copy.copy(blue_r)
@@ -791,14 +792,14 @@ def test_the_plan_names_the_stages_the_facts_hold_and_no_other(world, kings_row_
     for stage, z in zip(suravasa.stages[:4], (1.0, 4.0, 3.0, 2.0), strict=True):
         r.facts.add("map", "Suravasa", "map.stage_terrain", stage, source="stage_terrain",
                     value={"stage": stage, "features": [{"feature": "cover", "z": z}]})
-    assert engine.STAGES_NAMED == 3 and "%s has the cover; %s the cover; %s the cover." % tuple(
-        suravasa.stages[1:4]) in engine._plan(world, suravasa, "", [], [], r)
-    assert suravasa.stages[0] not in engine._plan(world, suravasa, "", [], [], r)
+    assert plan.STAGES_NAMED == 3 and "%s has the cover; %s the cover; %s the cover." % tuple(
+        suravasa.stages[1:4]) in plan.plan(world, suravasa, "", [], [], r)
+    assert suravasa.stages[0] not in plan.plan(world, suravasa, "", [], [], r)
     # no stage fact: Oasis has stages and no text of theirs, Dorado no stages
     for name in ("Oasis", "Dorado", "Colosseo"):
         assert not board_facts.generate(world, Draft(name)).find("map.stage_terrain")
-        assert " has the " not in plan(name), name
-        assert not any(stage in plan(name) for stage in world.map(name).stages), name
+        assert " has the " not in first_line(name), name
+        assert not any(stage in first_line(name) for stage in world.map(name).stages), name
 
 
 @pytest.mark.invariant
@@ -808,7 +809,8 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     a rule named for another style, and the family follows the style tags."""
     from types import SimpleNamespace as Ns
 
-    from inference import engine
+    from inference import plan
+    from inference.result import Result
     from inference.scoring import Contribution
     m = copy.copy(world.map("King's Row"))
     m.styles = {"brawl": (1.0, None), "dive": (-0.5, None), "poke": (0.0, None)}   # a brawl map
@@ -832,25 +834,25 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     red_lean = theirs["style_lean"] or theirs["style_top"]
     assert red_lean == "brawl"
     # a real Result, not a stand-in: _plan reads .facts, which Result defines
-    six = engine.Result(kind="infer", map_name=m.name, red=["Reinhardt", "Zarya"], blue=[],
-                        locked=[], catalog=rules, playstyle="brawl", contributions=terms)
-    plan = engine._plan(world, m, "", [], red_h, six)                   # a mirror
-    assert "(Reinhardt, Zarya) lean brawl too: %s." % engine.SAME_LEAN["brawl"] in plan
-    assert engine.THEIR_LEAN["brawl"] not in plan
-    assert "Above all: brawl maps reward durability." in plan
+    six = Result(kind="infer", map_name=m.name, red=["Reinhardt", "Zarya"], blue=[],
+                 locked=[], catalog=rules, playstyle="brawl", contributions=terms)
+    said = plan.plan(world, m, "", [], red_h, six)                     # a mirror
+    assert "(Reinhardt, Zarya) lean brawl too: %s." % plan.SAME_LEAN["brawl"] in said
+    assert plan.THEIR_LEAN["brawl"] not in said
+    assert "Above all: brawl maps reward durability." in said
     six.playstyle = "poke"
-    plan = engine._plan(world, m, "", [], red_h, six)
-    assert "lean brawl: %s." % engine.THEIR_LEAN["brawl"] in plan
-    assert "but against this red the six leans poke" in plan
-    assert "Above all: brawl maps reward durability; poke needs reach." in plan
-    plan = engine._plan(world, m, "", [], [], six)                      # red has revealed nothing
-    assert "this red" not in plan and "but the six leans poke" in plan
-    assert "No red pick yet: the six counters their likely six (Reinhardt, Zarya)." in plan
-    tanks = engine._family(world, m, "brawl", "tank", ["Zarya"])
+    said = plan.plan(world, m, "", [], red_h, six)
+    assert "lean brawl: %s." % plan.THEIR_LEAN["brawl"] in said
+    assert "but against this red the six leans poke" in said
+    assert "Above all: brawl maps reward durability; poke needs reach." in said
+    said = plan.plan(world, m, "", [], [], six)                        # red revealed nothing
+    assert "this red" not in said and "but the six leans poke" in said
+    assert "No red pick yet: the six counters their likely six (Reinhardt, Zarya)." in said
+    tanks = plan._family(world, m, "brawl", "tank", ["Zarya"])
     tagged = [h for h in world.heroes.values()
               if h.role == "tank" and "brawl" in h.styles and h.released and h.name != "Zarya"]
     assert set(tanks) <= {h.name for h in tagged} and "Reinhardt" in tanks
-    assert len(tanks) == min(engine.FAMILY_SIZE, len(tagged))
+    assert len(tanks) == min(plan.FAMILY_SIZE, len(tagged))
     assert "Zarya" not in tanks and "Sigma" not in tanks             # banned; not tagged brawl
     # fewest tags first, then the best win rate here
     keys = [(len(world.hero(n).styles), -(world.hero(n).map_win(m.id) or world.hero(n).win or 0.0))
@@ -858,20 +860,20 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     assert keys == sorted(keys)
     alone = [h for h in tagged if h.styles == {"brawl"}]
     assert [world.hero(n) for n in tanks[:len(alone)]] == sorted(
-        alone, key=lambda h: -(h.map_win(m.id) or h.win or 0.0))[:engine.FAMILY_SIZE]
-    assert "Tanks: %s." % ", ".join(engine._family(world, m, "poke", "tank", [])) in plan
+        alone, key=lambda h: -(h.map_win(m.id) or h.win or 0.0))[:plan.FAMILY_SIZE]
+    assert "Tanks: %s." % ", ".join(plan._family(world, m, "poke", "tank", [])) in said
 
 
 def test_the_rendered_breakdown_marks_a_need():
     """A need reads at or below zero by design, so the breakdown says which
     terms are needs; the flag rides to_dict() on each contribution."""
-    from inference import engine
-    r = engine.Result(kind="evaluate", map_name=None, red=[], blue=[], locked=[], catalog=[],
-                      contributions=[
-                          {"id": "a-reward", "kind": "heuristic", "form": "heuristic",
-                           "applies": True, "weighted": 0.25, "metric": None, "need": False},
-                          {"id": "a-need", "kind": "heuristic", "form": "heuristic",
-                           "applies": True, "weighted": -0.11, "metric": None, "need": True}])
+    from inference.result import Result
+    r = Result(kind="evaluate", map_name=None, red=[], blue=[], locked=[], catalog=[],
+               contributions=[
+                   {"id": "a-reward", "kind": "heuristic", "form": "heuristic",
+                    "applies": True, "weighted": 0.25, "metric": None, "need": False},
+                   {"id": "a-need", "kind": "heuristic", "form": "heuristic",
+                    "applies": True, "weighted": -0.11, "metric": None, "need": True}])
     assert "breakdown: a-reward +0.25 · a-need -0.11 (need)" in r.rendered()
     assert [c["need"] for c in r.to_dict()["contributions"]] == [False, True]
 
@@ -880,13 +882,13 @@ def test_the_rendered_breakdown_marks_a_need():
 def test_a_metric_printed_inside_another_fact_cites_that_fact(world):
     """team.range_max rides the range_median line and team.cleanse the invuln
     line; a rule on either cites that fact, not its guard's."""
-    from inference import engine
+    from inference.result import _cited_fact
     six = ["Reinhardt", "Sigma", "Ashe", "Cassidy", "Ana", "Kiriko"]
     fs = board_facts.generate(world, Draft("King's Row", ("Zarya",), tuple(six), side="attack"))
     for metric, line in (("team.range_max", "team.range_median"), ("team.melee", "team.hitscan"),
                          ("team.cleanse", "team.invuln"), ("team.dps_count", "team.dps_floor"),
                          ("matchup.exposure_share", "matchup.coverage_share")):
-        fact = engine._cited_fact(fs, [metric, "team.style_top"])
+        fact = _cited_fact(fs, [metric, "team.style_top"])
         assert fact is not None and fact.key == line, metric
 
 
@@ -949,17 +951,17 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     """Every search is cut into slices across the pool and merged here; the
     answer is byte-for-byte the sequential one, the board's weight overrides
     included (a worker loads the playbook from its files)."""
-    from inference import engine
-    if not engine.parallel_available():
+    from inference import engine, parallel
+    if not parallel.available():
         pytest.skip("one core, or COUNTRIX_PARALLEL=0")
-    assert engine.warm() == engine.worker_count() >= 6
+    assert parallel.warm() == parallel.worker_count() >= 6
     weights = {h.id: 10.0 if h.weight < 10 else 0.5
                for h in catalog.load() if h.kind == "heuristic"}
     draft = Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt"), side="attack")
     split = engine.board(world, draft, weights=weights)
     assert split.blue.to_dict()["weights"] == weights         # the override reached the worker
     monkeypatch.setenv("COUNTRIX_PARALLEL", "0")
-    assert not engine.parallel_available()
+    assert not parallel.available()
     straight = engine.board(world, draft, weights=weights)
 
     def timeless(b):
@@ -971,7 +973,7 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     assert timeless(split) == timeless(straight)
     first_line = lambda b: b.rendered().split("\n")[0]   # noqa: E731
     assert first_line(split) == first_line(straight)
-    assert engine.parallel_available(catalog=[]) is False   # a caller's catalog stays in-process
+    assert parallel.available(catalog=[]) is False   # a caller's catalog stays in-process
 
 
 def _priming_pool(monkeypatch, outcome):
@@ -980,7 +982,7 @@ def _priming_pool(monkeypatch, outcome):
     the pool was asked to drop."""
     from concurrent.futures import Future
 
-    from inference import engine
+    from inference import parallel
     dropped = []
 
     class Executor:
@@ -991,9 +993,9 @@ def _priming_pool(monkeypatch, outcome):
             else:
                 future.set_result(outcome)
             return future
-    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: True)
-    monkeypatch.setattr(engine._POOL, "executor", lambda: engine.Workers(Executor(), 6))
-    monkeypatch.setattr(engine._POOL, "drop", lambda: dropped.append("drop"))
+    monkeypatch.setattr(parallel, "available", lambda catalog=None: True)
+    monkeypatch.setattr(parallel.POOL, "executor", lambda: parallel.Workers(Executor(), 6))
+    monkeypatch.setattr(parallel.POOL, "drop", lambda: dropped.append("drop"))
     return dropped
 
 
@@ -1002,43 +1004,43 @@ def test_warm_reports_a_worker_that_cannot_start_and_falls_back_to_one_process(m
     """A worker that cannot read the playbook fails its priming task. warm()
     says so on stderr, drops the pool and reports no workers, so the server
     boots and its boards solve in its own process."""
-    from inference import engine
+    from inference import parallel
     dropped = _priming_pool(monkeypatch, catalog.CatalogError("no strategy files in x/"))
-    assert engine.warm() == 0
+    assert parallel.warm() == 0
     assert ("the solver workers did not start (CatalogError: no strategy files in x/);"
             " boards solve in this process") in capsys.readouterr().err
     assert dropped == ["drop"]
 
 
 def test_warm_returns_the_worker_count_when_every_worker_starts(monkeypatch):
-    from inference import engine
+    from inference import parallel
     dropped = _priming_pool(monkeypatch, 4242)
-    assert engine.warm() == 6 and dropped == []
+    assert parallel.warm() == 6 and dropped == []
 
 
 def test_countrix_workers_sets_the_worker_count(monkeypatch):
     # read when the pool starts, so no pool is spawned to read it here
-    from inference import engine
+    from inference import parallel
     monkeypatch.setenv("COUNTRIX_WORKERS", "3")
-    assert engine.worker_count() == 3
-    for cores, count in ((16, engine.WORKER_CEILING), (2, 6)):
-        monkeypatch.setattr(engine.os, "cpu_count", lambda cores=cores: cores)
+    assert parallel.worker_count() == 3
+    for cores, count in ((16, parallel.WORKER_CEILING), (2, 6)):
+        monkeypatch.setattr(parallel.os, "cpu_count", lambda cores=cores: cores)
         for junk in ("0", "x"):
             monkeypatch.setenv("COUNTRIX_WORKERS", junk)
-            assert engine.worker_count() == count, (cores, junk)
+            assert parallel.worker_count() == count, (cores, junk)
         monkeypatch.delenv("COUNTRIX_WORKERS")
-        assert engine.worker_count() == count, cores
+        assert parallel.worker_count() == count, cores
 
 
 def test_countrix_parallel_off_keeps_the_board_in_one_process(monkeypatch):
     # read on every board: the switch holds from the next call
-    from inference import engine
-    monkeypatch.setattr(engine.os, "cpu_count", lambda: 4)
+    from inference import parallel
+    monkeypatch.setattr(parallel.os, "cpu_count", lambda: 4)
     monkeypatch.setenv("COUNTRIX_PARALLEL", "1")
-    assert engine.parallel_available() is True
+    assert parallel.available() is True
     for off in ("0", "no", "False"):
         monkeypatch.setenv("COUNTRIX_PARALLEL", off)
-        assert engine.parallel_available() is False, off
+        assert parallel.available() is False, off
 
 
 @pytest.mark.invariant

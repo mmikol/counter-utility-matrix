@@ -27,7 +27,7 @@ import psycopg
 
 from db import psql, web
 from inference import catalog as catalog_module
-from inference import engine
+from inference import engine, parallel
 from ui.facts import tables
 from ui.facts.draft import parse_board
 
@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> None:
     args = command_line(argv)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
-    workers = engine.warm()                    # the board's solves split across these
+    workers = parallel.warm()                    # the board's solves split across these
     print("countrix inference: http://%s:%d%s" % (
         args.host, args.port, " (%d solver workers)" % workers if workers else ""))
     server.serve_forever()

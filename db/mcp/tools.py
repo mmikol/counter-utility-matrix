@@ -23,6 +23,7 @@ from db.data import fetch
 from db.mcp.server import Tool, audited
 from db.psql import schema
 from inference import catalog, derive, engine, reach, tune
+from inference.result import Result
 from ui.facts import board_facts, compute, tables
 from ui.facts.draft import Draft
 
@@ -589,7 +590,7 @@ def infer(
     return result.rendered(), result.to_dict()
 
 
-def _compact(result: engine.Result) -> Reply:
+def _compact(result: Result) -> Reply:
     """A result small enough for a tool reply under a playbook of hundreds:
     the comp, the heuristics that apply but whose metric does not vary on this
     board, and the largest terms."""
