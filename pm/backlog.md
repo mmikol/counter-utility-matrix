@@ -76,7 +76,7 @@ keeps it current.
   that the solver's per-hero contribution ranks agree with each hero's
   published win rate on the map, capped per step, every change a
   tuning-log line with "fit" as its reason. Cost: a day.
-- **Memoize the per-hero parts of the metrics.** `compute.team_metrics`
+- **Memoize the per-hero parts of the metrics.** `team.team_metrics`
   rebuilds each hero's pool, kit sums and keyword sets for every
   candidate and is ~41% of a sequential board. A per-world term table
   measured 3x on the function, ~5% on a board. Cost: a day; risk: none to
