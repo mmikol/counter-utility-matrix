@@ -27,7 +27,7 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python orchestrator.py
 ```
 
-The stack comes up, one container per layer; the agents run headless on
+The stack comes up, one container per role; the agents run headless on
 the `/refresh` skill; the app is left running. The first start pulls
 every source and builds the database, which takes minutes at a polite
 pace.

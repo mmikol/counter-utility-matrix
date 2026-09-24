@@ -1,13 +1,13 @@
 #!/bin/sh
-# One image, one container per layer. The first argument is the role:
+# One image, one container per role. The first argument is the role:
 #
-#   data        DATA LAYER: build the database when it is empty, unfilled or
+#   data        the door: build the database when it is empty, unfilled or
 #               behind the migrations (the first build scrapes the sources;
-#               the mounted caches make later builds cheap), then serve the
-#               MCP server on 8020
+#               the mounted caches make later builds cheap), then serve every
+#               MCP tool on 8020
 #   inference   INFERENCE ENGINE: wait for the database, serve on 8019
-#   ui          UI LAYER: wait for the database, serve the board on 8017
-#   refresh     DATA LAYER's clock: wait for the database, then refresh it
+#   ui          the board: wait for the database, serve it on 8017
+#   refresh     the door's clock: wait for the database, then refresh it
 #               daily (door/refresh.py)
 #   sentry      the guard: the playbook, the database's text and the door, every
 #               COUNTRIX_SENTRY_EVERY seconds (door/sentry.py)
@@ -55,7 +55,7 @@ case "$role" in
                 echo "$role: the database is still $state after 900 s - giving up" >&2
                 exit 1
             fi
-            echo "$role: waiting for the data layer to build the database ($state)"
+            echo "$role: waiting for data to build the database ($state)"
             waits=$((waits + 1))
             sleep 10
         done

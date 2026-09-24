@@ -267,12 +267,12 @@ def derive_pending(h: Health) -> bool:
 
 
 def up() -> int:
-    """Build the image, start the containers, wait for each layer, complete
-    pending drafts on the host -> the verdict's exit code."""
+    """Build the image, start the containers, wait for each container,
+    complete pending drafts on the host -> the verdict's exit code."""
     print("building the image and starting the containers...")
     sh("docker", "compose", "build", "data", timeout=30 * MINUTE)
     sh("docker", "compose", "up", "-d", "--remove-orphans", timeout=10 * MINUTE)
-    print("waiting for the layers (a first build scrapes the sources: minutes)...")
+    print("waiting for the containers (a first build scrapes the sources: minutes)...")
     wait_for(URLS["data"], 30 * MINUTE, "the data layer")
     wait_for(URLS["inference"], 10 * MINUTE, "the inference engine")
     wait_for(URLS["ui"], 5 * MINUTE, "the board")

@@ -1,14 +1,14 @@
-# .venv/bin/python orchestrator.py  ->  one container per layer, and a guard:
+# .venv/bin/python orchestrator.py  ->  one container per role, and a guard:
 #
 #   db          PostgreSQL
-#   data        DATA LAYER: builds the database from the bind-mounted page
-#               caches when it is empty or stale, then serves the MCP server at
-#               http://localhost:8020/mcp (.mcp.json, server
+#   data        the door: builds the database from the bind-mounted page
+#               caches when it is empty or stale, then serves every MCP tool
+#               at http://localhost:8020/mcp (.mcp.json, server
 #               "countrix-docker")
 #   inference   INFERENCE ENGINE: http://localhost:8019, reading the strategy
 #               files live
-#   ui          UI LAYER: the board at http://localhost:8017
-#   refresher   the data layer's clock: seasons and rates daily at
+#   ui          the board at http://localhost:8017
+#   refresher   the door's clock: seasons and rates daily at
 #               COUNTRIX_REFRESH_AT (05:00 container time; set TZ), every
 #               source weekly, and on start when the caches are 20 hours old
 #   sentry      the guard: quarantines a strategy file that will not load or
@@ -83,8 +83,8 @@ services:
 
   data:
     <<: *app
-    deploy:                          # the suite runs here: pytest plus the board's
-      resources:                     # solver workers
+    deploy:                          # the suite (orchestrator.py test) and the door's
+      resources:                     # solves, a board's on the worker pool
         limits:
           memory: 2g
           pids: 256

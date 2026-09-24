@@ -123,7 +123,7 @@ mistaken for the other.
 | file | purpose |
 | --- | --- |
 | `orchestrator.py` | the end-to-end run. `.venv/bin/python orchestrator.py` brings the stack up (the data container pulls and ingests when the database is empty or stale), runs the agents headless on the `/refresh` skill, and leaves the app running. Verbs: `run` (default) · `up` · `agents` · `status` · `refresh` · `test` · `down` |
-| `compose.yaml` | one container per layer from one image: `db` (PostgreSQL 16), `data` (builds the database, then the MCP server over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the daily clock), `sentry` (the guard). Every container is unprivileged on a read-only root with no capabilities; every published port binds to 127.0.0.1 and nothing is published ([deploy.md](deploy.md)). Bind mounts keep the caches, `db/raw`, `inference/strategies` and `docs` on the host, so tuning, authoring and regenerating need no rebuild |
+| `compose.yaml` | one container per role from one image: `db` (PostgreSQL 16), `data` (the door: builds the database, then serves every MCP tool over HTTP), `inference` (the engine as a service), `ui` (the board), `refresher` (the door's clock), `sentry` (the guard). Every container is unprivileged on a read-only root with no capabilities; every published port binds to 127.0.0.1 and nothing is published ([deploy.md](deploy.md)). Bind mounts keep the caches, `db/raw`, `inference/strategies` and `docs` on the host, so tuning, authoring and regenerating need no rebuild |
 | `Dockerfile` | the one image, run as an unprivileged user (uid 1000, or `COUNTRIX_UID`/`GID` from `.env` on a Linux host whose checkout is owned by someone else); `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty, unfilled or behind the migrations |
 | `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m door.mcp call infer '{"map": "Ilios"}'` |
 | `.mcp.json` | registers the two MCP servers a Claude Code session sees: `countrix` (stdio, the local cluster) and `countrix-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
@@ -145,11 +145,11 @@ flowchart LR
         SHELL["./docker-db<br/>DATABASE_URL -> :5433"]
     end
     subgraph DOCKER["docker compose (one image, five containers, plus postgres)"]
-        DATA["data - DATA LAYER<br/>builds when empty or stale,<br/>then MCP over HTTP :8020/mcp"]
+        DATA["data - the door<br/>builds when empty or stale,<br/>then MCP over HTTP :8020/mcp"]
         INF["inference - INFERENCE ENGINE<br/>:8019 infer · evaluate ·<br/>board · strategies"]
-        UI["ui - UI LAYER<br/>:8017 the board<br/>facts in-process,<br/>comps via COUNTRIX_INFERENCE_URL"]
+        UI["ui - the board<br/>:8017<br/>facts in-process,<br/>comps via COUNTRIX_INFERENCE_URL"]
         DBC["db - postgres:16<br/>volume pgdata"]
-        REF["refresher - the clock<br/>seasons + rates daily,<br/>every source weekly,<br/>and on start when stale"]
+        REF["refresher - the door's clock<br/>seasons + rates daily,<br/>every source weekly,<br/>and on start when stale"]
         SEN["sentry - the guard<br/>the playbook, the database's text,<br/>the door's audit log"]
     end
     SESSION -->|".mcp.json: countrix-docker"| DATA

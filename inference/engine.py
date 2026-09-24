@@ -49,7 +49,8 @@ class SearchBounds(NamedTuple):
 
 
 # the legal sixes one search may enumerate: a candidate holds about 1 KB while the
-# field is ranked, so this is about 540 MB of the inference container's 2 GiB
+# field is ranked, so this is about 540 MB of the 2 GiB each solving container
+# has - inference, and data for the door's solver tools
 FIELD_BUDGET = 500_000
 
 

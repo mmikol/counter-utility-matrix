@@ -1,16 +1,16 @@
 ---
 name: up
-description: Bring the whole countrix stack up and current - database, data layer (MCP), inference engine, board, refresher - and report the URLs and the data's vintage. Use when the user says to start, run, launch or check the app, or wants everything "good to go" before a game.
+description: Bring the whole countrix stack up and current - database, the door (MCP), inference engine, board, refresher - and report the URLs and the data's vintage. Use when the user says to start, run, launch or check the app, or wants everything "good to go" before a game.
 ---
 
 Bring everything up and prove it is ready. Run, from the repo root:
 
     .venv/bin/python orchestrator.py up    # or without `up`, to also run the agents
 
-It builds the one image, starts one container per layer (`db`, `data`,
-`inference`, `ui`, `refresher`, `sentry`), waits for each layer's health,
-and prints a verdict. A first build scrapes the sources once (minutes);
-later starts take seconds. Then:
+It builds the one image, starts one container per role (`db`, `data`,
+`inference`, `ui`, `refresher`, `sentry`), waits for each container's
+health, and prints a verdict. A first build scrapes the sources once
+(minutes); later starts take seconds. Then:
 
 1. Read the verdict. `READY` means: the data layer answers with no pending
    migrations and a populated database, the inference engine sees the
