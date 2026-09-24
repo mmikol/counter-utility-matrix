@@ -266,8 +266,11 @@ venv and restore its local config, which lives in the gitignored
 .venv/bin/pip install --upgrade "desloppify[full]"
 .venv/bin/desloppify update-skill claude        # refreshes .claude/skills/desloppify/SKILL.md
 for p in .venv .cache-blizzard .cache-wiki db/psql/cluster db/raw .claude/worktrees; do .venv/bin/desloppify exclude $p; done
-.venv/bin/desloppify config set target_strict_score 98
 ```
+
+The target score is set with `desloppify config set target_strict_score
+<n>` and lives only in that local config. A subjective review is blind:
+its reviewers score from the code alone, never from a score or a target.
 
 The loop, from the repo root:
 `PATH="$PWD/.venv/bin:$PATH" .venv/bin/desloppify scan --path .` (the scan
