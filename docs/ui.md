@@ -41,6 +41,7 @@ ui/
     math.html      the math page's article
   facts/           everything the database knows about a board
     model.py       the World: the database in memory, per request
+    kit.py         a kit piece's stat rows and the combat numbers read off them
     compute.py     the metrics registry: every number, one function each
     engine.py      the FactSet: the numbered facts for a board
 ```
@@ -171,6 +172,22 @@ constraints, heuristics and assumptions - every colour a token in
 portrait tiles.
 
 ## `facts/` - everything the database knows about a board
+
+### `kit.py` - the kit and its numbers
+
+A `Kit` is an ability, a weapon config or a perk; a `Stat` is one of its
+measurements as the data layer stored it - a value in its units, under a
+condition - with the wiki's original words beside it. `rate(code,
+per_shot)` is a piece's sustained rate: the published rate with the reload
+the wiki words beside it, else the firing rate over its magazine and
+reload, else one shot times the fire rate. `hits()` and `cast_hit()` are
+the single hits a hero's burst is read from, `ult_hit()` one ultimate
+cast's damage, `reach` how far a weapon fights, `dual_rate` two guns fired from
+one magazine. This is the one place the wiki's prose is read:
+`db/data/wiki/measurements.py` splits a stat into measurements at ingest
+and keeps its text, and the wording rules - a reload in a row's text, a
+figure that is a sum, an overhealth percent worth its cap - live here, so a
+misread stat is fixed in this file and needs no re-pull.
 
 ### `model.py` - the World
 
