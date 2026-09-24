@@ -1,6 +1,7 @@
 """The process pool the board splits its searches across: the round order,
-a dying worker's board run again in this process, the pooled board against
-the sequential one, the workers' start, and the two settings."""
+a dying worker's board run again in this process, a superseded board's
+cancelled rounds, the pooled board against the sequential one, the workers'
+start, and the two settings."""
 
 from concurrent.futures.process import BrokenProcessPool
 
@@ -27,22 +28,23 @@ class _Call:
 TRACED = Draft("Harbor Gate", ("Anvil",), ("Balm",), side="attack")
 
 
-def _traced_board(monkeypatch, world, playbook, *, pooled, breaks_after=None):
-    """board() for real, in this process, on the synthetic World. Pooled, a
-    recording Split with the real one's constructor stands in for the workers:
-    it traces each round, hands back None from solved() and swept() so each
-    seat searches for itself, and after `breaks_after` rounds a worker dies.
-    Only the pool module's public names are patched. -> (the Board, the
-    trace)."""
+def _traced_board(
+        monkeypatch, world, playbook, *, pooled, breaks_after=None, brief=None, trace=None):
+    """board() for real, in this process, on the synthetic World, under
+    `brief`. Pooled, a recording Split with the real one's constructor stands
+    in for the workers: it checks the board's watch and traces each round,
+    hands back None from solved() and swept() so each seat searches for
+    itself, and after `breaks_after` rounds a worker dies. Only the pool
+    module's public names are patched. -> (the Board, the trace)."""
     from inference import engine, parallel
-    trace = []
+    trace = [] if trace is None else trace
 
     class Split:
-        def __init__(self, pool, world, catalog, spec, weights, top, slices,
-                     bounds=None, standing=None):
-            self.spec, self.bounds, self.standing = spec, bounds, standing
+        def __init__(self, run, spec, slices, bounds=None, standing=None):
+            self.run, self.spec, self.bounds, self.standing = run, spec, bounds, standing
 
         def _round(self, name):
+            self.run.watch.check()
             seat = self.spec.draft
             trace.append(_Call(name, locked=seat.blue, enemy=seat.red, pool=self.spec.pool_size))
             if breaks_after is not None and len(trace) >= breaks_after:
@@ -68,7 +70,7 @@ def _traced_board(monkeypatch, world, playbook, *, pooled, breaks_after=None):
                         lambda: parallel.Workers(executor=None, size=6))
     monkeypatch.setattr(parallel.POOL, "drop", lambda: trace.append(_Call("drop")))
     monkeypatch.setattr(parallel, "Split", Split)
-    return engine.board(world, TRACED, catalog=playbook), trace
+    return engine.board(world, TRACED, catalog=playbook, brief=brief), trace
 
 
 def _timeless(board):
@@ -120,6 +122,65 @@ def test_a_dying_worker_reruns_the_same_board_in_this_process(
         assert _timeless(board) == _timeless(alone), breaks_after
 
 
+def test_a_board_without_the_countered_case_sends_none_of_its_rounds(
+        monkeypatch, synthetic_world, scratch_playbook):
+    """The page never reads the countered case, so its boards ask for none: no
+    countered round reaches the pool, the Board holds none and the verdict no
+    hedge. The rest is the board the MCP tool gets."""
+    from inference import engine
+    full, whole = _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True)
+    lean, trace = _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True,
+                                brief=engine.Brief(countered=False))
+    assert trace == [c for c in whole if c.kw["pool"] != 4] != whole
+    assert "your picks hold" in full.momentum["verdict"]
+    assert lean.countered is None and lean.momentum["countered"] is None
+    assert "your picks hold" not in lean.momentum["verdict"]
+    assert ({k: v for k, v in _timeless(lean).items() if k not in ("countered", "momentum")}
+            == {k: v for k, v in _timeless(full).items() if k not in ("countered", "momentum")})
+
+
+def test_a_superseded_search_cancels_every_task_that_has_not_started(
+        synthetic_world, scratch_playbook):
+    """Each round first asks whether a newer board from the same client has
+    replaced this one. Once one has, every task the board queued and no
+    worker took is cancelled, and the round raises Superseded - a Refusal,
+    which the doors answer 400 with no traceback."""
+    from concurrent.futures import Future
+
+    from db import Refusal
+    from inference import parallel
+
+    class Queued:
+        def submit(self, task, *args):
+            return Future()                   # queued: no worker has taken it
+    newer = []
+    watch = parallel.Watch(lambda: bool(newer))
+    run = parallel.Run(Queued(), synthetic_world, scratch_playbook, None, 6, watch)
+    split = parallel.Split(run, parallel.Spec(TRACED, 6), 3)
+    assert len(watch.futures) == 3 and not any(f.cancelled() for f in watch.futures)
+    newer.append("the next board")
+    with pytest.raises(parallel.Superseded):
+        split.rank_roster()
+    assert all(f.cancelled() for f in watch.futures)
+    assert issubclass(parallel.Superseded, Refusal)
+
+
+def test_a_superseded_board_is_not_solved_again_in_this_process(
+        monkeypatch, synthetic_world, scratch_playbook):
+    """A superseded pooled board is not a dead worker: it raises, the pool is
+    kept, and the board is not run a second time here."""
+    from inference import engine, parallel
+    checks, trace = [], []
+
+    def superseded():
+        checks.append(1)
+        return len(checks) > 4
+    with pytest.raises(parallel.Superseded):
+        _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True,
+                      brief=engine.Brief(superseded=superseded), trace=trace)
+    assert len(trace) == 4 and _Call("drop") not in trace
+
+
 @pytest.mark.invariant
 def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(world, monkeypatch):
     """Every search is cut into slices across the pool and merged here; the
@@ -132,11 +193,11 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     weights = {
         h.id: 10.0 if h.weight < 10 else 0.5 for h in catalog.load() if h.kind == "heuristic"}
     draft = Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt"), side="attack")
-    split = engine.board(world, draft, weights=weights)
+    split = engine.board(world, draft, brief=engine.Brief(weights=weights))
     assert split.blue.to_dict()["weights"] == weights         # the override reached the worker
     monkeypatch.setenv("COUNTRIX_PARALLEL", "0")
     assert not parallel.available()
-    straight = engine.board(world, draft, weights=weights)
+    straight = engine.board(world, draft, brief=engine.Brief(weights=weights))
 
     def timeless(b):
         d = b.to_dict()

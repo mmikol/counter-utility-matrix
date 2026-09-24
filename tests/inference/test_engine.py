@@ -1,6 +1,7 @@
 """board(): both seats on opposite sides, the weights it is given, the fight
 odds, the shapes and the queue's tank limit, a team of seven, the likely six,
-a full six on control, and every seat of a board on the synthetic World."""
+a full six on control, every seat of a board on the synthetic World, and the
+page's boards superseding one another."""
 
 import pytest
 
@@ -93,7 +94,7 @@ def test_the_board_scores_under_the_weights_it_is_given(world, kings_row_board):
     heuristic = next(h for h in fix if h.id == moving)
     weights = {heuristic.id: 10.0 if heuristic.weight < 10 else 0.5}
     tilted = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt")),
-                          catalog=fix, weights=weights)
+                          catalog=fix, brief=engine.Brief(weights=weights))
     assert tilted.current.to_dict()["weights"][heuristic.id] == weights[heuristic.id]
     assert plain.current.to_dict()["weights"][heuristic.id] == heuristic.weight
     assert tilted.current.score != plain.current.score
@@ -253,3 +254,19 @@ def test_a_board_on_the_synthetic_world_holds_every_seat(synthetic_world, scratc
     alone = engine.board(synthetic_world, Draft("Harbor Gate", ("Anvil",), side="attack"),
                          catalog=scratch_playbook)
     assert alone.fill is None and alone.countered is None
+
+
+def test_a_newer_board_from_the_same_client_supersedes_the_older_one(
+        synthetic_world, scratch_playbook):
+    """The page's boards take a ticket per client: a newer ticket supersedes
+    the older one under the same name only, and a board whose ticket is
+    superseded stops before its first search, in this process too."""
+    from inference import engine, parallel
+    latest = engine.Latest()
+    first, elsewhere = latest.take("tab-1"), latest.take("tab-2")
+    assert not first() and not elsewhere()
+    second = latest.take("tab-1")
+    assert first() and not second() and not elsewhere()
+    with pytest.raises(parallel.Superseded):
+        engine.board(synthetic_world, Draft("Harbor Gate", ("Anvil",), ("Balm",)),
+                     catalog=scratch_playbook, brief=engine.Brief(superseded=first))

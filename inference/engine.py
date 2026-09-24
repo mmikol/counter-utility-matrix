@@ -11,8 +11,9 @@ current blue picks as they stand. The records are result.py's, the prose
 plan.py's and the process pool parallel.py's.
 """
 
+import threading
 import time
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures.process import BrokenProcessPool
 from typing import NamedTuple
 
@@ -52,6 +53,46 @@ def clamp_search(pool: str | float | None = None,
 
 COUNTERED_POOL = 4          # a what-if: a smaller field is enough
 BOARD_TOP = 5               # the alternatives each of a board's seats keeps
+
+
+class Brief(NamedTuple):
+    """What a caller asks of one board beyond the draft: the candidates per
+    role, the playbook tab's weights ({heuristic id: 0..10}, for this board
+    only), whether to solve the countered case - the MCP board prints it, the
+    page never reads it - and the check that says a newer request from the
+    same client has superseded this one."""
+    pool_size: int = 6
+    weights: Mapping[str, float] | None = None
+    countered: bool = True
+    superseded: Callable[[], bool] | None = None
+
+
+class Latest:
+    """Latest wins, per client: each board request takes a ticket under its
+    client's name, and a ticket is superseded as soon as a newer one is taken
+    under the same name. A server hands the ticket to board() as
+    Brief.superseded, so a board the page has already moved past stops at
+    its next round instead of holding the pool."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._newest: dict[str, int] = {}
+
+    def take(self, client: str) -> Callable[[], bool]:
+        """A new ticket for `client`: a check that turns true once another
+        is taken under the same name."""
+        with self._lock:
+            mine = self._newest.get(client, 0) + 1
+            self._newest[client] = mine
+
+        def superseded() -> bool:
+            with self._lock:
+                return self._newest[client] != mine
+        return superseded
+
+
+# the page's boards, one lane per client, in whichever server solves them
+LATEST = Latest()
 
 
 def _order(heroes: Iterable[Hero]) -> list[str]:
@@ -210,7 +251,7 @@ def _countered(
 
 def board(
         world: World, draft: Draft, *, catalog: list[Strategy] | None = None,
-        pool_size: int = 6, weights: dict[str, float] | None = None) -> Board:
+        brief: Brief | None = None) -> Board:
     """The whole board in one pass, at whatever stage the draft is - no map
     (the meta's best six), a map, a map and a side, bans, red's picks as
     they reveal:
@@ -227,7 +268,8 @@ def board(
         red_current  red's picks as they stand, scored against blue's
                      selection on red's optimal's scale
         countered    blue's picks against red's optimal six - how you hold
-                     if they answer you perfectly (None without blue picks)
+                     if they answer you perfectly (None without blue picks,
+                     or when the brief does not ask for it)
         fill         blue's locked picks with the empty slots filled by the
                      solver - the best six that keeps what you hold, on
                      blue's optimal's scale (None unless one to five are locked)
@@ -242,31 +284,32 @@ def board(
                      comps tab shows for red and what blue counters until red
                      reveals a pick
 
-    `weights` ({heuristic id: 0..10}) overrides the files' weights for this
-    board only - the playbook tab's sliders; the files stay as they are and
-    every result says the weights it was scored under.
+    The brief's weights override the files' for this board only - the
+    playbook tab's sliders; the files stay as they are and every result says
+    the weights it was scored under.
 
     Across the pool the four searches are split and walked through their
     rounds together; in this process each seat searches for itself. A worker
     dying anywhere in the pooled pass drops the pool and runs the same pass
-    here.
+    here. A board the brief's check reports superseded stops at its next
+    round, its unstarted tasks cancelled, and raises parallel.Superseded.
     """
+    brief = brief or Brief()
     pooled = parallel.available(catalog)
-    catalog = catalog_module.weighted(catalog or catalog_module.load(), weights)
+    catalog = catalog_module.weighted(catalog or catalog_module.load(), brief.weights)
     if not pooled:
-        return _board_once(world, draft, catalog=catalog, pool_size=pool_size, weights=weights,
-                           workers=None)
+        return _board_once(world, draft, catalog=catalog, brief=brief, workers=None)
     try:
-        return _board_once(world, draft, catalog=catalog, pool_size=pool_size, weights=weights,
+        return _board_once(world, draft, catalog=catalog, brief=brief,
                            workers=parallel.POOL.executor())
     except BrokenProcessPool:
         parallel.POOL.drop()                   # a worker died: this board, in this process
-    return _board_once(world, draft, catalog=catalog, pool_size=pool_size, weights=weights,
-                       workers=None)
+    return _board_once(world, draft, catalog=catalog, brief=brief, workers=None)
 
 
-def _board_once(world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int,
-                weights: Mapping[str, float] | None, workers: parallel.Workers | None) -> Board:
+def _board_once(
+        world: World, draft: Draft, *, catalog: list[Strategy], brief: Brief,
+        workers: parallel.Workers | None) -> Board:
     """The board, its searches split across `workers`, or each run in this
     process where there are none."""
     m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
@@ -279,17 +322,18 @@ def _board_once(world: World, draft: Draft, *, catalog: list[Strategy], pool_siz
     red_seat = Draft(draft.map_name, draft.blue, (), draft.bans, opposite(draft.side))
     ours = draft._replace(red=enemy)                   # the current comp and the fill
     theirs = Draft(draft.map_name, draft.blue, draft.red, draft.bans, opposite(draft.side))
-    want = BOARD_TOP + 1
+    pool_size = brief.pool_size
     half, rest = _slices(workers)
     full, wants_fill = len(draft.blue) == TEAM_SIZE, 0 < len(draft.blue) < TEAM_SIZE
+    watch = parallel.Watch(brief.superseded)
+    run = _run(workers, world, catalog, brief, watch)
 
     def split(
             seat: Draft, slices: int, *, pool_size: int = pool_size, bounds: Bounds | None = None,
             standing: Tally | None = None) -> parallel.Split | parallel.NullSplit:
-        if workers is None:
-            return parallel.NullSplit()
-        return parallel.Split(workers.executor, world, catalog, parallel.Spec(seat, pool_size),
-                              weights, want, slices, bounds, standing)
+        if run is None:
+            return parallel.NullSplit(watch)
+        return parallel.Split(run, parallel.Spec(seat, pool_size), slices, bounds, standing)
 
     blue_split, red_split = split(blue_seat, half), split(red_seat, rest)
     blue_split.rank_roster()
@@ -298,7 +342,7 @@ def _board_once(world: World, draft: Draft, *, catalog: list[Strategy], pool_siz
     red_split.sweep()
     # the fill is blue's board, so it takes blue's scale and draws none
     fill_split = (split(ours, half, bounds=blue_split.bounds, standing=blue_split.standing)
-                  if wants_fill else parallel.NullSplit())
+                  if wants_fill else parallel.NullSplit(watch))
     fill_split.sweep()
     blue_split.merge()
     red_split.merge()
@@ -306,11 +350,11 @@ def _board_once(world: World, draft: Draft, *, catalog: list[Strategy], pool_siz
                     seat="blue", kind="infer", solved=blue_split.solved())
     red = _optimal(world, red_seat, catalog=catalog, pool_size=pool_size, top=BOARD_TOP,
                    seat="red", kind="infer", solved=red_split.solved())
-    countering = bool(draft.blue and red.result.blue)
+    countering = bool(brief.countered and draft.blue and red.result.blue)
     countered_seat = draft._replace(red=tuple(red.result.blue))
     countered_split = (split(countered_seat._replace(blue=()), rest,
                              pool_size=min(pool_size, COUNTERED_POOL))
-                       if countering else parallel.NullSplit())
+                       if countering else parallel.NullSplit(watch))
     countered_split.sweep()
     fill_split.merge()
     countered_split.merge()
@@ -343,6 +387,16 @@ def _check_teams(red_h: Sequence[Hero], blue_h: Sequence[Hero]) -> None:
     for team, seat in ((red_h, "red"), (blue_h, "blue")):
         check_team_size(team, seat)
         check_tanks(team, seat)
+
+
+def _run(
+        workers: parallel.Workers | None, world: World, catalog: list[Strategy], brief: Brief,
+        watch: parallel.Watch) -> parallel.Run | None:
+    """The board's pass across the pool, or None where there are no workers
+    and each seat searches for itself."""
+    if workers is None:
+        return None
+    return parallel.Run(workers.executor, world, catalog, brief.weights, BOARD_TOP + 1, watch)
 
 
 def _slices(workers: parallel.Workers | None) -> tuple[int, int]:

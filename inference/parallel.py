@@ -29,10 +29,11 @@ import os
 import pickle  # nosec B403  # pickles cross only from this process to the workers it spawned
 import sys
 import threading
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
+from db import Refusal
 from inference import catalog as catalog_module
 from inference.catalog import Strategy
 from inference.scale import Tally, reference_bounds, reference_standing
@@ -290,25 +291,64 @@ def _rank(
     return [_verdict(c) for c in ranked], solver.considered
 
 
+class Superseded(Refusal):
+    """A board a newer request from the same client replaced before it was
+    solved. It is answered as the caller's, a 400 with no traceback: the
+    caller has already asked for the board it wants."""
+
+
+class Watch:
+    """One board's check against being superseded, and every future its
+    searches submitted. Each round of each search calls check(): once the
+    board is superseded, the futures that have not started are cancelled and
+    the round raises Superseded, so a stale board stops holding the pool."""
+
+    def __init__(self, superseded: Callable[[], bool] | None = None) -> None:
+        self.superseded = superseded
+        self.futures: list[Future[Any]] = []
+
+    def check(self) -> None:
+        """Raise Superseded, cancelling what has not started, once a newer
+        request has replaced this board."""
+        if self.superseded is not None and self.superseded():
+            for future in self.futures:
+                future.cancel()
+            raise Superseded("a newer board from the same client superseded this one")
+
+
+class Run:
+    """One board's pass across the pool: the executor, the world pickled once
+    for its tasks, the playbook and weights every search scores under, the
+    winners each search keeps, and the board's Watch, which learns of every
+    task submitted."""
+
+    def __init__(self, executor: ProcessPoolExecutor, world: World, catalog: list[Strategy],
+                 weights: Mapping[str, float] | None, top: int, watch: Watch) -> None:
+        self.executor, self.world, self.catalog = executor, world, catalog
+        self.weights, self.top, self.watch = weights, top, watch
+        self.token, self.data = POOL.world_blob(world)
+
+    def submit[T](self, task: Callable[..., T], spec: Spec, *args: object) -> Future[T]:
+        """Send one task on `spec`'s board to the pool, watched."""
+        future = self.executor.submit(task, self.token, self.data, spec, self.weights, *args)
+        self.watch.futures.append(future)
+        return future
+
+
 class Split:
     """One search, split across the pool, a round at a time: the reference
     sample, then the enumeration, then the tail. A caller starts several and
-    walks them through the rounds together, so the pool stays full."""
+    walks them through the rounds together, so the pool stays full; each
+    round first checks that the board has not been superseded."""
 
-    def __init__(self, pool: ProcessPoolExecutor, world: World, catalog: list[Strategy],
-                 spec: Spec, weights: Mapping[str, float] | None, top: int, slices: int,
-                 bounds: Bounds | None = None, standing: Tally | None = None) -> None:
-        self.pool, self.world, self.catalog = pool, world, catalog
-        self.spec, self.weights, self.top = spec, weights, top
-        self.bounds, self.size = bounds, 0
+    def __init__(self, run: Run, spec: Spec, slices: int, bounds: Bounds | None = None,
+                 standing: Tally | None = None) -> None:
+        self.run, self.spec, self.count = run, spec, slices
+        self.bounds, self.standing, self.size = bounds, standing, 0
         self.verdicts: list[Verdict] = []
-        self.standing = standing
         self.tallies: list[Future[Tally]] | None = None
-        self.token, self.data = POOL.world_blob(world)
-        self.count = slices
         self.scale: list[Future[Bounds]] | None = None if bounds is not None else [
-            pool.submit(_bounds, self.token, self.data, spec, weights, i, slices)
-            for i in range(slices)]
+            run.submit(_bounds, spec, i, slices) for i in range(slices)]
         self.slices: list[Future[tuple[int, list[Verdict]]]] | None = None
         self.tail: Future[tuple[list[Verdict], int]] | None = None
 
@@ -321,14 +361,14 @@ class Split:
     def rank_roster(self) -> None:
         """Take the scale the slices drew, and send the sample out again to be
         scored under it: each hero's standing, which ranks the pools."""
+        self.run.watch.check()
         if self.scale is not None:
             self.bounds = {}
             for future in self.scale:
                 _widen(self.bounds, future.result())
             self.scale = None
         if self.standing is None and self.tallies is None:
-            self.tallies = [self.pool.submit(_standing, self.token, self.data, self.spec,
-                                             self.weights, self._scale(), i, self.count)
+            self.tallies = [self.run.submit(_standing, self.spec, self._scale(), i, self.count)
                             for i in range(self.count)]
 
     def sweep(self) -> None:
@@ -339,62 +379,74 @@ class Split:
             for future in self.tallies:
                 _merge_tallies(self.standing, future.result())
             self.tallies = None
-        self.slices = [self.pool.submit(_sweep, self.token, self.data, self.spec, self.weights,
-                                        self._scale(), self.standing, i, self.count)
-                       for i in range(self.count)]
+        self.slices = [
+            self.run.submit(_sweep, self.spec, self._scale(), self.standing, i, self.count)
+            for i in range(self.count)]
 
     def merge(self) -> None:
         """Collect the slices and send the merged field off to be ranked."""
+        self.run.watch.check()
         if self.slices is None:
             raise RuntimeError("merge() follows sweep()")
         self.verdicts = []
         for future in self.slices:
             self.size, part = future.result()
             self.verdicts.extend(part)
-        self.tail = self.pool.submit(_rank, self.token, self.data, self.spec, self.weights,
-                                     self._scale(), self.standing, self.verdicts, self.top)
+        self.tail = self.run.submit(_rank, self.spec, self._scale(), self.standing,
+                                    self.verdicts, self.run.top)
 
     def _scaled_solver(self) -> Solver:
         """The Solver for this split's board, on the scale its slices froze."""
-        solver = _solver(self.world, self.catalog, self.spec)
+        solver = _solver(self.run.world, self.run.catalog, self.spec)
         solver.adopt_bounds(self._scale(), self.standing)
         return solver
 
     def solved(self) -> Solved:
         """The Solved that Solver.solve() would have returned."""
+        self.run.watch.check()
         if self.tail is None:
             raise RuntimeError("solved() follows merge()")
         winners, refined = self.tail.result()
         solver = self._scaled_solver()
         solver.considered = self.size + refined
-        return Solved(solver, [solver.hydrate(_revive(self.world, v)) for v in winners])
+        return Solved(solver, [solver.hydrate(_revive(self.run.world, v)) for v in winners])
 
     def swept(self) -> Swept:
         """The Swept of the whole field, as one Solver.sweep() would have left
         it: what a six is ranked against."""
+        self.run.watch.check()
         return Swept(self._scaled_solver(), self.size,
-                     [_revive(self.world, v) for v in self.verdicts])
+                     [_revive(self.run.world, v) for v in self.verdicts])
 
 
 class NullSplit:
-    """A search not split: each round does nothing and solved() and swept()
-    are None, so the seat searches for itself in this process."""
+    """A search not split: each round only checks that the board has not
+    been superseded, and solved() and swept() are None, so the seat searches
+    for itself in this process."""
     bounds: Bounds | None = None
     standing: Tally | None = None
 
+    def __init__(self, watch: Watch) -> None:
+        self.watch = watch
+
     def rank_roster(self) -> None:
-        """Nothing to rank: the seat's own search draws its scale."""
+        """The seat's own search draws its scale: only the check."""
+        self.watch.check()
 
     def sweep(self) -> None:
-        """Nothing to send out."""
+        """Nothing to send out: only the check."""
+        self.watch.check()
 
     def merge(self) -> None:
-        """Nothing to collect."""
+        """Nothing to collect: only the check."""
+        self.watch.check()
 
     def solved(self) -> Solved | None:
-        """None: the seat searches for itself."""
+        """None, after the check: the seat searches for itself."""
+        self.watch.check()
         return None
 
     def swept(self) -> Swept | None:
-        """None: the seat sweeps its own field."""
+        """None, after the check: the seat sweeps its own field."""
+        self.watch.check()
         return None

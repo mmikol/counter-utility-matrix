@@ -99,7 +99,8 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 - **The solver is deterministic.** `engine.board()` returns a Board of up to
   seven Results (blue, red, current, red_current, fill, countered, expected);
   fill is None unless one to five blue picks are locked, countered is None
-  without blue picks. Each seat has one scale: reference sixes drawn from a
+  without blue picks or when the caller's `Brief` leaves it out, as the
+  page's boards do. Each seat has one scale: reference sixes drawn from a
   string seed, the map and the side, bounded against the enemy. current
   shares blue's optimal's scale, red_current red's, so within a seat infer,
   evaluate and current are comparable. Only `board()` uses the process pool,

@@ -5,7 +5,9 @@
     GET  /health                       the catalog size and the database state; 200
                                        and degraded, naming why, when either is out
                                        of reach
-    GET  /board?map=&side=&red=&blue=&bans=   both seats' optimal six + the current comp
+    GET  /board?map=&side=&red=&blue=&bans=[&client=]   both seats' optimal six + the
+                                       current comp; a newer board from the same client
+                                       supersedes one still solving
     GET  /infer?map=&side=&red=&blue=&bans=[&top=&pool=]   blue's optimal six
     GET  /evaluate?map=&side=&red=&blue=&bans=   a full six scored against the field
     GET  /strategies                   the catalog
@@ -61,12 +63,17 @@ def handle_evaluate(cx: psycopg.Connection, query: Query) -> Answer:
 
 
 def handle_board(cx: psycopg.Connection, query: Query) -> Answer:
-    """Both seats and the current comp - what the board's two displays show."""
+    """Both seats and the current comp - what the board's two displays show.
+    The page never reads the countered case, so it is not solved here; a
+    newer board from the same `client` (one lane when none is named)
+    supersedes this one, which then answers 400."""
     draft = parse_board(query)
+    superseded = engine.LATEST.take(_first(query, "client") or "")
     world = tables.load(cx)
     weights = catalog_module.parse_weights(query.get("weights", []))
     pool, _ = engine.clamp_search(_first(query, "pool"))
-    return engine.board(world, draft, pool_size=pool, weights=weights).to_dict(), 200
+    brief = engine.Brief(pool_size=pool, weights=weights, countered=False, superseded=superseded)
+    return engine.board(world, draft, brief=brief).to_dict(), 200
 
 
 def handle_strategies() -> Answer:

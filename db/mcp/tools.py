@@ -672,8 +672,8 @@ def board(
     with ctx.connect() as cx:
         world = tables.load(cx)
     pool, _ = engine.clamp_search(pool)
-    b = engine.board(world, Draft(map, tuple(red), tuple(blue), tuple(bans), side),
-                     pool_size=pool, weights=catalog.parse_weights(weights or {}))
+    brief = engine.Brief(pool_size=pool, weights=catalog.parse_weights(weights or {}))
+    b = engine.board(world, Draft(map, tuple(red), tuple(blue), tuple(bans), side), brief=brief)
     return b.rendered(), b.to_dict()
 
 
