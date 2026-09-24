@@ -19,8 +19,9 @@ import itertools
 import math
 import random
 from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import dataclass
 
-from inference.scoring import CONFIDENCE_KEY, Bounds, Candidate, Objective, legal_shapes
+from inference.scoring import CONFIDENCE_KEY, Bounds, Candidate, MetricKey, Objective, legal_shapes
 from ui.facts import compute
 from ui.facts.model import ROLES, Hero
 from ui.facts.team import number
@@ -29,7 +30,17 @@ REFERENCE_SIZE = 1200
 REFERENCE_SEED = 20260913
 SCALE_POOL = 6                    # the field that fixes a board's scale, whatever pool is searched
 
-Tally = dict[int, list[int]]                    # hero id -> [summed millionths, sixes]
+
+@dataclass(slots=True)
+class Standing:
+    """One hero's tally over reference sixes: its summed score in millionths
+    and the sixes it is in. Whole numbers, so slices add up the same in any
+    order; the mean is total / sixes."""
+    total: int = 0
+    sixes: int = 0
+
+
+Tally = dict[int, Standing]                     # hero id -> its standing
 
 
 def sample(objective: Objective, size: int = REFERENCE_SIZE) -> list[Candidate]:
@@ -85,7 +96,7 @@ def _prepared(objective: Objective, index: int = 0, count: int = 1) -> list[Cand
             if not c.violations]
 
 
-def _confidence_bounds(objective: Objective, spec: tuple[str, str], index: int,
+def _confidence_bounds(objective: Objective, spec: MetricKey, index: int,
                        prepared: Sequence[Candidate]) -> tuple[float, float]:
     """The low and high a rule's confidence metric (`spec`, its namespace and
     key) is read against.
@@ -96,10 +107,9 @@ def _confidence_bounds(objective: Objective, spec: tuple[str, str], index: int,
     that cannot move it would call every board equally certain. Its
     population is the other boards: the same metric over every map.
     """
-    section, key = spec
-    if section == "map":
+    if spec.section == "map":
         bans = len(objective.banned)
-        readings = [compute.map_metrics(m, objective.side, ban_count=bans).get(key)
+        readings = [compute.map_metrics(m, objective.side, ban_count=bans).get(spec.key)
                     for m in objective.world.maps.values()]
         over = [float(number(v)) for v in readings if v is not None]
         return (min(over), max(over)) if over else (0.0, 0.0)
@@ -212,15 +222,16 @@ def freeze(objective: Objective) -> Tally:
 
 
 def _tally(objective: Objective, prepared: Iterable[Candidate]) -> Tally:
-    """{hero id: [summed score in millionths, sixes]} over prepared reference
-    sixes. Whole numbers, so slices add up the same in any order."""
+    """Each hero's Standing over prepared reference sixes."""
     tally: Tally = {}
     for cand in prepared:
         points = round(objective.score(cand, detail=False).score * 1e6)
         for h in cand.heroes:
-            seen = tally.setdefault(h.id, [0, 0])
-            seen[0] += points
-            seen[1] += 1
+            seen = tally.get(h.id)
+            if seen is None:
+                seen = tally[h.id] = Standing()
+            seen.total += points
+            seen.sixes += 1
     return tally
 
 

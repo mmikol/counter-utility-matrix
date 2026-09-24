@@ -37,14 +37,14 @@ import pickle  # nosec B403  # pickles cross only from this process to the worke
 import sys
 import threading
 import time
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
-from typing import Any, NamedTuple
+from typing import Concatenate, NamedTuple, Protocol
 
 from db import Refusal
 from inference import catalog as catalog_module
 from inference.catalog import Strategy
-from inference.scale import Tally, reference_bounds, reference_standing
+from inference.scale import Standing, Tally, reference_bounds, reference_standing
 from inference.scoring import Bounds, Candidate
 from inference.solver import Solved, Solver, Swept
 from ui.facts.draft import Draft
@@ -261,13 +261,14 @@ def _standing(
     return reference_standing(_worker_solver(token, data, spec, weights, bounds), index, count)
 
 
-def _merge_tallies(tally: Tally, part: Mapping[int, Sequence[int]]) -> Tally:
-    """Add one slice's per-hero (total, count) standing tallies into the
-    running ones, in place."""
-    for hid, (total, n) in part.items():
-        seen = tally.setdefault(hid, [0, 0])
-        seen[0] += total
-        seen[1] += n
+def _merge_tallies(tally: Tally, part: Mapping[int, Standing]) -> Tally:
+    """Add one slice's per-hero standing into the running tally, in place."""
+    for hid, standing in part.items():
+        seen = tally.get(hid)
+        if seen is None:
+            seen = tally[hid] = Standing()
+        seen.total += standing.total
+        seen.sixes += standing.sixes
     return tally
 
 
@@ -333,6 +334,13 @@ class Latest:
 LATEST = Latest()
 
 
+class Cancellable(Protocol):
+    """A submitted task as a Watch holds it: whatever it returns, it can be
+    cancelled until a worker takes it."""
+
+    def cancel(self) -> bool: ...
+
+
 class Watch:
     """One board's check against being superseded, and every future its
     searches submitted. Each round of each search calls check(): once the
@@ -341,7 +349,7 @@ class Watch:
 
     def __init__(self, superseded: Callable[[], bool] | None = None) -> None:
         self.superseded = superseded
-        self.futures: list[Future[Any]] = []
+        self.futures: list[Cancellable] = []
 
     def check(self) -> None:
         """Raise Superseded, cancelling what has not started, once a newer
@@ -364,9 +372,14 @@ class Run:
         self.weights, self.top, self.watch = weights, top, watch
         self.token, self.data = POOL.world_blob(world)
 
-    def submit[T](self, task: Callable[..., T], spec: Spec, *args: object) -> Future[T]:
-        """Send one task on `spec`'s board to the pool, watched."""
-        future = self.executor.submit(task, self.token, self.data, spec, self.weights, *args)
+    def submit[**P, T](
+            self, task: Callable[Concatenate[str, bytes, Spec, Mapping[str, float] | None, P], T],
+            spec: Spec, *args: P.args, **kwargs: P.kwargs) -> Future[T]:
+        """Send one task on `spec`'s board to the pool, watched: the task takes
+        the world's token and bytes, the spec and the weights, then its own
+        arguments."""
+        future = self.executor.submit(
+            task, self.token, self.data, spec, self.weights, *args, **kwargs)
         self.watch.futures.append(future)
         return future
 

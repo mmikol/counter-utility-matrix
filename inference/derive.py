@@ -36,7 +36,7 @@ from typing import TypedDict
 from db import Refusal
 from inference import catalog as catalog_module
 from inference import tune
-from inference.catalog import Strategy
+from inference.catalog import Form, Strategy
 from ui.facts import compute
 
 CLI_CANDIDATES = ("claude",                                   # on PATH, any OS
@@ -52,7 +52,7 @@ DERIVED_BY = "claude -p (derive)"     # who asked, in the tuning log's line
 class Derived(TypedDict):
     """One draft completed: the form it took and each field's text."""
     id: str
-    form: str
+    form: Form
     set: dict[str, str]
 
 

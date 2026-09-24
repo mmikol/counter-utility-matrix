@@ -26,8 +26,9 @@ BINARY = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)
 COMPARE = (ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.In, ast.NotIn)
 UNARY = (ast.Not, ast.USub, ast.UAdd)
 
-# what an expression evaluates to: the whitelist admits no other constant or display
-Value = int | float | bool | str | list | tuple | None
+# what an expression evaluates to: the whitelist admits no other constant or
+# display, and a list or tuple holds the same
+Value = int | float | bool | str | list["Value"] | tuple["Value", ...] | None
 
 
 class ExprError(ValueError):

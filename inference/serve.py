@@ -26,7 +26,7 @@ stderr.
 import argparse
 import os
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Literal, NotRequired, TypedDict
 from urllib.parse import parse_qs, urlsplit
 
 import psycopg
@@ -42,6 +42,17 @@ Query = Mapping[str, Sequence[str]]
 Answer = tuple[dict[str, object], int]
 
 SOLVES = ("/board", "/infer", "/evaluate")     # the routes that search, and connect
+
+
+class Health(TypedDict):
+    """What /health answers: ok or degraded; the strategy counts where the
+    playbook loads; the heroes where the database answers; and the error,
+    naming each thing out of reach, where either does not."""
+    status: Literal["ok", "degraded"]
+    strategies: NotRequired[int]
+    pending: NotRequired[int]
+    heroes: NotRequired[int]
+    error: NotRequired[str]
 
 
 def _first(query: Query, key: str) -> str | None:
@@ -89,12 +100,12 @@ def handle_strategies() -> Answer:
             "playbook": catalog_module.playbook_name()}, 200
 
 
-def handle_health() -> Answer:
+def handle_health() -> tuple[Health, int]:
     """The catalog's size and the database's state, always 200: a playbook
     that does not load leaves the strategy counts out, and it or a database
     out of reach makes the status degraded, the error naming each - what
     orchestrator.py prints while it waits."""
-    out: dict[str, Any] = {"status": "ok"}
+    out: Health = {"status": "ok"}
     errors: list[str] = []
     try:
         cat = catalog_module.load()

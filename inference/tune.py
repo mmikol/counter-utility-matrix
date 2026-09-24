@@ -66,7 +66,7 @@ class Change(TypedDict):
 class Completion(TypedDict):
     """What complete() set: the form the strategy took and each field's text."""
     id: str
-    form: str
+    form: catalog_module.Form
     set: dict[str, str]
     line: str
 
@@ -74,7 +74,7 @@ class Completion(TypedDict):
 class Addition(TypedDict):
     """What add() stored: the new file's form and path."""
     id: str
-    form: str
+    form: catalog_module.Form
     path: str
     line: str
 

@@ -11,7 +11,7 @@
 """
 
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Literal, NotRequired, TypedDict
+from typing import Literal, NamedTuple, NotRequired, TypedDict
 
 from inference.catalog import BOARD_SECTIONS, Strategy
 from inference.expr import Expr, Scope, Value, scope
@@ -28,22 +28,46 @@ SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size", "team.o
 # the namespaces that do not change across the candidates of one board
 STATIC_SECTIONS = BOARD_SECTIONS
 
-# The shapes the objective passes around. A namespace is the metric bags by
+# The records the objective passes around. A namespace is the metric bags by
 # section.
-Shape = tuple[int, int, int]                    # tanks, damage, supports
 Bounds = dict[str, tuple[float, float]]         # id, or id + CONFIDENCE_KEY -> low, high
 Namespace = dict[str, MetricBag]
-# one heuristic's frozen scale for the scoring loop: the strategy, its low and
-# spread, weight, minimise, need, and its confidence metric's bounds
-Norm = tuple[Strategy, float, float | None, float, bool, bool, tuple[float, float] | None]
+
+
+class Shape(NamedTuple):
+    """A six's count per role."""
+    tanks: int
+    damage: int
+    supports: int
+
+
+class MetricKey(NamedTuple):
+    """A dotted metric key split: the namespace, and the key within it."""
+    section: str
+    key: str
+
+
+class Norm(NamedTuple):
+    """One heuristic's frozen scale for the scoring loop: the strategy, its
+    reference low and spread (None where the sample never moved), its weight,
+    whether it minimises, whether it is a need, and its confidence metric's
+    bounds where it names one."""
+    strategy: Strategy
+    low: float
+    span: float | None
+    weight: float
+    minimize: bool
+    need: bool
+    scale: tuple[float, float] | None
+
 
 _EMPTY: MetricBag = {}
 
 
-def _split_key(key: str | None) -> tuple[str, str]:
+def _split_key(key: str | None) -> MetricKey:
     """A dotted metric key -> (namespace, key)."""
     section, _, name = (key or "").partition(".")
-    return section, name
+    return MetricKey(section, name)
 
 
 def _not_a_number(value: MetricValue | None) -> float:
@@ -293,7 +317,7 @@ class Objective:
             if spec is None or raw[i] is None:
                 confidence.append(None)
                 continue
-            value = ns.get(spec[0], _EMPTY).get(spec[1])
+            value = ns.get(spec.section, _EMPTY).get(spec.key)
             confidence.append(float(value) if isinstance(value, NUMBER_TYPES)
                               else _not_a_number(value))
         return confidence
@@ -325,17 +349,16 @@ class Objective:
         self._freeze_norms()
 
     def _freeze_norms(self) -> None:
-        """One tuple per heuristic for the scoring loop: the strategy, the
-        reference low, the reference spread (None where the sample never
-        moved: everything then normalises to 0.5), its weight, whether it
-        minimises and whether it is a need."""
+        """One Norm per heuristic for the scoring loop. A spread of None -
+        the sample never moved - normalises everything to 0.5."""
         self._norms = []
         for g in self.heuristics:
             lo, hi = self.bounds.get(g.id, (0.0, 0.0))
-            scale = self.bounds.get(g.id + CONFIDENCE_KEY) if g.confidence else None
-            self._norms.append((g, lo, hi - lo if hi > lo else None,
-                                g.weight * self._needs.get(g.id, 1.0),
-                                g.direction == "minimize", g.id in self._needs, scale))
+            self._norms.append(Norm(
+                strategy=g, low=lo, span=hi - lo if hi > lo else None,
+                weight=g.weight * self._needs.get(g.id, 1.0),
+                minimize=g.direction == "minimize", need=g.id in self._needs,
+                scale=self.bounds.get(g.id + CONFIDENCE_KEY) if g.confidence else None))
 
     # --- the score -------------------------------------------------------------
 
@@ -457,7 +480,7 @@ def legal_shapes(catalog: Iterable[Strategy],
                     or s < locked_counts["support"]):
                 continue
             if _shape_allowed(t, d, s, limits):
-                out.append((t, d, s))
+                out.append(Shape(t, d, s))
     return out
 
 

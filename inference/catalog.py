@@ -49,7 +49,7 @@ import hashlib
 import os
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from typing import NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 import psycopg
 
@@ -74,10 +74,13 @@ def strategies_dir() -> str:
 
 
 DOCS_PATH = os.path.join(ROOT, "docs", "inference.md")
-KINDS = ("constraint", "heuristic", "assumption")
+# a strategy's kind, as its frontmatter names it, and its form, as its fields make it
+Kind = Literal["constraint", "heuristic", "assumption"]
+Form = Literal["limit", "scored", "heuristic", "assumption", "draft"]
+KINDS: tuple[Kind, ...] = ("constraint", "heuristic", "assumption")
 # load() sorts by this index within a kind, so draft sits last for a
 # heuristic draft as well as a constraint one
-FORMS = ("limit", "scored", "heuristic", "assumption", "draft")
+FORMS: tuple[Form, ...] = ("limit", "scored", "heuristic", "assumption", "draft")
 NOT_STRATEGIES = ("README.md", "tuning-log.md")     # markdown that lives beside the files
 KIND_ORDER = {k: i for i, k in enumerate(KINDS)}
 
@@ -191,8 +194,8 @@ class StrategyRecord(TypedDict):
     """A strategy as the tools, the service and the board serve it."""
     id: str
     name: str
-    kind: str
-    form: str
+    kind: Kind
+    form: Form
     pending: bool
     need: bool
     category: str
@@ -216,7 +219,7 @@ class Strategy:
         kind = meta.get("kind")
         if not isinstance(kind, str) or kind not in KINDS:
             raise CatalogError("%s: kind must be one of %s" % (hid, "/".join(KINDS)))
-        self.kind: str = kind
+        self.kind: Kind = kind
         self.category = str(meta.get("category") or "general")
         self.direction = _text(meta.get("direction"))
         self.metric = _text(meta.get("metric"))
@@ -311,7 +314,7 @@ class Strategy:
                                        % (self.id, name))
 
     @property
-    def form(self) -> str:
+    def form(self) -> Form:
         """heuristic, a constraint's form (limit, scored), assumption, or draft
         (name, kind and prose only - awaiting /strategy)."""
         if self.kind == "assumption":
@@ -475,10 +478,18 @@ def has_scoring_terms(catalog: Iterable[Strategy]) -> bool:
                for h in catalog)
 
 
-def counts(catalog: Iterable[Strategy]) -> dict[str, int]:
+class KindCounts(TypedDict):
+    """Strategies per kind, in KINDS order."""
+    constraint: int
+    heuristic: int
+    assumption: int
+
+
+def counts(catalog: Iterable[Strategy]) -> KindCounts:
     """Strategies per kind: {"constraint": n, "heuristic": n, "assumption": n}."""
     kinds = [h.kind for h in catalog]
-    return {k: kinds.count(k) for k in KINDS}
+    return KindCounts(constraint=kinds.count("constraint"), heuristic=kinds.count("heuristic"),
+                      assumption=kinds.count("assumption"))
 
 
 def playbook_name(directory: str | None = None) -> str:
@@ -501,12 +512,9 @@ def playbook_digest(directory: str | None = None) -> str:
     return digest.hexdigest()
 
 
-class MirrorSummary(TypedDict):
+class MirrorSummary(KindCounts):
     """What a mirror loaded: the strategies per kind, the total and the table
     it wrote; load_authored adds how many are drafts."""
-    constraint: int
-    heuristic: int
-    assumption: int
     total: int
     tables: list[str]
     pending: NotRequired[int]
@@ -528,9 +536,7 @@ def mirror(cx: psycopg.Connection, catalog: Sequence[Strategy],
              h.weight if h.solver_reads else None, h.expressions or None,
              _params_line(h) or None, h.body, playbook_name(directory), source_id))
     cx.commit()
-    kinds = counts(catalog)
-    return {"constraint": kinds["constraint"], "heuristic": kinds["heuristic"],
-            "assumption": kinds["assumption"], "total": len(catalog), "tables": ["strategies"]}
+    return MirrorSummary(**counts(catalog), total=len(catalog), tables=["strategies"])
 
 
 def _params_line(h: Strategy) -> str:

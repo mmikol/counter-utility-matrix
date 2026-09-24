@@ -477,7 +477,7 @@ def _above_all(blue_r: Result, lean: str) -> str | None:
     if not top:
         return None
     return ("Above all: "
-            + "; ".join(titles.get(str(c["id"]), str(c["id"])).lower() for c in top) + ".")
+            + "; ".join(titles.get(c["id"], c["id"]).lower() for c in top) + ".")
 
 
 def _basis(

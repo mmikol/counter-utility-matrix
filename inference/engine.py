@@ -22,7 +22,7 @@ from inference import catalog as catalog_module
 from inference import parallel
 from inference.catalog import Strategy
 from inference.plan import Seats, momentum, plan
-from inference.result import Alternative, Board, Pick, Result
+from inference.result import Alternative, Board, Pick, Result, ResultKind, Seat
 from inference.scoring import Candidate, legal_shapes
 from inference.solver import Solved, Solver, Swept, evaluate_comp
 from ui.facts import board_facts, compute
@@ -140,7 +140,7 @@ class _Optimal(NamedTuple):
 
 def _optimal(
         world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int,
-        top: int, seat: str, kind: str, solved: Solved | None,
+        top: int, seat: Seat, kind: ResultKind, solved: Solved | None,
         began: float | None) -> _Optimal:
     """The optimal six for `seat` around its locked picks (`draft.blue`)
     against the other seat's revealed ones (`draft.red`), labelled `kind`.
@@ -177,7 +177,7 @@ def _optimal(
 
 def _evaluated(
         world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int,
-        seat: str, kind: str, swept: Swept | None) -> Result:
+        seat: Seat, kind: ResultKind, swept: Swept | None) -> Result:
     """`seat`'s full six (`draft.blue`), scored and ranked against the field
     the solver would have searched, labelled `kind`. `swept` takes that field
     from a search the caller already ran on this board."""
@@ -208,7 +208,7 @@ def _evaluated(
 
 def _current(
         world: World, draft: Draft, *, solver: Solver, best: float,
-        catalog: list[Strategy], pool_size: int, seat: str, kind: str,
+        catalog: list[Strategy], pool_size: int, seat: Seat, kind: ResultKind,
         swept: Swept | None) -> Result:
     """`seat`'s picks (`draft.blue`, from that seat's perspective) as they
     stand against the other seat's (`draft.red`), on the scale of the seat's
@@ -397,7 +397,7 @@ class _Pass:
         return parallel.Split(self.run, spec, slices, scale.bounds, scale.standing)
 
     def optimal(
-            self, draft: Draft, search: Searching, *, seat: str, kind: str = "infer",
+            self, draft: Draft, search: Searching, *, seat: Seat, kind: ResultKind = "infer",
             pool_size: int | None = None) -> _Optimal:
         """`seat`'s optimal six on `draft`, taken from `search` where it ran
         across the pool and timed from when it was sent out."""
@@ -405,7 +405,7 @@ class _Pass:
                         pool_size=pool_size or self.brief.pool_size, top=BOARD_TOP, seat=seat,
                         kind=kind, solved=search.solved(), began=search.started)
 
-    def current(self, draft: Draft, optimal: _Optimal, search: Searching, *, seat: str) -> Result:
+    def current(self, draft: Draft, optimal: _Optimal, search: Searching, *, seat: Seat) -> Result:
         """`seat`'s picks as they stand, on its optimal's scale; a full six is
         ranked against the field `search` swept."""
         swept = search.swept() if len(draft.blue) == TEAM_SIZE else None
@@ -414,8 +414,8 @@ class _Pass:
                         kind="current", swept=swept)
 
     def filled(
-            self, draft: Draft, search: Searching, *, seat: str, best: float,
-            kind: str = "fill", pool_size: int | None = None) -> Result | None:
+            self, draft: Draft, search: Searching, *, seat: Seat, best: float,
+            kind: ResultKind = "fill", pool_size: int | None = None) -> Result | None:
         """`seat`'s picks (`draft.blue`) with the empty slots filled by the
         solver, on the scale whose 100 is `best`: how close the best
         completion comes. None unless the seat is half-drafted."""

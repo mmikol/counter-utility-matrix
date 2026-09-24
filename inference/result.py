@@ -9,7 +9,7 @@ JSON-ready data (to_dict) and as text (rendered).
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any, NotRequired, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from inference import catalog as catalog_module
 from inference.catalog import Strategy
@@ -19,8 +19,11 @@ from ui.facts.factset import Fact, FactSet
 from ui.facts.model import ROLES
 from ui.facts.team import text
 
-# A result or a board as to_dict() serves it: JSON, read by the shells.
-Payload = dict[str, Any]
+# A result or a board as to_dict() serves it: a JSON object, read by the shells.
+Payload = dict[str, object]
+# what a result is, which its heading names, and the seat whose six it is
+ResultKind = Literal["infer", "evaluate", "current", "countered", "fill", "expected"]
+Seat = Literal["blue", "red"]
 
 
 class Pick(TypedDict):
@@ -81,9 +84,10 @@ def _pct(score: float, best: float) -> int:
 
 
 # what each kind of result is, as its rendered heading names it
-HEADINGS = {"infer": "optimal comp", "evaluate": "evaluation", "current": "current comp",
-            "countered": "if countered optimally", "fill": "your picks, the rest filled",
-            "expected": "their likely starting comp"}
+HEADINGS: dict[ResultKind, str] = {
+    "infer": "optimal comp", "evaluate": "evaluation", "current": "current comp",
+    "countered": "if countered optimally", "fill": "your picks, the rest filled",
+    "expected": "their likely starting comp"}
 UNSCORED = ("unscored - the playbook in force holds no heuristic, scored constraint or soft"
             " limit, so every legal six ties at zero; add one and the board scores")
 
@@ -94,7 +98,7 @@ class Result:
     how that breaks down per strategy, the runners-up, and the facts it
     cites. Built empty around the board's names; record_candidate() writes
     the six onto it and scale_to() sets what 100 means."""
-    kind: str
+    kind: ResultKind
     map_name: str | None
     red: list[str]
     blue: list[str]
@@ -102,7 +106,7 @@ class Result:
     catalog: list[Strategy]
     bans: list[str] = field(default_factory=list)
     side: str = ""
-    seat: str = "blue"
+    seat: Seat = "blue"
     partial: bool = False
     score: float = 0.0
     picks: list[Pick] = field(default_factory=list)

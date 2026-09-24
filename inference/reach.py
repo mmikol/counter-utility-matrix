@@ -18,7 +18,7 @@ Shion do not, as of the scale that stopped moving with the bans.
            most exposed to it first; the same without the heroes that answer it back
 """
 
-from typing import TypedDict
+from typing import NamedTuple, TypedDict
 
 from inference import engine
 from ui.facts.draft import MAX_BANS, SIDES, Draft, is_sided
@@ -41,6 +41,15 @@ class Reach(TypedDict):
     banned: list[str]
     six: list[str]
     gap: float
+
+
+class _Near(NamedTuple):
+    """A board that did not seat the hero: its optimal six's lead over the
+    best six that holds the hero, and the board."""
+    gap: float
+    map_name: str
+    red: list[str]
+    side: str
 
 
 def maps(world: World, hero: Hero) -> list[Map]:
@@ -81,7 +90,7 @@ def search(world: World, name: str) -> Reach:
     World.resolve gives every board tool; a database without maps leaves no
     board to search, which is the server's fault, a RuntimeError."""
     (hero,) = world.resolve(None, (), [name]).blue
-    near: list[tuple[float, str, list[str], str]] = []
+    near: list[_Near] = []
     for m in maps(world, hero):
         for red in reds(world, hero):
             for side in (SIDES if is_sided(m) else ("",)):
@@ -91,18 +100,18 @@ def search(world: World, name: str) -> Reach:
                             "red": red, "banned": [], "six": top.blue, "gap": 0.0}
                 held = engine.infer(world, Draft(m.name, tuple(red), (hero.name,), side=side),
                                     top=1)
-                near.append((top.score - held.score, m.name, red, side))
+                near.append(_Near(top.score - held.score, m.name, red, side))
     if not near:
         raise RuntimeError("reach: no board to search for %s: the database holds no maps"
                            % hero.name)
-    near.sort(key=lambda t: (t[0], t[1], t[3]))
-    for _, map_name, red, side in near[:CLOSEST]:
-        found = _banning(world, hero, map_name, red, side)
+    near.sort(key=lambda n: (n.gap, n.map_name, n.side))
+    for board in near[:CLOSEST]:
+        found = _banning(world, hero, board.map_name, board.red, board.side)
         if found is not None:
             return found
-    gap, map_name, red, side = near[0]
-    return {"hero": hero.name, "bans": None, "map": map_name, "side": side, "red": red,
-            "banned": [], "six": [], "gap": round(gap, 3)}
+    closest = near[0]
+    return {"hero": hero.name, "bans": None, "map": closest.map_name, "side": closest.side,
+            "red": closest.red, "banned": [], "six": [], "gap": round(closest.gap, 3)}
 
 
 def _banning(world: World, hero: Hero, map_name: str, red: list[str], side: str) -> Reach | None:

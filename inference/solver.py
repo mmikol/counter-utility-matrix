@@ -79,7 +79,7 @@ class Solver(Objective):
         self.adopt_standing(scale.freeze(self))
 
     def adopt_bounds(self, bounds: Mapping[str, tuple[float, float]],
-                     standing: Mapping[int, Sequence[int]] | None = None) -> None:
+                     standing: Mapping[int, scale.Standing] | None = None) -> None:
         """Bounds (and standing) frozen elsewhere for this same board: another
         process's slice of the search, or an earlier solver on the same map,
         side, enemies and bans. The sample is seeded, so it draws the same
@@ -88,12 +88,12 @@ class Solver(Objective):
         if standing is not None:
             self.adopt_standing(standing)
 
-    def adopt_standing(self, tally: Mapping[int, Sequence[int]]) -> None:
+    def adopt_standing(self, tally: Mapping[int, scale.Standing]) -> None:
         """A hero's standing: the mean score of the reference sixes it is in -
         how the playbook in force rates it on this board, red and the map
         included. It ranks each role's pool, so the heroes searched in full
         are the ones the strategies favour, not the ones a side formula does."""
-        self._standing = {hid: total / n for hid, (total, n) in tally.items() if n}
+        self._standing = {hid: s.total / s.sixes for hid, s in tally.items() if s.sixes}
 
     # --- enumeration ---------------------------------------------------------------
 
