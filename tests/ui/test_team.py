@@ -173,3 +173,27 @@ def test_the_versus_section_counts_counter_edges_both_ways(synthetic_world):
     assert t["_answered"] == {"Mortar": ["Anvil"], "Gale": ["Needle"], "Balm": []}
     alone = team_metrics(w, blue)
     assert (alone["coverage"], alone["safe_count"], alone["banproof_coverage"]) == (0, 0, 0)
+
+
+def test_a_metric_read_as_the_wrong_kind_is_the_callers_error():
+    """The readers hand a bag's value on as the kind asked for - a number, a
+    name, the names, the synergy pairs, the tally, the answers - and a value
+    of another kind raises: the catalog keeps text metrics out of every place
+    a number is read."""
+    from ui.facts import team
+    assert team.number(3) == 3 and team.number(2.5) == 2.5
+    assert team.numbers({"a": 1, "b": "dive", "c": 2.5, "d": ["x"]}) == {"a": 1, "c": 2.5}
+    assert team.text("dive") == "dive"
+    assert team.names(["Anvil", "Balm"]) == ["Anvil", "Balm"] and team.names([]) == []
+    pair = team.SynergyPair("Anvil", "Balm", 2)
+    assert team.synergy_pairs([pair]) == [pair]
+    assert team.style_tally({"brawl": 2, "dive": 1}) == {"brawl": 2, "dive": 1}
+    assert team.answers({"Mortar": ["Anvil"]}) == {"Mortar": ["Anvil"]}
+    for reader, wrong in (
+            (team.number, "dive"), (team.number, ["x"]), (team.text, 3),
+            (team.names, ["Anvil", 3]), (team.names, "Anvil"),
+            (team.synergy_pairs, ["Anvil+Balm"]), (team.synergy_pairs, {}),
+            (team.style_tally, {"brawl": "2"}), (team.style_tally, []),
+            (team.answers, {"Mortar": "Anvil"}), (team.answers, [])):
+        with pytest.raises(TypeError, match="a metric read as"):
+            reader(wrong)

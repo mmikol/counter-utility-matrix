@@ -213,3 +213,42 @@ def test_expected_picks_read_the_map_and_the_meta_and_no_strategy(synthetic_worl
         for p, (_, rate) in zip(anywhere, meta, strict=True))
     # no strategy is read: nothing here takes a catalog
     assert "catalog" not in inspect.signature(compute.expected_picks).parameters
+
+
+def test_an_expected_pick_says_what_its_rate_rests_on(synthetic_world):
+    """A hero with no rate on the map rests on its overall rate and says so; a
+    hero with no rate at all rests on none, and a role with nobody left to
+    field leaves its seat empty: no other role fills it."""
+    w = synthetic_world
+    harbor = w.map("Harbor Gate")
+    anvil = w.hero("Anvil")
+    del anvil.map_rates[harbor.id]
+    # Anvil's 11 overall still beats Kite's 8 on the map
+    first = compute.expected_picks(w, harbor)[0]
+    assert first == {"hero": "Anvil", "role": "tank", "rate": 11.0, "locked": False,
+                     "why": "picked in 11.0% of matches overall (no rate on this map)"}
+    kite = w.hero("Kite")
+    kite.pick, kite.map_rates = None, {}
+    banned = [w.hero(n) for n in ("Anvil", "Mortar", "Quarry")]
+    five = compute.expected_picks(w, harbor, banned=banned)
+    assert len(five) == TEAM_SIZE - 1
+    assert [p for p in five if p["role"] == "tank"] == [
+        {"hero": "Kite", "role": "tank", "rate": None, "locked": False,
+            "why": "no pick rate on record"}]
+
+
+def test_the_world_metrics_and_the_registry_the_catalog_validates_against(synthetic_world):
+    """The world's benches are its own; the registry offers every team metric
+    on both sides but the versus keys on red's, which the solver would read as
+    zero, and every red-only matchup key is a matchup key."""
+    assert compute.world_metrics(synthetic_world) == {
+        "heal_bench": 145.0, "hps_bench": 130.0, "roster_size": 13}
+    reg = compute.registry()
+    assert len(reg) == (2 * len(TEAM_METRICS) - len(compute.VERSUS_KEYS)
+                        + len(compute.MATCHUP_METRICS) + len(compute.MAP_METRICS)
+                        + len(compute.WORLD_METRICS))
+    for key in compute.VERSUS_KEYS:
+        assert "team." + key in reg and "enemy." + key not in reg, key
+    assert set(reg) >= compute.RED_MATCHUP
+    assert reg["team.coverage"] == TEAM_METRICS["coverage"]
+    assert all("map.%s" % f in reg for f in TERRAIN_FEATURES)
