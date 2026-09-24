@@ -94,12 +94,12 @@ def search(world: World, name: str) -> Reach:
     for m in maps(world, hero):
         for red in reds(world, hero):
             for side in (SIDES if is_sided(m) else ("",)):
-                top = engine.infer(world, Draft(m.name, tuple(red), side=side), top=1)
+                top = engine.infer(world, Draft(map_name=m.name, red=tuple(red), side=side), top=1)
                 if hero.name in top.blue:
                     return {"hero": hero.name, "bans": 0, "map": m.name, "side": side,
                             "red": red, "banned": [], "six": top.blue, "gap": 0.0}
-                held = engine.infer(world, Draft(m.name, tuple(red), (hero.name,), side=side),
-                                    top=1)
+                held = engine.infer(world, Draft(map_name=m.name, red=tuple(red),
+                                                 blue=(hero.name,), side=side), top=1)
                 near.append(_Near(top.score - held.score, m.name, red, side))
     if not near:
         raise RuntimeError("reach: no board to search for %s: the database holds no maps"

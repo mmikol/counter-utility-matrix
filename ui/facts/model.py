@@ -266,7 +266,8 @@ class World:
         clash = [heroes[n].name for n in [*red, *blue] if heroes[n].id in banned_ids]
         if clash:
             raise Refusal("banned this match, cannot be picked: %s" % ", ".join(clash))
-        return Resolved(m, [heroes[n] for n in red], [heroes[n] for n in blue], banned)
+        return Resolved(map=m, red=[heroes[n] for n in red], blue=[heroes[n] for n in blue],
+                        banned=banned)
 
     def heroes_by_role(self) -> list[Hero]:
         return sorted(self.heroes.values(), key=lambda h: (ROLES.index(h.role), h.name))

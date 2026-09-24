@@ -1,6 +1,7 @@
 """infer(), evaluate() and board(): the API over the solver.
 
-    infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",), side="attack"))
+    infer(world, Draft(map_name="King's Row", red=("Zarya", "Pharah"), blue=("Ana",),
+                       side="attack"))
 
 returns the optimal six around the locked picks, each pick with the facts
 that justify it (the board the UI layer would show for map + red + the
