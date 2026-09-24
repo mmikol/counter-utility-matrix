@@ -2,9 +2,9 @@
 A Solver is the board's Objective (inference.scoring) on the board's scale
 (inference.scale), searched around the locked picks.
 
-    legal_sixes     every shape the hard limits allow, filled around the locked
-                    picks from a per-role pool ranked by standing (six per role
-                    by default)
+    legal_sixes     every shape the queue and the hard limits allow, filled around
+                    the locked picks from a per-role pool ranked by standing (six
+                    per role by default)
     sweep           a slice of the enumeration prepared, scored and slimmed. The
                     slices partition the field, so the search splits across
                     processes.
@@ -98,8 +98,8 @@ class Solver(Objective):
     # --- enumeration ---------------------------------------------------------------
 
     def shapes(self) -> list[Shape]:
-        """(tanks, damage, supports) triples the shape-only hard limits
-        allow, that can still seat the locked picks."""
+        """(tanks, damage, supports) triples the queue and the shape-only hard
+        limits allow, that can still seat the locked picks."""
         counts = {r: len(v) for r, v in self._locked_by_role.items()}
         return legal_shapes(self.catalog, counts)
 
@@ -359,10 +359,9 @@ class Solver(Objective):
 
 def _beats(cand: Candidate, best: Candidate) -> bool:
     """Whether a six ranks above another in the order rank() sorts by: score,
-    then tie-break, then names. A search that moved on score alone stood still
-    wherever sixes tie - everywhere, under a playbook that scores nothing - and
-    never met the better tie-break a swap away, so a fill that kept the
-    optimal's own picks came back a different six."""
+    then tie-break, then names. Every move of the local search asks this, so
+    where sixes tie - all of them, under a playbook that scores nothing - it
+    still climbs toward the six rank() puts first."""
     if cand.score != best.score:
         return cand.score > best.score
     return Solver._rank_key(cand) < Solver._rank_key(best)
