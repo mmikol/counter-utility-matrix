@@ -12,12 +12,19 @@ extend-exclude = ["db/psql/cluster", "db/raw", ".cache-*"]
 # set, minus what the house style does on purpose: %-formatting
 # (UP031/UP032), the ∪ and · in prose (RUF001-003), mutable class attributes
 # as vocabulary (RUF012). A catch of every Exception is a boundary - a
-# request, a daemon's pass - and says so: `# noqa: BLE001  # <why>`.
+# request, a daemon's pass - and says so: `# noqa: BLE001  # <why>`. An
+# import sits in the module's import block (PLC0415); one deferred into a
+# function is deliberate and says so: `# noqa: PLC0415  # <why>`.
 # Every function carries full type annotations (mypy holds it, below), and a
 # record that crosses a module boundary is a dataclass, NamedTuple or
 # TypedDict, not a bare dict or tuple.
-select = ["E", "W", "F", "I", "B", "BLE", "C4", "SIM", "UP", "N", "RUF", "PIE"]
+select = ["E", "W", "F", "I", "B", "BLE", "C4", "SIM", "UP", "N", "RUF", "PIE", "PLC0415"]
 ignore = ["UP031", "UP032", "RUF001", "RUF002", "RUF003", "RUF012"]
+
+# the import rule covers the code the app runs; a test may import a module
+# inside the test that uses it
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["PLC0415"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["db", "ui", "inference"]

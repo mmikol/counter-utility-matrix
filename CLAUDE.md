@@ -202,6 +202,11 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   not an ad-hoc dict or tuple. `Any` is for arbitrary JSON. mypy holds the
   annotations in CI (`[tool.mypy]` in pyproject.toml, `warn_unused_ignores`
   among them); the tests need none and are not checked.
+- Imports sit in the module's import block; an optional dependency is
+  imported there inside `try`/`except ImportError`, as pgserver is in
+  `db/psql/__init__.py`. A function-level import is a deliberate deferral
+  and says why, `# noqa: PLC0415  # <why>`; ruff fails any other outside
+  `tests/`.
 - Every module opens with a docstring saying what it does. Test names are
   declarative sentences (`test_the_overview_names_everything_at_the_root`);
   side effects are stubbed with `monkeypatch`, not mocks.
