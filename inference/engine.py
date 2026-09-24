@@ -21,10 +21,9 @@ from db import Refusal
 from inference import catalog as catalog_module
 from inference import parallel
 from inference.catalog import Strategy
-from inference.plan import momentum, plan
+from inference.plan import Seats, momentum, plan
 from inference.result import Alternative, Board, Pick, Result
-from inference.scale import Tally
-from inference.scoring import Bounds, Candidate, legal_shapes
+from inference.scoring import Candidate, legal_shapes
 from inference.solver import Solved, Solver, Swept, evaluate_comp
 from ui.facts import board_facts, compute
 from ui.facts.draft import TEAM_SIZE, Draft, check_tanks, check_team_size, is_sided, opposite
@@ -238,20 +237,6 @@ def _current(
     return result
 
 
-def _countered(
-        world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int,
-        top: int, solved: Solved | None, began: float | None, swept: Swept | None) -> Result:
-    """Blue's picks (`draft.blue`) against red's optimal six (`draft.red`):
-    how they hold if red answers perfectly, on the scale of blue's best
-    counter to that six."""
-    hypothetical = min(pool_size, COUNTERED_POOL)
-    against = _optimal(world, draft._replace(blue=()), catalog=catalog, pool_size=hypothetical,
-                       top=top, seat="blue", kind="infer", solved=solved, began=began)
-    return _current(world, draft, solver=against.solver, best=against.result.score,
-                    catalog=catalog, pool_size=hypothetical, seat="blue", kind="countered",
-                    swept=swept)
-
-
 def board(
         world: World, draft: Draft, *, catalog: list[Strategy] | None = None,
         brief: Brief | None = None) -> Board:
@@ -271,12 +256,16 @@ def board(
         red_current  red's picks as they stand, scored against blue's
                      selection on red's optimal's scale
         countered    blue's picks against red's optimal six - how you hold
-                     if they answer you perfectly (None without blue picks,
-                     or when the brief does not ask for it)
+                     if they answer you perfectly: a full six as it stands, a
+                     half-drafted one filled, on the scale of blue's best
+                     counter to that six (None without blue picks, or when
+                     the brief does not ask for it)
         fill         blue's locked picks with the empty slots filled by the
                      solver - the best six that keeps what you hold, on
                      blue's optimal's scale (None unless one to five are locked)
-        momentum     the verdict from the two current comps
+        momentum     the verdict from the two current comps, each
+                     half-drafted seat read through its fill; red's fill is
+                     solved for the verdict and not kept
         plan         the game plan in prose, from the same facts
         shapes       the (tanks, damage, supports) triples the queue and the
                      playbook's shape limits allow - what the roster enforces
@@ -291,11 +280,11 @@ def board(
     playbook tab's sliders; the files stay as they are and every result says
     the weights it was scored under.
 
-    Across the pool the four searches are split and walked through their
-    rounds together; in this process each seat searches for itself. A worker
-    dying anywhere in the pooled pass drops the pool and runs the same pass
-    here. A board the brief's check reports superseded stops at its next
-    round, its unstarted tasks cancelled, and raises parallel.Superseded.
+    Across the pool the searches are split and walked through their rounds
+    together; in this process each seat searches for itself. A worker dying
+    anywhere in the pooled pass drops the pool and runs the same pass here. A
+    board the brief's check reports superseded stops at its next round, its
+    unstarted tasks cancelled, and raises parallel.Superseded.
     """
     brief = brief or Brief()
     pooled = parallel.available(catalog)
@@ -314,7 +303,10 @@ def _board_once(
         world: World, draft: Draft, *, catalog: list[Strategy], brief: Brief,
         workers: parallel.Workers | None) -> Board:
     """The board, its searches split across `workers`, or each run in this
-    process where there are none."""
+    process where there are none. The rounds go in the order that keeps the
+    pool full: the two optimal seats rank their rosters and sweep, the fills
+    sweep on their seats' scales, the seats merge and are solved, and the
+    countered case, which needs red's six, sweeps while the fills merge."""
     m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
     draft = draft._replace(side=_side(m, draft.side))
     _check_teams(red_h, blue_h)
@@ -323,68 +315,145 @@ def _board_once(
     # each seat's draft, from that seat's perspective: its own picks are `blue`
     blue_seat = draft._replace(red=enemy, blue=())
     red_seat = Draft(draft.map_name, draft.blue, (), draft.bans, opposite(draft.side))
-    ours = draft._replace(red=enemy)                   # the current comp and the fill
+    ours = draft._replace(red=enemy)                   # blue's current comp and fill
     theirs = Draft(draft.map_name, draft.blue, draft.red, draft.bans, opposite(draft.side))
-    pool_size = brief.pool_size
-    half, rest = _slices(workers)
-    full, wants_fill = len(draft.blue) == TEAM_SIZE, 0 < len(draft.blue) < TEAM_SIZE
-    watch = parallel.Watch(brief.superseded)
-    run = _run(workers, world, catalog, brief, watch)
-
-    def split(
-            seat: Draft, slices: int, *, pool_size: int = pool_size, bounds: Bounds | None = None,
-            standing: Tally | None = None) -> parallel.Split | parallel.NullSplit:
-        if run is None:
-            return parallel.NullSplit(watch)
-        return parallel.Split(run, parallel.Spec(seat, pool_size), slices, bounds, standing)
-
-    blue_split, red_split = split(blue_seat, half), split(red_seat, rest)
+    solve = _Pass(world, catalog, brief, workers)
+    blue_split, red_split = solve.split(blue_seat, solve.half), solve.split(red_seat, solve.rest)
     blue_split.rank_roster()
     red_split.rank_roster()
     blue_split.sweep()
     red_split.sweep()
-    # the fill is blue's board, so it takes blue's scale and draws none
-    fill_split = (split(ours, half, bounds=blue_split.bounds, standing=blue_split.standing)
-                  if wants_fill else parallel.NullSplit(watch))
+    # a fill is its seat's board, so it takes the seat's scale and draws none
+    fill_split = solve.split(ours, solve.half, wanted=_drafting(ours), scale=blue_split)
+    red_fill_split = solve.split(theirs, solve.rest, wanted=_drafting(theirs), scale=red_split)
     fill_split.sweep()
+    red_fill_split.sweep()
     blue_split.merge()
     red_split.merge()
-    blue = _optimal(world, blue_seat, catalog=catalog, pool_size=pool_size, top=BOARD_TOP,
-                    seat="blue", kind="infer", solved=blue_split.solved(),
-                    began=blue_split.started)
-    red = _optimal(world, red_seat, catalog=catalog, pool_size=pool_size, top=BOARD_TOP,
-                   seat="red", kind="infer", solved=red_split.solved(), began=red_split.started)
-    countering = bool(brief.countered and draft.blue and red.result.blue)
+    blue = solve.optimal(blue_seat, blue_split, seat="blue")
+    red = solve.optimal(red_seat, red_split, seat="red")
     countered_seat = draft._replace(red=tuple(red.result.blue))
-    countered_split = (split(countered_seat._replace(blue=()), rest,
-                             pool_size=min(pool_size, COUNTERED_POOL))
-                       if countering else parallel.NullSplit(watch))
-    countered_split.sweep()
-    fill_split.merge()
-    countered_split.merge()
+    against_split, answer_split = solve.countering(countered_seat)
+    for split in (fill_split, red_fill_split, against_split, answer_split):
+        split.merge()
     # a full six is ranked against the field its seat's search just swept;
     # 100 is the seat's optimal, whatever it holds
-    cur = _current(world, ours, solver=blue.solver, best=blue.result.score, catalog=catalog,
-                   pool_size=pool_size, seat="blue", kind="current",
-                   swept=blue_split.swept() if full else None)
-    red_cur = _current(world, theirs, solver=red.solver, best=red.result.score, catalog=catalog,
-                       pool_size=pool_size, seat="red", kind="current",
-                       swept=red_split.swept() if len(draft.red) == TEAM_SIZE else None)
-    fill = (_filled(world, ours, catalog=catalog, pool_size=pool_size, top=BOARD_TOP,
-                    solved=fill_split.solved(), began=fill_split.started,
-                    best=blue.result.score)
-            if wants_fill else None)
-    countered = (_countered(world, countered_seat, catalog=catalog, pool_size=pool_size,
-                            top=BOARD_TOP, solved=countered_split.solved(),
-                            began=countered_split.started,
-                            swept=countered_split.swept() if full else None)
-                 if countering else None)
+    cur = solve.current(ours, blue, blue_split, seat="blue")
+    red_cur = solve.current(theirs, red, red_split, seat="red")
+    fill = solve.filled(ours, fill_split, seat="blue", best=blue.result.score)
+    red_fill = solve.filled(theirs, red_fill_split, seat="red", best=red.result.score)
+    countered = solve.countered(countered_seat, against_split, answer_split)
+    seats = Seats(cur, red_cur, blue.result, red.result, fill, red_fill, countered)
     return Board(map_name=expected.map_name, side=draft.side, bans=list(draft.bans),
                  blue=blue.result, red=red.result, current=cur, red_current=red_cur,
-                 fill=fill, countered=countered,
-                 momentum=momentum(cur, red_cur, countered, blue.result, red.result, fill),
+                 fill=fill, countered=countered, momentum=momentum(seats),
                  plan=plan(world, m, draft.side, list(draft.bans), red_h, blue.result),
                  shapes=[list(s) for s in legal_shapes(catalog)], expected=expected)
+
+
+def _drafting(seat: Draft) -> bool:
+    """Whether a seat is half-drafted - one to five picks, which a fill completes."""
+    return 0 < len(seat.blue) < TEAM_SIZE
+
+
+# a search sent across the pool, or one each seat runs for itself
+Searching = parallel.Split | parallel.NullSplit
+
+
+class _Pass:
+    """One pass of a board: the world, the weighted playbook and the brief it
+    is solved under, and the searches it sends out - blue's and its fill's
+    over half the pool's workers, red's, its fill's and the countered case's
+    over the rest - or each seat searching for itself where there are none."""
+
+    def __init__(self, world: World, catalog: list[Strategy], brief: Brief,
+                 workers: parallel.Workers | None) -> None:
+        self.world, self.catalog, self.brief = world, catalog, brief
+        self.watch = parallel.Watch(brief.superseded)
+        size = workers.size if workers is not None else 0
+        self.half = max(1, size // 2)
+        self.rest = max(1, size - self.half)
+        self.run = None if workers is None else parallel.Run(
+            workers.executor, world, catalog, brief.weights, BOARD_TOP + 1, self.watch)
+        self.countered_pool = min(brief.pool_size, COUNTERED_POOL)
+
+    def split(
+            self, draft: Draft, slices: int, *, wanted: bool = True,
+            pool_size: int | None = None, scale: Searching | None = None) -> Searching:
+        """One search sent out, unless there are no workers or it is not
+        wanted. With `scale`, a search on the same board, it takes that
+        search's bounds and standing and draws no sample of its own."""
+        if self.run is None or not wanted:
+            return parallel.NullSplit(self.watch)
+        spec = parallel.Spec(draft, pool_size or self.brief.pool_size)
+        if scale is None:
+            return parallel.Split(self.run, spec, slices)
+        return parallel.Split(self.run, spec, slices, scale.bounds, scale.standing)
+
+    def optimal(
+            self, draft: Draft, search: Searching, *, seat: str, kind: str = "infer",
+            pool_size: int | None = None) -> _Optimal:
+        """`seat`'s optimal six on `draft`, taken from `search` where it ran
+        across the pool and timed from when it was sent out."""
+        return _optimal(self.world, draft, catalog=self.catalog,
+                        pool_size=pool_size or self.brief.pool_size, top=BOARD_TOP, seat=seat,
+                        kind=kind, solved=search.solved(), began=search.started)
+
+    def current(self, draft: Draft, optimal: _Optimal, search: Searching, *, seat: str) -> Result:
+        """`seat`'s picks as they stand, on its optimal's scale; a full six is
+        ranked against the field `search` swept."""
+        swept = search.swept() if len(draft.blue) == TEAM_SIZE else None
+        return _current(self.world, draft, solver=optimal.solver, best=optimal.result.score,
+                        catalog=self.catalog, pool_size=self.brief.pool_size, seat=seat,
+                        kind="current", swept=swept)
+
+    def filled(
+            self, draft: Draft, search: Searching, *, seat: str, best: float,
+            kind: str = "fill", pool_size: int | None = None) -> Result | None:
+        """`seat`'s picks (`draft.blue`) with the empty slots filled by the
+        solver, on the scale whose 100 is `best`: how close the best
+        completion comes. None unless the seat is half-drafted."""
+        if not _drafting(draft):
+            return None
+        fill = self.optimal(draft, search, seat=seat, kind=kind, pool_size=pool_size).result
+        fill.scale_to(best)
+        return fill
+
+    def _countering(self, draft: Draft) -> bool:
+        """Whether the countered case is solved: blue has picks, red a six,
+        and the brief asks for it."""
+        return bool(self.brief.countered and draft.blue and draft.red)
+
+    def countering(self, draft: Draft) -> tuple[Searching, Searching]:
+        """The countered case's two searches, swept: blue's best counter to
+        red's optimal six (`draft.red`), which is its 100, and blue's picks
+        filled against that six on the same scale - the second only while
+        blue is half-drafted."""
+        wanted = self._countering(draft)
+        against = self.split(draft._replace(blue=()), self.rest, wanted=wanted,
+                             pool_size=self.countered_pool)
+        against.sweep()
+        answer = self.split(draft, self.rest, wanted=wanted and _drafting(draft),
+                            pool_size=self.countered_pool, scale=against)
+        answer.sweep()
+        return against, answer
+
+    def countered(self, draft: Draft, against: Searching, answer: Searching) -> Result | None:
+        """Blue's picks (`draft.blue`) against red's optimal six (`draft.red`):
+        how they hold if red answers perfectly, on the scale of blue's best
+        counter to that six. A full six is ranked against that counter's
+        field; a half-drafted one is filled, as the fill reads blue's picks.
+        None where the countered case is not solved."""
+        if not self._countering(draft):
+            return None
+        top = self.optimal(draft._replace(blue=()), against, seat="blue",
+                           pool_size=self.countered_pool)
+        if _drafting(draft):
+            return self.filled(draft, answer, seat="blue", best=top.result.score,
+                               kind="countered", pool_size=self.countered_pool)
+        return _current(self.world, draft, solver=top.solver, best=top.result.score,
+                        catalog=self.catalog, pool_size=self.countered_pool, seat="blue",
+                        kind="countered", swept=against.swept())
 
 
 def _check_teams(red_h: Sequence[Hero], blue_h: Sequence[Hero]) -> None:
@@ -393,24 +462,6 @@ def _check_teams(red_h: Sequence[Hero], blue_h: Sequence[Hero]) -> None:
     for team, seat in ((red_h, "red"), (blue_h, "blue")):
         check_team_size(team, seat)
         check_tanks(team, seat)
-
-
-def _run(
-        workers: parallel.Workers | None, world: World, catalog: list[Strategy], brief: Brief,
-        watch: parallel.Watch) -> parallel.Run | None:
-    """The board's pass across the pool, or None where there are no workers
-    and each seat searches for itself."""
-    if workers is None:
-        return None
-    return parallel.Run(workers.executor, world, catalog, brief.weights, BOARD_TOP + 1, watch)
-
-
-def _slices(workers: parallel.Workers | None) -> tuple[int, int]:
-    """How a board's searches share the pool: blue's and the fill's slices,
-    and red's and the countered case's. In this process nothing is sliced."""
-    size = workers.size if workers is not None else 0
-    half = max(1, size // 2)
-    return half, max(1, size - half)
 
 
 def _expected(
@@ -426,15 +477,3 @@ def _expected(
                   picks=[Pick(hero=p["hero"], role=p["role"], rate=p["rate"],
                               locked=p["locked"], why=p["why"], evidence=[])
                          for p in likely])
-
-
-def _filled(
-        world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int, top: int,
-        solved: Solved | None, began: float | None, best: float) -> Result:
-    """Blue's locked picks (`draft.blue`) with the empty slots filled by the
-    solver, on the scale of blue's optimal, whose score is `best`: how close
-    the best completion comes."""
-    fill = _optimal(world, draft, catalog=catalog, pool_size=pool_size, top=top, seat="blue",
-                    kind="fill", solved=solved, began=began).result
-    fill.scale_to(best)
-    return fill

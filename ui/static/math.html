@@ -78,8 +78,9 @@ optimal, 100. The badge above a picker is that seat's picks as a share of its op
 this playbook, not a win probability. An optimal at or below zero leaves no share to divide,
 so every other comp reads <i>unscored</i>, and the reason is on hover.</p>
 <p id='fight-odds'><b>Fight odds.</b> Blue's share over the sum of both shares; red's is the
-rest. With one seat unscored the bars show the shares alone. This is not a fitted
-probability.</p>
+rest. A seat still drafting is read through its fill, the best six its picks can reach, on
+both sides alike: a sum over fewer picks reads low, so the seat with more picks would lead. With
+one seat unscored the bars show the shares alone. This is not a fitted probability.</p>
 <p id='argmax'><b>The argmax.</b> Each role's pool is the six heroes of highest standing: a
 hero's mean score across the reference sixes it appears in, plus 0.5 for each locked partner.
 Every legal shape is filled around the locked picks and scored. A local search then swaps

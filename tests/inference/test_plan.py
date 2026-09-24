@@ -1,6 +1,6 @@
 """The board in prose: the momentum verdict read off the two current comps,
-and the game plan - the style, the terrain and the stages it names, and
-nothing the board contradicts."""
+each half-drafted seat through its fill, and the game plan - the style, the
+terrain and the stages it names, and nothing the board contradicts."""
 
 import copy
 
@@ -22,16 +22,36 @@ def test_the_momentum_verdict_reads_the_two_current_comps():
     def comp(blue, score, best, partial=False):
         return Result(kind="current", map_name=None, red=[], blue=blue, locked=blue,
                       catalog=fix, score=score, best=best, partial=partial)
-    even = plan.momentum(comp(["a"], 8, 10), comp(["b"], 7.8, 10), None)
+    even = plan.momentum(plan.Seats(comp(["a"], 8, 10), comp(["b"], 7.8, 10)))
     assert even["verdict"].startswith("even") and even["blue"] == 80 and even["red"] == 78
-    blue = plan.momentum(comp(["a"] * 6, 9, 10), comp(["b"] * 6, 5, 10),
-                         comp(["a"] * 6, 3, 10))
+    blue = plan.momentum(plan.Seats(comp(["a"] * 6, 9, 10), comp(["b"] * 6, 5, 10),
+                                    countered=comp(["a"] * 6, 3, 10)))
     assert blue["verdict"].startswith("blue ahead by 40") and blue["countered"] == 30
     assert "your picks hold 30 / 100" in blue["verdict"] and not blue["partial"]
-    red = plan.momentum(comp(["a"], 2, 10, partial=True), comp(["b"] * 6, 9, 10), None)
+    red = plan.momentum(plan.Seats(comp(["a"], 2, 10, partial=True), comp(["b"] * 6, 9, 10)))
     assert red["verdict"].startswith("red ahead by 70") and "(partial picks)" in red["verdict"]
-    only_red = plan.momentum(comp([], 0, 10), comp(["b"], 5, 10), None)
+    only_red = plan.momentum(plan.Seats(comp([], 0, 10), comp(["b"], 5, 10)))
     assert only_red["verdict"].startswith("red has revealed")
+
+
+def test_both_seats_are_read_through_their_fills_while_half_drafted(
+        synthetic_world, scratch_playbook):
+    """Blue's share used to be its fill's and red's the sum over its picks
+    alone, which reads low, so a half-drafted blue always led. Each seat is
+    now read through its own fill and the countered case fills blue's picks
+    too: a board where both seats hold the same one pick on an unsided map
+    is the same board from either side, and reads even."""
+    from inference import engine
+    b = engine.board(synthetic_world, Draft("Ember Ruins", ("Anvil",), ("Anvil",)),
+                     catalog=scratch_playbook)
+    assert b.current.partial and b.red_current.partial
+    assert b.momentum["blue"] == b.momentum["red"] == b.fill.to_dict()["normalized"]
+    assert b.momentum["verdict"].startswith("even - blue %d, red %d (partial picks)"
+                                            % (b.momentum["blue"], b.momentum["red"]))
+    assert b.momentum["odds"] == {"blue": 50, "red": 50}
+    assert b.countered.kind == "countered" and len(b.countered.blue) == 6
+    assert "Anvil" in b.countered.locked and not b.countered.partial
+    assert b.momentum["countered"] == b.countered.to_dict()["normalized"]
 
 
 @pytest.mark.invariant

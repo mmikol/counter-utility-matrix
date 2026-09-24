@@ -5,6 +5,7 @@ the facts and strategies the solver scored.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
+from typing import NamedTuple
 
 from inference.result import Momentum, Odds, Result
 from ui.facts.draft import TEAM_SIZE
@@ -13,10 +14,21 @@ from ui.facts.model import Hero, Map, World
 from ui.facts.team import team_metrics, text
 
 
-def momentum(
-        cur: Result, red_cur: Result, countered: Result | None,
-        blue_r: Result | None = None, red_r: Result | None = None,
-        fill: Result | None = None) -> Momentum:
+class Seats(NamedTuple):
+    """What the verdict reads off a board: the two current comps; the two
+    optimals, whose reason a seat with no picks is read by; the two fills,
+    the best six reachable from a half-drafted seat's picks, which that seat
+    is read through; and blue's picks against red's best counter."""
+    current: Result
+    red_current: Result
+    blue: Result | None = None
+    red: Result | None = None
+    fill: Result | None = None
+    red_fill: Result | None = None
+    countered: Result | None = None
+
+
+def momentum(seats: Seats) -> Momentum:
     """Who the picks favour, read off the two current comps on their own
     optimals' scales: blue's share of its best counter to red's selection,
     red's share of its best counter to blue's. A seat with no picks has no
@@ -24,15 +36,18 @@ def momentum(
     its optimal instead.
 
     A half-drafted seat is read through its fill - the best six reachable from
-    what it has. Scoring the picks alone sums over a smaller team, so a
-    perfectly played draft would read low and could fall when the right pick
-    lands; that measures how many picks are in, not how good they are."""
-    blue_why = cur.unscored() if cur.blue or blue_r is None else blue_r.waiting()
-    red_why = red_cur.unscored() if red_cur.blue or red_r is None else red_r.waiting()
+    what it has - on both sides alike. Scoring the picks alone sums over a
+    smaller team, so a perfectly played draft would read low and could fall
+    when the right pick lands; that measures how many picks are in, not how
+    good they are, and a seat read that way against one read through its
+    fill would always trail."""
+    cur, red_cur = seats.current, seats.red_current
+    blue_why = cur.unscored() if cur.blue or seats.blue is None else seats.blue.waiting()
+    red_why = red_cur.unscored() if red_cur.blue or seats.red is None else seats.red.waiting()
     if blue_why and red_why:                       # neither seat can be a share of anything
         return Momentum(blue=None, red=None, countered=None, partial=False, odds=None,
                         verdict=blue_why)
-    n, m, k = _shares(cur, red_cur, countered, fill, blue_why, red_why)
+    n, m, k = _shares(seats, blue_why, red_why)
     odds = _odds(n, m)
     partial = bool((cur.blue and cur.partial) or (red_cur.blue and red_cur.partial))
     verdict = _verdict_line(cur, red_cur, n, m, partial, odds, blue_why, red_why)
@@ -41,24 +56,27 @@ def momentum(
     return Momentum(blue=n, red=m, countered=k, partial=partial, odds=odds, verdict=verdict)
 
 
-def _shares(cur: Result, red_cur: Result, countered: Result | None, fill: Result | None,
-            blue_why: str | None,
-            red_why: str | None) -> tuple[int | None, int | None, int | None]:
+def _shares(
+        seats: Seats, blue_why: str | None,
+        red_why: str | None) -> tuple[int | None, int | None, int | None]:
     """Blue's share of its optimal, red's of its best counter, and blue's
     against red's best counter; None where a seat has no picks or its share
-    waits. A half-drafted blue is read through its fill where one was
-    computed - the best six reachable from its picks. Scoring the picks alone
-    sums over a smaller team, so a well-played draft reads low and can fall
-    when the right pick lands. Red has no fill, so its half-drafted share
-    keeps that bias: the seat with more picks is flattered. Known, and not
-    fixed here."""
-    blue_now = fill if (fill is not None and cur.partial and cur.blue) else cur
-    n = blue_now.share() if cur.blue and not blue_why else None
-    m = red_cur.share() if red_cur.blue and not red_why else None
+    waits. Each half-drafted seat is read through its fill where one was
+    solved, and the countered case is a fill of blue's picks too, so the
+    three are measured the same way."""
+    cur, red_cur, countered = seats.current, seats.red_current, seats.countered
+    n = _now(cur, seats.fill).share() if cur.blue and not blue_why else None
+    m = _now(red_cur, seats.red_fill).share() if red_cur.blue and not red_why else None
     k = None
     if countered is not None and countered.blue and not countered.unscored():
         k = countered.share()
     return n, m, k
+
+
+def _now(current: Result, fill: Result | None) -> Result:
+    """A seat as the verdict reads it: its fill while it is half-drafted and
+    one was solved, else its current comp."""
+    return fill if fill is not None and current.partial and current.blue else current
 
 
 def _odds(n: int | None, m: int | None) -> Odds | None:

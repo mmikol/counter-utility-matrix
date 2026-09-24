@@ -86,11 +86,12 @@ def _timeless(board):
 
 def test_the_pooled_and_the_in_process_board_run_one_orchestration(
         monkeypatch, synthetic_world, scratch_playbook):
-    """Pooled, the four searches walk the rounds together in the order that
-    keeps the pool full: blue and red rank their rosters and sweep, the fill
-    sweeps on blue's scale, blue and red merge and are solved, and only then
-    does the countered case sweep, against red's six. In this process no
-    split is built. Both answer the same Board."""
+    """Pooled, the searches walk the rounds together in the order that keeps
+    the pool full: blue and red rank their rosters and sweep, the two fills
+    sweep on their seats' scales, blue and red merge and are solved, and only
+    then does the countered case sweep against red's six - blue's best
+    counter, and blue's pick filled on its scale. In this process no split is
+    built. Both answer the same Board."""
     alone, none = _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=False)
     pooled, trace = _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True)
     assert none == []
@@ -98,14 +99,20 @@ def test_the_pooled_and_the_in_process_board_run_one_orchestration(
     blue = {"locked": (), "enemy": enemy, "pool": 6}
     red = {"locked": (), "enemy": ours, "pool": 6}
     fill = {"locked": ours, "enemy": enemy, "pool": 6}
-    countered = {"locked": (), "enemy": tuple(alone.red.blue), "pool": 4}
+    red_fill = {"locked": enemy, "enemy": ours, "pool": 6}
+    against = {"locked": (), "enemy": tuple(alone.red.blue), "pool": 4}
+    answer = {"locked": ours, "enemy": tuple(alone.red.blue), "pool": 4}
     assert trace == [
         _Call("rank_roster", **blue), _Call("rank_roster", **red),
-        _Call("sweep", **blue), _Call("sweep", **red), _Call("sweep", **fill),
+        _Call("sweep", **blue), _Call("sweep", **red),
+        _Call("sweep", **fill), _Call("sweep", **red_fill),
         _Call("merge", **blue), _Call("merge", **red),
         _Call("solved", **blue), _Call("solved", **red),
-        _Call("sweep", **countered), _Call("merge", **fill), _Call("merge", **countered),
-        _Call("solved", **fill), _Call("solved", **countered)]
+        _Call("sweep", **against), _Call("sweep", **answer),
+        _Call("merge", **fill), _Call("merge", **red_fill),
+        _Call("merge", **against), _Call("merge", **answer),
+        _Call("solved", **fill), _Call("solved", **red_fill),
+        _Call("solved", **against), _Call("solved", **answer)]
     assert _timeless(pooled) == _timeless(alone)
 
 

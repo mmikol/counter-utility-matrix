@@ -127,8 +127,9 @@ comp as a share of its own optimal - blue's picks against blue's optimal,
 red's against red's best counter to your picks (solved for that scale,
 not shown); before any pick the badge shows the suggested six's 100. The
 *fight odds* strip above the boxes is two bars stacked on one track,
-blue's over red's: with both seats scored each bar is its side's share
-over the two shares' sum, a split of 100, the share in the tooltip; with
+blue's over red's: with both seats scored each bar is its side's share -
+a side still drafting read through its fill, on both sides alike - over
+the two shares' sum, a split of 100, the share in the tooltip; with
 one seat scored, its share alone; empty until a seat has a figure. Not a
 fitted probability. When nothing can be a share of anything - the
 playbook holds no heuristic, scored constraint or soft limit, or none
