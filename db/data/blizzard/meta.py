@@ -16,14 +16,14 @@ vocabularies as ordinary select options.
 
 import json
 from collections.abc import Callable
-from typing import NamedTuple, TypedDict
+from typing import NamedTuple
 
 import psycopg
 import requests
 from bs4 import BeautifulSoup, Tag
 
 from db import INPUT_DEVICE, PLATFORM, REGION, psql
-from db.data import fetch
+from db.data import PullSummary, fetch
 from db.data.blizzard import BLIZZARD, RATES_URL, attr
 from db.data.fetch import cache_key, cached_get
 from db.psql import current_patch, current_season
@@ -35,6 +35,7 @@ class RatesError(Exception):
 
 
 class RateRow(NamedTuple):
+    """One hero's row of the data table; a rate the page leaves out is None."""
     name: str
     win_rate: float | None
     pick_rate: float | None
@@ -42,7 +43,8 @@ class RateRow(NamedTuple):
 
 
 def parse_rows(html: str) -> list[RateRow]:
-    """[(hero_name, win_rate, pick_rate, ban_rate)] from the data table JSON."""
+    """[RateRow(hero_name, win_rate, pick_rate, ban_rate)] from the data table
+    JSON."""
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("blz-data-table")
     if not isinstance(table, Tag) or not table.get("rows"):
@@ -118,7 +120,7 @@ def fetch_slice(session: requests.Session, params: dict[str, str], cache_dir: st
     )
 
 
-class RatesSummary(TypedDict):
+class RatesSummary(PullSummary):
     queue: str
     platform: str
     region: str
@@ -130,12 +132,13 @@ class RatesSummary(TypedDict):
     snapshots: int
     unmatched: list[str]
     skipped_maps: list[str]
-    tables: list[str]
 
 
 def run(connection: psycopg.Connection, cache_dir: str | None = None,
         session: requests.Session | None = None,
         log: Callable[[str], None] = print) -> RatesSummary:
+    """Pull the rates page by tier and by map and store them as one new dated
+    snapshot, in one transaction."""
     session = fetch.session(session)
     cao = psql.now()
 

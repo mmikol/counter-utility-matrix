@@ -13,7 +13,23 @@ page to table, plus what they share.
     names         matching hero, map and ability names across sources
 
 Each fetched source's domain module ends in a
-run(connection, cache_dir, session, log); authored/ has no run - the
-strategies mirror is inference.catalog.mirror.
+run(connection, cache_dir, session, log) that returns a PullSummary: the
+tables it wrote, and for a pull that reads one article per entity, the
+articles that would not fetch (ArticlePullSummary). authored/ has no run -
+the strategies mirror is inference.catalog.mirror.
 The MCP tools call them. Nothing here is an entry point of its own.
 """
+
+from typing import TypedDict
+
+
+class PullSummary(TypedDict):
+    """What every run() returns; each pull's summary adds its own counts."""
+    tables: list[str]
+
+
+class ArticlePullSummary(PullSummary):
+    """A pull that fetches one article per entity: 'title: error' for each
+    article that would not fetch, so a pull that read nothing cannot look
+    like a pull that found nothing."""
+    missing: list[str]

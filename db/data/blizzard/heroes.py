@@ -16,8 +16,8 @@ import psycopg
 import requests
 from bs4 import BeautifulSoup, Tag
 
-from db import psql
-from db.data import fetch
+from db import PERK_TIERS, psql
+from db.data import PullSummary, fetch
 from db.data.blizzard import BASE_URL, BLIZZARD, HEROES_URL, attr
 from db.data.fetch import cache_key, cached_get
 
@@ -60,19 +60,19 @@ class PerkText(TypedDict):
     position: int
 
 
-def html_to_text(node: Tag) -> str:
-    """Plain gameplay text from a BeautifulSoup node.
+def node_text(node: Tag) -> str:
+    """Plain gameplay text from a BeautifulSoup node. It decomposes the
+    node's <img> tags in place: the tree loses them for every later reader.
 
     Ability descriptions embed input-icon <img> tags mid-sentence and wrap
     numbers in coloured <span>s. Both are dropped: the schema stores gameplay
-    text, not markup or media.
+    text, not markup or media. db.data.wiki.markup.html_to_text is the wiki's
+    reader of a string; this one reads a parsed node.
     """
     for image in node.find_all("img"):
         image.decompose()
     return " ".join(node.get_text(" ", strip=True).split())
 
-
-PERK_TIERS = {"minor": 1, "major": 2}
 
 URL_IN_STYLE_RE = re.compile(r"url\((['\"]?)(.*?)\1\)")
 
@@ -99,7 +99,7 @@ def parse_subroles(soup: BeautifulSoup) -> dict[str, Subrole]:
             "role_code": attr(div, "data-role"),
             # The label span reads "Tactician: ".
             "name": spans[0].get_text(strip=True).rstrip(":").strip(),
-            "passive_description": html_to_text(spans[1]),
+            "passive_description": node_text(spans[1]),
         }
     if not subroles:
         raise ScrapeError("no subroles found on the heroes page")
@@ -172,7 +172,7 @@ def parse_abilities(soup: BeautifulSoup, slug: str) -> list[AbilityText]:
         abilities.append(
             {
                 "name": heading.get_text(strip=True),
-                "description": html_to_text(description),
+                "description": node_text(description),
                 "position": position,
             }
         )
@@ -208,7 +208,7 @@ def parse_perks(soup: BeautifulSoup, slug: str) -> list[PerkText]:
                 {
                     "tier_id": PERK_TIERS[tier_code],
                     "name": heading.get_text(strip=True),
-                    "description": html_to_text(description),
+                    "description": node_text(description),
                     "position": position,
                 }
             )
@@ -223,13 +223,13 @@ def parse_perks(soup: BeautifulSoup, slug: str) -> list[PerkText]:
 ROLE_NAMES = {"tank": "Tank", "damage": "Damage", "support": "Support"}
 
 
-def load(connection: psycopg.Connection, subroles: dict[str, Subrole],
-         heroes: list[RosterHero], abilities_by_slug: dict[str, list[AbilityText]],
-         perks_by_slug: dict[str, list[PerkText]], icons: RoleIcons, cao: datetime) -> None:
-    cursor = connection.cursor()
+def _store(cursor: psycopg.Cursor, subroles: dict[str, Subrole],
+           heroes: list[RosterHero], abilities_by_slug: dict[str, list[AbilityText]],
+           perks_by_slug: dict[str, list[PerkText]], icons: RoleIcons, cao: datetime) -> None:
+    """Upsert the roles, subroles, heroes and each hero's abilities and perks."""
     source_id = psql.register_source(cursor, BLIZZARD, cao)
 
-    role_ids = {}
+    role_ids: dict[str, int] = {}
     for code in ("tank", "damage", "support"):
         cursor.execute(
             "INSERT INTO roles (code, name, icon_url, source_id)"
@@ -242,7 +242,7 @@ def load(connection: psycopg.Connection, subroles: dict[str, Subrole],
         )
         role_ids[code] = psql.scalar(cursor)
 
-    subrole_ids = {}
+    subrole_ids: dict[str, int] = {}
     for subrole in sorted(subroles.values(), key=lambda s: (s["role_code"], s["code"])):
         cursor.execute(
             "INSERT INTO subroles (role_id, code, name, passive_description,"
@@ -279,7 +279,7 @@ def load(connection: psycopg.Connection, subroles: dict[str, Subrole],
                 hero["name"],
                 role_ids[hero["role_code"]],
                 subrole_ids[hero["subrole_code"]],
-                hero.get("portrait_url"),
+                hero["portrait_url"],
                 source_id,
             ),
         )
@@ -313,23 +313,20 @@ def load(connection: psycopg.Connection, subroles: dict[str, Subrole],
                  perk["position"], source_id),
             )
 
-    connection.commit()
 
-
-class HeroesSummary(TypedDict):
+class HeroesSummary(PullSummary):
     heroes: int
     subroles: int
     abilities: int
     perks: int
     portraits: int
-    tables: list[str]
 
 
 def run(connection: psycopg.Connection, cache_dir: str | None = None,
         session: requests.Session | None = None,
         log: Callable[[str], None] = print) -> HeroesSummary:
-    """Pull the roster and every hero page, clean them, store them.
-    Returns a summary dict."""
+    """Pull the roster and every hero page, clean them, store them in one
+    transaction."""
     session = fetch.session(session)
 
     roster_soup = BeautifulSoup(cached_get(session, HEROES_URL, cache_dir, cache_key(HEROES_URL),
@@ -339,7 +336,8 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
     icons = parse_icons(roster_soup)
     log("roster: %d heroes, %d subroles" % (len(heroes), len(subroles)))
 
-    abilities_by_slug, perks_by_slug = {}, {}
+    abilities_by_slug: dict[str, list[AbilityText]] = {}
+    perks_by_slug: dict[str, list[PerkText]] = {}
     for index, hero in enumerate(heroes, start=1):
         slug = hero["slug"]
         page = cached_get(session, "%s/heroes/%s/" % (BASE_URL, slug),
@@ -351,13 +349,14 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
             % (index, len(heroes), hero["name"],
                len(abilities_by_slug[slug]), len(perks_by_slug[slug])))
 
-    load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
-         psql.now())
+    cursor = connection.cursor()
+    _store(cursor, subroles, heroes, abilities_by_slug, perks_by_slug, icons, psql.now())
+    connection.commit()
     return {
         "heroes": len(heroes),
         "subroles": len(subroles),
         "abilities": sum(len(a) for a in abilities_by_slug.values()),
         "perks": sum(len(p) for p in perks_by_slug.values()),
-        "portraits": sum(1 for h in heroes if h.get("portrait_url")),
+        "portraits": sum(1 for h in heroes if h["portrait_url"]),
         "tables": ["roles", "subroles", "heroes", "abilities", "perks"],
     }

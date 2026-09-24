@@ -27,11 +27,12 @@ boundary does not draw it.
     raw/          the CSV mirror the tools export (gitignored)
 
 This file holds what the whole layer must agree on: where things live (ROOT
-and the paths under it), the shape of a `sources` row (Source), the scope
-every rates snapshot is pinned to, the one error a caller can fix
-(Refusal), which every layer raises and every door answers as the caller's,
-and embed, which rewrites one generated section of a markdown file for
-every layer that generates docs. docs/db.md walks the tree.
+and the paths under it), the shape of a `sources` row (Source), the ability
+and perk vocabularies the migrations seed, the scope every rates snapshot is
+pinned to, the one error a caller can fix (Refusal), which every layer raises
+and every door answers as the caller's, and embed, which rewrites one
+generated section of a markdown file for every layer that generates docs.
+docs/db.md walks the tree.
 
 Every row carries a source_id, and that is the only distinction drawn
 between what was measured, what was judged and what was written by hand.
@@ -78,6 +79,10 @@ class Source:
 KIND_WEAPON, KIND_ABILITY, KIND_ULTIMATE, KIND_PASSIVE = (
     "weapon", "ability", "ultimate", "passive")
 ABILITY_KINDS = (KIND_WEAPON, KIND_ABILITY, KIND_ULTIMATE, KIND_PASSIVE)
+
+# The perk tiers: the ids 002_heroes.sql seeds into perk_tiers (1 minor, 2
+# major). Blizzard's pages and the wiki's rows both name a perk's tier by code.
+PERK_TIERS = {"minor": 1, "major": 2}
 
 # The scope every rates snapshot is pinned to. Blizzard spells these its own
 # way (input=Console); these are the codes the database stores.
