@@ -5,6 +5,9 @@ Over stdio it is one message per line on stdin/stdout, and this server
 speaks the parts a tool host needs: `initialize`, `ping`, `tools/list`,
 `tools/call`, `resources/list`, `resources/read`, and empty `prompts/list`.
 Logs go to stderr - stdout is the wire.
+
+A tool declares its arguments as JSON Schema (ToolSchema, one Property per
+argument), and Tool checks every call against it before the tool runs.
 """
 
 import hmac
@@ -17,7 +20,7 @@ import traceback
 import uuid
 from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
-from typing import Any, Protocol, TextIO
+from typing import Protocol, TextIO, TypedDict
 from urllib.parse import urlsplit
 
 from db import RAW_DIR, Refusal, web
@@ -27,11 +30,12 @@ SERVER_INFO = {"name": "countrix", "version": "2.1.0"}
 
 _client = threading.local()
 
-# A JSON-RPC message, request or response, as json.loads reads it: arbitrary JSON.
-Message = dict[str, Any]
+# A JSON-RPC message, request or response, as json.loads reads it: arbitrary
+# JSON, so a value is narrowed before it is used.
+Message = dict[str, object]
 # What a tool answers: its text, and the same as a JSON object for a
 # structured reply, or None.
-Answer = tuple[str, Mapping[str, Any] | None]
+Answer = tuple[str, Mapping[str, object] | None]
 
 
 # Every tool call is one JSON line here - through either transport, and
@@ -102,19 +106,35 @@ def audited[T](name: str, arguments: Mapping[str, object], call: Callable[[], T]
 
 
 class InvalidParamsError(Exception):
-    """The request left out a field this method needs, or named something the
-    server does not serve: the wire's INVALID_PARAMS. Raised only where that is
-    what went wrong, so anything else escaping a handler is the server's own
-    fault and reaches the branch that logs a traceback."""
+    """The request left out a field this method needs, sent one of the wrong
+    type, or named something the server does not serve: the wire's
+    INVALID_PARAMS. Raised only where that is what went wrong, so anything
+    else escaping a handler is the server's own fault and reaches the branch
+    that logs a traceback."""
+
+
+class Resource(TypedDict):
+    """A resource as resources/list lists it."""
+    uri: str
+    name: str
+    description: str
+    mimeType: str
+
+
+class ResourceText(TypedDict):
+    """A resource as resources/read returns it: its uri, its type and its text."""
+    uri: str
+    mimeType: str
+    text: str
 
 
 class Resources(Protocol):
     """What a server serves as MCP resources: a listing, and one resource by
     uri, a KeyError when nothing is at it."""
 
-    def list(self) -> list[dict[str, str]]: ...
+    def list(self) -> list[Resource]: ...
 
-    def read(self, uri: str) -> dict[str, str]: ...
+    def read(self, uri: str) -> ResourceText: ...
 
 
 class Server:
@@ -135,20 +155,25 @@ class Server:
 
     def handle(self, message: object) -> Message | None:
         """One decoded message -> a response, or None for a notification. A
-        request the wire cannot serve is INVALID_PARAMS; anything else that
-        escapes a method is the server's fault, INTERNAL with its type and
-        message, and its traceback goes to the log, never to the caller."""
+        message that is not an object or names no string method is
+        INVALID_REQUEST, and a request the wire cannot serve - its params not
+        an object, a field missing or of the wrong type - INVALID_PARAMS;
+        anything else that escapes a method is the server's fault, INTERNAL
+        with its type and message, and its traceback goes to the log, never
+        to the caller."""
         if not isinstance(message, dict):
             return self._error(None, INVALID_REQUEST, "expected an object")
-        msg_id = message.get("id")
-        method = message.get("method")
-        params = message.get("params") or {}
+        msg_id: object = message.get("id")
+        method: object = message.get("method")
+        params: object = message.get("params") or {}
         if method is None:
             return None            # a response to something we never sent
+        if not isinstance(method, str):
+            return self._error(msg_id, INVALID_REQUEST, "method must be a string")
         try:
             if method.startswith("notifications/"):
                 return None                # a notification gets no response
-            handler: Callable[[Message], Message] | None = {
+            methods: dict[str, Callable[[Message], Message]] = {
                 "initialize": self._initialize,
                 "ping": lambda p: {},
                 "tools/list": self._tools_list,
@@ -157,10 +182,13 @@ class Server:
                 "resources/read": self._resources_read,
                 "resources/templates/list": lambda p: {"resourceTemplates": []},
                 "prompts/list": lambda p: {"prompts": []},
-            }.get(method)
+            }
+            handler = methods.get(method)
             if handler is None:
                 return self._error(msg_id, METHOD_NOT_FOUND,
                                    "unknown method %r" % method)
+            if not isinstance(params, dict):
+                raise InvalidParamsError("params must be an object")
             return {"jsonrpc": "2.0", "id": msg_id, "result": handler(params)}
         except InvalidParamsError as bad:
             return self._error(msg_id, INVALID_PARAMS, str(bad))
@@ -202,14 +230,14 @@ class Server:
         if "name" not in params:
             raise InvalidParamsError("missing parameter 'name'")
         name = params["name"]
-        tool = self.tools.get(name)
+        tool = self.tools.get(name) if isinstance(name, str) else None
         if tool is None:
-            raise InvalidParamsError("no tool named %r" % name)
+            raise InvalidParamsError("no tool named %r" % (name,))
         arguments = params.get("arguments") or {}
         if not isinstance(arguments, dict):
             raise InvalidParamsError("arguments must be an object")
         try:
-            text, structured = audited(name, arguments, lambda: tool(arguments),
+            text, structured = audited(tool.name, arguments, lambda: tool(arguments),
                                        self.transport, getattr(_client, "id", None),
                                        self.audit_path)
         except Refusal as refused:
@@ -231,8 +259,11 @@ class Server:
             raise InvalidParamsError("missing parameter 'uri'")
         if self.resources is None:
             raise InvalidParamsError("this server serves no resources")
+        uri = params["uri"]
+        if not isinstance(uri, str):
+            raise InvalidParamsError("uri must be a string")
         try:
-            return {"contents": [self.resources.read(params["uri"])]}
+            return {"contents": [self.resources.read(uri)]}
         except KeyError as unknown:
             raise InvalidParamsError("no resource at %s" % unknown) from unknown
 
@@ -266,6 +297,29 @@ class Server:
         stdout.flush()
 
 
+class Property(TypedDict, total=False):
+    """One argument in a tool's JSON schema: its type, an array's item type,
+    the values it admits and what it means. One that declares no type admits
+    any value."""
+    type: str
+    items: "Property"
+    enum: list[str]
+    description: str
+
+
+# A tool's arguments by name, in the order the reference lists them.
+type Properties = dict[str, Property]
+
+
+class ToolSchema(TypedDict):
+    """A tool's arguments as JSON Schema: an object of the named properties,
+    the required ones present and no other admitted."""
+    type: str
+    properties: Properties
+    required: list[str]
+    additionalProperties: bool
+
+
 # The Python values each JSON schema type admits. A bool is an int to Python
 # and neither an integer nor a number here; None is no type at all.
 JSON_TYPES: dict[str, tuple[type, ...]] = {
@@ -280,7 +334,7 @@ def _is_a(value: object, kind: str) -> bool:
     return isinstance(value, JSON_TYPES[kind])
 
 
-def _misfit(spec: Mapping[str, Any], value: object) -> str | None:
+def _misfit(spec: Property, value: object) -> str | None:
     """What a value must be to fit the property that declares it, or None when
     it fits: its type (an array's items too, where they declare one) and its
     enum. A property that declares neither admits anything."""
@@ -300,7 +354,7 @@ class Tool:
     call is checked against the schema before the function runs, so a call
     the schema refuses never reaches the tool, whichever door it came in by."""
 
-    def __init__(self, name: str, description: str, schema: Mapping[str, Any],
+    def __init__(self, name: str, description: str, schema: ToolSchema,
                  fn: Callable[..., Answer]) -> None:
         self.name, self.description, self.schema, self.fn = (
             name, description, schema, fn)

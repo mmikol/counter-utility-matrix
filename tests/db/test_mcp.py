@@ -154,6 +154,28 @@ def test_a_fault_inside_a_tool_is_internal_and_logged_not_a_bad_parameter(tmp_pa
     assert call("resources/read", {"uri": "strategy://x"})["error"]["code"] == -32602
 
 
+def test_a_request_of_the_wrong_shape_is_the_callers_error_and_logs_nothing(tmp_path):
+    """A method that is not a string, params that are not an object, a tool
+    name or a uri that is not a string: each is the request's error, never a
+    fault with a traceback in the log. A notification still gets no reply."""
+    logged = []
+    server = Server([], tools.StrategyResources(), log=logged.append,
+                    audit_path=str(tmp_path / "audit.jsonl"))
+
+    def error(message):
+        return server.handle(dict({"jsonrpc": "2.0", "id": 1}, **message))["error"]
+    assert error({"method": 5}) == {"code": -32600, "message": "method must be a string"}
+    assert error({"method": "tools/call", "params": [1]}) == {
+        "code": -32602, "message": "params must be an object"}
+    assert error({"method": "tools/call", "params": {"name": ["t"]}}) == {
+        "code": -32602, "message": "no tool named ['t']"}
+    assert error({"method": "resources/read", "params": {"uri": 5}}) == {
+        "code": -32602, "message": "uri must be a string"}
+    assert server.handle({"jsonrpc": "2.0", "method": "notifications/initialized",
+                          "params": [1]}) is None
+    assert logged == []
+
+
 def test_the_strategy_resources_answer_an_unknown_uri_as_a_bad_parameter(tmp_path):
     """The one implementation of the resources a server serves: an id no file
     holds is a bad parameter, and a strategy's uri reads back its file."""

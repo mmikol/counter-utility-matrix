@@ -95,7 +95,7 @@ The servers, the transport and the full tool reference are in
 
 | file | purpose |
 | --- | --- |
-| `server.py` | A dependency-free MCP server: JSON-RPC over stdio, and the same surface over Streamable HTTP (`POST /mcp`, `GET /health`). `initialize`, `tools/list`, `tools/call`, `resources/*`. Dependency-free so the door has nothing to audit but its own few hundred lines. |
+| `server.py` | A dependency-free MCP server: JSON-RPC over stdio, and the same surface over Streamable HTTP (`POST /mcp`, `GET /health`). `initialize`, `tools/list`, `tools/call`, `resources/*`. A tool's arguments are JSON Schema (`ToolSchema`, a `Property` per argument), checked on every call before the tool runs. Dependency-free so the door has nothing to audit but its own few hundred lines. |
 | `registry.py` | What a tool is: `ToolSpec` (name, description, JSON schema, function, and for a pull the source it reads) and `ToolReply` (text, and the same as JSON). `Registry` holds a family's tools in registration order, refuses a name twice and derives the pulls; `joined` assembles the families, `run` is the audited in-process call, `write_docs` the tool reference in [mcp.md](mcp.md). `Context` is where a call lands - the database, the page caches, the log - and carries the joined registry, through which one tool calls another. |
 | `tools.py` | The four families joined in the order the server lists them, the `Context` the servers, the refresher and the board use, and `run_tool`, the in-process call. |
 | `pulls.py` | `list_sources`, the ten `pull_*` tools in dependency order (one source and domain each, each stated once through `pull_tool`), `load_authored`, `sync_all`. |

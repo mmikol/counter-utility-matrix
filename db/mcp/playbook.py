@@ -11,7 +11,8 @@ half of the write, and the one step this module adds.
 import os
 
 from db import ROOT
-from db.mcp.registry import Context, Properties, Registry, ToolReply
+from db.mcp.registry import Context, Registry, ToolReply
+from db.mcp.server import Properties, Resource, ResourceText
 from inference import catalog, derive, tune
 
 TOOLS = Registry()
@@ -162,21 +163,21 @@ def tuning_log(ctx: Context, lines: int = 20) -> ToolReply:
 class StrategyResources:
     """The strategies files (and the tuning log), readable as MCP resources."""
 
-    def list(self) -> list[dict[str, str]]:
-        out = [{"uri": "strategy://" + h.id, "name": h.name,
-                "description": "%s (%s)" % (h.kind, h.category),
-                "mimeType": "text/markdown"} for h in catalog.load()]
-        out.append({"uri": "strategy://tuning-log", "name": "tuning log",
-                    "description": "every change to the strategies, with reasons",
-                    "mimeType": "text/markdown"})
+    def list(self) -> list[Resource]:
+        out = [Resource(uri="strategy://" + h.id, name=h.name,
+                        description="%s (%s)" % (h.kind, h.category),
+                        mimeType="text/markdown") for h in catalog.load()]
+        out.append(Resource(uri="strategy://tuning-log", name="tuning log",
+                            description="every change to the strategies, with reasons",
+                            mimeType="text/markdown"))
         return out
 
-    def read(self, uri: str) -> dict[str, str]:
+    def read(self, uri: str) -> ResourceText:
         hid = uri.replace("strategy://", "", 1)
         if hid == "tuning-log":
-            return {"uri": uri, "mimeType": "text/markdown",
-                    "text": "\n".join(tune.log_tail(1000)) or "no tuning yet"}
+            return ResourceText(uri=uri, mimeType="text/markdown",
+                                text="\n".join(tune.log_tail(1000)) or "no tuning yet")
         for h in catalog.load():
             if h.id == hid:
-                return {"uri": uri, "mimeType": "text/markdown", "text": h.raw}
+                return ResourceText(uri=uri, mimeType="text/markdown", text=h.raw)
         raise KeyError(uri)

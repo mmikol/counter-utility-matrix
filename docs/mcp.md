@@ -54,10 +54,13 @@ Postgres rejects - raises `db.Refusal`: the reply is `isError` with the
 reason, and the audit line says refused. Every call, in-process too, is
 checked against the tool's schema before the tool runs: an argument it
 does not take, one it requires left out, a value of the wrong type or
-outside the declared values is refused the same way. Anything else is the server's fault, a playbook that does
-not load included: the reply is `INTERNAL` (-32603) with the error's type
-and message, the traceback goes to stderr, and the audit line says
-crashed, which the sentry counts.
+outside the declared values is refused the same way. A request the wire
+cannot serve - params that are not an object, a tool name or uri that is
+not a string or names nothing served - is `INVALID_PARAMS` (-32602), and a
+message without a string method `INVALID_REQUEST` (-32600). Anything else
+is the server's fault, a playbook that does not load included: the reply
+is `INTERNAL` (-32603) with the error's type and message, the traceback
+goes to stderr, and the audit line says crashed, which the sentry counts.
 
 ## From a shell
 

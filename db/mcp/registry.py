@@ -1,12 +1,11 @@
 """What a tool is, the registry a family of tools is declared into, and the
 context a call lands in.
 
-    Property         one argument in a tool's JSON schema
-    ToolSchema       a tool's arguments as JSON Schema
     ToolReply        what every tool returns: its text, and the same as a JSON
                      object for a structured reply
-    ToolSpec         a tool as registered: its name, description, schema and
-                     function, and for a pull the source whose cache it reads
+    ToolSpec         a tool as registered: its name, description, schema (a
+                     server.ToolSchema) and function, and for a pull the
+                     source whose cache it reads
     Registry         tools in registration order, each name once: joined()
                      assembles the families, bind() hands a server its Tools,
                      run() is the audited in-process call, write_docs() the
@@ -18,44 +17,23 @@ context a call lands in.
 
 Each family module - pulls, lifecycle, layers, playbook - declares its tools
 into a Registry of its own and imports no other family. tools.py joins them
-and gives the Context its registry.
+and gives the Context its registry. A tool declares its arguments in
+server.py's JSON Schema vocabulary (Properties), the one the server checks
+every call against.
 """
 
 import functools
 import os
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import ClassVar, NamedTuple, TypedDict
+from typing import ClassVar, NamedTuple
 
 import psycopg
 
 from db import CACHE_DIRS, ROOT, embed, psql
 from db.data import fetch
 from db.data.fetch import Log
-from db.mcp.server import Tool, audited
-
-
-class Property(TypedDict, total=False):
-    """One argument in a tool's JSON schema: its type, an array's item type,
-    the values it admits and what it means. One that declares no type admits
-    any value."""
-    type: str
-    items: "Property"
-    enum: list[str]
-    description: str
-
-
-# A tool's arguments by name, in the order the reference lists them.
-type Properties = dict[str, Property]
-
-
-class ToolSchema(TypedDict):
-    """A tool's arguments as JSON Schema: an object of the named properties,
-    the required ones present and no other admitted."""
-    type: str
-    properties: Properties
-    required: list[str]
-    additionalProperties: bool
+from db.mcp.server import Properties, Property, Tool, ToolSchema, audited
 
 
 class ToolReply(NamedTuple):

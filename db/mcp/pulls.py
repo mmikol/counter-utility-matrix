@@ -28,7 +28,8 @@ from db.data.wiki import playstyles as wiki_playstyles
 from db.data.wiki import seasons as wiki_seasons
 from db.data.wiki import synergies as wiki_synergies
 from db.data.wiki import terrain as wiki_terrain
-from db.mcp.registry import REFRESH, Context, Properties, Registry, ToolReply
+from db.mcp.registry import REFRESH, Context, Registry, ToolReply
+from db.mcp.server import Properties
 from inference import catalog, derive
 
 TOOLS = Registry()
