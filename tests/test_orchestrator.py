@@ -84,7 +84,7 @@ def test_the_allowlist_is_exactly_the_tools_the_refresh_skill_names():
     from db.mcp import tools
     with open(REFRESH_SKILL, encoding="utf-8") as handle:
         named = set(re.findall(r"`([a-z_]+)`", handle.read()))
-    registered = {name for name, *_ in tools.REGISTRY}
+    registered = set(tools.REGISTRY.names())
     assert set(orchestrator.AGENT_TOOL_NAMES) == named & registered
 
 

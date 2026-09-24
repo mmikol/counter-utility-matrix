@@ -33,39 +33,40 @@ def test_the_authored_package_holds_the_source_row_and_no_loader():
 
 def test_load_authored_takes_strategies_and_nothing_else():
     """One input, and no argument to narrow it to: the tool takes none."""
-    [schema] = [s for name, _, s, _ in tools.REGISTRY if name == "load_authored"]
+    schema = tools.REGISTRY.get("load_authored").schema
     assert schema["properties"] == {} and schema["required"] == []
 
 
 def test_seasons_and_synergies_are_pulls_in_dependency_order():
-    order = [name for name, _ in tools.PULLS]
-    assert dict(tools.PULLS)["pull_seasons"] == "wiki"
-    assert dict(tools.PULLS)["pull_synergies"] == "wiki"
+    pulls = {spec.name: spec.source for spec in tools.REGISTRY.pulls()}
+    order = list(pulls)
+    assert pulls["pull_seasons"] == "wiki"
+    assert pulls["pull_synergies"] == "wiki"
     # a rates pull stamps its snapshot with the season live today
     assert order.index("pull_seasons") < order.index("pull_rates")
     # a synergy and a counter are pairs of heroes on the roster
     assert order.index("pull_heroes") < order.index("pull_synergies")
     assert order.index("pull_heroes") < order.index("pull_counters")
-    registered = {name for name, *_ in tools.REGISTRY}
-    assert {name for name, _ in tools.PULLS} <= registered
+    # every pull_* tool is a pull, in the order it was registered
+    assert order == [n for n in tools.REGISTRY.names() if n.startswith("pull_")]
 
 
 def test_every_pull_reads_blizzard_or_the_wiki():
-    assert {source for _, source in tools.PULLS} == {"blizzard", "wiki"}
+    assert {spec.source for spec in tools.REGISTRY.pulls()} == {"blizzard", "wiki"}
     assert set(db.CACHE_DIRS) == {"blizzard", "wiki"}
     assert set(tools.Context(dsn="postgresql://nowhere").caches) == {"blizzard", "wiki"}
     _text, data = tools.run_tool(tools.Context(dsn="postgresql://nowhere"), "list_sources")
     assert [s["code"] for s in data["sources"]] == ["blizzard", "wiki"]
     assert sorted(t for s in data["sources"] for t in s["tools"]) == sorted(
-        name for name, _ in tools.PULLS)
+        spec.name for spec in tools.REGISTRY.pulls())
 
 
 def test_pull_counters_runs_the_wikis_matchups(monkeypatch, tmp_path):
     from db.data.wiki import matchups
-    assert dict(tools.PULLS)["pull_counters"] == "wiki"
-    [schema] = [s for name, _, s, _ in tools.REGISTRY if name == "pull_counters"]
-    assert set(schema["properties"]) == {"refresh"}
-    [text] = [d for name, d, _, _ in tools.REGISTRY if name == "pull_counters"]
+    spec = tools.REGISTRY.get("pull_counters")
+    assert spec.source == "wiki"
+    assert set(spec.schema["properties"]) == {"refresh"}
+    text = spec.description
     assert "wiki" in text and "Match-Up" in text
     seen = {}
 

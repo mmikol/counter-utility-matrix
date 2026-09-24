@@ -208,7 +208,7 @@ def test_wiki_maps_store_each_modes_stages(shared):
 @needs_caches
 def test_wiki_terrain_pulls_the_stages_terrain_after_the_maps(shared):
     ctx, connection = shared
-    order = [name for name, _ in tools.PULLS]
+    order = [spec.name for spec in tools.REGISTRY.pulls()]
     assert order.index("pull_maps") < order.index("pull_terrain")
     tools.run_tool(ctx, "pull_maps")
     text, data = tools.run_tool(ctx, "pull_terrain")

@@ -189,7 +189,7 @@ def test_every_skill_has_frontmatter_and_names_its_tools():
     """Coverage, not identity: a coding tool may install its own playbook
     beside ours, and a skill this repo does not own does not decide the run."""
     from db.mcp import tools
-    registered = {name for name, *_ in tools.REGISTRY}
+    registered = set(tools.REGISTRY.names())
     skills = _skills()
     assert set(MUST_NAME) <= set(skills)
     for name in MUST_NAME:
@@ -224,7 +224,7 @@ def test_the_tool_reference_is_current(copy_of):
     from db.mcp import tools
     committed = _read("docs", "mcp.md")
     listed = set(re.findall(r"^\| `([a-z_]+)` \|", _section(committed, "tools"), re.M))
-    assert listed == {name for name, *_ in tools.REGISTRY}
+    assert listed == set(tools.REGISTRY.names())
     fresh = copy_of("docs/mcp.md")
     tools.write_tool_docs(fresh)
     with open(fresh, encoding="utf-8") as handle:

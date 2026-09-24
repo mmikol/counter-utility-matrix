@@ -12,7 +12,8 @@ import json
 import os
 import re
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import psycopg
@@ -57,22 +58,19 @@ class Context:
 
 # --- the registry ----------------------------------------------------------
 
-# A tool as registered: its name, description, JSON schema and function.
+# A tool's function: its context first, its arguments by name.
 ToolFn = Callable[..., Reply]
-REGISTRY: list[tuple[str, str, dict[str, Any], ToolFn]] = []
 
 
-def tool(
-        name: str, description: str, properties: dict[str, Any] | None = None,
-        required: Sequence[str] = ()) -> Callable[[ToolFn], ToolFn]:
-    # json_schema, not schema: db.psql.schema is imported above
-    json_schema = {"type": "object", "properties": properties or {},
-                   "required": list(required), "additionalProperties": False}
-
-    def decorate(fn: ToolFn) -> ToolFn:
-        REGISTRY.append((name, description, json_schema, fn))
-        return fn
-    return decorate
+@dataclass(frozen=True)
+class ToolSpec:
+    """A tool as registered: its name, description, JSON schema and function,
+    and for a pull, the source whose page cache it reads."""
+    name: str
+    description: str
+    schema: dict[str, Any]
+    fn: ToolFn
+    source: str | None = None
 
 
 class NoSuchToolError(KeyError):
@@ -83,16 +81,70 @@ class NoSuchToolError(KeyError):
         return "no tool named %r" % self.args[0]
 
 
-def _bind(ctx: Context, name: str, description: str, json_schema: dict[str, Any],
-          fn: ToolFn) -> Tool:
+class Registry:
+    """The tools in the order they were registered, each name once. The pulls
+    are the tools that name a source, in the same order."""
+
+    def __init__(self) -> None:
+        self._specs: dict[str, ToolSpec] = {}
+
+    def add(self, spec: ToolSpec) -> None:
+        # a name registered twice is a programmer's error, raised at import
+        if spec.name in self._specs:
+            raise ValueError("tool %r is registered twice" % spec.name)
+        self._specs[spec.name] = spec
+
+    def tool(
+            self, name: str, description: str, properties: dict[str, Any] | None = None,
+            required: Sequence[str] = (), *,
+            source: str | None = None) -> Callable[[ToolFn], ToolFn]:
+        """The decorator that registers a function as a tool: its arguments
+        are the named properties, the required ones must be present, and no
+        other is accepted."""
+        # json_schema, not schema: db.psql.schema is imported above
+        json_schema = {"type": "object", "properties": properties or {},
+                       "required": list(required), "additionalProperties": False}
+
+        def decorate(fn: ToolFn) -> ToolFn:
+            self.add(ToolSpec(name, description, json_schema, fn, source))
+            return fn
+        return decorate
+
+    def __iter__(self) -> Iterator[ToolSpec]:
+        return iter(self._specs.values())
+
+    def __len__(self) -> int:
+        return len(self._specs)
+
+    def names(self) -> list[str]:
+        return list(self._specs)
+
+    def get(self, name: str) -> ToolSpec:
+        """The tool of that name; a name no tool has is a NoSuchToolError."""
+        try:
+            return self._specs[name]
+        except KeyError:
+            raise NoSuchToolError(name) from None
+
+    def pulls(self) -> list[ToolSpec]:
+        """The tools that pull a source, in registration order: the
+        dependency order sync_all runs them in."""
+        return [spec for spec in self if spec.source is not None]
+
+
+REGISTRY = Registry()
+tool = REGISTRY.tool
+
+
+def _bind(ctx: Context, spec: ToolSpec) -> Tool:
     """One registered tool bound to a context: the wrapper that checks every
     call against the tool's schema, over the function with ctx filled in."""
-    return Tool(name, description, json_schema, functools.partial(fn, ctx))
+    return Tool(spec.name, spec.description, spec.schema, functools.partial(spec.fn, ctx))
 
 
 def build(ctx: Context) -> list[Tool]:
     """Bind every registered tool to a context -> [Tool]."""
-    return [_bind(ctx, *entry) for entry in REGISTRY]
+    return [_bind(ctx, spec) for spec in REGISTRY]
 
 
 def run_tool(ctx: Context, name: str, /, **arguments: Any) -> tuple[str, Any]:
@@ -103,10 +155,7 @@ def run_tool(ctx: Context, name: str, /, **arguments: Any) -> tuple[str, Any]:
     reaches no tool and leaves no audit line. The name is positional only, so
     a tool argument called `name` (add_strategy has one) reaches the tool
     instead of colliding here."""
-    entry = next((e for e in REGISTRY if e[0] == name), None)
-    if entry is None:
-        raise NoSuchToolError(name)
-    tool = _bind(ctx, *entry)
+    tool = _bind(ctx, REGISTRY.get(name))
     return audited(name, arguments, lambda: tool(arguments), "in-process")
 
 
@@ -140,7 +189,7 @@ def list_sources(ctx: Context) -> Reply:
         cached = len(os.listdir(path)) if os.path.isdir(path) else 0
         rows.append({"code": source.code, "name": source.name, "url": source.url,
                      "cached_pages": cached,
-                     "tools": [t for t, s in PULLS if s == source.code]})
+                     "tools": [s.name for s in REGISTRY.pulls() if s.source == source.code]})
     text = "\n".join("%-12s %-24s %4d cached pages  tools: %s"
                      % (r["code"], r["name"], r["cached_pages"],
                         ", ".join(r["tools"])) for r in rows)
@@ -160,9 +209,14 @@ def _pull(
     return summary
 
 
+# Registration order is dependency order, and sync_all runs the pulls in it:
+# heroes before what links to them, maps and their stages before the terrain
+# counted for them, seasons and patches before the pull that stamps a
+# snapshot (rates).
+
 @tool("pull_heroes", "Blizzard's roster: heroes, roles, subroles, portraits,"
       " ability and perk text. Run first - everything links to heroes.",
-      REFRESH)
+      REFRESH, source="blizzard")
 def pull_heroes(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_heroes: roster stored", _pull(
         ctx, "blizzard", "db.data.blizzard.heroes", refresh))
@@ -174,7 +228,8 @@ def pull_heroes(ctx: Context, refresh: bool = False) -> Reply:
       dict(REFRESH, supplement={"type": "boolean",
                                 "description": "also read each hero article"
                                                " for the flags Cargo lacks"
-                                               " (default true)"}))
+                                               " (default true)"}),
+      source="wiki")
 def pull_kits(ctx: Context, refresh: bool = False, supplement: bool = True) -> Reply:
     return _summary("pull_kits: kit numbers stored", _pull(
         ctx, "wiki", "db.data.wiki.heroes", refresh,
@@ -185,7 +240,7 @@ def pull_kits(ctx: Context, refresh: bool = False, supplement: bool = True) -> R
       " combinations, and each map's stages: a Control map's three, a Flashpoint"
       " map's five points, a Hybrid map's two phases, an Escort map's stretches"
       " where its article names them. Push maps have none.",
-      REFRESH)
+      REFRESH, source="wiki")
 def pull_maps(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_maps: map pool stored", _pull(
         ctx, "wiki", "db.data.wiki.maps", refresh))
@@ -196,14 +251,14 @@ def pull_maps(ctx: Context, refresh: bool = False) -> Reply:
       " open_ground, hazards, cover) and the mentions per thousand words; the"
       " same per stage, where the article has text about the stage. Reloads"
       " map_terrain and stage_terrain whole. Run after pull_maps: a stage must"
-      " exist before its terrain.", REFRESH)
+      " exist before its terrain.", REFRESH, source="wiki")
 def pull_terrain(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_terrain: terrain stored", _pull(
         ctx, "wiki", "db.data.wiki.terrain", refresh))
 
 
 @tool("pull_patches", "The wiki's patch list, so every rates snapshot can say"
-      " which game version it measured.", REFRESH)
+      " which game version it measured.", REFRESH, source="wiki")
 def pull_patches(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_patches: patches stored", _pull(
         ctx, "wiki", "db.data.wiki.patches", refresh))
@@ -211,7 +266,7 @@ def pull_patches(ctx: Context, refresh: bool = False) -> Reply:
 
 @tool("pull_seasons", "The wiki's Season pages: every season that has started,"
       " with its start date. Restamps every rates snapshot with its season. Run"
-      " before pull_rates.", REFRESH)
+      " before pull_rates.", REFRESH, source="wiki")
 def pull_seasons(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_seasons: seasons stored", _pull(
         ctx, "wiki", "db.data.wiki.seasons", refresh))
@@ -220,14 +275,14 @@ def pull_seasons(ctx: Context, refresh: bool = False) -> Reply:
 @tool("pull_rates", "Blizzard's win/pick/ban rates as a NEW dated snapshot,"
       " by rank tier and by map (Competitive Role Queue - the page offers no"
       " Open Queue - console, Americas). Slow when uncached: ~40 pages, 5s apart.",
-      REFRESH)
+      REFRESH, source="blizzard")
 def pull_rates(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_rates: snapshot stored", _pull(
         ctx, "blizzard", "db.data.blizzard.meta", refresh))
 
 
 @tool("pull_playstyles", "The wiki's team-composition page: which playstyle"
-      " (dive, brawl, poke) each hero belongs to.", REFRESH)
+      " (dive, brawl, poke) each hero belongs to.", REFRESH, source="wiki")
 def pull_playstyles(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_playstyles: styles stored", _pull(
         ctx, "wiki", "db.data.wiki.playstyles", refresh))
@@ -235,7 +290,8 @@ def pull_playstyles(ctx: Context, refresh: bool = False) -> Reply:
 
 @tool("pull_synergies", "The Synergy section of every hero's wiki article: one"
       " row per pair, score 2 when both articles name each other, 1 when one"
-      " does, the wiki's advice as the note. Run after pull_heroes.", REFRESH)
+      " does, the wiki's advice as the note. Run after pull_heroes.", REFRESH,
+      source="wiki")
 def pull_synergies(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_synergies: pairs stored", _pull(
         ctx, "wiki", "db.data.wiki.synergies", refresh))
@@ -244,20 +300,11 @@ def pull_synergies(ctx: Context, refresh: bool = False) -> Reply:
 @tool("pull_counters", "The Match-Up column of every hero's wiki article: each"
       " written cell read as a verdict and stored as a directed edge, one row ="
       " countered_by answers hero. Reloads the table whole. Run after"
-      " pull_heroes.", REFRESH)
+      " pull_heroes.", REFRESH, source="wiki")
 def pull_counters(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_counters: counters stored", _pull(
         ctx, "wiki", "db.data.wiki.matchups", refresh))
 
-
-# Dependency order: heroes before what links to them, maps and their stages
-# before the terrain counted for them, seasons and patches before the pull
-# that stamps a snapshot (rates).
-PULLS = [("pull_heroes", "blizzard"), ("pull_kits", "wiki"),
-         ("pull_maps", "wiki"), ("pull_terrain", "wiki"),
-         ("pull_patches", "wiki"), ("pull_seasons", "wiki"),
-         ("pull_rates", "blizzard"), ("pull_playstyles", "wiki"),
-         ("pull_synergies", "wiki"), ("pull_counters", "wiki")]
 
 @tool("load_authored", "Store the one input a user writes: the mirror of the"
       " strategies in inference/strategies/. A whole-truth reload.")
@@ -283,13 +330,14 @@ def load_authored(ctx: Context) -> Reply:
       " update: entities refresh in place, rates append a snapshot.", REFRESH)
 def sync_all(ctx: Context, refresh: bool = False) -> Reply:
     results: dict[str, Any] = {}
-    for name, _ in PULLS:
-        ctx.log("=== %s ===" % name)
-        results[name] = run_tool(ctx, name, refresh=refresh)[1]
+    pulls = REGISTRY.pulls()
+    for spec in pulls:
+        ctx.log("=== %s ===" % spec.name)
+        results[spec.name] = run_tool(ctx, spec.name, refresh=refresh)[1]
     ctx.log("=== load_authored ===")
     results["load_authored"] = run_tool(ctx, "load_authored")[1]
     results["export_csv"] = run_tool(ctx, "export_csv")[1]
-    return "sync_all: %d pulls + strategies mirror + export done" % len(PULLS), results
+    return "sync_all: %d pulls + strategies mirror + export done" % len(pulls), results
 
 
 # --- the database's life ----------------------------------------------------
@@ -380,17 +428,17 @@ def write_tool_docs(path: str | None = None) -> str:
     out = ["%d tools, in the order the server lists them. Regenerated by"
            " `python -m db.mcp call db_docs`." % len(REGISTRY), "",
            "| tool | does | arguments |", "| --- | --- | --- |"]
-    for name, description, json_schema, _ in REGISTRY:
-        required = set(json_schema.get("required", ()))
+    for entry in REGISTRY:
+        required = set(entry.schema.get("required", ()))
         args = []
-        for arg, spec in json_schema.get("properties", {}).items():
+        for arg, spec in entry.schema.get("properties", {}).items():
             kind = spec.get("type") or "any"
             if "enum" in spec:
                 kind = " \\| ".join(str(v) for v in spec["enum"])
             args.append("`%s`%s (%s)%s" % (arg, " *required*" if arg in required else "",
                                             kind, ": " + spec["description"].replace("|", "\\|")
                                             if spec.get("description") else ""))
-        out.append("| `%s` | %s | %s |" % (name, description.replace("|", "\\|"),
+        out.append("| `%s` | %s | %s |" % (entry.name, entry.description.replace("|", "\\|"),
                                           "<br>".join(args) if args else "none"))
     embed(path, "tools", "\n".join(out))
     return path

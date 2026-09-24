@@ -435,6 +435,19 @@ def test_derive_strategies_is_idle_with_nothing_pending():
     assert data["deferred"] == 0
 
 
+def test_a_registry_refuses_a_tool_name_twice():
+    registry = tools.Registry()
+
+    @registry.tool("twice", "the first")
+    def first(ctx):
+        return "first", {}
+    with pytest.raises(ValueError, match="'twice'"):
+        @registry.tool("twice", "the second")
+        def second(ctx):
+            return "second", {}
+    assert registry.names() == ["twice"] and registry.get("twice").fn is first
+
+
 # --- the door's guards: token, size, rate, audit ------------------------------------------
 
 def _http_server(tmp_path, token=None, rate_limit=120):
