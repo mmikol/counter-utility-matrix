@@ -61,8 +61,9 @@ def generate(world: World, draft: Draft) -> FactSet:
     board = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans, allow_announced=True)
     side = draft.side if is_sided(board.map) else ""
     fs = FactSet(Draft(
-        board.map.name if board.map else None, tuple(h.name for h in board.red),
-        tuple(h.name for h in board.blue), tuple(h.name for h in board.banned), side))
+        map_name=board.map.name if board.map else None,
+        red=tuple(h.name for h in board.red), blue=tuple(h.name for h in board.blue),
+        bans=tuple(h.name for h in board.banned), side=side))
     _meta_facts(fs, world)
     if board.banned:
         _ban_facts(fs, world, board)
@@ -104,12 +105,12 @@ def _ban_facts(fs: FactSet, world: World, board: Resolved) -> None:
     for h in banned:
         fs.add("bans", h.name, "bans.hero", "%s is banned this match - neither team"
             " can pick them" % h.name, value=h.name, source="derived:bans.hero")
-        answered = [e.name for e in board.red if world.counters_of(e.id, h.id)]
+        answered = [e.name for e in board.red if world.is_countered_by(e.id, h.id)]
         if answered:
             fs.add("bans", h.name, "bans.answered_red", "banned %s answered red %s -"
                 " that answer is off the table" % (h.name, ", ".join(answered)),
                 value=answered, source="counters")
-        threatened = [a.name for a in board.blue if world.counters_of(a.id, h.id)]
+        threatened = [a.name for a in board.blue if world.is_countered_by(a.id, h.id)]
         if threatened:
             fs.add("bans", h.name, "bans.answered_blue", "banned %s answered blue %s -"
                 " that threat is gone" % (h.name, ", ".join(threatened)),

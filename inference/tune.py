@@ -169,7 +169,7 @@ def validate(directory: str, hid: str, new_text: str) -> list[catalog_module.Str
 
 # --- the values a field accepts -------------------------------------------------
 
-def _number(value: object, message: str) -> float:
+def _required_number(value: object, message: str) -> float:
     """A number, or a TuneError saying so. A bool is an int, as float() reads it."""
     if not isinstance(value, (str, int, float)):
         raise TuneError(message)
@@ -184,12 +184,12 @@ def _coerce(field: str, value: object) -> object:
     TuneError. A field it does not know passes as it is: edit_frontmatter
     refuses it."""
     if field == "weight":
-        weight = _number(value, "weight must be a number")
+        weight = _required_number(value, "weight must be a number")
         if not WEIGHT_RANGE[0] <= weight <= WEIGHT_RANGE[1]:
             raise TuneError("weight must be within %g..%g" % WEIGHT_RANGE)
         return weight
     if field.startswith("params."):
-        return _number(value, "a param must be a number")
+        return _required_number(value, "a param must be a number")
     if field == "soft" and not isinstance(value, bool):
         raise TuneError("soft must be true or false")
     if field == "kind" and value not in catalog_module.KINDS:
@@ -313,7 +313,7 @@ def complete(
             "line": line}
 
 
-def sentences(body: str) -> int:
+def sentence_count(body: str) -> int:
     """How many sentences the prose holds - the title line and code spans aside."""
     text = "\n".join(line for line in (body or "").splitlines() if not line.startswith("#"))
     text = re.sub(r"`[^`]*`", "code", text)                 # `require: a == 2.` is one token
@@ -332,7 +332,7 @@ def _check_new(hid: str, name: str, kind: str, body: str) -> None:
     if len(name) > MAX_NAME or len(body) > MAX_PROSE:
         raise TuneError("a strategy is a name under %d characters and prose under %d"
                         % (MAX_NAME, MAX_PROSE))
-    count = sentences(body)
+    count = sentence_count(body)
     if count > MAX_SENTENCES:
         raise TuneError("a strategy's prose is at most %d sentences; this has %d"
                         % (MAX_SENTENCES, count))

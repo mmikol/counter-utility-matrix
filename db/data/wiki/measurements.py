@@ -227,7 +227,9 @@ def parse_measurements(value_text: str | None,
         for text, text_condition in _variants(part, condition):
             if TEMPLATE_ERROR_RE.search(text):
                 # A broken template is not a measurement; keep the text only.
-                measurements.append(Measurement(None, None, None, None, text_condition, text))
+                measurements.append(Measurement(
+                    value=None, numerator=None, denominator=None, window=None,
+                    condition=text_condition, text=text))
                 continue
             for reading in _measure(text, text_condition, default_unit):
                 measurements.append(Measurement(*reading, text))

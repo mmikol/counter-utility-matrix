@@ -106,7 +106,8 @@ class Registry:
                             required=list(required), additionalProperties=False)
 
         def decorate(fn: ToolFn) -> ToolFn:
-            self.register(ToolSpec(name, description, schema, fn, source))
+            self.register(ToolSpec(name=name, description=description, schema=schema, fn=fn,
+                                   source=source))
             return fn
         return decorate
 

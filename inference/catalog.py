@@ -105,7 +105,7 @@ _WORDS: dict[str, bool | None] = {"true": True, "yes": True, "false": False, "no
 _INTEGER = re.compile(r"[-+]?\d+(?:_\d+)*\Z")      # what int() reads
 
 
-def _number(text: str) -> int | float | str:
+def _number_or_text(text: str) -> int | float | str:
     """An int where the text is one, else a float, else the text itself: a
     bare word is a string in this dialect."""
     if _INTEGER.match(text):
@@ -128,7 +128,7 @@ def _scalar(text: str) -> Scalar:
     low = text.lower()
     if low in _WORDS:
         return _WORDS[low]
-    return _number(text)
+    return _number_or_text(text)
 
 
 def parse_frontmatter(text: str) -> tuple[Frontmatter, str]:
@@ -385,7 +385,7 @@ def _read(directory: str, name: str, ids: set[str]) -> Strategy:
             raise CatalogError("%s: id: is the filename; drop it" % name)
         if hid in ids:
             raise CatalogError("%s: duplicate id %r" % (name, hid))
-        return Strategy(hid, meta, body, raw, path)
+        return Strategy(hid, meta, body=body, raw=raw, path=path)
     except CatalogError as error:
         text = str(error)
         wrapped = CatalogError(text if text.startswith((name, hid)) else "%s: %s" % (name, text))

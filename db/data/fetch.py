@@ -13,6 +13,8 @@ shared by every source.
                      refresh); a page that fails to refetch keeps its cached
                      copy, so a flaky source degrades to yesterday's numbers,
                      never to an empty table
+    is_stale         whether a cached page is older than the policy in force
+    cache_key        a request as a file name in the cache
     session          a requests session that identifies this project
     PullContext      what a pull's run() takes beside its connection: the page
                      cache, the session and the log (stderr unless the caller
@@ -105,22 +107,24 @@ def is_stale(path: str) -> bool:
     return _age(path) > seconds
 
 
-def read_cache(path: str) -> str:
+def _read_cache(path: str) -> str:
+    """A cached page's text."""
     with open(path, encoding="utf-8") as handle:
         return handle.read()
 
 
-def write_cache(path: str, text: str) -> None:
+def _write_cache(path: str, text: str) -> None:
+    """A page's text into the cache, over any older copy."""
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(text)
 
 
-def keep_stale(path: str, error: Exception) -> str:
+def _keep_stale(path: str, error: Exception) -> str:
     """A refetch failed: fall back to the cached copy, saying so."""
     age = _age(path) / SECONDS_PER_HOUR
     sys.stderr.write("warning: %s; keeping the cached copy from %.0fh ago (%s)\n"
                      % (error, age, os.path.basename(path)))
-    return read_cache(path)
+    return _read_cache(path)
 
 
 def cache_key(*parts: object) -> str:
@@ -172,14 +176,14 @@ def cached(cache_dir: str | None, name: str, produce: Callable[[], str]) -> str:
         return produce()
     path = os.path.join(cache_dir, name)
     if os.path.exists(path) and not is_stale(path):
-        return read_cache(path)
+        return _read_cache(path)
     try:
         text = produce()
     except FetchError as error:
         if os.path.exists(path):
-            return keep_stale(path, error)
+            return _keep_stale(path, error)
         raise
-    write_cache(path, text)
+    _write_cache(path, text)
     return text
 
 

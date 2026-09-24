@@ -331,13 +331,13 @@ def _hero_versus(
     """The hero against these opponents and beside these teammates."""
     name = h.name
     other_side = "red" if team == "blue" else "blue"
-    threats = [o.name for o in opponents if world.counters_of(h.id, o.id)]
+    threats = [o.name for o in opponents if world.is_countered_by(h.id, o.id)]
     if threats:
         fs.add("hero", name, "hero.vs_answered_by", "%s: %s %s is answered by %s %s"
             % ("WARNING" if team == "blue" else "NOTE", team, name, other_side,
                 ", ".join(threats)), value=threats,
             source="counters", team=team)
-    wins = [o.name for o in opponents if world.counters_of(o.id, h.id)]
+    wins = [o.name for o in opponents if world.is_countered_by(o.id, h.id)]
     if wins:
         fs.add("hero", name, "hero.vs_answers", "%s %s answers %s %s"
             % (team, name, other_side, ", ".join(wins)), value=wins,

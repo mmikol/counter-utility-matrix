@@ -143,9 +143,11 @@ def best_maps(w: World) -> None:
 # --- the read steps: each fills its part of the World -----------------------
 
 def _add_stats(kits: dict[int, Kit], rows: list[TupleRow]) -> None:
-    """Each stat row, (piece id, code, value, units, condition, text), onto its piece."""
+    """Each stat row - piece id, code, value, the two units, the magnitude
+    underneath, condition, text - onto its piece."""
     for kid, code, value, un, ud, dv, cond, text in rows:
-        kits[kid].stats[code].append(Stat(code, value, un, ud, dv, cond, text))
+        kits[kid].stats[code].append(Stat(code=code, value=value, unit_num=un, unit_den=ud,
+                                          den_value=dv, condition=cond, text=text))
 
 
 def _read_heroes(cx: Connection, w: World) -> None:
@@ -177,7 +179,7 @@ def _read_abilities(cx: Connection, w: World) -> None:
                    a.description, a.keywords
             from abilities a left join ability_kinds k using(kind_id)
             order by a.hero_id, a.position"""):
-        kit = Kit(name, kind, desc, kw)
+        kit = Kit(name, kind, description=desc, keywords=kw)
         abilities[aid] = kit
         w.heroes[hid].abilities.append(kit)
     _add_stats(abilities, _rows(cx, """
@@ -190,7 +192,9 @@ def _read_abilities(cx: Connection, w: World) -> None:
             select a.hero_id, a.name, m.affects, m.applies_to, m.magnitude, m.unit
             from ability_modifiers m join abilities a using(ability_id)
             order by m.modifier_id"""):
-        w.heroes[hid].modifiers.append(Modifier(name, affects, applies, float(magnitude), unit))
+        w.heroes[hid].modifiers.append(Modifier(
+            ability=name, affects=affects, applies_to=applies, magnitude=float(magnitude),
+            unit=unit))
 
 
 def _read_weapons(cx: Connection, w: World) -> None:
@@ -202,7 +206,7 @@ def _read_weapons(cx: Connection, w: World) -> None:
             from weapon_configs c join weapons w using(weapon_id)
             join weapon_config_slots s on s.slot_id = c.slot_id
             order by w.hero_id, w.position, c.position"""):
-        kit = Kit(cname or wname, KIND_WEAPON, "", kw)
+        kit = Kit(cname or wname, KIND_WEAPON, description="", keywords=kw)
         kit.extra["weapon"] = wname
         kit.extra["weapon_type"] = wtype
         kit.extra["slot"] = slot
@@ -223,7 +227,7 @@ def _read_perks(cx: Connection, w: World) -> None:
             select p.perk_id, p.hero_id, p.name, t.code, p.description
             from perks p join perk_tiers t using(tier_id)
             order by p.hero_id, p.tier_id, p.position"""):
-        kit = Kit(name, "perk:" + tier, desc)
+        kit = Kit(name, "perk:" + tier, description=desc)
         perks[pid] = kit
         w.heroes[hid].perks.append(kit)
     _add_stats(perks, _rows(cx, """

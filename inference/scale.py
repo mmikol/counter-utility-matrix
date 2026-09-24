@@ -108,8 +108,8 @@ def _confidence_bounds(objective: Objective, spec: MetricKey, index: int,
     population is the other boards: the same metric over every map.
     """
     if spec.section == "map":
-        bans = len(objective.banned)
-        readings = [compute.map_metrics(m, objective.side, ban_count=bans).get(spec.key)
+        ban_count = len(objective.banned)
+        readings = [compute.map_metrics(m, objective.side, ban_count=ban_count).get(spec.key)
                     for m in objective.world.maps.values()]
         over = [float(number(v)) for v in readings if v is not None]
         return (min(over), max(over)) if over else (0.0, 0.0)
@@ -147,8 +147,8 @@ def board_prior(objective: Objective, h: Hero, partners: int = 0) -> float:
     m, world = objective.m, objective.world
     here = h.map_win(m.id) if m is not None else None
     base = here if here is not None else (h.win if h.win is not None else 50.0)
-    answers = sum(1 for e in objective.red if world.counters_of(e.id, h.id))
-    exposed = sum(1 for e in objective.red if world.counters_of(h.id, e.id))
+    answers = sum(1 for e in objective.red if world.is_countered_by(e.id, h.id))
+    exposed = sum(1 for e in objective.red if world.is_countered_by(h.id, e.id))
     style = 1 if (m is not None and m.style_top in h.styles) else 0
     best = 1 if (m is not None and m.id in h.best_maps) else 0
     return base + 3.0 * answers - 3.0 * exposed + 2.0 * partners + style + best

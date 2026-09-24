@@ -433,9 +433,9 @@ def _versus(world: World, heroes: list[Hero], enemies: list[Hero], top_ban: Hero
     """The counter edges between the picks and the other team: all zeros while
     that team is empty."""
     # enemy id -> the picks answering it; pick id -> the enemies answering it
-    answered = {e.id: [h.name for h in heroes if world.counters_of(e.id, h.id)]
+    answered = {e.id: [h.name for h in heroes if world.is_countered_by(e.id, h.id)]
                 for e in enemies}
-    exposure = {h.id: [e.name for e in enemies if world.counters_of(h.id, e.id)]
+    exposure = {h.id: [e.name for e in enemies if world.is_countered_by(h.id, e.id)]
                 for h in heroes}
     covered = [e for e in enemies if answered[e.id]]
     exposed = [h.name for h in heroes if exposure[h.id]]

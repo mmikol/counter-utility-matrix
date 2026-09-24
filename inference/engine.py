@@ -102,8 +102,9 @@ def _order(heroes: Iterable[Hero]) -> list[str]:
 def _board_facts(world: World, result: Result, side: str) -> FactSet:
     """The facts of the board a result stands on: its map, both sides as it
     names them, its bans, and the side."""
-    return board_facts.generate(world, Draft(result.map_name, tuple(result.red),
-                                             tuple(result.blue), tuple(result.bans), side))
+    return board_facts.generate(world, Draft(
+        map_name=result.map_name, red=tuple(result.red), blue=tuple(result.blue),
+        bans=tuple(result.bans), side=side))
 
 
 def _side(m: Map | None, side: str) -> str:
@@ -318,9 +319,11 @@ def _board_once(
     enemy = draft.red or tuple(expected.blue)
     # each seat's draft, from that seat's perspective: its own picks are `blue`
     blue_seat = draft._replace(red=enemy, blue=())
-    red_seat = Draft(draft.map_name, draft.blue, (), draft.bans, opposite(draft.side))
+    red_seat = Draft(map_name=draft.map_name, red=draft.blue, blue=(), bans=draft.bans,
+                     side=opposite(draft.side))
     ours = draft._replace(red=enemy)                   # blue's current comp and fill
-    theirs = Draft(draft.map_name, draft.blue, draft.red, draft.bans, opposite(draft.side))
+    theirs = Draft(map_name=draft.map_name, red=draft.blue, blue=draft.red, bans=draft.bans,
+                   side=opposite(draft.side))
     solve = _Pass(world, catalog, brief, workers)
     blue_split, red_split = solve.split(blue_seat, solve.half), solve.split(red_seat, solve.rest)
     blue_split.rank_roster()
@@ -347,7 +350,8 @@ def _board_once(
     fill = solve.filled(ours, fill_split, seat="blue", best=blue.result.score)
     red_fill = solve.filled(theirs, red_fill_split, seat="red", best=red.result.score)
     countered = solve.countered(countered_seat, against_split, answer_split)
-    seats = Seats(cur, red_cur, blue.result, red.result, fill, red_fill, countered)
+    seats = Seats(current=cur, red_current=red_cur, blue=blue.result, red=red.result,
+                  fill=fill, red_fill=red_fill, countered=countered)
     # the six the comps tab shows for blue, which the plan describes
     shown = fill if fill is not None else cur if len(draft.blue) == TEAM_SIZE else blue.result
     return Board(map_name=expected.map_name, side=draft.side, bans=list(draft.bans),

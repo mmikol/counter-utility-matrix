@@ -277,5 +277,6 @@ class World:
     def synergy(self, a: int, b: int) -> Synergy | None:
         return self.synergies.get(frozenset((a, b)))
 
-    def counters_of(self, loser: int, winner: int) -> bool:
+    def is_countered_by(self, loser: int, winner: int) -> bool:
+        """Whether the wiki reads `winner` as an answer to `loser`."""
         return (loser, winner) in self.counters

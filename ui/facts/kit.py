@@ -15,7 +15,7 @@ import re
 import statistics
 from collections import defaultdict
 from collections.abc import Iterable
-from decimal import Decimal
+from dataclasses import dataclass
 from typing import NamedTuple, TypedDict
 
 from db import KIND_ABILITY, KIND_WEAPON
@@ -38,28 +38,24 @@ MIN_FALLOFF = 10.0      # a "falloff range" under this is a splash radius, not a
 MIN_KNOCKBACK = 10.0    # m/s onto an enemy; under this a knockback is a nudge, not crowd control
 
 
+@dataclass(slots=True, kw_only=True, eq=False)
 class Stat:
     """One measurement of a kit piece as the data layer stored it: a value in
-    its units, under a condition, and the wiki's own words for the stat."""
-    __slots__ = (
-        "code",
-        "condition",
-        "den_value",
-        "text",
-        "unit_den",
-        "unit_num",
-        "value",
-    )
+    its units, under a condition, and the wiki's own words for the stat. It is
+    built by keyword, since its two unit columns and its two text columns sit
+    side by side and a swapped pair would still read as a stat. A numeric
+    column arrives as a Decimal and is held as a float."""
+    code: str
+    value: float | None
+    unit_num: str | None
+    unit_den: str | None
+    den_value: float | None
+    condition: str | None
+    text: str | None
 
-    def __init__(
-            self, code: str, value: float | Decimal | None, unit_num: str | None,
-            unit_den: str | None, den_value: float | Decimal | None, condition: str | None,
-            text: str | None) -> None:
-        self.code = code
-        self.value = float(value) if value is not None else None
-        self.unit_num, self.unit_den = unit_num, unit_den
-        self.den_value = float(den_value) if den_value is not None else None
-        self.condition, self.text = condition, text
+    def __post_init__(self) -> None:
+        self.value = float(self.value) if self.value is not None else None
+        self.den_value = float(self.den_value) if self.den_value is not None else None
 
     def rendered(self) -> str:
         """The value with its units and condition; the wiki's words where no value
@@ -110,7 +106,7 @@ class WeaponConfig(TypedDict, total=False):
     slot: str
 
 
-def _number(text: str | None) -> float | None:
+def _first_figure(text: str | None) -> float | None:
     """The first figure in a line of the wiki's prose; of a range, its top."""
     found = NUMBER_RE.search(text or "")
     return float(found.group(2) or found.group(1)) if found else None
@@ -122,7 +118,7 @@ def _reload_figure(stat: Stat, value: float) -> float | None:
     words beside the firing rate, else `value` itself. None when neither the
     condition nor the text speaks of a reload."""
     if RELOAD_RE.search(stat.condition or ""):
-        return _number(stat.condition)
+        return _first_figure(stat.condition)
     if RELOAD_RE.search("%s %s" % (stat.condition or "", stat.text or "")):
         found = TEXT_RELOAD_RE.search(stat.text or "")
         return float(found.group(1)) if found else value
@@ -241,7 +237,7 @@ class Kit:
         variants: list[float] = []
         worded = False
         for stat in self.stats.get(code, ()):
-            value = stat.value if stat.value is not None else _number(stat.text)
+            value = stat.value if stat.value is not None else _first_figure(stat.text)
             if value is None:
                 continue
             worded = worded or bool(RELOAD_RE.search(stat.text or ""))

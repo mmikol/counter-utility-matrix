@@ -14,9 +14,9 @@ from inference import catalog, tune
 def test_a_strategy_is_three_sentences_at_most(catalog_copy):
     """The add tool refuses a fourth sentence, counts a code span as one token
     and the title line as none; the playbook's own files keep to it."""
-    assert tune.sentences("# Title\n\nOne. Two! Three?") == 3
-    assert tune.sentences("One `require: a == 2.` two.") == 1
-    assert tune.sentences("One (as noted). Two \"quoted.\" Three.") == 3
+    assert tune.sentence_count("# Title\n\nOne. Two! Three?") == 3
+    assert tune.sentence_count("One `require: a == 2.` two.") == 1
+    assert tune.sentence_count("One (as noted). Two \"quoted.\" Three.") == 3
     with pytest.raises(tune.TuneError, match="at most 3 sentences"):
         tune.add("four-sentences", "Four sentences", "assumption",
                  "One. Two. Three. Four.", None, "test", directory=catalog_copy)
@@ -24,7 +24,7 @@ def test_a_strategy_is_three_sentences_at_most(catalog_copy):
                      "One. Two. Three.", None, "test", directory=catalog_copy)
     assert added["form"] == "assumption"
     for h in catalog.load():
-        assert tune.sentences(h.body) <= tune.MAX_SENTENCES, h.id
+        assert tune.sentence_count(h.body) <= tune.MAX_SENTENCES, h.id
 
 
 def test_tune_edits_validates_and_logs(catalog_copy):

@@ -7,12 +7,15 @@ import pytest
 from db import KIND_ABILITY, KIND_ULTIMATE, KIND_WEAPON
 from ui.facts.kit import Kit, Stat, dual_rate
 
+# a stat row as the loader reads it, column by column
+STAT_COLUMNS = ("code", "value", "unit_num", "unit_den", "den_value", "condition", "text")
+
 
 def _kit(kind, *rows):
     """A kit piece from (code, value, unit_num, unit_den, den_value, condition, text) rows."""
     kit = Kit("piece", kind)
     for row in rows:
-        kit.stats[row[0]].append(Stat(*row))
+        kit.stats[row[0]].append(Stat(**dict(zip(STAT_COLUMNS, row, strict=True))))
     return kit
 
 
@@ -163,7 +166,8 @@ def test_two_guns_fired_together_share_one_magazine():
     # one gun, or two off different magazines, is no pair
     assert dual_rate([gun(69.44)]) is None
     other = gun(69.44)
-    other.stats["ammo"][0] = Stat("ammo", 300, "rounds", None, None, None, "300")
+    other.stats["ammo"][0] = Stat(code="ammo", value=300, unit_num="rounds", unit_den=None,
+                                  den_value=None, condition=None, text="300")
     assert dual_rate([gun(69.44), other]) is None
 
 

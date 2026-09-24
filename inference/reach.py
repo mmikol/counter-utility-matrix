@@ -68,9 +68,9 @@ def reds(world: World, hero: Hero) -> list[list[str]]:
         red: list[str] = []
         for role in ("tank", "damage", "support"):
             pool = [h for h in others if h.role == role
-                    and not (strict and world.counters_of(hero.id, h.id))]
-            pool.sort(key=lambda h: (-bool(world.counters_of(h.id, hero.id)),
-                                     bool(world.counters_of(hero.id, h.id)),
+                    and not (strict and world.is_countered_by(hero.id, h.id))]
+            pool.sort(key=lambda h: (-bool(world.is_countered_by(h.id, hero.id)),
+                                     bool(world.is_countered_by(hero.id, h.id)),
                                      -(h.pick or 0), h.name))
             red += [h.name for h in pool[:2]]
         if red not in out:
@@ -122,14 +122,15 @@ def _banning(world: World, hero: Hero, map_name: str, red: list[str], side: str)
     # one solve of this board per ban, not two: the board a ban produces is
     # the board the next round starts from, so the round reads it
     for _ in range(MAX_BANS + 1):
-        top = engine.infer(world, Draft(map_name, tuple(red), (), tuple(banned), side), top=1)
+        top = engine.infer(world, Draft(map_name=map_name, red=tuple(red),
+                                        bans=tuple(banned), side=side), top=1)
         if banned and hero.name in top.blue:
             return {"hero": hero.name, "bans": len(banned), "map": map_name, "side": side,
                     "red": red, "banned": banned, "six": top.blue, "gap": 0.0}
         if len(banned) == MAX_BANS:
             break
-        held = engine.infer(world, Draft(map_name, tuple(red), (hero.name,), tuple(banned), side),
-                            top=1)
+        held = engine.infer(world, Draft(map_name=map_name, red=tuple(red), blue=(hero.name,),
+                                         bans=tuple(banned), side=side), top=1)
         rivals = [h for h in top.blue if _role(world, h) == hero.role
                   and h not in held.blue and h not in red]
         if not rivals:
@@ -140,6 +141,6 @@ def _banning(world: World, hero: Hero, map_name: str, red: list[str], side: str)
 
 def seated(world: World, board: Reach) -> bool:
     """Is the hero still in the optimal six of the board a search recorded for it?"""
-    top = engine.infer(world, Draft(board["map"], tuple(board["red"]), (), tuple(board["banned"]),
-                                    board["side"]), top=1)
+    top = engine.infer(world, Draft(map_name=board["map"], red=tuple(board["red"]),
+                                    bans=tuple(board["banned"]), side=board["side"]), top=1)
     return board["hero"] in top.blue

@@ -83,7 +83,7 @@ def _pull(ctx: Context, source: str, fn: PullFn, refresh: bool, **options: bool)
     and logging to the context's log -> the summary its run() returns."""
     pull = fetch.PullContext(ctx.cache(source), log=ctx.log)
     # refresh: every cached page counts as stale and is fetched again; the
-    # cached copy survives a failed fetch (see db.data.fetch.keep_stale)
+    # cached copy survives a failed fetch (see db.data.fetch.cached)
     with fetch.max_age(0 if refresh else None), ctx.connect() as cx:
         return fn(cx, pull, **options)
 
