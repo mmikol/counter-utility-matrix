@@ -15,8 +15,9 @@ Every COUNTRIX_SENTRY_EVERY seconds (30):
                    (descriptions, the wiki's notes, strategy bodies); those
                    are flagged, not removed - a person decides
     the door       the audit log every tool call writes (db/raw/audit.jsonl):
-                   calls in the last minute, refusals, crashes, and any
-                   client past the rate limit
+                   calls in the last minute, refusals, crashes, any client
+                   past the rate limit, and any line that is not an audit
+                   entry
     the report     db/raw/sentry.json - ok or not, what was quarantined, the
                    flags, the counts - which `orchestrator.py status` prints
 
@@ -31,8 +32,9 @@ import sys
 import time
 import unicodedata
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import NamedTuple, NoReturn, TypedDict
+from typing import NoReturn, TypedDict
 
 import psycopg
 from psycopg.sql import SQL
@@ -46,6 +48,7 @@ EVERY = float(os.environ.get("COUNTRIX_SENTRY_EVERY", "30"))
 Log = Callable[[str], object]
 
 REPORT_PATH = os.path.join(RAW_DIR, "sentry.json")
+AUDIT_TAIL_BYTES = 262144  # 256 KiB: the last minute's lines with room to spare
 QUARANTINE = ".quarantined"
 
 # What a strategy, a note or a description never legitimately says.
@@ -77,7 +80,7 @@ TEXT_COLUMNS = (("abilities", ("description",)), ("perks", ("description",)),
                 ("seasons", ("name", "note")), ("strategies", ("body",)))
 
 
-def injected(text: str | None) -> str | None:
+def injection_in(text: str) -> str | None:
     """The first instruction-like pattern in `text`, or None."""
     text = normalised(text)
     for pattern in INJECTION:
@@ -121,7 +124,7 @@ def check_playbook(
             continue
         hit = None
         for h in cat:
-            why = injected(h.name + "\n" + h.body)
+            why = injection_in(h.name + "\n" + h.body)
             if why:
                 hit = (os.path.basename(h.path), why)
                 break
@@ -154,7 +157,7 @@ def scan(cx: psycopg.Connection) -> list[str]:
                              % (table, column, type(error).__name__, error))
                 continue
             for (value,) in rows:
-                why = injected(value)
+                why = injection_in(value)
                 if why:
                     flags.append("%s.%s reads like an instruction: %r"
                                  % (table, column, why))
@@ -172,44 +175,59 @@ def check_database(dsn: str | None = None) -> list[str]:
         return ["database not scanned: %s: %s" % (type(error).__name__, error)]
 
 
-class DoorTally(NamedTuple):
-    """What the audit log says about the last minute, and where reading stopped."""
-    offset: int
-    recent: int
-    refused: int
-    crashed: int
-    hot: list[str | None]           # clients past the rate limit
+@dataclass(frozen=True)
+class DoorTally:
+    """What one read of the audit log found: the last minute's calls,
+    refusals and crashes, the clients past the rate limit, the lines that are
+    not audit entries, and the offset the next read starts from."""
+    offset: int = 0
+    recent: int = 0
+    refused: int = 0
+    crashed: int = 0
+    hot: list[str | None] = field(default_factory=list)
+    malformed: int = 0
 
 
 def check_door(audit_path: str | None = None, offset: int = 0) -> DoorTally:
-    """Read the audit log from `offset` -> (new offset, calls in the last minute,
-    refusals, crashes, clients past the limit)."""
+    """Read the audit log from `offset` -> the tally. A line that is not an
+    audit entry counts once, in the read that first passes it; a last line
+    without its newline is still being written and waits for the next read."""
     audit_path = audit_path or AUDIT_PATH
-    now = time.time()
-    recent, refused, crashed = 0, 0, 0
-    per_client: dict[str | None, int] = {}
     if not os.path.exists(audit_path):
-        return DoorTally(0, 0, 0, 0, [])
+        return DoorTally()
+    now = time.time()
+    recent = refused = crashed = malformed = 0
+    per_client: dict[str | None, int] = {}
     size = os.path.getsize(audit_path)
-    with open(audit_path, encoding="utf-8") as handle:
+    # bytes: the door writes UTF-8 unescaped, and a seek can land inside a character
+    with open(audit_path, "rb") as handle:
         # re-read the last minute's worth even when the offset is ahead: the
         # window is time, the offset only spares re-reading the whole file
-        handle.seek(max(0, min(offset, size) - 262144))
-        for line in handle:
+        tail = max(0, min(offset, size) - AUDIT_TAIL_BYTES)
+        if tail:
+            handle.seek(tail - 1)
+            handle.readline()       # the rest of the line the seek lands in
+        end = handle.tell()
+        for raw in handle:
+            start, end = end, end + len(raw)
+            if not raw.endswith(b"\n"):
+                end = start         # still being written: the next read takes it whole
+                break
             try:
-                entry = json.loads(line)
+                entry = json.loads(raw)
                 when = datetime.fromisoformat(entry["t"]).timestamp()
-            except (ValueError, KeyError):
+            except (ValueError, KeyError, TypeError):
+                malformed += start >= offset
                 continue
             if now - when > 60:
                 continue
             recent += 1
             per_client[entry.get("client")] = per_client.get(entry.get("client"), 0) + 1
-            refused += 1 if entry.get("refused") else 0
-            crashed += 1 if entry.get("crashed") else 0
-        offset = handle.tell()
+            refused += bool(entry.get("refused"))
+            crashed += bool(entry.get("crashed"))
     hot = [c for c, n in per_client.items() if n >= RATE_LIMIT]
-    return DoorTally(offset, recent, refused, crashed, hot)
+    return DoorTally(offset=end, recent=recent, refused=refused, crashed=crashed, hot=hot,
+                     malformed=malformed)
 
 
 class Report(TypedDict):
@@ -231,17 +249,19 @@ def run_once(
     """One pass -> the report, also written to db/raw/sentry.json."""
     quarantined, cat = check_playbook(directory, log)
     flags = check_database(dsn) if scan_database else []
-    offset, recent, refused, crashed, hot = check_door(audit_path, offset)
-    if crashed:
-        flags.append("%d tool call(s) crashed in the last minute" % crashed)
-    if hot:
-        flags.append("client(s) past the rate limit: %s" % ", ".join(str(c) for c in hot))
+    door = check_door(audit_path, offset)
+    if door.crashed:
+        flags.append("%d tool call(s) crashed in the last minute" % door.crashed)
+    if door.hot:
+        flags.append("client(s) past the rate limit: %s" % ", ".join(str(c) for c in door.hot))
+    if door.malformed:
+        flags.append("%d malformed line(s) in the audit log" % door.malformed)
     report = Report(checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
                     ok=not quarantined and not flags and cat is not None,
                     playbook=None if cat is None else len(cat),
                     quarantined=quarantined, flags=flags,
-                    calls_last_minute=recent, refused_last_minute=refused,
-                    audit_offset=offset)
+                    calls_last_minute=door.recent, refused_last_minute=door.refused,
+                    audit_offset=door.offset)
     report_path = report_path or REPORT_PATH
     try:
         os.makedirs(os.path.dirname(report_path), exist_ok=True)
@@ -250,7 +270,7 @@ def run_once(
     except OSError as error:
         log("sentry: could not write the report: %s" % error)
     log("sentry: %s - playbook %s, %d call(s)/min, %d flag(s)%s" % (
-        "ok" if report["ok"] else "NOT OK", report["playbook"], recent, len(flags),
+        "ok" if report["ok"] else "NOT OK", report["playbook"], door.recent, len(flags),
         ", quarantined " + ", ".join(quarantined) if quarantined else ""))
     for flag in flags:
         log("sentry: flag - " + flag)
