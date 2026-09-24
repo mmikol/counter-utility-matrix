@@ -27,7 +27,7 @@ from ui.facts import compute, tables
 from ui.facts import engine as facts_engine
 
 # A tool's answer: its text, and the same as a JSON object for a structured reply.
-Reply = tuple[str, dict[str, Any]]
+Reply = tuple[str, Mapping[str, Any]]
 Log = Callable[[str], object]       # print, a list's append, stderr's write
 
 
@@ -750,9 +750,9 @@ STRATEGY_FIELDS = {
             "body": {"type": "string", "description": "the prose: what it means and why"},
             "reason": {"type": "string", "description": "why it was added, in a sentence"}},
            **STRATEGY_FIELDS),
-      ["id", "name", "kind", "body"])
+      ["id", "name", "kind", "body", "reason"])
 def add_strategy(
-        ctx: Context, id: str, name: str, kind: str, body: str, reason: str = "",
+        ctx: Context, id: str, name: str, kind: str, body: str, reason: str,
         **fields: Any) -> Reply:
     try:
         category = fields.pop("category", "general")

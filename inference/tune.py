@@ -14,8 +14,9 @@ tools mirror it into the database.
                          "weight": 2}, "inferred from the prose")
 
 Fields: weight, direction, soft, when, require, bonus, penalty, metric,
-kind, category, params.NAME. The edited (or new) file is loaded through
-the catalog before it is written, so a metric that does not exist or an
+kind, category, params.NAME. Each of the three takes a reason and writes
+in one order (_commit): the edited (or new) file is loaded through the
+catalog before it is written, so a metric that does not exist or an
 expression that does not parse is refused and nothing changes. Every
 accepted change is one line in inference/strategies/tuning-log.md. The log
 lives beside the files: the compose stack bind-mounts that directory, so a
@@ -27,21 +28,57 @@ import os
 import re
 import shutil
 import tempfile
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
+from typing import TypedDict
 
 from inference import catalog as catalog_module
 
 SCALARS = ("weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric",
            "kind", "category")
+# the string fields: the four expressions and the names a strategy carries
+TEXT_FIELDS = ("when", "require", "bonus", "penalty", "metric", "direction", "category")
 WEIGHT_RANGE = (0.0, 10.0)
 PARAM_RE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
+MAX_EXPRESSION = 500       # characters in a string field
+MAX_NAME = 120             # characters in a strategy's name
+MAX_PROSE = 20000          # characters in a strategy's prose
+MAX_SENTENCES = 3          # a strategy's prose is three sentences at most
+_SENTENCE_END = re.compile(r"[.!?](?:[\"')\]`]*)(?:\s|$)")
+
+Pairs = Sequence[tuple[str, object]]
 
 
 class TuneError(ValueError):
     pass
 
 
-def _format(value):
+class Change(TypedDict):
+    """What tune() changed: one field, its old and new text, the log line."""
+    id: str
+    field: str
+    old: str | None
+    new: str
+    line: str
+
+
+class Completion(TypedDict):
+    """What complete() set: the form the strategy took and each field's text."""
+    id: str
+    form: str
+    set: dict[str, str]
+    line: str
+
+
+class Addition(TypedDict):
+    """What add() stored: the new file's form and path."""
+    id: str
+    form: str
+    path: str
+    line: str
+
+
+def _format(value: object) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, float) and value == int(value):
@@ -49,7 +86,50 @@ def _format(value):
     return str(value)
 
 
-def edit_frontmatter(text, field, value):
+def _pairs(pairs: Pairs) -> str:
+    return ", ".join("%s=%s" % (field, _format(value)) for field, value in pairs)
+
+
+# --- the frontmatter edit -------------------------------------------------------
+
+def _header_end(lines: list[str]) -> int:
+    """Where a new header line goes: the end, before a trailing blank line."""
+    return len(lines) - (1 if lines and not lines[-1].strip() else 0)
+
+
+def _set_param(lines: list[str], name: str, value: object) -> str | None:
+    """NAME set under params:, the block added when there is none -> the old value."""
+    if not PARAM_RE.match(name):
+        raise TuneError("a param is NAME: capitals, digits, underscores")
+    block = next((i for i, line in enumerate(lines) if line.strip() == "params:"), None)
+    if block is None:
+        block = _header_end(lines)
+        lines.insert(block, "params:")
+    i = block + 1
+    while i < len(lines) and lines[i][:1] in (" ", "\t"):
+        if lines[i].strip().split(":")[0] == name:
+            old = lines[i].split(":", 1)[1].strip()
+            lines[i] = "  %s: %s" % (name, _format(value))
+            return old
+        i += 1
+    lines.insert(i, "  %s: %s" % (name, _format(value)))
+    return None
+
+
+def _set_scalar(lines: list[str], field: str, value: object) -> str | None:
+    """A flat field set in place, or added above params: -> the old value."""
+    for i, line in enumerate(lines):
+        if line[:1] not in (" ", "\t") and line.split(":")[0].strip() == field:
+            old = line.split(":", 1)[1].strip()
+            lines[i] = "%s: %s" % (field, _format(value))
+            return old
+    at = next((i for i, line in enumerate(lines) if line.strip() == "params:"),
+              _header_end(lines))
+    lines.insert(at, "%s: %s" % (field, _format(value)))
+    return None
+
+
+def edit_frontmatter(text: str, field: str, value: object) -> tuple[str, str | None]:
     """The file's text with one frontmatter field set -> (new text, old value)."""
     if not text.startswith("---"):
         raise TuneError("no frontmatter")
@@ -61,42 +141,16 @@ def edit_frontmatter(text, field, value):
         raise TuneError("unterminated frontmatter")
     header, rest = text[3:end], text[end:]
     lines = header.split("\n")
-    old = None
     if field.startswith("params."):
-        name = field[7:]
-        if not PARAM_RE.match(name):
-            raise TuneError("a param is NAME: capitals, digits, underscores")
-        block = next((i for i, line in enumerate(lines) if line.strip() == "params:"), None)
-        if block is None:
-            lines.insert(len(lines) - (1 if lines and not lines[-1].strip() else 0),
-                         "params:")
-            block = len(lines) - 1 if lines[-1].strip() == "params:" else len(lines) - 2
-        i = block + 1
-        while i < len(lines) and lines[i][:1] in (" ", "\t"):
-            key = lines[i].strip().split(":")[0]
-            if key == name:
-                old = lines[i].split(":", 1)[1].strip()
-                lines[i] = "  %s: %s" % (name, _format(value))
-                break
-            i += 1
-        else:
-            lines.insert(i, "  %s: %s" % (name, _format(value)))
+        old = _set_param(lines, field[7:], value)
     elif field in SCALARS:
-        for i, line in enumerate(lines):
-            if line[:1] not in (" ", "\t") and line.split(":")[0].strip() == field:
-                old = line.split(":", 1)[1].strip()
-                lines[i] = "%s: %s" % (field, _format(value))
-                break
-        else:
-            insert_at = next((i for i, line in enumerate(lines) if line.strip() == "params:"),
-                             len(lines) - (1 if lines and not lines[-1].strip() else 0))
-            lines.insert(insert_at, "%s: %s" % (field, _format(value)))
+        old = _set_scalar(lines, field, value)
     else:
         raise TuneError("field must be one of %s or params.NAME" % ", ".join(SCALARS))
     return "---" + "\n".join(lines) + rest, old
 
 
-def validate(directory, hid, new_text):
+def validate(directory: str, hid: str, new_text: str) -> list[catalog_module.Strategy]:
     """Load a copy of the catalog with this one file replaced; raise on error."""
     tmp = tempfile.mkdtemp(prefix="tune-")
     try:
@@ -112,45 +166,54 @@ def validate(directory, hid, new_text):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def _coerce(field, value):
-    """The value a field accepts, or a TuneError."""
+# --- the values a field accepts -------------------------------------------------
+
+def _number(value: object, message: str) -> float:
+    """A number, or a TuneError saying so. A bool is an int, as float() reads it."""
+    if isinstance(value, (str, int, float)):
+        try:
+            return float(value)
+        except ValueError:
+            pass
+    raise TuneError(message)
+
+
+def _coerce(field: str, value: object) -> object:
+    """The value a field accepts - a number, a boolean or a string - or a
+    TuneError. A field it does not know passes as it is: edit_frontmatter
+    refuses it."""
     if field == "weight":
-        try:
-            value = float(value)
-        except (TypeError, ValueError):
-            raise TuneError("weight must be a number") from None
-        if not WEIGHT_RANGE[0] <= value <= WEIGHT_RANGE[1]:
+        weight = _number(value, "weight must be a number")
+        if not WEIGHT_RANGE[0] <= weight <= WEIGHT_RANGE[1]:
             raise TuneError("weight must be within %g..%g" % WEIGHT_RANGE)
-    elif field.startswith("params."):
-        try:
-            value = float(value)
-        except (TypeError, ValueError):
-            raise TuneError("a param must be a number") from None
-    elif field == "soft":
-        if not isinstance(value, bool):
-            raise TuneError("soft must be true or false")
-    elif field == "kind":
-        if value not in catalog_module.KINDS:
-            raise TuneError("kind must be one of %s" % "/".join(catalog_module.KINDS))
-    elif field in ("when", "require", "bonus", "penalty", "metric", "direction", "category"):
-        if not isinstance(value, str) or len(value) > 500:
-            raise TuneError("%s is a string under 500 characters" % field)
+        return weight
+    if field.startswith("params."):
+        return _number(value, "a param must be a number")
+    if field == "soft" and not isinstance(value, bool):
+        raise TuneError("soft must be true or false")
+    if field == "kind" and value not in catalog_module.KINDS:
+        raise TuneError("kind must be one of %s" % "/".join(catalog_module.KINDS))
+    if field in TEXT_FIELDS and not (isinstance(value, str) and len(value) <= MAX_EXPRESSION):
+        raise TuneError("%s is a string under %d characters" % (field, MAX_EXPRESSION))
     return value
 
 
-def _flatten(fields):
+def _flatten(fields: Mapping[str, object] | None) -> list[tuple[str, object]]:
     """{"params": {"A": 1}, "weight": 2} -> [("params.A", 1), ("weight", 2)]."""
-    out = []
+    out: list[tuple[str, object]] = []
     for field, value in (fields or {}).items():
-        if field == "params":
-            for name, v in (value or {}).items():
-                out.append(("params." + name, v))
-        else:
+        if field != "params":
             out.append((field, value))
+        elif isinstance(value, Mapping):
+            out += [("params." + name, v) for name, v in value.items()]
+        elif value:
+            raise TuneError("params is a block of NAME: number")
     return out
 
 
-def _log(log_path, line):
+# --- the write order --------------------------------------------------------------
+
+def _log(log_path: str, line: str) -> None:
     if not os.path.exists(log_path):
         with open(log_path, "w", encoding="utf-8") as handle:
             handle.write("# Tuning log\n\nEvery change to a strategy's frontmatter,"
@@ -159,58 +222,81 @@ def _log(log_path, line):
         handle.write(line + "\n")
 
 
-def _stamp():
+def _stamp() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%MZ")
 
 
-def _where(directory):
+def _where(directory: str | None) -> tuple[str, str]:
     """The playbook in force and its log: (directory, log path)."""
     directory = directory or catalog_module.strategies_dir()
     return directory, os.path.join(directory, "tuning-log.md")
 
 
-def _document(directory, loaded):
+def _document(directory: str, loaded: list[catalog_module.Strategy]) -> None:
     """The catalog document follows the files, for the shipped playbook only."""
     if os.path.abspath(directory) == os.path.abspath(catalog_module.strategies_dir()):
         catalog_module.write_docs(loaded)
 
 
-def tune(hid, field, value, reason, directory=None, by="claude-code-session"):
-    """Apply one change -> {"id", "field", "old", "new", "line"}."""
-    directory, log_path = _where(directory)
+def _reason(reason: str, message: str) -> None:
+    """Every change is logged with why: a blank reason is refused."""
     if not reason or not reason.strip():
-        raise TuneError("a tuning change needs a reason")
+        raise TuneError(message)
+
+
+def _existing(directory: str, hid: str) -> str:
+    """The path of the strategy file hid names, or a TuneError."""
     if not catalog_module.ID_RE.fullmatch(hid or ""):
         raise TuneError("no strategy %r" % hid)          # ids are kebab: no paths here
     path = os.path.join(directory, hid + ".md")
     if not os.path.exists(path):
         raise TuneError("no strategy %r" % hid)
+    return path
+
+
+def _commit(directory: str, hid: str, text: str,
+            what: Callable[[catalog_module.Strategy], str], reason: str,
+            by: str) -> tuple[catalog_module.Strategy, str]:
+    """The one write order: the catalog loaded with the new text, the file
+    written, the docs regenerated, one line logged -> (the strategy as loaded,
+    the line). `what` words the change from the loaded strategy; it is a
+    callable because a pair's text can hold an expression's %, which a
+    %-template would misread."""
+    loaded = validate(directory, hid, text)
+    with open(os.path.join(directory, hid + ".md"), "w", encoding="utf-8") as handle:
+        handle.write(text)
+    _document(directory, loaded)
+    strategy = next(h for h in loaded if h.id == hid)
+    line = "- %s `%s` %s (%s) [%s]" % (_stamp(), hid, what(strategy),
+                                      " ".join(reason.split()), by)
+    _log(_where(directory)[1], line)
+    return strategy, line
+
+
+# --- the three changes -------------------------------------------------------------
+
+def tune(hid: str, field: str, value: object, reason: str, directory: str | None = None,
+         by: str = "claude-code-session") -> Change:
+    """Apply one change -> the field's old and new text and the log line."""
+    directory = _where(directory)[0]
+    _reason(reason, "a tuning change needs a reason")
+    path = _existing(directory, hid)
     value = _coerce(field, value)
     with open(path, encoding="utf-8") as handle:
-        text = handle.read()
-    new_text, old = edit_frontmatter(text, field, value)
-    loaded = validate(directory, hid, new_text)
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(new_text)
-    _document(directory, loaded)
-    line = "- %s `%s` %s: %s -> %s (%s) [%s]" % (
-        _stamp(), hid, field, old if old is not None else "unset", _format(value),
-        " ".join(reason.split()), by)
-    _log(log_path, line)
+        text, old = edit_frontmatter(handle.read(), field, value)
+    _, line = _commit(directory, hid, text, lambda _: "%s: %s -> %s" % (
+        field, old if old is not None else "unset", _format(value)), reason, by)
     return {"id": hid, "field": field, "old": old, "new": _format(value), "line": line}
 
 
-def complete(hid, fields, reason, directory=None, by="claude-code-session"):
+def complete(hid: str, fields: Mapping[str, object] | None, reason: str,
+             directory: str | None = None, by: str = "claude-code-session") -> Completion:
     """Set several frontmatter fields at once - what /strategy infers for a
-    draft - validated as a whole, logged as one line -> {"id", "form", "set", "line"}."""
-    directory, log_path = _where(directory)
-    if not reason or not reason.strip():
-        raise TuneError("an inferred strategy needs a reason")
-    if not catalog_module.ID_RE.fullmatch(hid or ""):
-        raise TuneError("no strategy %r" % hid)
-    path = os.path.join(directory, hid + ".md")
-    if not os.path.exists(path):
-        raise TuneError("no strategy %r" % hid)
+    draft - validated as a whole, logged as one line -> the form it took and
+    each field's text."""
+    directory = _where(directory)[0]
+    _reason(reason, "an inferred strategy needs a reason")
+    path = _existing(directory, hid)
     pairs = [(f, _coerce(f, v)) for f, v in _flatten(fields)]
     if not pairs:
         raise TuneError("nothing to set")
@@ -218,46 +304,46 @@ def complete(hid, fields, reason, directory=None, by="claude-code-session"):
         text = handle.read()
     for field, value in pairs:
         text, _ = edit_frontmatter(text, field, value)
-    loaded = validate(directory, hid, text)
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(text)
-    _document(directory, loaded)
-    form = next(h.form for h in loaded if h.id == hid)
-    line = "- %s `%s` inferred -> %s: %s (%s) [%s]" % (
-        _stamp(), hid, form, ", ".join("%s=%s" % (f, _format(v)) for f, v in pairs),
-        " ".join(reason.split()), by)
-    _log(log_path, line)
-    return {"id": hid, "form": form, "set": {f: _format(v) for f, v in pairs},
+    strategy, line = _commit(directory, hid, text, lambda s: "inferred -> %s: %s" % (
+        s.form, _pairs(pairs)), reason, by)
+    return {"id": hid, "form": strategy.form, "set": {f: _format(v) for f, v in pairs},
             "line": line}
 
 
-MAX_SENTENCES = 3          # a strategy's prose is three sentences at most
-_SENTENCE_END = re.compile(r"[.!?](?:[\"')\]`]*)(?:\s|$)")
-
-
-def sentences(body):
+def sentences(body: str) -> int:
     """How many sentences the prose holds - the title line and code spans aside."""
     text = "\n".join(line for line in (body or "").splitlines() if not line.startswith("#"))
     text = re.sub(r"`[^`]*`", "code", text)                 # `require: a == 2.` is one token
     return len(_SENTENCE_END.findall(text.strip()))
 
 
-def add(hid, name, kind, body, fields=None, reason="", directory=None,
-        by="claude-code-session", category="general"):
-    """A new strategy file from its name, kind, prose and (inferred) fields,
-    validated through the catalog before it exists -> {"id", "form", "path", "line"}."""
-    directory, log_path = _where(directory)
+def _check_new(hid: str, name: str, kind: str, body: str) -> None:
+    """What a new strategy must be before any file exists: a kebab id, a known
+    kind, a name and prose within their limits, three sentences at most."""
     if not catalog_module.ID_RE.fullmatch(hid or ""):
         raise TuneError("id must be lowercase-kebab, got %r" % hid)
     if kind not in catalog_module.KINDS:
         raise TuneError("kind must be one of %s" % "/".join(catalog_module.KINDS))
     if not (name or "").strip() or not (body or "").strip():
         raise TuneError("a strategy needs a name and its prose")
-    if len(name) > 120 or len(body) > 20000:
-        raise TuneError("a strategy is a name under 120 characters and prose under 20,000")
-    if sentences(body) > MAX_SENTENCES:
+    if len(name) > MAX_NAME or len(body) > MAX_PROSE:
+        raise TuneError("a strategy is a name under %d characters and prose under %d"
+                        % (MAX_NAME, MAX_PROSE))
+    count = sentences(body)
+    if count > MAX_SENTENCES:
         raise TuneError("a strategy's prose is at most %d sentences; this has %d"
-                        % (MAX_SENTENCES, sentences(body)))
+                        % (MAX_SENTENCES, count))
+
+
+def add(hid: str, name: str, kind: str, body: str, fields: Mapping[str, object] | None,
+        reason: str, *, directory: str | None = None, by: str = "claude-code-session",
+        category: str = "general") -> Addition:
+    """A new strategy file from its name, kind, prose and (inferred) fields,
+    validated through the catalog before it exists and logged with its reason
+    -> its form, path and log line."""
+    directory = _where(directory)[0]
+    _reason(reason, "a new strategy needs a reason")
+    _check_new(hid, name, kind, body)
     path = os.path.join(directory, hid + ".md")
     if os.path.exists(path):
         raise TuneError("%r exists; tune or infer_strategy changes it, deleting it is manual"
@@ -270,20 +356,12 @@ def add(hid, name, kind, body, fields=None, reason="", directory=None,
         name.strip(), kind, (category or "general").strip(), body)
     for field, value in pairs:
         text, _ = edit_frontmatter(text, field, value)
-    loaded = validate(directory, hid, text)
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(text)
-    _document(directory, loaded)
-    form = next(h.form for h in loaded if h.id == hid)
-    line = "- %s `%s` added as %s/%s%s (%s) [%s]" % (
-        _stamp(), hid, kind, form,
-        ": " + ", ".join("%s=%s" % (f, _format(v)) for f, v in pairs) if pairs else "",
-        " ".join((reason or "added").split()), by)
-    _log(log_path, line)
-    return {"id": hid, "form": form, "path": path, "line": line}
+    strategy, line = _commit(directory, hid, text, lambda s: "added as %s/%s%s" % (
+        kind, s.form, ": " + _pairs(pairs) if pairs else ""), reason, by)
+    return {"id": hid, "form": strategy.form, "path": path, "line": line}
 
 
-def log_tail(n=20, log_path=None):
+def log_tail(n: int = 20, log_path: str | None = None) -> list[str]:
     """The last n lines of the log beside the playbook in force."""
     log_path = log_path or _where(None)[1]
     if not os.path.exists(log_path):

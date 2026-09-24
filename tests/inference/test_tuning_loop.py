@@ -30,9 +30,9 @@ def test_a_strategy_is_three_sentences_at_most(catalog_copy):
     assert tune.sentences("One (as noted). Two \"quoted.\" Three.") == 3
     with pytest.raises(tune.TuneError, match="at most 3 sentences"):
         tune.add("four-sentences", "Four sentences", "assumption",
-                 "One. Two. Three. Four.", directory=catalog_copy)
+                 "One. Two. Three. Four.", None, "test", directory=catalog_copy)
     added = tune.add("three-sentences", "Three sentences", "assumption",
-                     "One. Two. Three.", directory=catalog_copy)
+                     "One. Two. Three.", None, "test", directory=catalog_copy)
     assert added["form"] == "assumption"
     for h in catalog.load():
         assert tune.sentences(h.body) <= tune.MAX_SENTENCES, h.id
@@ -125,6 +125,9 @@ def test_add_stores_a_validated_strategy_and_complete_finishes_a_draft(catalog_c
     cat = catalog.load(catalog_copy)
     assert next(h for h in cat if h.id == "sustain-first").solver_reads
     # refusals leave nothing behind
+    with pytest.raises(tune.TuneError, match="reason"):
+        tune.add("no-reason", "No reason", "assumption", "x", None, "  ", directory=catalog_copy)
+    assert not os.path.exists(os.path.join(catalog_copy, "no-reason.md"))
     with pytest.raises(tune.TuneError, match="exists"):
         tune.add("sustain-first", "again", "heuristic", "x", None, "r", directory=catalog_copy)
     with pytest.raises(tune.TuneError, match="not a registered fact key"):
