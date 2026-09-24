@@ -277,7 +277,7 @@ is not data.
 
 ### `scalars.py` - a hero's numbers
 
-`derive(hero)` derives the hero's numbers from weapons, abilities and
+`derive_scalars(hero)` derives the hero's numbers from weapons, abilities and
 passives; ultimates add tools only, perks nothing. It runs one step per
 section, in order, each setting its own fields on the hero: the body
 (pool, keywords, a form's armor, cooldowns); dps, the held weapon

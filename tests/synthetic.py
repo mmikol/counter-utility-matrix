@@ -22,7 +22,7 @@ in each.
 world() fills the World the way tables.load's reads do, sets heal_bench,
 hps_bench and ult_cap as inputs, then runs what load runs after its reads,
 in its order: derive_rates, best_maps, the terrain, the stages' terrain, the
-styles and the ultimate cap. scalars.derive does not run: there are no kit
+styles and the ultimate cap. derive_scalars does not run: there are no kit
 rows, so a hero's kit numbers are given whole.
 """
 

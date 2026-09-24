@@ -1,7 +1,7 @@
 """A hero's derived numbers from ui/facts/scalars.py, section by section:
 each test builds a hero's kit by hand, in the shape the load reads it, runs
-scalars.derive and reads the fields it sets. The kit reader's own wording
-rules are tests/ui/test_kit.py's. No database."""
+scalars.derive_scalars and reads the fields it sets. The kit reader's own
+wording rules are tests/ui/test_kit.py's. No database."""
 
 import pytest
 
@@ -34,7 +34,7 @@ def _gun(name, weapon_type, *stats, slot="primary_fire", keywords=""):
 def _hero(role="damage", *, weapons=(), abilities=(), **fields):
     hero = Hero(id=1, name="Test", role=role, subrole="Flanker", weapons=list(weapons),
                 abilities=list(abilities), **fields)
-    scalars.derive(hero)
+    scalars.derive_scalars(hero)
     return hero
 
 

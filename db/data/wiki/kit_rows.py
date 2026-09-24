@@ -128,7 +128,7 @@ def _entry(fields: Mapping[str, str], name: str, mode: str | None) -> KitEntry:
     )
 
 
-def parse_rows(rows: Iterable[Mapping[str, str]]) -> dict[str, HeroKit]:
+def parse_kits(rows: Iterable[Mapping[str, str]]) -> dict[str, HeroKit]:
     """Cargo rows -> {hero_name: HeroKit(weapons, abilities, perks)}."""
     heroes: dict[str, HeroKit] = {}
     for row in rows:

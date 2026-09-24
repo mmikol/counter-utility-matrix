@@ -32,7 +32,7 @@ from ui.facts.records import (
     StyleScore,
     Synergy,
 )
-from ui.facts.scalars import derive
+from ui.facts.scalars import derive_scalars
 
 type Connection = psycopg.Connection[TupleRow]
 
@@ -379,7 +379,7 @@ def _benches(w: World) -> None:
 def load(cx: Connection) -> World:
     """The whole database -> World. `cx` is an open psycopg connection; this
     module never opens one of its own. The steps run in the order each relies
-    on: the kit before scalars.derive, the rates before derive_rates,
+    on: the kit before derive_scalars, the rates before derive_rates,
     best_maps and map_styles, the terrain before map_styles, and the benches
     over the derived roster."""
     w = World()
@@ -395,6 +395,6 @@ def load(cx: Connection) -> World:
     _read_provenance(cx, w)
     map_styles(w)
     for hero in w.heroes.values():
-        derive(hero)
+        derive_scalars(hero)
     _benches(w)
     return w

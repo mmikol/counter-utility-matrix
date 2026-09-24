@@ -61,7 +61,7 @@ class Hero:
     map_rates: dict[int, MapRate] = field(default_factory=dict)
     map_bans: dict[int, float] = field(default_factory=dict)        # map_id -> its ban rate, if any
     best_maps: list[int] = field(default_factory=list)              # map ids, three at most
-    # What scalars.derive() reads off the kit and derive_rates() off the
+    # What derive_scalars() reads off the kit and derive_rates() off the
     # rates, at rest: the class states its whole shape here, so a hero the
     # rows never filled reads zero rather than raising, and a reader sees
     # the fields in one place.

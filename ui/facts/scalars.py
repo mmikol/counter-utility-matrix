@@ -1,11 +1,11 @@
 """A hero's derived numbers: what its kit rows add up to, set on the hero once
 per load so the metrics read fields, not rows.
 
-    scalars.derive(hero)
+    scalars.derive_scalars(hero)
 
-derive sorts the kit into its sets and runs one step per section, in order,
-each setting its own fields on the hero. The keyword families and the
-authored name lists below decide what a kit piece counts toward.
+derive_scalars sorts the kit into its sets and runs one step per section,
+in order, each setting its own fields on the hero. The keyword families and
+the authored name lists below decide what a kit piece counts toward.
 """
 
 import statistics
@@ -38,7 +38,7 @@ FORM_GATED = ("Configuration: Assault", "Pummel", "Tesla Cannon Alt Fire", *PILO
 SAVE_TOOLS = ("Immortality Field",)
 
 
-def derive(hero: Hero) -> None:
+def derive_scalars(hero: Hero) -> None:
     """The hero's numbers, from the kit rows. Three kit sets:
 
         base    weapons, abilities and passives - what the hero brings every fight

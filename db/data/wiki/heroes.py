@@ -18,7 +18,7 @@ from db import psql
 from db.data import ArticlePullSummary, fetch
 from db.data.wiki import WIKI, cargo_query, fetch_articles, kit_store
 from db.data.wiki.hero_articles import Supplement, parse_announcement, supplement_kits
-from db.data.wiki.kit_rows import parse_rows
+from db.data.wiki.kit_rows import parse_kits
 from db.data.wiki.kit_store import KitCounts
 
 CARGO_TABLE = "Abilities"
@@ -95,7 +95,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext, *,
     supplement is off, in one transaction -> every row counted, the heroes
     announced and skipped, and the articles that would not fetch."""
     rows = cargo_query(pull.session, CARGO_TABLE, CARGO_FIELDS, pull.cache_dir)
-    by_hero = parse_rows(rows)
+    by_hero = parse_kits(rows)
     pull.log("cargo rows: %d   heroes named: %d" % (len(rows), len(by_hero)))
 
     articles = Supplement({}, 0, [])
