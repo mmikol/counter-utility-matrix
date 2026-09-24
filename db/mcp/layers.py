@@ -14,8 +14,8 @@ import json
 from collections.abc import Callable, Mapping, Sequence
 from typing import TypedDict
 
-from db.mcp.registry import Context, Registry, ToolReply
-from db.mcp.server import Properties
+from db.mcp.registry import Context, Registry
+from db.mcp.schema import Properties, ToolReply
 from inference import catalog, engine, reach
 from inference.result import Result
 from ui.facts import board_facts, compute, tables

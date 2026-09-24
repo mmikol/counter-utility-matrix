@@ -9,10 +9,16 @@ one of them, the sentry's quarantine rename aside.
     python -m db.mcp list            print the tools
     python -m db.mcp call pull_maps  run one tool from the shell
 
-    server       the protocol: JSON-RPC over stdio and Streamable HTTP, the
-                 schema check every call passes, the audit line it leaves
-    registry     what a tool is, the Registry a family of tools is declared
-                 into, and the Context a call lands in
+    server       the protocol: JSON-RPC answered from a server's tools and
+                 resources, whichever transport carries it
+    stdio        the stdio transport, one message a line
+    http         the Streamable HTTP transport, and the bearer token, the
+                 caps and the rate limit a client is held to
+    schema       a tool as the protocol serves it: its arguments as JSON
+                 Schema, its reply, and the Tool that checks every call
+    audit        the audit line every call leaves, through any door
+    registry     the Registry a family of tools is declared into, and the
+                 Context a call lands in
     tools        the families joined in the order the server lists them, and
                  the Context the servers, the refresher and the board use
     pulls        pull, clean, store: the pull_* tools, load_authored, sync_all
@@ -24,8 +30,8 @@ one of them, the sentry's quarantine rename aside.
                  log, the strategy:// resources
     __main__     the command line above
 
-The protocol implementation is dependency-free (server.py) so the door has
-nothing to audit but its own few hundred lines; the surface is the standard
-one - initialize, tools/list, tools/call, resources - so any MCP client can
-drive it.
+The protocol and its transports are dependency-free (server, stdio, http,
+schema, audit), so the door has nothing to audit but its own few hundred
+lines; the surface is the standard one - initialize, tools/list,
+tools/call, resources - so any MCP client can drive it.
 """

@@ -1,7 +1,7 @@
 """The door's tools, assembled: every family's tools in one registry, in the
 order the server lists them, and the context a call lands in.
 
-    registry     what a tool is (ToolSpec, ToolReply), the Registry a family
+    registry     a tool as registered (ToolSpec), the Registry a family
                  declares its tools into, and the Context base
     pulls        pull, clean, store: list_sources, the ten pull_* tools in
                  dependency order, load_authored, sync_all
@@ -23,8 +23,8 @@ and the shell read it.
 from db.data.fetch import Log
 from db.mcp import layers, lifecycle, playbook, pulls, registry
 from db.mcp.playbook import StrategyResources
-from db.mcp.registry import NoSuchToolError, Registry, ToolReply
-from db.mcp.server import Tool
+from db.mcp.registry import NoSuchToolError, Registry
+from db.mcp.schema import Tool, ToolReply
 
 __all__ = [
     "REGISTRY", "Context", "Log", "NoSuchToolError", "StrategyResources", "build", "run_tool",

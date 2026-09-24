@@ -39,9 +39,10 @@ stderr and the call goes on. The `query` tool connects as
 statement with a timeout, and refuses SQL that reaches for files or
 servers. The whole threat model is in [security.md](security.md).
 
-`db/mcp/server.py` is dependency-free - a few hundred lines instead of
-the SDK, so the door has nothing to audit: JSON-RPC 2.0, one message per
-line over stdio, and the same surface over HTTP with a `Mcp-Session-Id`
+The protocol (`db/mcp/server.py`) and its transports are dependency-free -
+a few hundred lines instead of the SDK, so the door has nothing to audit:
+JSON-RPC 2.0, one message per line over stdio (`stdio.py`), and the same
+surface over HTTP (`http.py`) with a `Mcp-Session-Id`
 per client, the Host-and-Origin guard all three servers share
 (`db/web.py`), `GET /health` for the containers' healthchecks - the
 database's state (`db.psql.schema.state`: empty, stale, unfilled or

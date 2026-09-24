@@ -15,7 +15,9 @@ import pytest
 
 from db import ROOT, Refusal
 from db.mcp import tools
-from db.mcp.server import Server, Tool, audit
+from db.mcp.audit import audit
+from db.mcp.schema import Tool
+from db.mcp.server import Server
 from inference import catalog, tune
 
 

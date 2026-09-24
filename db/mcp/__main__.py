@@ -11,9 +11,9 @@ from collections.abc import Callable
 from typing import cast
 
 from db import Refusal, psql
-from db.mcp import tools
+from db.mcp import http, stdio, tools
 from db.mcp.lifecycle import DbStatus
-from db.mcp.server import Server, serve_http
+from db.mcp.server import Server
 
 
 def _status(ctx: tools.Context) -> Callable[[], dict[str, object]]:
@@ -60,11 +60,11 @@ def main(argv: list[str] | None = None) -> int:
     ctx = tools.Context()
     server = Server(tools.build(ctx), tools.StrategyResources())
     if not argv:
-        server.serve()
+        stdio.serve(server)
         return 0
     if argv[0] == "--http" and len(argv) >= 2:
         host, _, port = argv[1].rpartition(":")
-        serve_http(server, host or "127.0.0.1", int(port), _status(ctx),
+        http.serve(server, host or "127.0.0.1", int(port), _status(ctx),
                    allowed_hosts=argv[2:])
         return 0
     if argv[0] == "list":

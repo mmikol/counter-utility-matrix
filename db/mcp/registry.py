@@ -1,10 +1,8 @@
-"""What a tool is, the registry a family of tools is declared into, and the
-context a call lands in.
+"""The registry a family of tools is declared into, and the context a call
+lands in.
 
-    ToolReply        what every tool returns: its text, and the same as a JSON
-                     object for a structured reply
     ToolSpec         a tool as registered: its name, description, schema (a
-                     server.ToolSchema) and function, and for a pull the
+                     schema.ToolSchema) and function, and for a pull the
                      source whose cache it reads
     Registry         tools in registration order, each name once: joined()
                      assembles the families, bind() hands a server its Tools,
@@ -18,30 +16,23 @@ context a call lands in.
 Each family module - pulls, lifecycle, layers, playbook - declares its tools
 into a Registry of its own and imports no other family. tools.py joins them
 and gives the Context its registry. A tool declares its arguments in
-server.py's JSON Schema vocabulary (Properties), the one the server checks
-every call against.
+schema.py's JSON Schema vocabulary (Properties), the one every call is
+checked against, and answers a schema.ToolReply.
 """
 
 import functools
 import os
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import ClassVar, NamedTuple
+from typing import ClassVar
 
 import psycopg
 
 from db import CACHE_DIRS, ROOT, embed, psql
 from db.data import fetch
 from db.data.fetch import Log
-from db.mcp.server import Properties, Property, Tool, ToolSchema, audited
-
-
-class ToolReply(NamedTuple):
-    """What a tool returns: its text, and the same as a JSON object for a
-    structured reply."""
-    text: str
-    data: Mapping[str, object]
-
+from db.mcp.audit import audited
+from db.mcp.schema import Properties, Property, Tool, ToolReply, ToolSchema
 
 # A tool's function: its context first, its arguments by name.
 type ToolFn = Callable[..., ToolReply]

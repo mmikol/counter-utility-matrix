@@ -84,10 +84,10 @@ def test_an_audit_line_whose_client_is_not_a_name_is_malformed(tmp_path):
 
 def test_the_sentry_reads_the_log_the_door_writes(tmp_path, monkeypatch):
     # one definition of the path, the door's, read when each of them runs
-    from db.mcp import server
+    from db.mcp import audit
     monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
     now = datetime.now(UTC).isoformat(timespec="seconds")
-    server.audit({"t": now, "client": "http:a", "tool": "facts", "ok": True})
+    audit.audit({"t": now, "client": "http:a", "tool": "facts", "ok": True})
     assert sentry.check_door().recent == 1
 
 

@@ -82,7 +82,7 @@ or the user points at, and leave a report.
 
 6. **Security posture.** `docs/security.md` lists the measures; check
    that what it describes is still what the code does (the allowlist in
-   `orchestrator.py`, the guards in `db/mcp/server.py`, the `query` tool,
+   `orchestrator.py`, the guards in `db/mcp/http.py`, the `query` tool,
    the sentry's patterns, the compose hardening). `python -m db.sentry
    --once` must exit 0 on a clean tree.
 

@@ -18,7 +18,8 @@ import pytest
 
 from db import ROOT
 from db.mcp import tools
-from db.mcp.server import HttpServer, Server
+from db.mcp.http import HttpServer
+from db.mcp.server import Server
 
 
 @pytest.fixture(scope="module")

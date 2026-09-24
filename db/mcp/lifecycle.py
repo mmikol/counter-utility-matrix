@@ -20,7 +20,8 @@ import psycopg
 from psycopg.sql import SQL
 
 from db import ROOT, Refusal, psql
-from db.mcp.registry import REFRESH, Context, Registry, ToolReply
+from db.mcp.registry import REFRESH, Context, Registry
+from db.mcp.schema import ToolReply
 from db.psql import schema
 from inference import catalog
 

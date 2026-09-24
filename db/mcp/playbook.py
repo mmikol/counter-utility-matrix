@@ -11,8 +11,9 @@ half of the write, and the one step this module adds.
 import os
 
 from db import ROOT
-from db.mcp.registry import Context, Registry, ToolReply
-from db.mcp.server import Properties, Resource, ResourceText
+from db.mcp.registry import Context, Registry
+from db.mcp.schema import Properties, ToolReply
+from db.mcp.server import Resource, ResourceText
 from inference import catalog, derive, tune
 
 TOOLS = Registry()

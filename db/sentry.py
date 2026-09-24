@@ -43,7 +43,8 @@ import psycopg
 from psycopg.sql import SQL
 
 from db import RAW_DIR, psql
-from db.mcp import server  # one definition: the door's own
+from db.mcp.audit import default_audit_path  # the door's own, one definition
+from db.mcp.http import RATE_LIMIT  # the door's own, one definition
 from inference import catalog as catalog_module
 
 EVERY = 30.0                 # seconds between passes; COUNTRIX_SENTRY_EVERY, read by main()
@@ -58,7 +59,7 @@ QUARANTINE = ".quarantined"
 @dataclass(frozen=True)
 class Watch:
     """Where one pass looks and reports. No directory is the playbook in force,
-    no audit path the door's own log (server.default_audit_path()) and no DSN
+    no audit path the door's own log (default_audit_path()) and no DSN
     default_dsn(), each resolved on every pass."""
     directory: str | None = None
     audit_path: str | None = None
@@ -227,7 +228,7 @@ def check_door(audit_path: str | None = None, offset: int = 0) -> DoorTally:
     """Read the audit log from `offset` -> the tally. A line that is not an
     audit entry counts once, in the read that first passes it; a last line
     without its newline is still being written and waits for the next read."""
-    audit_path = audit_path or server.default_audit_path()
+    audit_path = audit_path or default_audit_path()
     if not os.path.exists(audit_path):
         return DoorTally()
     now = time.time()
@@ -264,7 +265,7 @@ def check_door(audit_path: str | None = None, offset: int = 0) -> DoorTally:
             per_client[client] = per_client.get(client, 0) + 1
             refused += bool(entry.get("refused"))
             crashed += bool(entry.get("crashed"))
-    hot = [c for c, n in per_client.items() if n >= server.RATE_LIMIT]
+    hot = [c for c, n in per_client.items() if n >= RATE_LIMIT]
     return DoorTally(offset=end, recent=recent, refused=refused, crashed=crashed, hot=hot,
                      malformed=malformed)
 
