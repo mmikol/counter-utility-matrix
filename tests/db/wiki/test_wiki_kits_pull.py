@@ -7,7 +7,7 @@ transaction and counts what it read. No database, no network."""
 import datetime
 
 from db.data import fetch
-from db.data.wiki import heroes
+from db.data.wiki import Articles, heroes
 from db.data.wiki.hero_articles import HeroProfile, Supplement
 from tests.db.recording import RecordingConnection, RecordingCursor
 
@@ -40,10 +40,10 @@ def test_an_announced_hero_is_stored_from_its_article_and_the_rest_are_reported(
 
     def articles(session, titles, cache_dir, log):
         asked.append(list(titles))
-        return ({"All heroes": "An overview of every hero.",
-                 "Doctrine": ARTICLE % ("Doctrine", "Survivor", "Doctrine"),
-                 "Oddity": ARTICLE % ("Oddity", "Warden", "Oddity")},
-                ["Wraith: failed after 1 attempt: gone"])
+        return Articles({"All heroes": "An overview of every hero.",
+                         "Doctrine": ARTICLE % ("Doctrine", "Survivor", "Doctrine"),
+                         "Oddity": ARTICLE % ("Oddity", "Warden", "Oddity")},
+                        ["Wraith: failed after 1 attempt: gone"])
     monkeypatch.setattr(heroes, "fetch_articles", articles)
     lines = []
     cursor = RecordingCursor(reads=[("SELECT s.subrole_id, r.role_id", _subrole)])
@@ -80,7 +80,7 @@ def test_the_pull_stores_every_kit_in_one_transaction_and_counts_what_it_read(mo
     both kits are stored; the overview page is skipped by name. The articles
     add Anvil's pools and three stats, and Kite's would not fetch."""
     def articles(session, titles, cache_dir, log):
-        return {"Doctrine": ARTICLE % ("Doctrine", "Survivor", "Doctrine")}, []
+        return Articles({"Doctrine": ARTICLE % ("Doctrine", "Survivor", "Doctrine")}, [])
 
     def supplement(session, by_hero, cache_dir, log):
         assert sorted(by_hero) == ["All heroes", "Anvil", "Doctrine"]
@@ -112,7 +112,7 @@ def test_the_pull_without_the_articles_reads_the_cargo_table_alone(monkeypatch):
     def refused(*args):
         raise AssertionError("supplement is off: no article is read for the kits")
     monkeypatch.setattr(heroes, "cargo_query", lambda session, table, fields, cache_dir: ROWS)
-    monkeypatch.setattr(heroes, "fetch_articles", lambda *args: ({}, ["Doctrine: gone"]))
+    monkeypatch.setattr(heroes, "fetch_articles", lambda *args: Articles({}, ["Doctrine: gone"]))
     monkeypatch.setattr(heroes, "supplement_kits", refused)
     connection = RecordingConnection(reads=[
         ('SELECT "name", "hero_id" FROM "heroes"', [("Anvil", 1)])])
