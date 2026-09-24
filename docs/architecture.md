@@ -31,7 +31,7 @@ Code on your subscription, before a game, never during one.
 | `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain` | [skills.md](skills.md) |
 | `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
 | `scripts/` | the recorders of the proven fixtures, run from the repo root as modules. `optimal` (`python -m scripts.optimal`) records the true maximum of proven boards into `tests/fixtures/optimal.json`, which `tests/inference/test_optimal.py` re-solves on every run - the regression gate on the search. It reads the brute force's `.jsonl` output from the paths in `OPTIMAL_SOURCES`, which live outside the repo. `reach` (`python -m scripts.reach`) records a board per released hero into `tests/fixtures/reach.json`. Each fixture records the digest of the playbook it was proved under. The gate skips while the shipped playbook scores nothing, fails with "recorded under a different playbook" under any other playbook that scores, and holds out banned boards (`OPTIMAL_STALE_BANNED`) until the backlog's re-prove lands. Run after a deliberate change to the objective, and say in the commit why every number moved | |
-| `.github/workflows/` | `ci.yml`: lint and the tests that need no built database, held to 70% coverage, on pushes to `main` and on pull requests | |
+| `.github/workflows/` | `ci.yml`: lint and the tests that need no built database, held to 77% coverage, on pushes to `main` and on pull requests | |
 | `.cache-blizzard/` `.cache-wiki/` | the page caches (gitignored): every build after the first costs almost no requests | |
 
 How they fit:

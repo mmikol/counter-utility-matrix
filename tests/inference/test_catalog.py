@@ -1,6 +1,7 @@
-"""The catalog's guards: what a strategy file may be named, how the
-playbook in force is chosen, how the catalog reads as text, and the files
-a playbook reads and fingerprints."""
+"""The catalog: what a strategy file may be named, how the playbook in force
+is chosen, how the catalog reads as text, the files a playbook reads and
+fingerprints, the frontmatter and the forms a strategy takes, and the
+weights one board overrides."""
 
 import os
 import shutil
@@ -9,8 +10,10 @@ from pathlib import Path
 
 import pytest
 
+from db import Refusal
 from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
+from ui.facts import compute
 
 
 def _fights(strategies: Iterable[catalog.Strategy]) -> list[str]:
@@ -85,7 +88,7 @@ def test_the_docs_word_every_form_the_reference_playbook_holds(tmp_path, monkeyp
     assert catalog.write_docs(catalog.load(FIXTURE_PLAYBOOK), path=str(path)) == str(path)
     text = path.read_text(encoding="utf-8")
     assert "##### At most two tanks (`open-queue-tanks`, shape, limit)\n\n" \
-           "`require team.tanks <= 2` (hard)\n" in text
+        "`require team.tanks <= 2` (hard)\n" in text
     assert "`require team.hitscan >= 1` (soft, penalty `2.5`); when `enemy.flyers >= 1`" in text
     assert "weight 1; penalty `max(0, team.squish_count - 4) * 1.0`" in text
     assert "`maximize team.pool_total` - " in text and "\n# At most two tanks" not in text
@@ -145,3 +148,100 @@ def test_a_folder_that_is_not_there_holds_no_playbook(tmp_path):
         catalog.strategy_files(str(tmp_path / "gone"))
     with pytest.raises(catalog.CatalogError, match="no strategies directory"):
         catalog.playbook_digest(str(tmp_path / "gone"))
+
+
+def test_frontmatter_parses_scalars_lists_and_params():
+    meta, body = catalog.parse_frontmatter(
+        "---\nname: X\nweight: 2.5\nsoft: true\ntags: [a, b]\nn: -4\nf: 1e3\nw: word\nz: ~\n"
+        "params:\n  K: 3\n---\n# X\nbody\n")
+    assert meta == {"name": "X", "weight": 2.5, "soft": True, "tags": ["a", "b"], "n": -4,
+                    "f": 1000.0, "w": "word", "z": None, "params": {"K": 3}}
+    assert type(meta["n"]) is int and type(meta["f"]) is float
+    assert body == "# X\nbody"
+
+
+def test_the_reference_and_the_live_playbooks_are_valid_and_reference_real_metrics():
+    live = catalog.load()                       # the user's playbook: whatever it holds today
+    assert live and {h.kind for h in live} <= set(catalog.KINDS)
+    assert all(h.metric in compute.registry() for h in live if h.kind == "heuristic")
+    cat = catalog.load(FIXTURE_PLAYBOOK)        # the reference: every kind and every form
+    kinds = {h.kind for h in cat}
+    assert kinds == set(catalog.KINDS) == {"constraint", "heuristic", "assumption"}
+    forms = {h.form for h in cat}
+    assert forms == {"limit", "scored", "heuristic", "assumption"}
+    assert all(h.form == "heuristic" for h in cat if h.kind == "heuristic")
+    assert all(
+        h.form == "assumption" and not h.solver_reads for h in cat if h.kind == "assumption")
+    assert {h.id for h in cat if h.kind == "assumption"} >= {"optimal-play", "vintage", "objective"}
+    registry = compute.registry()
+    for h in cat:
+        if h.kind == "heuristic":
+            assert h.metric in registry and h.metric not in compute.TEXT_METRICS
+        for e in (h.when, h.require, h.bonus, h.penalty):
+            for name in (e.names if e else []):
+                assert name in registry or name[7:] in h.params, (h.id, name)
+    assert any(h.id == "open-queue-tanks" for h in cat)
+
+
+def test_catalog_rejects_a_goal_on_an_unknown_metric(tmp_path):
+    (tmp_path / "bad.md").write_text(
+        "---\nname: bad\nkind: heuristic\ndirection: maximize\nmetric: team.nope\n---\nx\n",
+        "utf-8")
+    with pytest.raises(catalog.CatalogError, match="not a registered fact key"):
+        catalog.load(str(tmp_path))
+    (tmp_path / "bad.md").write_text(
+        "---\nname: bad\nkind: constraint\nwhen: team.tanks > params.T\nbonus: 1\n---\nx\n",
+        "utf-8")
+    with pytest.raises(catalog.CatalogError, match="params"):
+        catalog.load(str(tmp_path))
+
+
+def test_a_constraint_is_a_limit_or_scored_and_an_assumption_is_prose(tmp_path):
+    def load_one(text):
+        (tmp_path / "x.md").write_text(text, encoding="utf-8")
+        return catalog.load(str(tmp_path))[0]
+    limit = load_one("---\nname: l\nkind: constraint\nrequire: team.tanks <= 2\n---\nx\n")
+    assert limit.form == "limit"
+    assert load_one("---\nname: s\nkind: constraint\nbonus: team.tanks\n---\nx\n").form == "scored"
+    assert load_one("---\nname: p\nkind: assumption\n---\nx\n").form == "assumption"
+    # awaiting /strategy
+    assert load_one("---\nname: d\nkind: constraint\n---\nx\n").form == "draft"
+    assert load_one("---\nname: d\nkind: heuristic\n---\nx\n").pending
+    assert not load_one("---\nname: p\nkind: assumption\n---\nx\n").pending
+    assert load_one("---\nname: g\nkind: heuristic\ndirection: maximize\nmetric: team.tanks\n"
+                    "---\nx\n").form == "heuristic"
+    for bad in ("---\nname: b\nkind: constraint\nrequire: team.tanks <= 2\nbonus: 1\n---\nx\n",
+                "---\nname: b\nkind: constraint\nmetric: team.tanks\n---\nx\n",
+                "---\nname: b\nkind: heuristic\ndirection: maximize\nmetric: team.tanks\n"
+                "require: team.tanks <= 2\n---\nx\n",
+                "---\nname: b\nkind: constraint\nrequire: team.tanks <= 2\nsoft: true\n---\nx\n",
+                "---\nname: b\nkind: rule\nrequire: team.tanks <= 2\n---\nx\n",
+                "---\nname: b\nkind: assumption\nrequire: team.tanks <= 2\n---\nx\n",
+                "---\nname: b\nkind: goal\ndirection: maximize\nmetric: team.tanks\n---\nx\n",
+                "---\nname: b\nkind: strategy\n---\nx\n"):
+        with pytest.raises(catalog.CatalogError):
+            load_one(bad)
+
+
+def test_weights_override_a_heuristic_for_one_board_and_never_the_file():
+    """The playbook tab's sliders: `id:value` strings or a mapping become
+    weights clamped to the file's range; the catalog's heuristic carries the
+    override in a copy, the loaded one and its file are untouched, and a
+    constraint or an unknown id is ignored."""
+    parsed = catalog.parse_weights(["a:2", "b:11", "c:-1"])
+    assert parsed == {"a": 2.0, "b": 10.0, "c": 0.0}
+    assert catalog.parse_weights({"a": "3.5"}) == {"a": 3.5}
+    # a malformed weight is refused, never dropped
+    for malformed, said in ((["nonsense"], "id:value"), (["d:x"], "not a number"),
+                            ({"e": None}, "not a number")):
+        with pytest.raises(Refusal, match=said):
+            catalog.parse_weights(malformed)
+    cat = catalog.load(FIXTURE_PLAYBOOK)
+    heuristic = next(h for h in cat if h.kind == "heuristic")
+    limit = next(h for h in cat if h.form == "limit")
+    before = heuristic.weight
+    over = catalog.weighted(cat, {heuristic.id: 7.5, limit.id: 9, "no-such": 1})
+    assert next(h for h in over if h.id == heuristic.id).weight == 7.5
+    assert heuristic.weight == before                        # the loaded one is untouched
+    assert next(h for h in over if h.id == limit.id) is limit  # a constraint's stays its own
+    assert catalog.weighted(cat, {}) is cat and len(over) == len(cat)

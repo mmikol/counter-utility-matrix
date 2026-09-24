@@ -172,6 +172,15 @@ def test_names_resolve_across_spellings(world):
         world.resolve("Atlantis", [], [])
 
 
+def test_one_hero_cannot_hold_two_seats(world):
+    """A six with a hero twice is a five, and team_metrics would count it
+    twice; a hero may play for both teams."""
+    for red, blue, bans in ((["Zarya", "Zarya"], [], []), ([], ["Ana", "Ana"], []),
+                            ([], [], ["Sombra", "Sombra"])):
+        with pytest.raises(Refusal, match="same hero twice"):
+            world.resolve("King's Row", red, blue, bans)
+    world.resolve("King's Row", ["Zarya"], ["Zarya"], [])
+
 def test_terrain_metrics_are_z_scores_across_the_maps_with_text(world, rows):
     features = model.TERRAIN_FEATURES
     assert set(features) == {f for (f,) in rows("select distinct feature from map_terrain")}

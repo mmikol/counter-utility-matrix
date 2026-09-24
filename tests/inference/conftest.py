@@ -1,5 +1,7 @@
-"""The inference tests' shared fixture: a private copy of the reference
-playbook, for the tests that write to one."""
+"""The inference tests' shared fixtures: a private copy of the reference
+playbook, for the tests that write to one; a two-file scratch playbook that
+scores every seat of a board on the synthetic World; and the King's Row
+board the engine and plan tests read."""
 
 import os
 import shutil
@@ -8,6 +10,7 @@ import pytest
 
 from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
+from ui.facts.draft import Draft
 
 
 @pytest.fixture()
@@ -16,3 +19,22 @@ def catalog_copy(tmp_path):
     for name in catalog.strategy_files(FIXTURE_PLAYBOOK):
         shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
     return str(tmp_path)
+
+
+@pytest.fixture()
+def scratch_playbook(tmp_path):
+    """The reference playbook's two-tank limit and its one heuristic on
+    team.win_mean, loaded: enough for every seat of a board to score."""
+    for name in ("open-queue-tanks.md", "meta-strength.md"):
+        shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
+    return catalog.load(str(tmp_path))
+
+
+@pytest.fixture(scope="module")
+def kings_row_board(world):
+    """The board the tests read most - King's Row, Zarya and Pharah revealed, Ana and
+    Reinhardt locked, the reference playbook - solved once per module (a caller's
+    catalog keeps the solve in one process)."""
+    from inference import engine
+    return engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt")),
+                        catalog=catalog.load(FIXTURE_PLAYBOOK))
