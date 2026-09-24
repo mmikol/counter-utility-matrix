@@ -30,7 +30,7 @@ from inference.scale import Tally, reference_bounds, reference_standing
 from inference.scoring import Bounds, Candidate, Contribution, legal_shapes
 from inference.solver import Solved, Solver, Swept, evaluate_comp
 from ui.facts import board_facts, compute
-from ui.facts.draft import TEAM_SIZE, Draft, check_tanks, is_sided, opposite
+from ui.facts.draft import TEAM_SIZE, Draft, check_tanks, check_team_size, is_sided, opposite
 from ui.facts.factset import Fact, FactSet
 from ui.facts.model import ROLES, Hero, Map, World
 from ui.facts.team import team_metrics, text
@@ -341,8 +341,7 @@ def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
     catalog = catalog or catalog_module.load()
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
-    if len(blue_h) > TEAM_SIZE:
-        raise Refusal("more than %d %s picks" % (TEAM_SIZE, seat))
+    check_team_size(blue_h, seat)
     check_tanks(blue_h, seat)
     result = Result("infer", m.name if m else None, [h.name for h in red_h], [],
                     [h.name for h in blue_h], catalog, [h.name for h in bans_h], side, seat)
@@ -1110,7 +1109,7 @@ def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
         plan         the game plan in prose, from the same facts
         shapes       the (tanks, damage, supports) triples the queue and the
                      playbook's shape limits allow - what the roster enforces
-                     as you pick; a team past the queue's two tanks is refused
+                     as you pick; a team past six picks or two tanks is refused
         expected     red's likely six from the data alone - a two-two-two from
                      the map's pick rates and the wiki's synergies, past the
                      bans - static for the board, no strategy read; what the
@@ -1125,8 +1124,9 @@ def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
     catalog = catalog_module.weighted(catalog or catalog_module.load(), weights)
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
-    check_tanks(red_h, "red")
-    check_tanks(blue_h, "blue")
+    for team, seat in ((red_h, "red"), (blue_h, "blue")):
+        check_team_size(team, seat)
+        check_tanks(team, seat)
     # red's likely six - the map and the meta alone, past the bans - is static
     # for the board; until red reveals a pick it is what blue's seat counters.
     # A Result like every other seat: its picks carry the reason each rests on

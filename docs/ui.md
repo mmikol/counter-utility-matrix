@@ -256,15 +256,18 @@ metrics read fields, not SQL. The ultimate's raw damage waits for
 ### `draft.py` - the board's vocabulary
 
 The names every layer spells a board with: `TEAM_SIZE` (six, 6v6 Open
-Queue), `MAX_BANS` (five), `EXPECTED_SHAPE` (two per role), `SIDED_MODES`
-(Escort, Hybrid), `SIDES`, `is_sided` and `opposite`. `Draft` is the
+Queue), `MAX_TANKS` (two, the queue's own limit, whatever the playbook
+holds), `MAX_BANS` (five), `EXPECTED_SHAPE` (two per role), `SIDED_MODES`
+(Escort, Hybrid), `SIDES`, `is_sided` and `opposite`; `check_team_size`
+and `check_tanks` refuse a team past the first two. `Draft` is the
 board at one stage of the pick-and-ban draft - the map, red's and blue's
 picks, the bans and blue's side, in that order, each list a tuple. A
 playbook draft is another thing: a strategy that awaits its frontmatter.
-`parse_board(query)` reads a Draft off a parsed query string and
-`board_query(draft)` writes one back, so this board and the inference
-service spell a board the same way. The module imports only the model,
-so the metrics can take its names without a cycle.
+`parse_board(query)` reads a Draft off a parsed query string, cutting the
+bans to five and refusing a team of seven, and `board_query(draft)`
+writes one back, so this board and the inference service spell a board
+the same way. The module imports only the model and `db.Refusal`, so the
+metrics can take its names without a cycle.
 
 ### `team.py` - the team metrics
 

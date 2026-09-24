@@ -5,7 +5,7 @@ and write one with. A leaf: it imports only the model and db's Refusal, so
 every other module in the package can take these names from it.
 """
 
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence, Sized
 from typing import NamedTuple
 
 from db import Refusal
@@ -17,6 +17,12 @@ MAX_BANS = 5              # each team's two and the lobby's
 SIDED_MODES = ("Escort", "Hybrid")   # modes with an attacking and a defending side
 SIDES = ("attack", "defense")
 EXPECTED_SHAPE = {"tank": 2, "damage": 2, "support": 2}   # what a lobby fields: two of each
+
+
+def check_team_size(picks: Sized, seat: str) -> None:
+    """Refuse a team of more picks than a lobby seats."""
+    if len(picks) > TEAM_SIZE:
+        raise Refusal("more than %d %s picks" % (TEAM_SIZE, seat))
 
 
 def check_tanks(heroes: Iterable[Hero], seat: str) -> None:
@@ -45,11 +51,15 @@ class Draft(NamedTuple):
 # makes an equal-looking Draft compare unequal.
 
 def parse_board(query: Mapping[str, Sequence[str]]) -> Draft:
-    """The board a parsed query names, its bans cut to MAX_BANS."""
+    """The board a parsed query names, its bans cut to MAX_BANS. A team of
+    more than TEAM_SIZE picks is refused, not cut: no lobby seats it, and a
+    cut would answer a board the caller did not send."""
     maps, sides = query.get("map"), query.get("side")
-    return Draft(map_name=(maps[0] or None) if maps else None,
-                 red=tuple(x for x in query.get("red", ()) if x),
-                 blue=tuple(x for x in query.get("blue", ()) if x),
+    red = tuple(x for x in query.get("red", ()) if x)
+    blue = tuple(x for x in query.get("blue", ()) if x)
+    check_team_size(red, "red")
+    check_team_size(blue, "blue")
+    return Draft(map_name=(maps[0] or None) if maps else None, red=red, blue=blue,
                  bans=tuple(x for x in query.get("bans", ()) if x)[:MAX_BANS],
                  side=sides[0] if sides else "")
 

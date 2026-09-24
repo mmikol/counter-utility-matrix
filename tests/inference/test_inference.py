@@ -580,6 +580,20 @@ def test_the_queue_caps_tanks_at_two_whatever_the_playbook_holds(world):
 
 
 @pytest.mark.invariant
+def test_the_board_refuses_a_team_of_seven(world):
+    """engine.board is what every door reaches, the MCP tool with no wire to
+    parse among them: a seventh pick on either team is refused before any
+    search, where it used to be scored as a seven-hero comp."""
+    from inference import engine
+    fix = catalog.load(FIXTURE_PLAYBOOK)
+    seven = ["Ana", "Kiriko", "Lúcio", "Tracer", "Genji", "Sojourn", "Ashe"]
+    with pytest.raises(Refusal, match="more than 6 red picks"):
+        engine.board(world, "King's Row", seven, [], catalog=fix)
+    with pytest.raises(Refusal, match="more than 6 blue picks"):
+        engine.board(world, "King's Row", [], seven, catalog=fix)
+
+
+@pytest.mark.invariant
 def test_blue_counters_the_likely_six_until_red_reveals_a_pick(world, monkeypatch):
     """With no red pick the board solves blue against red's likely six, so the
     opening suggestion is a counter to what the map and the meta say red
