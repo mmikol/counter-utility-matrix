@@ -71,9 +71,9 @@ def handle_evaluate(cx: psycopg.Connection, query: Query) -> Answer:
 def handle_board(cx: psycopg.Connection, query: Query) -> Answer:
     """Both seats and the current comp - what the board's two displays show."""
     map_name, red, blue, bans, side = parse_board(query)
-    weights = catalog_module.parse_weights(query.get("weights", []))
     world = tables.load(cx)
     try:
+        weights = catalog_module.parse_weights(query.get("weights", []))
         pool, _ = engine.clamp_search(_first(query, "pool"))
         b = engine.board(world, map_name, red, blue, bans, side, pool_size=pool,
                          weights=weights)

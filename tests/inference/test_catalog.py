@@ -41,6 +41,23 @@ def test_a_filename_that_is_not_lowercase_kebab_is_refused_before_the_folder_cou
         catalog.load(str(tmp_path))
 
 
+def test_the_docs_word_every_form_the_reference_playbook_holds(tmp_path, monkeypatch):
+    """write_docs words a hard limit, a soft limit, a scored constraint and a
+    heuristic under their headings, and drops each file's title line - the
+    heading names it."""
+    monkeypatch.delenv("COUNTRIX_STRATEGIES", raising=False)
+    path = tmp_path / "inference.md"
+    path.write_text("# The doc\n\n<!-- generated:catalog -->\n<!-- /generated:catalog -->\n",
+                    encoding="utf-8")
+    assert catalog.write_docs(catalog.load(FIXTURE_PLAYBOOK), path=str(path)) == str(path)
+    text = path.read_text(encoding="utf-8")
+    assert "##### At most two tanks (`open-queue-tanks`, shape, limit)\n\n" \
+           "`require team.tanks <= 2` (hard)\n" in text
+    assert "`require team.hitscan >= 1` (soft, penalty `2.5`); when `enemy.flyers >= 1`" in text
+    assert "weight 1; penalty `max(0, team.squish_count - 4) * 1.0`" in text
+    assert "`maximize team.pool_total` - " in text and "\n# At most two tanks" not in text
+
+
 def test_the_rendered_catalog_is_one_line_per_strategy_led_by_its_kind():
     playbook = catalog.load(FIXTURE_PLAYBOOK)
     lines = catalog.catalog_rendered(playbook).split("\n")

@@ -88,9 +88,12 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
         {"forwarded": True}, 200)
     assert calls[-1] == ("/board", {"map": "Ilios", "side": "", "red": ["Zarya"],
                                     "blue": [], "bans": []}, None)
-    board.api_infer(None, {"map": ["Ilios"],
-                           "weights": ["healing-floor:9.99", "x:12", "junk"]})
-    assert calls[-1][1]["weights"] == ["healing-floor:9.99", "x:10"]  # clamped, junk dropped
+    board.api_infer(None, {"map": ["Ilios"], "weights": ["healing-floor:9.99", "x:12"]})
+    assert calls[-1][1]["weights"] == ["healing-floor:9.99", "x:10"]  # clamped
+    # a malformed weight is the caller's error, answered here and never forwarded
+    forwarded = len(calls)
+    data, code = board.api_infer(None, {"map": ["Ilios"], "weights": ["junk"]})
+    assert code == 400 and "id:value" in data["error"] and len(calls) == forwarded
     # the status rides along now: a 502 from the service is not served as a 200
     assert board.api_strategies() == ({"forwarded": True}, 200)
 
@@ -148,3 +151,5 @@ def test_board_infer_and_evaluate_are_served(served, monkeypatch, dsn):
     assert code == 200 and data["rank"] == 1
     code, data = _get(served + "/evaluate?map=Ilios&blue=Ana")
     assert code == 400 and "error" in data
+    code, data = _get(served + "/board?map=Ilios&weights=junk")    # a weight is id:value
+    assert code == 400 and "id:value" in data["error"]

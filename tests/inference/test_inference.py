@@ -44,9 +44,11 @@ def test_expression_names_are_the_full_dotted_keys():
 
 def test_frontmatter_parses_scalars_lists_and_params():
     meta, body = catalog.parse_frontmatter(
-        "---\nname: X\nweight: 2.5\nsoft: true\ntags: [a, b]\nparams:\n  K: 3\n---\n# X\nbody\n")
-    assert meta == {"name": "X", "weight": 2.5, "soft": True, "tags": ["a", "b"],
-                    "params": {"K": 3}}
+        "---\nname: X\nweight: 2.5\nsoft: true\ntags: [a, b]\nn: -4\nf: 1e3\nw: word\nz: ~\n"
+        "params:\n  K: 3\n---\n# X\nbody\n")
+    assert meta == {"name": "X", "weight": 2.5, "soft": True, "tags": ["a", "b"], "n": -4,
+                    "f": 1000.0, "w": "word", "z": None, "params": {"K": 3}}
+    assert type(meta["n"]) is int and type(meta["f"]) is float
     assert body == "# X\nbody"
 
 
@@ -367,9 +369,14 @@ def test_weights_override_a_heuristic_for_one_board_and_never_the_file():
     weights clamped to the file's range; the catalog's heuristic carries the
     override in a copy, the loaded one and its file are untouched, and a
     constraint or an unknown id is ignored."""
-    parsed = catalog.parse_weights(["a:2", "b:11", "c:-1", "nonsense", "d:x"])
+    parsed = catalog.parse_weights(["a:2", "b:11", "c:-1"])
     assert parsed == {"a": 2.0, "b": 10.0, "c": 0.0}
     assert catalog.parse_weights({"a": "3.5"}) == {"a": 3.5}
+    # a malformed weight is refused, never dropped
+    for malformed, said in ((["nonsense"], "id:value"), (["d:x"], "not a number"),
+                            ({"e": None}, "not a number")):
+        with pytest.raises(ValueError, match=said):
+            catalog.parse_weights(malformed)
     cat = catalog.load(FIXTURE_PLAYBOOK)
     heuristic = next(h for h in cat if h.kind == "heuristic")
     limit = next(h for h in cat if h.form == "limit")

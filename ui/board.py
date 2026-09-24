@@ -134,7 +134,10 @@ def api_infer(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
     `board()`. The playbook tab's sliders ride along as `weights=<id>:<0..10>`,
     one per heuristic set away from its file."""
     map_name, red, blue, bans, side = parse_board(query)
-    weights = catalog_module.parse_weights(query.get("weights", []))
+    try:
+        weights = catalog_module.parse_weights(query.get("weights", []))
+    except ValueError as error:                  # a malformed weight: never forwarded
+        return {"error": str(error)}, 400
     if INFERENCE_URL:
         forward = board_query(map_name, red, blue, bans, side)
         if weights:

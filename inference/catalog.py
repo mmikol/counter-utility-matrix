@@ -47,15 +47,16 @@ reads as params.NAME - tuning is editing the file.
 import copy
 import os
 import re
-from collections.abc import Iterable, Mapping
-from typing import TYPE_CHECKING, Any, TypedDict
+from collections.abc import Iterable, Mapping, Sequence
+from typing import NotRequired, TypedDict
+
+import psycopg
 
 from db import ROOT, embed
+from db.data.authored import AUTHORED
+from db.psql import now, register_source
 from inference.expr import Expr, ExprError, Section, compile_expr
 from ui.facts import compute
-
-if TYPE_CHECKING:
-    import psycopg
 
 SHIPPED_DIR = os.path.join(ROOT, "inference", "strategies")
 # the id is the filename, so no id may name a path (docs/security.md)
@@ -88,13 +89,28 @@ class CatalogError(ValueError):
     file: str | None = None         # the strategy file at fault, when one is
 
 
-# One frontmatter value as the dialect reads it, and a file's frontmatter:
-# whatever the file wrote, checked field by field in Strategy.
-type Scalar = str | int | float | bool | list[Scalar] | None
-Meta = dict[str, Any]
-
-
 # --- the frontmatter dialect --------------------------------------------------
+
+# one value: a string, a number, a boolean, a [list] of values, or null
+Scalar = str | int | float | bool | list["Scalar"] | None
+# a file's frontmatter: flat keys, and one level of indented mapping (params:)
+Frontmatter = dict[str, Scalar | dict[str, Scalar]]
+
+_WORDS: dict[str, bool | None] = {"true": True, "yes": True, "false": False, "no": False,
+                                  "null": None, "none": None, "~": None}
+_INTEGER = re.compile(r"[-+]?\d+(?:_\d+)*\Z")      # what int() reads
+
+
+def _number(text: str) -> int | float | str:
+    """An int where the text is one, else a float, else the text itself: a
+    bare word is a string in this dialect."""
+    if _INTEGER.match(text):
+        return int(text)
+    try:
+        return float(text)
+    except ValueError:
+        return text
+
 
 def _scalar(text: str) -> Scalar:
     text = text.strip()
@@ -106,23 +122,12 @@ def _scalar(text: str) -> Scalar:
         inner = text[1:-1].strip()
         return [_scalar(p) for p in inner.split(",")] if inner else []
     low = text.lower()
-    if low in ("true", "yes"):
-        return True
-    if low in ("false", "no"):
-        return False
-    if low in ("null", "none", "~"):
-        return None
-    try:
-        return int(text)
-    except ValueError:
-        pass
-    try:
-        return float(text)
-    except ValueError:
-        return text
+    if low in _WORDS:
+        return _WORDS[low]
+    return _number(text)
 
 
-def parse_frontmatter(text: str) -> tuple[Meta, str]:
+def parse_frontmatter(text: str) -> tuple[Frontmatter, str]:
     """'---\\nkey: value\\n---\\nbody' -> (meta, body). Flat keys plus one
     level of indented mapping (params:)."""
     if not text.startswith("---"):
@@ -131,8 +136,8 @@ def parse_frontmatter(text: str) -> tuple[Meta, str]:
     if end < 0:
         raise CatalogError("unterminated frontmatter")
     header, body = text[3:end], text[end + 4:]
-    meta: Meta = {}
-    current: str | None = None
+    meta: Frontmatter = {}
+    block: dict[str, Scalar] | None = None      # the mapping indented lines fill
     for raw in header.splitlines():
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
@@ -143,16 +148,40 @@ def parse_frontmatter(text: str) -> tuple[Meta, str]:
         key, _, value = line.partition(":")
         key = key.strip()
         if indented:
-            if current is None:
+            if block is None:
                 raise CatalogError("indented line %r under no mapping" % raw)
-            meta[current][key] = _scalar(value)
+            block[key] = _scalar(value)
         elif value.strip() == "":
-            meta[key] = {}
-            current = key
+            block = {}
+            meta[key] = block
         else:
             meta[key] = _scalar(value)
-            current = None
+            block = None
     return meta, body.strip("\n")
+
+
+def _text(value: Scalar | dict[str, Scalar]) -> str | None:
+    """A field that names something: None when unset or blank, else its text."""
+    return str(value) if value else None
+
+
+def _weight(hid: str, value: Scalar | dict[str, Scalar]) -> float:
+    """A weight: a number within 0..10, where a blank one reads 0."""
+    value = value or 0.0
+    if not isinstance(value, (int, float, str)):
+        raise CatalogError("%s: weight must be a number" % hid)
+    try:
+        weight = float(value)
+    except ValueError:
+        raise CatalogError("%s: weight must be a number" % hid) from None
+    if not 0.0 <= weight <= 10.0:
+        raise CatalogError("%s: weight must be within 0..10" % hid)
+    return weight
+
+
+def _compiled(meta: Frontmatter, key: str) -> Expr | None:
+    """The expression the frontmatter sets under key, or None."""
+    return compile_expr(str(meta[key])) if key in meta else None
 
 
 # --- the strategy --------------------------------------------------------------
@@ -180,66 +209,74 @@ class StrategyRecord(TypedDict):
 
 
 class Strategy:
-    def __init__(self, hid: str, meta: Meta, body: str, raw: str, path: str) -> None:
+    def __init__(self, hid: str, meta: Frontmatter, body: str, raw: str, path: str) -> None:
         self.id, self.body, self.raw, self.path = hid, body, raw, path
         self.name = str(meta.get("name") or hid.replace("-", " "))
         kind = meta.get("kind")
         if not isinstance(kind, str) or kind not in KINDS:
             raise CatalogError("%s: kind must be one of %s" % (hid, "/".join(KINDS)))
-        self.kind = kind
+        self.kind: str = kind
         self.category = str(meta.get("category") or "general")
-        self.direction: str | None = meta.get("direction")
-        self.metric: str | None = meta.get("metric")
-        try:
-            self.weight = float(meta.get("weight", 1.0) or 0.0)
-        except (TypeError, ValueError):
-            raise CatalogError("%s: weight must be a number" % hid) from None
-        if not 0.0 <= self.weight <= 10.0:
-            raise CatalogError("%s: weight must be within 0..10" % hid)
+        self.direction = _text(meta.get("direction"))
+        self.metric = _text(meta.get("metric"))
+        self.weight = _weight(hid, meta.get("weight", 1.0))
         self.soft = bool(meta.get("soft", False))
         # A metric that says how strongly this rule's own premise holds. It scales
         # the term through the same reference bounds the metric uses, so a rule
         # whose premise is barely true contributes barely anything. Declared, not
         # coded: nothing here knows which metric any rule names.
-        self.confidence: str | None = meta.get("confidence")
-        self.params: dict[str, Scalar] = dict((meta.get("params") or {}).items())
+        confidence = meta.get("confidence")
+        self.confidence = None if confidence is None else str(confidence)
+        params = meta.get("params") or {}
+        if not isinstance(params, dict):
+            raise CatalogError("%s: params is a block of NAME: number" % hid)
+        self.params: dict[str, Scalar] = dict(params)
         self.params_section = Section({k: 0 if v is None else v
                                        for k, v in self.params.items()})
         try:
-            self.when: Expr | None = (compile_expr(str(meta["when"]))
-                                      if "when" in meta else None)
-            self.require: Expr | None = (compile_expr(str(meta["require"]))
-                                         if "require" in meta else None)
-            self.bonus: Expr | None = (compile_expr(str(meta["bonus"]))
-                                       if "bonus" in meta else None)
-            self.penalty: Expr | None = (compile_expr(str(meta["penalty"]))
-                                         if "penalty" in meta else None)
+            self.when = _compiled(meta, "when")
+            self.require = _compiled(meta, "require")
+            self.bonus = _compiled(meta, "bonus")
+            self.penalty = _compiled(meta, "penalty")
         except ExprError as error:
             raise CatalogError("%s: %s" % (hid, error)) from error
         self._check()
 
     def _check(self) -> None:
+        """Every rule a file must keep, in order, so its first error is the one
+        reported."""
         known = compute.registry()
-        if self.kind == "heuristic" and (self.metric or self.direction):
-            if self.direction not in ("maximize", "minimize"):
-                raise CatalogError("%s: a heuristic needs direction maximize|minimize" % self.id)
-            if not self.metric or self.metric not in known:
-                raise CatalogError("%s: metric %r is not a registered fact key"
-                                   % (self.id, self.metric))
-            if self.metric in compute.TEXT_METRICS:
-                raise CatalogError("%s: metric %r is text, not a number" % (self.id, self.metric))
-        if self.confidence is not None:
-            if self.confidence not in known:
-                raise CatalogError("%s: confidence %r is not a metric"
-                                   % (self.id, self.confidence))
-            if self.confidence in compute.TEXT_METRICS:
-                raise CatalogError("%s: confidence %r is text, not a number"
-                                   % (self.id, self.confidence))
-            if self.form != "heuristic":
-                raise CatalogError("%s: only a heuristic scales by a confidence" % self.id)
-        if self.kind == "assumption" and (self.metric or self.require is not None
-                                          or self.bonus is not None or self.penalty is not None
-                                          or self.when is not None):
+        self._check_heuristic(known)
+        self._check_confidence(known)
+        self._check_kind()
+        self._check_limit()
+        self._check_names(known)
+
+    def _check_heuristic(self, known: Mapping[str, str]) -> None:
+        if self.kind != "heuristic" or not (self.metric or self.direction):
+            return
+        if self.direction not in ("maximize", "minimize"):
+            raise CatalogError("%s: a heuristic needs direction maximize|minimize" % self.id)
+        if not self.metric or self.metric not in known:
+            raise CatalogError("%s: metric %r is not a registered fact key"
+                               % (self.id, self.metric))
+        if self.metric in compute.TEXT_METRICS:
+            raise CatalogError("%s: metric %r is text, not a number" % (self.id, self.metric))
+
+    def _check_confidence(self, known: Mapping[str, str]) -> None:
+        if self.confidence is None:
+            return
+        if self.confidence not in known:
+            raise CatalogError("%s: confidence %r is not a metric" % (self.id, self.confidence))
+        if self.confidence in compute.TEXT_METRICS:
+            raise CatalogError("%s: confidence %r is text, not a number"
+                               % (self.id, self.confidence))
+        if self.form != "heuristic":
+            raise CatalogError("%s: only a heuristic scales by a confidence" % self.id)
+
+    def _check_kind(self) -> None:
+        """What each kind may not carry."""
+        if self.kind == "assumption" and (self.metric or self.expressions):
             raise CatalogError("%s: an assumption carries nothing to score" % self.id)
         if self.kind == "heuristic" and (self.require is not None or self.bonus is not None):
             raise CatalogError("%s: a heuristic weighs a metric;"
@@ -247,6 +284,9 @@ class Strategy:
                                % self.id)
         if self.kind == "constraint" and self.metric:
             raise CatalogError("%s: a constraint has no metric; that is a heuristic" % self.id)
+
+    def _check_limit(self) -> None:
+        """A limit or scored, never both; soft only on a limit, with a penalty."""
         if self.require is not None and self.bonus is not None:
             raise CatalogError("%s: a constraint is a limit (require) or scored (bonus/penalty),"
                                " not both" % self.id)
@@ -254,6 +294,9 @@ class Strategy:
             raise CatalogError("%s: a soft limit needs penalty:" % self.id)
         if self.require is None and self.soft:
             raise CatalogError("%s: soft: needs require:" % self.id)
+
+    def _check_names(self, known: Mapping[str, str]) -> None:
+        """Every name an expression reads is a registered key or a declared param."""
         for expr in (self.when, self.require, self.bonus, self.penalty):
             if expr is None:
                 continue
@@ -292,6 +335,7 @@ class Strategy:
 
     @property
     def expressions(self) -> str:
+        """Every expression the file sets, labelled: "when: ...; require: ..."."""
         parts = []
         for label, expr in (("when", self.when), ("require", self.require),
                             ("bonus", self.bonus), ("penalty", self.penalty)):
@@ -322,6 +366,33 @@ class Strategy:
                 "params": self.params, "body": self.body}
 
 
+def _read(directory: str, name: str, ids: set[str]) -> Strategy:
+    """One strategy file, validated; any failure is a CatalogError naming the
+    file."""
+    hid = name[:-3]                       # the id IS the filename; nothing overrides it
+    try:
+        if not ID_RE.fullmatch(hid):
+            raise CatalogError("%s: the filename must be lowercase-kebab" % name)
+        path = os.path.join(directory, name)
+        with open(path, encoding="utf-8") as handle:
+            raw = handle.read()
+        meta, body = parse_frontmatter(raw)
+        if "id" in meta and str(meta["id"]) != hid:
+            raise CatalogError("%s: id: is the filename; drop it" % name)
+        if hid in ids:
+            raise CatalogError("%s: duplicate id %r" % (name, hid))
+        return Strategy(hid, meta, body, raw, path)
+    except CatalogError as error:
+        text = str(error)
+        wrapped = CatalogError(text if text.startswith((name, hid)) else "%s: %s" % (name, text))
+        wrapped.file = name
+        raise wrapped from error
+    except Exception as error:            # bytes that are not text, a directory, ...
+        wrapped = CatalogError("%s: %s: %s" % (name, type(error).__name__, error))
+        wrapped.file = name
+        raise wrapped from error
+
+
 def load(directory: str | None = None) -> list[Strategy]:
     """Every strategy file, validated, ordered constraints (limits, scored) then
     heuristics, then assumptions; drafts sit last within their kind."""
@@ -333,30 +404,8 @@ def load(directory: str | None = None) -> list[Strategy]:
     for name in sorted(os.listdir(directory)):
         if not name.endswith(".md") or name in NOT_STRATEGIES:
             continue
-        path = os.path.join(directory, name)
-        hid = name[:-3]                       # the id IS the filename; nothing overrides it
-        try:
-            if not ID_RE.fullmatch(hid):
-                raise CatalogError("%s: the filename must be lowercase-kebab" % name)
-            with open(path, encoding="utf-8") as handle:
-                raw = handle.read()
-            meta, body = parse_frontmatter(raw)
-            if "id" in meta and str(meta["id"]) != hid:
-                raise CatalogError("%s: id: is the filename; drop it" % name)
-            if hid in ids:
-                raise CatalogError("%s: duplicate id %r" % (name, hid))
-            strategy = Strategy(hid, meta, body, raw, path)
-        except CatalogError as error:
-            text = str(error)
-            wrapped = CatalogError(text if text.startswith((name, hid))
-                                   else "%s: %s" % (name, text))
-            wrapped.file = name
-            raise wrapped from error
-        except Exception as error:            # bytes that are not text, a directory, ...
-            wrapped = CatalogError("%s: %s: %s" % (name, type(error).__name__, error))
-            wrapped.file = name
-            raise wrapped from error
-        ids.add(hid)
+        strategy = _read(directory, name, ids)
+        ids.add(strategy.id)
         out.append(strategy)
     if not out:
         raise CatalogError("no strategies in %s" % directory)
@@ -364,19 +413,34 @@ def load(directory: str | None = None) -> list[Strategy]:
     return out
 
 
-def parse_weights(items: Mapping[str, Any] | Iterable[object] | None) -> dict[str, float]:
+def parse_weights(items: Mapping[str, object] | Iterable[object] | None) -> dict[str, float]:
     """`id:value` strings (a query's repeated `weight` parameter) or a mapping
-    -> {id: weight}, each clamped to the file's 0..10; malformed entries are
-    dropped. What a board's sliders send."""
-    pairs = items.items() if isinstance(items, dict) else \
-        (str(x).split(":", 1) for x in (items or []) if ":" in str(x))
-    out: dict[str, float] = {}
+    -> {id: weight}, each clamped to the file's 0..10. What a board's sliders
+    send. An entry that is not id:value, or a value that is not a number, is
+    refused: a ValueError, which the board, the service and the board tool
+    answer as the caller's error."""
+    if isinstance(items, Mapping):
+        pairs = [(str(hid), value) for hid, value in items.items()]
+    else:
+        pairs = [_weight_entry(item) for item in items or []]
+    out = {}
     for hid, value in pairs:
+        if not isinstance(value, (int, float, str)):
+            raise ValueError("weight %r for %r is not a number" % (value, hid))
         try:
-            out[str(hid).strip()] = min(10.0, max(0.0, float(value)))
-        except (TypeError, ValueError):
-            continue
+            weight = float(value)
+        except ValueError:
+            raise ValueError("weight %r for %r is not a number" % (value, hid)) from None
+        out[hid.strip()] = min(10.0, max(0.0, weight))
     return out
+
+
+def _weight_entry(item: object) -> tuple[str, object]:
+    """One `id:value` string -> (id, value)."""
+    hid, colon, value = str(item).partition(":")
+    if not colon:
+        raise ValueError("a weight is id:value, got %r" % item)
+    return hid, value
 
 
 def weighted(catalog: list[Strategy], weights: Mapping[str, float]) -> list[Strategy]:
@@ -406,7 +470,8 @@ def has_scoring_terms(catalog: Iterable[Strategy]) -> bool:
 
 def counts(catalog: Iterable[Strategy]) -> dict[str, int]:
     """Strategies per kind: {"constraint": n, "heuristic": n, "assumption": n}."""
-    return {k: sum(1 for h in catalog if h.kind == k) for k in KINDS}
+    kinds = [h.kind for h in catalog]
+    return {k: kinds.count(k) for k in KINDS}
 
 
 def playbook_name(directory: str | None = None) -> str:
@@ -414,22 +479,21 @@ def playbook_name(directory: str | None = None) -> str:
     return os.path.relpath(directory or strategies_dir(), ROOT).replace(os.sep, "/")
 
 
-class Mirrored(TypedDict):
-    """What mirror() stored: strategies per kind, the total and the table."""
+class MirrorSummary(TypedDict):
+    """What a mirror loaded: the strategies per kind, the total and the table
+    it wrote; load_authored adds how many are drafts."""
     constraint: int
     heuristic: int
     assumption: int
     total: int
     tables: list[str]
+    pending: NotRequired[int]
 
 
-def mirror(
-        cx: "psycopg.Connection", catalog: list[Strategy],
-        directory: str | None = None) -> Mirrored:
+def mirror(cx: psycopg.Connection, catalog: Sequence[Strategy],
+           directory: str | None = None) -> MirrorSummary:
     """Reload the strategies table from the files (whole truth), each row
     naming the playbook it came from."""
-    from db.data.authored import AUTHORED
-    from db.psql import now, register_source
     cursor = cx.cursor()
     source_id = register_source(cursor, AUTHORED, now())
     cursor.execute("DELETE FROM strategies")
@@ -440,12 +504,16 @@ def mirror(
             " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (h.id, h.name, h.kind, h.category, h.direction, h.metric,
              h.weight if h.solver_reads else None, h.expressions or None,
-             ", ".join("%s=%s" % kv for kv in sorted(h.params.items())) or None,
-             h.body, playbook_name(directory), source_id))
+             _params_line(h) or None, h.body, playbook_name(directory), source_id))
     cx.commit()
     kinds = counts(catalog)
-    return Mirrored(constraint=kinds["constraint"], heuristic=kinds["heuristic"],
-                    assumption=kinds["assumption"], total=len(catalog), tables=["strategies"])
+    return {"constraint": kinds["constraint"], "heuristic": kinds["heuristic"],
+            "assumption": kinds["assumption"], "total": len(catalog), "tables": ["strategies"]}
+
+
+def _params_line(h: Strategy) -> str:
+    """A strategy's params as NAME=value, by name."""
+    return ", ".join("%s=%s" % (name, h.params[name]) for name in sorted(h.params))
 
 
 def catalog_rendered(catalog: Iterable[Strategy]) -> str:
@@ -466,7 +534,36 @@ def catalog_rendered(catalog: Iterable[Strategy]) -> str:
     return "\n".join(lines)
 
 
-def write_docs(catalog: list[Strategy], path: str = DOCS_PATH) -> str | None:
+def _form_line(h: Strategy, reg: Mapping[str, str]) -> str:
+    """The line under a strategy's heading in the docs: what it weighs, by form."""
+    when = "; when `%s`" % h.when.source if h.when else ""
+    if h.form == "heuristic":
+        return "`%s %s` - %s. weight %g%s%s" % (
+            h.direction, h.metric, reg.get(h.metric or "", ""), h.weight,
+            ", a need" if h.need else "", when)
+    if h.form == "limit":
+        # a limit has require:, and a soft one a penalty: (_check_limit)
+        return "`require %s`%s%s" % (
+            h.require.source if h.require else "",
+            " (soft, penalty `%s`)" % h.penalty.source if h.soft and h.penalty else " (hard)",
+            when)
+    if h.form == "draft":
+        return "*draft* - name, kind and prose only; `/strategy` infers the rest"
+    if h.form == "assumption":
+        return "*assumption* - prose the solver takes as given and the session holds a comp to"
+    return "weight %g; %s" % (h.weight, "; ".join(
+        "%s `%s`" % (label, expr.source) for label, expr in (
+            ("when", h.when), ("bonus", h.bonus), ("penalty", h.penalty))
+        if expr is not None))
+
+
+def _without_title(body: str) -> str:
+    """The prose without its title line: the docs' heading names the strategy."""
+    first, newline, rest = body.partition("\n")
+    return rest.lstrip("\n") if first.startswith("#") and newline else body
+
+
+def write_docs(catalog: Sequence[Strategy], path: str = DOCS_PATH) -> str | None:
     """The catalog and the vocabulary, generated into docs/inference.md
     between its <!-- generated:catalog --> markers - from the shipped
     playbook only: while another folder is in force the docs keep describing
@@ -490,32 +587,10 @@ def write_docs(catalog: list[Strategy], path: str = DOCS_PATH) -> str | None:
         for h in items:
             out.append("##### %s (`%s`, %s%s)" % (
                 h.name, h.id, h.category, ", %s" % h.form if h.form != h.kind else ""))
-            out.append("")
-            if h.form == "heuristic":
-                out.append("`%s %s` - %s. weight %g%s%s" % (
-                    h.direction, h.metric, reg.get(h.metric, ""), h.weight,
-                    ", a need" if h.need else "",
-                    "; when `%s`" % h.when.source if h.when else ""))
-            elif h.form == "limit" and h.require is not None:     # a limit has one
-                out.append("`require %s`%s%s" % (
-                    h.require.source, " (soft, penalty `%s`)" % h.penalty.source
-                    if h.soft and h.penalty is not None else " (hard)",
-                    "; when `%s`" % h.when.source if h.when else ""))
-            elif h.form == "draft":
-                out.append("*draft* - name, kind and prose only; `/strategy` infers the rest")
-            elif h.form == "assumption":
-                out.append("*assumption* - prose the solver takes as given"
-                           " and the session holds a comp to")
-            elif h.form == "scored":
-                out.append("weight %g; %s" % (h.weight, "; ".join(
-                    "%s `%s`" % (label, expr.source) for label, expr in (
-                        ("when", h.when), ("bonus", h.bonus), ("penalty", h.penalty))
-                    if expr is not None)))
+            out += ["", _form_line(h, reg)]
             if h.params:
-                out.append("params: " + ", ".join("%s=%s" % kv
-                                                    for kv in sorted(h.params.items())))
-            body = re.sub(r"^#[^\n]*\n+", "", h.body)      # the header names it
-            out += ["", body, ""]
+                out.append("params: " + _params_line(h))
+            out += ["", _without_title(h.body), ""]
     out += ["#### The vocabulary", "",
             "Every key a strategy may reference, with its meaning. `enemy.*` are",
             "the `team.*` metrics computed for the red side.", "",
