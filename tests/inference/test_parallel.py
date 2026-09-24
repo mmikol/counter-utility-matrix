@@ -5,6 +5,7 @@ and the two settings. A superseded board's cancelled rounds are
 test_supersede's."""
 
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -101,15 +102,14 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     answer is byte-for-byte the sequential one, the board's weight overrides
     included (a worker loads the playbook from its files). The reference
     playbook is in force, so the sixes score and the overrides weigh
-    something; a worker reads the playbook's folder from the environment it
-    was spawned with, so the pool is started for it and dropped after."""
+    something. The workers are primed under the shipped playbook, so they
+    score the reference one only by the folder each task names."""
     from inference import engine, parallel
     if not parallel.available():
         pytest.skip("one core, or COUNTRIX_PARALLEL=0")
-    monkeypatch.setenv("COUNTRIX_STRATEGIES", FIXTURE_PLAYBOOK)
-    parallel.POOL.drop()
     try:
         assert parallel.warm() == parallel.worker_count() >= 6
+        monkeypatch.setenv("COUNTRIX_STRATEGIES", FIXTURE_PLAYBOOK)
         weights = {
             h.id: 10.0 if h.weight < 10 else 0.5
             for h in catalog.load() if h.kind == "heuristic"}
@@ -122,7 +122,7 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
         assert not parallel.available()
         straight = engine.board(world, draft, brief=engine.Brief(weights=weights))
     finally:
-        parallel.POOL.drop()
+        parallel.POOL.drop()                # the pool this test started, torn down
 
     def timeless(b):
         d = b.to_dict()
@@ -134,6 +134,24 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     first_line = lambda b: b.rendered().split("\n")[0]   # noqa: E731
     assert first_line(split) == first_line(straight)
     assert parallel.available(catalog=[]) is False   # a caller's catalog stays in-process
+
+
+def test_a_worker_reads_the_playbook_from_the_folder_its_task_names(tmp_path):
+    """A worker takes the playbook's folder from each task, not from the
+    environment it was spawned with: two folders in turn read as each
+    folder's own playbook, and a second task on the same folder reads
+    nothing again."""
+    from inference import parallel
+    held = parallel._Held()
+    folders = {}
+    for name in ("meta-strength", "open-queue-tanks"):
+        folder = folders[name] = tmp_path / name
+        folder.mkdir()
+        shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name + ".md"), folder / (name + ".md"))
+    for name, folder in folders.items():
+        assert [h.id for h in held.playbook(str(folder))] == [name]
+    again = str(folders["open-queue-tanks"])
+    assert held.playbook(again) is held.playbook(again)
 
 
 def _priming_pool(monkeypatch, outcome):
@@ -159,16 +177,28 @@ def _priming_pool(monkeypatch, outcome):
     return dropped
 
 
-def test_warm_reports_a_worker_that_cannot_start_and_falls_back_to_one_process(
-        monkeypatch, capsys):
-    """A worker that cannot read the playbook fails its priming task. warm()
-    says so on stderr, drops the pool and reports no workers, so the server
-    boots and its boards solve in its own process."""
+def test_warm_names_a_playbook_that_does_not_load_and_keeps_the_workers(monkeypatch, capsys):
+    """The workers started, and each reads the playbook again on its next
+    task: warm() says the playbook is at fault, keeps the pool and reports
+    its workers. Until the playbook is fixed, board() raises the same
+    CatalogError in this process."""
     from inference import parallel
     dropped = _priming_pool(monkeypatch, CatalogError("no strategy files in x/"))
+    assert parallel.warm() == 6
+    assert ("the playbook does not load (no strategy files in x/); the workers read it again"
+            " on the next board") in capsys.readouterr().err
+    assert dropped == []
+
+
+def test_warm_drops_a_pool_that_fails_to_start_and_the_first_board_starts_it_again(
+        monkeypatch, capsys):
+    """Any other failure while priming drops the pool and reports no workers,
+    so the server still boots; the first board builds the pool again."""
+    from inference import parallel
+    dropped = _priming_pool(monkeypatch, OSError("spawn failed"))
     assert parallel.warm() == 0
-    assert ("the solver workers did not start (CatalogError: no strategy files in x/);"
-            " boards solve in this process") in capsys.readouterr().err
+    assert ("warming the solver workers failed (OSError: spawn failed); the first board starts"
+            " the pool again") in capsys.readouterr().err
     assert dropped == ["drop"]
 
 

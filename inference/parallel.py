@@ -22,11 +22,12 @@ Each round first asks the board's Watch (inference.supersede) whether a
 newer request replaced the board; the Watch sees every task the searches
 submit, so a superseded board's queued tasks are cancelled.
 
-The world crosses as bytes pickled once and cached per worker; so is the
-playbook, reread when a file changes. Off with COUNTRIX_PARALLEL=0 (read on
-every board), on one core, or with a catalog the caller supplied (a worker
-loads the playbook from its files). The task functions are top-level, so a
-spawned worker finds them by module path.
+The world crosses as bytes pickled once and cached per worker. Each task
+names the playbook folder the parent reads, and a worker reads it again
+when the folder or a file in it changes. Off with COUNTRIX_PARALLEL=0 (read
+on every board), on one core, or with a catalog the caller supplied (a
+worker loads the playbook from its files). The task functions are
+top-level, so a spawned worker finds them by module path.
 """
 
 import concurrent.futures
@@ -47,7 +48,7 @@ from inference import catalog as catalog_module
 from inference.scale import Standing, Tally, reference_bounds, reference_standing
 from inference.scoring import Bounds, Candidate, Interval
 from inference.solver import Solved, Solver, Swept
-from inference.strategy import Strategy
+from inference.strategy import CatalogError, Strategy
 from inference.supersede import Watch
 
 WORKER_CEILING = 12          # a worker holds about 70 MB, and past a dozen slices the
@@ -132,30 +133,38 @@ def available(catalog: list[Strategy] | None = None) -> bool:
 
 def warm(world: World | None = None) -> int:
     """Start the workers now, so the first board does not pay for it: they
-    read the playbook, and take a copy of the world when one is given.
-    Returns the number started, 0 when the board runs sequentially here - no
-    pool, or a worker that could not start, which is written to stderr and
-    drops the pool, so boards solve in this process."""
+    read the playbook in force, and take a copy of the world when one is
+    given. Returns the number started, 0 where there is no pool. A playbook
+    that does not load is written to stderr and keeps the workers, which
+    read it again on their next task; until it is fixed, board() raises the
+    same CatalogError in this process. Any other failure is written to
+    stderr, drops the pool and returns 0, and the first board starts the
+    pool again."""
     if not available():
         return 0
     workers = POOL.executor()                 # more tasks than workers, so each gets one
     args = POOL.world_blob(world) if world is not None else (None, None)
-    futures = [workers.executor.submit(_prime, *args) for _ in range(workers.size * 3)]
+    playbook = catalog_module.strategies_dir()
+    futures = [workers.executor.submit(_prime, playbook, *args) for _ in range(workers.size * 3)]
     try:
         for future in futures:
             future.result()
-    except Exception as error:  # noqa: BLE001  # any worker failure at startup means solving in this process
-        sys.stderr.write("countrix: the solver workers did not start (%s: %s); boards solve in"
-                         " this process\n" % (type(error).__name__, error))
+    except CatalogError as error:
+        sys.stderr.write("countrix: the playbook does not load (%s); the workers read it again"
+                         " on the next board\n" % error)
+        return workers.size
+    except Exception as error:  # noqa: BLE001  # warming is best effort: the first board starts the pool again
+        sys.stderr.write("countrix: warming the solver workers failed (%s: %s); the first board"
+                         " starts the pool again\n" % (type(error).__name__, error))
         POOL.drop()
         return 0
     return workers.size
 
 
-def _prime(token: str | None = None, data: bytes | None = None) -> int:
-    """In a worker: read the playbook and hold the world, so the first slice
-    does not."""
-    _HELD.playbook()
+def _prime(playbook: str, token: str | None = None, data: bytes | None = None) -> int:
+    """In a worker: read the playbook in `playbook`, the parent's folder, and
+    hold the world, so the first slice does not."""
+    _HELD.playbook(playbook)
     if token is not None and data is not None:
         _HELD.world_of(token, data)
     return os.getpid()
@@ -179,12 +188,14 @@ type Stamp = list[tuple[str, int, int]]
 
 class _Held:
     """A worker's side of the pool: the world it holds between tasks, under
-    the token it came with, and the playbook, under its files' stamp. Only
-    worker processes read it."""
+    the token it came with, and the playbook, under its folder and its files'
+    stamp. Only worker processes read it."""
 
     def __init__(self) -> None:
         self._world: tuple[str | None, World | None] = (None, None)
-        self._playbook: tuple[Stamp | None, list[Strategy] | None] = (None, None)
+        # the folder, its stamp, the playbook read from it
+        self._playbook: tuple[str | None, Stamp | None, list[Strategy] | None] = (
+            None, None, None)
 
     def world_of(self, token: str, data: bytes) -> World:
         """The world these bytes pickle, unpickled once per token."""
@@ -194,16 +205,18 @@ class _Held:
             self._world = (token, world)
         return world
 
-    def playbook(self) -> list[Strategy]:
-        """The playbook, read once per worker and again whenever a file changes."""
-        directory = catalog_module.strategies_dir()
+    def playbook(self, directory: str) -> list[Strategy]:
+        """The playbook in `directory`, the folder the parent reads: read once,
+        and again whenever the folder or a file in it changes. A missing
+        folder is read every time, and catalog.load raises CatalogError."""
         stamp = sorted((e.name, e.stat().st_mtime_ns, e.stat().st_size)
                        for e in os.scandir(directory)
                        if e.name.endswith(".md")) if os.path.isdir(directory) else None
-        held, playbook = self._playbook
-        if stamp is None or held != stamp or playbook is None:
+        held_directory, held_stamp, playbook = self._playbook
+        if (stamp is None or held_directory != directory or held_stamp != stamp
+                or playbook is None):
             playbook = catalog_module.load(directory)
-            self._playbook = (stamp, playbook)
+            self._playbook = (directory, stamp, playbook)
         return playbook
 
 
@@ -249,31 +262,36 @@ def _solver(world: World, catalog: list[Strategy], spec: Spec) -> Solver:
                   catalog=catalog, pool_size=spec.pool_size)
 
 
-def _worker_solver(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
-                   bounds: Bounds | None = None, standing: Tally | None = None) -> Solver:
+def _worker_solver(
+        token: str, data: bytes, playbook: str, spec: Spec,
+        weights: Mapping[str, float] | None, bounds: Bounds | None = None,
+        standing: Tally | None = None) -> Solver:
     """In a worker: the Solver for a spec's board, on the world the worker
-    holds and the playbook under the board's weights - on the scale the
-    merged slices froze, when `bounds` is given."""
+    holds and the playbook in the parent's folder under the board's weights -
+    on the scale the merged slices froze, when `bounds` is given."""
     solver = _solver(_HELD.world_of(token, data),
-                     catalog_module.weighted(_HELD.playbook(), weights), spec)
+                     catalog_module.weighted(_HELD.playbook(playbook), weights), spec)
     if bounds is not None:
         solver.adopt_bounds(bounds, standing)
     return solver
 
 
-def _bounds(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
-            index: int, count: int) -> Bounds:
+def _bounds(
+        token: str, data: bytes, playbook: str, spec: Spec,
+        weights: Mapping[str, float] | None, index: int, count: int) -> Bounds:
     """One slice of the reference sample, in a worker: the low and high it
     sees for each heuristic."""
-    return reference_bounds(_worker_solver(token, data, spec, weights), index, count)
+    return reference_bounds(_worker_solver(token, data, playbook, spec, weights), index, count)
 
 
 def _standing(
-        token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
-        bounds: Bounds, index: int, count: int) -> Tally:
+        token: str, data: bytes, playbook: str, spec: Spec,
+        weights: Mapping[str, float] | None, bounds: Bounds, index: int,
+        count: int) -> Tally:
     """One slice of the reference sample scored under the merged bounds, in a
     worker: each hero's tally in it."""
-    return reference_standing(_worker_solver(token, data, spec, weights, bounds), index, count)
+    solver = _worker_solver(token, data, playbook, spec, weights, bounds)
+    return reference_standing(solver, index, count)
 
 
 def _merge_tallies(tally: Tally, part: Mapping[int, Standing]) -> Tally:
@@ -297,45 +315,48 @@ def _widen(bounds: Bounds, part: Mapping[str, Interval]) -> Bounds:
 
 
 def _sweep(
-        token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
-        bounds: Bounds, standing: Tally | None, index: int,
-        count: int) -> tuple[int, list[Verdict]]:
+        token: str, data: bytes, playbook: str, spec: Spec,
+        weights: Mapping[str, float] | None, bounds: Bounds, standing: Tally | None,
+        index: int, count: int) -> tuple[int, list[Verdict]]:
     """One slice of one search, in a worker."""
-    swept = _worker_solver(token, data, spec, weights, bounds, standing).sweep(index, count)
+    solver = _worker_solver(token, data, playbook, spec, weights, bounds, standing)
+    swept = solver.sweep(index, count)
     return swept.size, [_verdict(c) for c in swept.feasible]
 
 
 def _rank(
-        token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
-        bounds: Bounds, standing: Tally | None, verdicts: Iterable[Verdict],
-        top: int) -> tuple[list[Verdict], int]:
+        token: str, data: bytes, playbook: str, spec: Spec,
+        weights: Mapping[str, float] | None, bounds: Bounds, standing: Tally | None,
+        verdicts: Iterable[Verdict], top: int) -> tuple[list[Verdict], int]:
     """The tail of a split search, in a worker: the merged field ranked and
     refined. -> (the winners, how many candidates refining added)."""
-    solver = _worker_solver(token, data, spec, weights, bounds, standing)
+    solver = _worker_solver(token, data, playbook, spec, weights, bounds, standing)
     ranked = solver.rank([_revive(solver.world, v) for v in verdicts], top)
     return [_verdict(c) for c in ranked], solver.considered
 
 
 class Run:
     """One board's pass across the pool: the executor, the world pickled once
-    for its tasks, the playbook and weights every search scores under, the
-    winners each search keeps, and the board's Watch, which learns of every
-    task submitted."""
+    for its tasks, the playbook and weights every search scores under and the
+    folder that playbook was read from, the winners each search keeps, and
+    the board's Watch, which learns of every task submitted."""
 
     def __init__(self, executor: ProcessPoolExecutor, world: World, catalog: list[Strategy],
                  weights: Mapping[str, float] | None, top: int, watch: Watch) -> None:
         self.executor, self.world, self.catalog = executor, world, catalog
         self.weights, self.top, self.watch = weights, top, watch
         self.token, self.data = POOL.world_blob(world)
+        self.playbook = catalog_module.strategies_dir()     # the folder board() loaded
 
     def submit[**P, T](
-            self, task: Callable[Concatenate[str, bytes, Spec, Mapping[str, float] | None, P], T],
+            self,
+            task: Callable[Concatenate[str, bytes, str, Spec, Mapping[str, float] | None, P], T],
             spec: Spec, *args: P.args, **kwargs: P.kwargs) -> Future[T]:
         """Send one task on `spec`'s board to the pool, watched: the task takes
-        the world's token and bytes, the spec and the weights, then its own
-        arguments."""
+        the world's token and bytes, the playbook's folder, the spec and the
+        weights, then its own arguments."""
         future = self.executor.submit(
-            task, self.token, self.data, spec, self.weights, *args, **kwargs)
+            task, self.token, self.data, self.playbook, spec, self.weights, *args, **kwargs)
         self.watch.futures.append(future)
         return future
 
