@@ -32,6 +32,7 @@ Nothing here knows a particular source.
 import json
 import os
 import re
+import threading
 from datetime import UTC, datetime
 from typing import Any, TypedDict
 
@@ -59,9 +60,21 @@ class NoDatabaseError(Exception):
 # as degraded: the connection and its queries (psycopg.Error); no DATABASE_URL
 # and no cluster to use (NoDatabaseError, from default_dsn); the embedded
 # cluster's files and socket (OSError); and pgserver's .handle_pids.json,
-# which _embedded rewrites once and which another process starting at the
-# same moment can empty again before the retry reads it (JSONDecodeError).
+# left empty by a process killed while writing it (JSONDecodeError).
 UNREACHABLE = (psycopg.Error, NoDatabaseError, OSError, json.JSONDecodeError)
+
+# pgserver's own lock (fasteners, over fcntl) excludes other processes but
+# not this process's threads, and get_server reads its instance cache before
+# taking it, so two first touches from the threaded servers
+# (inference/serve.py, ui/board.py) could interleave the read-truncate-write
+# of the pid file. The first touch is serialised here. What remains: a
+# .handle_pids.json left empty by a process killed mid-write makes the first
+# touch in each later process raise JSONDecodeError, reported as degraded,
+# and later touches in that process get pgserver's cached handle, with the
+# process unregistered. The file is pgserver's and is not repaired here;
+# removing it while no process uses the cluster clears the fault (pgserver
+# 0.1.4's DiskList reads a missing file as []).
+_FIRST_TOUCH = threading.Lock()
 
 
 def default_dsn() -> str:
@@ -93,14 +106,7 @@ def _embedded() -> str:
         raise NoDatabaseError("no DATABASE_URL and no embedded cluster: pgserver is not"
                               " installed here (the image and CI filter it out; linux/arm64"
                               " has no wheel) - set DATABASE_URL")
-    try:
-        return pgserver.get_server(DEFAULT_DB_DIR).get_uri()
-    except json.JSONDecodeError:
-        # pgserver keeps its client pids in a file it rewrites without a lock; many
-        # processes starting at once can leave it empty. An empty list is what it means
-        handles = os.path.join(DEFAULT_DB_DIR, ".handle_pids.json")
-        with open(handles, "w", encoding="utf-8") as handle:
-            handle.write("[]")
+    with _FIRST_TOUCH:
         return pgserver.get_server(DEFAULT_DB_DIR).get_uri()
 
 

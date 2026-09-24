@@ -127,17 +127,43 @@ def test_a_probe_with_no_cluster_is_degraded_and_creates_none(monkeypatch, tmp_p
     assert not cluster.exists()
 
 
-def test_a_pid_file_race_degrades_health(monkeypatch):
-    """default_dsn's second look at pgserver's pid file can meet it emptied
-    again by another process: a JSONDecodeError, one of the ways the database
-    is out of reach, so /health answers 200 and degraded."""
+def test_an_emptied_pid_file_degrades_health(monkeypatch):
+    """A process killed while writing pgserver's pid file leaves it empty, and
+    the next first touch reads it as a JSONDecodeError: one of the ways the
+    database is out of reach, so /health answers 200 and degraded."""
     import json
 
-    def raced():
+    def emptied():
         raise json.JSONDecodeError("Expecting value", "", 0)
-    monkeypatch.setattr(serve.psql, "default_dsn", raced)
+    monkeypatch.setattr(serve.psql, "default_dsn", emptied)
     data, code = serve.handle_health()
     assert code == 200 and data["status"] == "degraded" and "Expecting value" in data["error"]
+
+
+def test_the_first_touch_holds_the_lock_and_leaves_the_pid_file_alone(monkeypatch, tmp_path):
+    """The first touch asks pgserver once, under the process's own lock, so
+    two threads cannot interleave its pid file; an emptied file is pgserver's
+    and is reported, never rewritten, and the lock is free afterwards."""
+    import json
+
+    (tmp_path / "PG_VERSION").write_text("16\n")
+    pids = tmp_path / ".handle_pids.json"
+    pids.write_text("")
+    held = []
+
+    class Server:
+        @staticmethod
+        def get_server(pgdata):
+            held.append(serve.psql._FIRST_TOUCH.locked())
+            raise json.JSONDecodeError("Expecting value", "", 0)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(serve.psql, "DEFAULT_DB_DIR", str(tmp_path))
+    monkeypatch.setattr(serve.psql, "pgserver", Server)
+    with pytest.raises(json.JSONDecodeError):
+        serve.psql.default_dsn()
+    assert held == [True]
+    assert pids.read_text() == ""
+    assert not serve.psql._FIRST_TOUCH.locked()
 
 
 def test_the_inference_service_listens_where_the_environment_says(monkeypatch):
