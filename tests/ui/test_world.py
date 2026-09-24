@@ -7,6 +7,7 @@ import statistics
 
 import pytest
 
+from db import Refusal
 from ui.facts import compute, model, tables
 
 pytestmark = pytest.mark.invariant
@@ -170,9 +171,9 @@ def test_names_resolve_across_spellings(world):
     assert world.hero("lucio").name == "Lúcio"
     assert world.hero("D.VA").name == "D.Va"
     assert world.map("kings row").name == "King's Row"
-    with pytest.raises(ValueError, match="unknown heroes"):
+    with pytest.raises(Refusal, match="unknown heroes"):
         world.resolve(None, ["Goku"], [])
-    with pytest.raises(ValueError, match="unknown map"):
+    with pytest.raises(Refusal, match="unknown map"):
         world.resolve("Atlantis", [], [])
 
 

@@ -6,6 +6,7 @@ import os
 
 import pytest
 
+from db import Refusal
 from inference import catalog, derive, tune
 
 
@@ -71,7 +72,7 @@ def test_derive_sends_the_catalogs_objection_back_once(catalog_copy):
     result = derive.derive(["stubborn"], directory=catalog_copy, runner=bad, log=lambda m: None)
     assert "stubborn" in result["failed"] and not result["derived"]
     assert next(h for h in catalog.load(catalog_copy) if h.id == "stubborn").pending
-    with pytest.raises(ValueError, match="no JSON object"):
+    with pytest.raises(Refusal, match="no JSON object"):
         derive.parse("I would rather not.")
 
 
@@ -110,13 +111,33 @@ def test_derive_counts_drafts_past_the_cap_apart_from_why_it_stopped(catalog_cop
 
 
 def test_the_deriver_accepts_only_a_strategys_fields():
-    with pytest.raises(ValueError, match="fields a strategy does not have"):
+    with pytest.raises(Refusal, match="fields a strategy does not have"):
         derive.parse('{"fields": {"prose": true, "weight": 2}, "reason": "r"}')
-    with pytest.raises(ValueError, match="keeps its kind"):
+    with pytest.raises(Refusal, match="keeps its kind"):
         derive.parse('{"fields": {"kind": "constraint"}, "reason": "r"}')
     parsed = derive.parse('{"fields": {"kind": "assumption"}, "reason": "r"}')
     assert parsed[0] == {"kind": "assumption"}
-    with pytest.raises(ValueError, match="params must be"):
+    with pytest.raises(Refusal, match="params must be"):
         derive.parse('{"fields": {"params": {"A": "1 == 1"}}, "reason": "r"}')
     fields, reason = derive.parse('{"fields": {"weight": 2, "params": {"A": 1.5}}, "reason": "r"}')
     assert fields == {"weight": 2, "params": {"A": 1.5}} and reason == "r"
+    with pytest.raises(Refusal, match="does not parse"):     # an objection, not a crash
+        derive.parse('{"fields": {"weight": 2,}}')
+
+
+def test_a_fault_past_the_answer_is_raised_and_never_sent_back_as_an_objection(
+        catalog_copy, monkeypatch):
+    """Only a Refusal is the model's to fix. A broken playbook or a docs file
+    without its markers is the operator's: derive() raises it and asks the
+    model nothing more."""
+    _draft(catalog_copy, "heal-line", "heuristic")
+    def broken(*args, **kwargs):
+        raise catalog.CatalogError("no strategies in the copy")
+    monkeypatch.setattr(derive.tune, "complete", broken)
+    asked = []
+    def runner(text):
+        asked.append(text)
+        return '{"fields": {"metric": "team.heal_peak_total", "direction": "maximize"}}'
+    with pytest.raises(catalog.CatalogError, match="no strategies"):
+        derive.derive(directory=catalog_copy, runner=runner, log=lambda m: None)
+    assert len(asked) == 1

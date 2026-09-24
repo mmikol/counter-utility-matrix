@@ -7,6 +7,7 @@ import shutil
 
 import pytest
 
+from db import Refusal
 from inference import catalog
 from inference.engine import BrokenProcessPool
 from inference.expr import Expr, ExprError
@@ -255,7 +256,7 @@ def test_evaluate_ranks_a_full_six_against_the_field(world):
     r = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"],
                         ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"])
     assert r.rank >= 1 and r.kind == "evaluate" and len(r.picks) == 6
-    with pytest.raises(ValueError, match="exactly 6"):
+    with pytest.raises(Refusal, match="exactly 6"):
         engine.evaluate(world, None, [], ["Ana"])
 
 
@@ -267,7 +268,7 @@ def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(world, tmp_
     r = engine.infer(world, "King's Row", ["Zarya"], ["Winston", "D.Va"], pool_size=4,
                      catalog=fix)
     assert {"Winston", "D.Va"} <= set(r.blue)
-    with pytest.raises(ValueError, match="no composition satisfies"):
+    with pytest.raises(Refusal, match="no composition satisfies"):
         engine.infer(world, "King's Row", [], ["Winston", "D.Va", "Reinhardt"], pool_size=4,
                      catalog=fix)
     # a stricter authored limit narrows the search the same way
@@ -291,7 +292,7 @@ def test_infer_never_drafts_a_banned_hero(world):
     assert not {"Widowmaker", "Bastion", "Reinhardt"} & set(r.blue)
     assert r.bans == ["Widowmaker", "Bastion", "Reinhardt"] and "banned" in r.rendered()
     assert r.facts.bans == r.bans
-    with pytest.raises(ValueError, match="banned this match"):
+    with pytest.raises(Refusal, match="banned this match"):
         engine.infer(world, None, ["Zarya"], ["Ana"], bans=["Zarya"])
 
 
@@ -375,7 +376,7 @@ def test_weights_override_a_heuristic_for_one_board_and_never_the_file():
     # a malformed weight is refused, never dropped
     for malformed, said in ((["nonsense"], "id:value"), (["d:x"], "not a number"),
                             ({"e": None}, "not a number")):
-        with pytest.raises(ValueError, match=said):
+        with pytest.raises(Refusal, match=said):
             catalog.parse_weights(malformed)
     cat = catalog.load(FIXTURE_PLAYBOOK)
     heuristic = next(h for h in cat if h.kind == "heuristic")
@@ -832,9 +833,9 @@ def test_an_announced_hero_is_described_but_never_picked(world):
     h = early[0]
     fs = facts_engine.generate(world, None, [], [h.name])          # the facts may describe it
     assert fs.find("hero.announced", h.name)
-    with pytest.raises(ValueError, match="announced, not yet playable"):
+    with pytest.raises(Refusal, match="announced, not yet playable"):
         engine.infer(world, None, [], [h.name])                    # a pick may not
-    with pytest.raises(ValueError, match="announced"):
+    with pytest.raises(Refusal, match="announced"):
         engine.board(world, None, [h.name], [])
     r = engine.infer(world, None, [], [])
     assert h.name not in r.blue and all(a["blue"] for a in r.alternatives)
@@ -1059,7 +1060,7 @@ def test_one_hero_cannot_hold_two_seats(world):
     import pytest as _pytest
     for kwargs in ({"blue": ["Ana", "Ana"]}, {"red": ["Zarya", "Zarya"]},
                    {"bans": ["Sombra", "Sombra"]}):
-        with _pytest.raises(ValueError, match="same hero twice"):
+        with _pytest.raises(Refusal, match="same hero twice"):
             world.resolve("King's Row", kwargs.get("red", []), kwargs.get("blue", []),
                           kwargs.get("bans", []))
     # but a hero may play for both teams

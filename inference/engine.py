@@ -23,6 +23,7 @@ from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from typing import Any
 
+from db import Refusal
 from inference import catalog as catalog_module
 from inference.catalog import Strategy
 from inference.solver import (
@@ -314,7 +315,7 @@ def _order(heroes: Iterable[Hero]) -> list[str]:
 
 def _side(m: Map | None, side: str) -> str:
     if side not in ("", "attack", "defense"):
-        raise ValueError("side must be attack or defense, got %r" % side)
+        raise Refusal("side must be attack or defense, got %r" % side)
     return side if is_sided(m) else ""
 
 
@@ -323,12 +324,12 @@ def clamp_search(pool: str | float | None = None,
     """Bounds on the search: pool 2..12 candidates per role, top 1..20
     alternatives. Every door that takes the two from a caller - the MCP tools
     and the HTTP service - passes them through here, so the search is bounded
-    by one definition. Junk raises ValueError, which each door already turns
-    into its own refusal."""
+    by one definition. Junk raises Refusal, which every door answers as the
+    caller's error."""
     try:
         return max(2, min(int(pool or 6), 12)), max(1, min(int(top or 5), 20))
     except (TypeError, ValueError) as error:
-        raise ValueError("pool and top must be numbers: %s" % error) from error
+        raise Refusal("pool and top must be numbers: %s" % error) from error
 
 
 def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
@@ -344,7 +345,7 @@ def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
     if len(blue_h) > TEAM_SIZE:
-        raise ValueError("more than %d %s picks" % (TEAM_SIZE, seat))
+        raise Refusal("more than %d %s picks" % (TEAM_SIZE, seat))
     result = Result("infer", m.name if m else None, [h.name for h in red_h], [],
                     [h.name for h in blue_h], catalog, [h.name for h in bans_h], side, seat)
     if solved is not None:
@@ -354,7 +355,7 @@ def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
                         pool_size=pool_size)
         ranked = solver.solve(top=max(top, 1) + 1)
     if not ranked:
-        raise ValueError("no composition satisfies the limits around the"
+        raise Refusal("no composition satisfies the limits around the"
                          " locked %s picks - relax a constraint in inference/strategies/"
                          % seat)
     best = ranked[0]
@@ -382,7 +383,7 @@ def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
     if len(blue_h) != TEAM_SIZE:
-        raise ValueError("evaluate needs exactly %d %s picks (got %d)"
+        raise Refusal("evaluate needs exactly %d %s picks (got %d)"
                          % (TEAM_SIZE, seat, len(blue_h)))
     result = Result("evaluate", m.name if m else None, [h.name for h in red_h],
                     [h.name for h in blue_h], [], catalog, [h.name for h in bans_h], side,
@@ -431,7 +432,7 @@ def current(world: World, blue_result: Result, map_name: str | None = None,
         return result
     solver = blue_result.solver
     if solver is None:
-        raise ValueError("current() scores a partial team against the bounds of its"
+        raise TypeError("current() scores a partial team against the bounds of its"
                          " seat's optimal search: blue_result must be an infer() result,"
                          " which carries the solver that drew them")
     result.best = blue_result.score
@@ -656,11 +657,12 @@ def _plan(world: World, m: Map | None, side: str, bans: Sequence[str],
             read.append("The wiki's article stresses %s."
                         % _and(TERRAIN_GROUND[f] for f in stressed))
         # the stages whose own text stresses a feature: the map.stage_terrain facts
-        staged = sorted((facts.find("map.stage_terrain", m.name) if facts is not None else ()),
-                        key=lambda f: -f.value["features"][0]["z"])[:STAGES_NAMED]
+        stressing = sorted((facts.find("map.stage_terrain", m.name)
+                            if facts is not None else ()),
+                           key=lambda f: -f.value["features"][0]["z"])[:STAGES_NAMED]
         staged = [(f.value["stage"], _and(TERRAIN_GROUND[x["feature"]]
                                           for x in f.value["features"]))
-                  for f in sorted(staged, key=lambda f: m.stages.index(f.value["stage"]))]
+                  for f in sorted(stressing, key=lambda f: m.stages.index(f.value["stage"]))]
         if staged:
             read.append("; ".join(("%s has the %s" if i == 0 else "%s the %s") % pair
                                   for i, pair in enumerate(staged)) + ".")

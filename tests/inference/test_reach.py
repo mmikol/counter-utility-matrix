@@ -7,6 +7,7 @@ off its board is searched for again, and none may be lost."""
 
 import pytest
 
+from db import Refusal
 from inference import catalog, reach
 from tests.inference import recorded
 from ui.facts.model import World
@@ -63,7 +64,15 @@ def test_the_reach_fixture_names_the_playbook_it_was_recorded_under():
 
 
 def test_reach_refuses_a_hero_the_world_does_not_know():
-    """A name the World does not hold is the caller's to fix, answered the way
-    World.resolve answers one, not a crash inside the search."""
-    with pytest.raises(ValueError, match="unknown heroes: Nosuchhero"):
+    """A name the World does not hold is the caller's to fix: reach resolves
+    its hero the way every board tool does, not a crash inside the search."""
+    with pytest.raises(Refusal, match="unknown heroes: Nosuchhero"):
         reach.search(World(), "Nosuchhero")
+
+
+@pytest.mark.invariant
+def test_reach_without_a_map_pool_is_the_servers_fault(world, monkeypatch):
+    monkeypatch.setattr(reach, "maps", lambda world, hero: [])
+    with pytest.raises(RuntimeError, match="no board") as caught:
+        reach.search(world, "Ana")
+    assert not isinstance(caught.value, Refusal)

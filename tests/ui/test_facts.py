@@ -2,6 +2,7 @@
 
 import pytest
 
+from db import Refusal
 from ui.facts import compute, engine, model, tables
 
 pytestmark = pytest.mark.invariant
@@ -116,9 +117,9 @@ def test_bans_become_facts_and_a_banned_pick_is_refused(world):
     assert fs.find("bans.count") and len(fs.find("bans.hero")) == 2
     # Widowmaker answers Pharah and Zarya: the ban took an answer off the table
     assert any("banned Widowmaker answered red" in f.text for f in fs.facts)
-    with pytest.raises(ValueError, match="banned this match"):
+    with pytest.raises(Refusal, match="banned this match"):
         engine.generate(world, None, ["Zarya"], ["Ana"], bans=["Ana"])
-    with pytest.raises(ValueError, match="unknown heroes"):
+    with pytest.raises(Refusal, match="unknown heroes"):
         engine.generate(world, None, [], [], bans=["Goku"])
 
 
@@ -310,7 +311,7 @@ def test_sides_exist_only_on_escort_and_hybrid(world):
     assert fs.find("map.side_caveat")
     fs = engine.generate(world, "Ilios", [], [], side="attack")
     assert fs.side == "" and any("no attacking or defending side" in f.text for f in fs.facts)
-    with pytest.raises(ValueError, match="side must be"):
+    with pytest.raises(Refusal, match="side must be"):
         engine.generate(world, "King's Row", [], [], side="left")
 
 

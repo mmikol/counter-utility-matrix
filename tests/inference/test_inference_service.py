@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 import pytest
 
+from db import Refusal
 from inference import catalog, serve
 from ui import board
 
@@ -31,7 +32,7 @@ def test_both_doors_bound_the_search_with_one_clamp():
     assert clamp_search(99, 99) == (12, 20)
     assert clamp_search("8", "3") == (8, 3)                    # a query string is text
     for junk in ("x", [1], object()):                          # a refusal, not a crash
-        with pytest.raises(ValueError, match="must be numbers"):
+        with pytest.raises(Refusal, match="must be numbers"):
             clamp_search(junk)
     assert clamp_search([], []) == (6, 5)                      # empty is unset, like None
 

@@ -32,6 +32,7 @@ from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from typing import TypedDict
 
+from db import Refusal
 from inference import catalog as catalog_module
 
 SCALARS = ("weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric",
@@ -49,8 +50,8 @@ _SENTENCE_END = re.compile(r"[.!?](?:[\"')\]`]*)(?:\s|$)")
 Pairs = Sequence[tuple[str, object]]
 
 
-class TuneError(ValueError):
-    pass
+class TuneError(Refusal):
+    """A change the catalog or the field refuses: nothing is written."""
 
 
 class Change(TypedDict):

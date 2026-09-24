@@ -30,6 +30,10 @@ them by key, and rendered as sentences so a person - or the /comp skill -
 can read them as evidence. Ids are dense and stable within a board.
 """
 
+from collections.abc import Iterable, Sequence
+from typing import Any
+
+from db import Refusal
 from ui.facts import compute
 from ui.facts.compute import (
     MAX_BANS,
@@ -41,7 +45,11 @@ from ui.facts.compute import (
     is_sided,
     opposite,
 )
-from ui.facts.model import SQUISHY_POOL, TERRAIN_FEATURES, TERRAIN_LEAN
+from ui.facts.model import SQUISHY_POOL, TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
+
+# a team's or a matchup's metrics as compute measures them: numbers, names and
+# lists, by key
+MetricBag = dict[str, Any]
 
 
 class Fact:
@@ -57,19 +65,22 @@ class Fact:
         "value",
     )
 
-    def __init__(self, fid, scope, subject, team, key, text, value, unit, source):
+    def __init__(self, fid: str, scope: str, subject: str, team: str | None, key: str,
+                 text: str, value: Any, unit: str | None, source: str) -> None:
+        # value is what the fact states - a number, a name, a list or a record
+        # of them - and JSON once _plain has read it; its readers know its shape
         self.id, self.scope, self.subject, self.team = fid, scope, subject, team
         self.key, self.text, self.value, self.unit, self.source = (
             key, text, value, unit, source)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, object]:
         return {"id": self.id, "scope": self.scope, "subject": self.subject,
                 "team": self.team, "key": self.key, "text": self.text,
                 "value": _plain(self.value), "unit": self.unit,
                 "source": self.source}
 
 
-def _plain(value):
+def _plain(value: object) -> object:
     if isinstance(value, (int, float, str, bool)) or value is None:
         return value
     if isinstance(value, (list, tuple)):
@@ -91,15 +102,17 @@ class FactSet:
     live in `facts` in order, so a citation of either resolves; `count` is
     the facts alone."""
 
-    def __init__(self, map_name=None, red=(), blue=(), bans=(), side=""):
+    def __init__(self, map_name: str | None = None, red: Iterable[str] = (),
+                 blue: Iterable[str] = (), bans: Iterable[str] = (), side: str = "") -> None:
         self.map_name, self.red, self.blue = map_name, list(red), list(blue)
         self.bans, self.side = list(bans), side
-        self.facts = []
-        self._by_key = {}
+        self.facts: list[Fact] = []
+        self._by_key: dict[tuple[str, str], list[Fact]] = {}
         self._n = {"F": 0, "S": 0}
 
-    def add(self, scope, subject, key, text, value=None, unit=None,
-            source="", team=None, also=()):
+    def add(self, scope: str, subject: str, key: str, text: str, value: object = None,
+            unit: str | None = None, source: str = "", team: str | None = None,
+            also: Sequence[str] = ()) -> str:
         """`also` names the other metrics this one sentence states, so a caller
         looking for one of them finds the fact that carries it. The fact keeps
         the key it is worded around; `also` only adds index entries."""
@@ -113,56 +126,58 @@ class FactSet:
         return fid
 
     @property
-    def count(self):
+    def count(self) -> int:
         return self._n["F"]
 
     @property
-    def playbook(self):
+    def playbook(self) -> list[Fact]:
         return [f for f in self.facts if f.scope == PLAYBOOK_SCOPE]
 
-    def find(self, key, subject=None):
+    def find(self, key: str, subject: str | None = None) -> list[Fact]:
         """Facts with this key (and subject, if given)."""
         if subject is not None:
             return list(self._by_key.get((key, subject), ()))
         return [f for f in self.facts if f.key == key]
 
-    def rendered(self):
+    def rendered(self) -> str:
         lines = ["[%s] %s" % (f.id, f.text) for f in self.facts if f.scope != PLAYBOOK_SCOPE]
         side = self.playbook
         if side:
             lines += [PLAYBOOK_DIVIDER] + ["[%s] %s" % (f.id, f.text) for f in side]
         return "\n".join(lines)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, object]:
         return {"map": self.map_name, "red": self.red, "blue": self.blue,
                 "bans": self.bans, "side": self.side, "count": self.count,
                 "playbook_count": self._n["S"],
                 "facts": [f.to_dict() for f in self.facts]}
 
 
-def _count(n, word="pick"):
+def _count(n: int, word: str = "pick") -> str:
     """A count reads as a sentence: one pick, two picks, never one pick(s)."""
     return "%d %s%s" % (n, word, "" if n == 1 else "s")
 
 
-def _g(value):
+def _g(value: object) -> str:
     return "%g" % value if isinstance(value, float) else str(value)
 
 
-def _trim(text, limit=110):
+def _trim(text: str | None, limit: int = 110) -> str:
     text = " ".join((text or "").split())
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
 # --- the board -------------------------------------------------------------
 
-def generate(world, map_name=None, red=(), blue=(), bans=(), side=""):
+def generate(world: World, map_name: str | None = None, red: Sequence[str] = (),
+             blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "") -> FactSet:
     """The FactSet for a board: the map (and blue's side on a sided map),
     the red and blue picks, and the match's bans (each team's two and the
     lobby's - up to five, all optional). A banned hero cannot be picked and
-    cannot be recommended."""
+    cannot be recommended; a side that is not one, and every name World.resolve
+    refuses, is a Refusal."""
     if side not in ("", *SIDES):
-        raise ValueError("side must be attack or defense, got %r" % side)
+        raise Refusal("side must be attack or defense, got %r" % side)
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans, allow_announced=True)
     side = side if is_sided(m) else ""
     fs = FactSet(m.name if m else None, [h.name for h in red_h],
@@ -188,7 +203,7 @@ def generate(world, map_name=None, red=(), blue=(), bans=(), side=""):
     return fs
 
 
-def _meta_facts(fs, world):
+def _meta_facts(fs: FactSet, world: World) -> None:
     for s in world.snapshots:                 # one per source: its newest capture
         fs.add("meta", "snapshot", "meta.snapshot",
                "%s rates: captured %s, %s (%s), %s - %s, %s, %s"
@@ -206,7 +221,8 @@ def _meta_facts(fs, world):
                value=len(world.newer_patches), source="patches")
 
 
-def _ban_facts(fs, world, bans, red, blue):
+def _ban_facts(fs: FactSet, world: World, bans: Sequence[Hero], red: Sequence[Hero],
+               blue: Sequence[Hero]) -> None:
     """What the bans took off the table, for both sides."""
     fs.add("bans", "match", "bans.count", "bans this match: %d of %d - %s"
            % (len(bans), MAX_BANS, ", ".join(h.name for h in bans)),
@@ -226,14 +242,14 @@ def _ban_facts(fs, world, bans, red, blue):
                    value=threatened, source="counters")
 
 
-def _halves(m, style):
+def _halves(m: Map, style: str) -> str:
     """The two halves of a map's style score, as the fact words them."""
     parts = [("terrain", m.terrain_lean.get(style)), ("rates", m.rate_lift.get(style))]
     return ", ".join("%s %+.1f" % (word, z) if z is not None else "no %s" % word
                      for word, z in parts)
 
 
-def _map_facts(fs, world, m, side=""):
+def _map_facts(fs: FactSet, world: World, m: Map, side: str = "") -> None:
     fs.add("map", m.name, "map.mode", "%s is a %s map" % (m.name, m.mode),
            value=m.mode, source="map_modes")
     if is_sided(m):
@@ -304,19 +320,21 @@ def _map_facts(fs, world, m, side=""):
                value={"style": style, "score": m.styles[style][0],
                       "terrain": m.terrain_lean.get(style), "rates": m.rate_lift.get(style)},
                source="derived:map.style")
-    if m.styles:
+    top = m.style_top                   # None exactly when the map has no styles
+    if top is not None:
         fs.add("map", m.name, "map.style_top", "%s rewards %s: %s (%s sd over the runner-up)"
-               % (m.name, m.style_top, _halves(m, m.style_top), _g(m.style_margin)),
-               value=m.style_top, source="derived:map.style_top")
-    ranked = sorted((h for h in world.heroes.values() if h.map_win(m.id) is not None),
-                    key=lambda h: -h.map_win(m.id))
+               % (m.name, top, _halves(m, top), _g(m.style_margin)),
+               value=top, source="derived:map.style_top")
+    wins = {h.id: win for h in world.heroes.values() if (win := h.map_win(m.id)) is not None}
+    ranked = sorted((h for h in world.heroes.values() if h.id in wins),
+                    key=lambda h: -wins[h.id])
     for h in ranked[:10]:
         fs.add("map", m.name, "map.leader", "on %s: %s wins %.1f%% (picked %.1f%%)"
-               % (m.name, h.name, h.map_win(m.id), h.map_pick(m.id) or 0),
-               value={"hero": h.name, "win": h.map_win(m.id)}, source="map_meta")
+               % (m.name, h.name, wins[h.id], h.map_pick(m.id) or 0),
+               value={"hero": h.name, "win": wins[h.id]}, source="map_meta")
     if len(ranked) > 6:
         fs.add("map", m.name, "map.strugglers", "struggle on %s: %s" % (m.name, ", ".join(
-            "%s (%.1f%%)" % (h.name, h.map_win(m.id)) for h in ranked[-6:][::-1])),
+            "%s (%.1f%%)" % (h.name, wins[h.id]) for h in ranked[-6:][::-1])),
             value=[h.name for h in ranked[-6:]], source="map_meta")
     for h in world.heroes_by_role():
         if m.id in h.best_maps:
@@ -328,11 +346,12 @@ def _map_facts(fs, world, m, side=""):
         if fits:
             fs.add("map", m.name, "map.style_fit", "%s heroes who hold up on %s: %s"
                    % (style, m.name, ", ".join(
-                       "%s (%.1f%%)" % (h.name, h.map_win(m.id)) for h in fits)),
+                       "%s (%.1f%%)" % (h.name, wins[h.id]) for h in fits)),
                    value=[h.name for h in fits], source="playstyle+map_meta")
 
 
-def _hero_facts(fs, world, h, team, m, opponents, teammates):
+def _hero_facts(fs: FactSet, world: World, h: Hero, team: str, m: Map | None,
+                opponents: Sequence[Hero], teammates: Sequence[Hero]) -> None:
     """Every independent fact about ONE hero, then the facts that only exist
     on this board: on this map, against these opponents, beside these
     teammates."""
@@ -496,12 +515,14 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
         fs.add("hero", name, "hero.rate_maps", "%s's best maps: %s" % (name, ", ".join(
             "%s (%.1f%%)" % (world.maps[mid].name, win) for mid, (win, _) in best)),
             value=[world.maps[mid].name for mid, _ in best], source="map_meta", team=team)
-    if m is None and h.best_maps:
+    if m is None and h.best_maps and h.win is not None:
         # the same intersection rule as the rates: with a map on the board the
-        # "top map" fact below is the whole story
+        # "top map" fact below is the whole story. best_maps is filled only for
+        # a hero with a win rate, from maps it has a rate on.
+        overall = h.win
         fs.add("hero", name, "hero.best_map", "%s's three best maps by Blizzard's map rates,"
-               " over its own %.1f%%: %s" % (name, h.win, ", ".join(
-                   "%s (%+.1f)" % (world.maps[mid].name, h.map_win(mid) - h.win)
+               " over its own %.1f%%: %s" % (name, overall, ", ".join(
+                   "%s (%+.1f)" % (world.maps[mid].name, h.map_rates[mid].win - overall)
                    for mid in h.best_maps)),
                value=[world.maps[mid].name for mid in h.best_maps],
                source="derived:hero.best_map", team=team)
@@ -569,17 +590,18 @@ def _hero_facts(fs, world, h, team, m, opponents, teammates):
                    team=team)
 
 
-def _team_facts(fs, world, team, heroes, t, m, enemies):
+def _team_facts(fs: FactSet, world: World, team: str, heroes: Sequence[Hero], t: MetricBag,
+                m: Map | None, enemies: Sequence[Hero]) -> None:
     """One fact per team metric, worded for a reader."""
     names = ", ".join(h.name for h in heroes)
     label = "%s team" % team
     side = "red" if team == "blue" else "blue"
 
-    def add(key, text, unit=None, also=()):
+    def add(key: str, text: str, unit: str | None = None, also: Sequence[str] = ()) -> None:
         fs.add("team", team, "team." + key, text, value=t[key], unit=unit,
                source="derived:team." + key, team=team, also=also)
 
-    def listed(key, unit=None):
+    def listed(key: str, unit: str | None = None) -> None:
         """A metric worded by its registry line, once compute carries it."""
         if t.get(key):
             add(key, "%s %s: %g" % (label, compute.TEAM_METRICS[key], t[key]), unit)
@@ -766,10 +788,11 @@ def _team_facts(fs, world, team, heroes, t, m, enemies):
                        value=answerers, source="counters", team=team)
 
 
-def _matchup_facts(fs, blue_t, red_t):
-    x = compute.matchup_metrics(blue_t, red_t)
+def _matchup_facts(fs: FactSet, blue_t: MetricBag, red_t: MetricBag) -> None:
+    x: MetricBag = compute.matchup_metrics(blue_t, red_t)
 
-    def add(key, text, unit=None, value=None, also=()):
+    def add(key: str, text: str, unit: str | None = None, value: object = None,
+            also: Sequence[str] = ()) -> None:
         # a few board facts read blue's own metric: matchup carries only what
         # reading both sides produces, so those pass their value in
         fs.add("matchup", "blue vs red", "matchup." + key, text,
@@ -842,7 +865,7 @@ def _matchup_facts(fs, blue_t, red_t):
             value=x["style_lean_red"])
 
 
-def _playbook_record(fs, world):
+def _playbook_record(fs: FactSet, world: World) -> None:
     """S1..: the playbook's record - what it holds - never what the sources
     say, and not the constraints and heuristics themselves."""
     scope = PLAYBOOK_SCOPE

@@ -26,9 +26,10 @@ boundary does not draw it.
 
 This file holds what the whole layer must agree on: where things live (ROOT
 and the paths under it), the shape of a `sources` row (Source), the scope
-every rates snapshot is pinned to, and embed, which rewrites one generated
-section of a markdown file for every layer that generates docs. docs/db.md
-walks the tree.
+every rates snapshot is pinned to, the one error a caller can fix
+(Refusal), which every layer raises and every door answers as the caller's,
+and embed, which rewrites one generated section of a markdown file for
+every layer that generates docs. docs/db.md walks the tree.
 
 Every row carries a source_id, and that is the only distinction drawn
 between what was measured, what was judged and what was written by hand.
@@ -53,6 +54,11 @@ CACHE_DIRS = {
     "wiki": os.path.join(ROOT, ".cache-wiki"),
 }
 
+
+class Refusal(ValueError):  # noqa: N818  # named for the answer every door gives it
+    """A request the caller can fix: a name, a value or a board the caller can
+    change. Every door answers it as the caller's error; anything else is the
+    server's fault."""
 
 
 @dataclass(frozen=True)

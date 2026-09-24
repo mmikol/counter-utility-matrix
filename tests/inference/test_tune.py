@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from db import Refusal
 from inference import catalog, tune
 
 # --- tuning --------------------------------------------------------------------------
@@ -167,3 +168,10 @@ def test_a_file_whose_frontmatter_never_closes_is_refused():
     whole = "---\nname: X\nweight: 1\n---\nbody\n"
     assert tune.edit_frontmatter(whole, "weight", 2) == (
         "---\nname: X\nweight: 2\n---\nbody\n", "1")
+
+
+def test_a_catalog_error_is_the_operators_fault_and_a_tune_error_the_callers():
+    """A tuning change the caller got wrong is a Refusal every door answers as
+    the caller's error; a playbook that does not load is the operator's."""
+    assert issubclass(tune.TuneError, Refusal)
+    assert not issubclass(catalog.CatalogError, Refusal)

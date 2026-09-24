@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
-from db import KIND_ULTIMATE
+from db import KIND_ULTIMATE, Refusal
 from db.data.names import name_key
 from ui.facts.kit import Kit
 from ui.facts.records import (
@@ -229,14 +229,15 @@ class World:
     def resolve(
             self, map_name: str | None, red: Sequence[str], blue: Sequence[str],
             bans: Sequence[str] = (), allow_announced: bool = False) -> Resolved:
-        """Names -> Resolved(map or None, red, blue, banned); unknown names raise,
-        and so does a pick that is banned - or, unless `allow_announced`, a
-        hero announced but not yet released."""
+        """Names -> Resolved(map or None, red, blue, banned). Each of these is
+        a Refusal: an unknown name, a hero twice on one side, a pick that is
+        banned - or, unless `allow_announced`, a hero announced but not yet
+        released."""
         named = [*red, *blue, *bans]
         found = {n: self.hero(n) for n in named}
         unknown = [n for n in named if found[n] is None]
         if unknown:
-            raise ValueError("unknown heroes: %s" % ", ".join(unknown))
+            raise Refusal("unknown heroes: %s" % ", ".join(unknown))
         heroes = {n: h for n, h in found.items() if h is not None}
         # a hero may play for either team but cannot hold two seats on one, and a
         # ban list naming the same hero twice bans one hero
@@ -247,23 +248,23 @@ class World:
                 hid = heroes[n].id
                 twice.append(n) if hid in seen else seen.add(hid)
             if twice:
-                raise ValueError(
+                raise Refusal(
                     "%s picks the same hero twice: %s" % (label, ", ".join(sorted(set(twice)))))
         early = [heroes[n] for n in named if not heroes[n].released]
         if early and not allow_announced:
-            raise ValueError("announced, not yet playable: %s" % ", ".join(
+            raise Refusal("announced, not yet playable: %s" % ", ".join(
                 "%s (releases %s)" % (h.name, h.release_date) if h.release_date else h.name
                 for h in early))
         m = None
         if map_name:
             m = self.map(map_name)
             if m is None:
-                raise ValueError("unknown map: %s" % map_name)
+                raise Refusal("unknown map: %s" % map_name)
         banned = [heroes[n] for n in bans]
         banned_ids = {h.id for h in banned}
         clash = [heroes[n].name for n in [*red, *blue] if heroes[n].id in banned_ids]
         if clash:
-            raise ValueError("banned this match, cannot be picked: %s" % ", ".join(clash))
+            raise Refusal("banned this match, cannot be picked: %s" % ", ".join(clash))
         return Resolved(m, [heroes[n] for n in red], [heroes[n] for n in blue], banned)
 
     def heroes_by_role(self) -> list[Hero]:

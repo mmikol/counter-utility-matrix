@@ -53,7 +53,7 @@ from typing import NotRequired, TypedDict
 
 import psycopg
 
-from db import ROOT, embed
+from db import ROOT, Refusal, embed
 from db.data.authored import AUTHORED
 from db.psql import now, register_source
 from inference.expr import Expr, ExprError, Section, compile_expr
@@ -424,8 +424,8 @@ def parse_weights(items: Mapping[str, object] | Iterable[object] | None) -> dict
     """`id:value` strings (a query's repeated `weight` parameter) or a mapping
     -> {id: weight}, each clamped to the file's 0..10. What a board's sliders
     send. An entry that is not id:value, or a value that is not a number, is
-    refused: a ValueError, which the board, the service and the board tool
-    answer as the caller's error."""
+    a Refusal, which the board, the service and the board tool answer as the
+    caller's error."""
     if isinstance(items, Mapping):
         pairs = [(str(hid), value) for hid, value in items.items()]
     else:
@@ -433,11 +433,11 @@ def parse_weights(items: Mapping[str, object] | Iterable[object] | None) -> dict
     out = {}
     for hid, value in pairs:
         if not isinstance(value, (int, float, str)):
-            raise ValueError("weight %r for %r is not a number" % (value, hid))
+            raise Refusal("weight %r for %r is not a number" % (value, hid))
         try:
             weight = float(value)
         except ValueError:
-            raise ValueError("weight %r for %r is not a number" % (value, hid)) from None
+            raise Refusal("weight %r for %r is not a number" % (value, hid)) from None
         out[hid.strip()] = min(10.0, max(0.0, weight))
     return out
 
@@ -446,7 +446,7 @@ def _weight_entry(item: object) -> tuple[str, object]:
     """One `id:value` string -> (id, value)."""
     hid, colon, value = str(item).partition(":")
     if not colon:
-        raise ValueError("a weight is id:value, got %r" % item)
+        raise Refusal("a weight is id:value, got %r" % item)
     return hid, value
 
 

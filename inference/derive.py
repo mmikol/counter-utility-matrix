@@ -27,6 +27,7 @@ import tempfile
 from collections.abc import Callable, Collection, Iterable
 from typing import TypedDict
 
+from db import Refusal
 from inference import catalog as catalog_module
 from inference import tune
 from inference.catalog import Strategy
@@ -164,22 +165,27 @@ def _is_params(value: object) -> bool:
 
 
 def parse(output: str) -> tuple[dict[str, object], str]:
-    """The JSON object in the model's answer -> (fields, reason)."""
+    """The JSON object in the model's answer -> (fields, reason). An answer
+    the catalog cannot take is a Refusal, which derive() sends back once as
+    the objection."""
     m = re.search(r"\{.*\}", output, re.S)
     if not m:
-        raise ValueError("no JSON object in the answer: %r" % output[:200])
-    data = json.loads(m.group(0))
+        raise Refusal("no JSON object in the answer: %r" % output[:200])
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError as error:
+        raise Refusal("the answer's JSON does not parse: %s" % error) from error
     fields = data.get("fields") if isinstance(data, dict) else None
     if not isinstance(fields, dict) or not fields:
-        raise ValueError("the answer has no fields: %r" % output[:200])
+        raise Refusal("the answer has no fields: %r" % output[:200])
     unknown = set(fields) - FIELDS
     if unknown:
-        raise ValueError("the answer sets fields a strategy does not have: %s" % sorted(unknown))
+        raise Refusal("the answer sets fields a strategy does not have: %s" % sorted(unknown))
     if "kind" in fields and fields["kind"] != "assumption":
-        raise ValueError("a draft keeps its kind unless it turns out to be an assumption")
+        raise Refusal("a draft keeps its kind unless it turns out to be an assumption")
     params = fields.get("params")
     if params is not None and not _is_params(params):
-        raise ValueError("params must be NAME: number")
+        raise Refusal("params must be NAME: number")
     return fields, str(data.get("reason") or "derived from the prose")[:500]
 
 
@@ -245,7 +251,7 @@ def derive(ids: Collection[str] | None = None, directory: str | None = None,
                 out["derived"].append({"id": draft.id, "form": done["form"], "set": done["set"]})
                 completed = True
                 break
-            except ValueError as error:                 # a TuneError is one
+            except Refusal as error:                    # a TuneError is one
                 objection = str(error)
                 log("derive: %s attempt %d refused: %s" % (draft.id, attempt, objection))
             except CliUnavailableError as error:

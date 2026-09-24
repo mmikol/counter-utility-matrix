@@ -78,10 +78,10 @@ def _role(world: World, name: str) -> str | None:
 
 def search(world: World, name: str) -> Reach:
     """The first board that seats the hero, bans 0..MAX_BANS; with none, bans
-    None and the closest it came."""
-    hero = world.hero(name)
-    if hero is None:
-        raise ValueError("unknown heroes: %s" % name)
+    None and the closest it came. An unknown or announced hero is the Refusal
+    World.resolve gives every board tool; a database without maps leaves no
+    board to search, which is the server's fault, a RuntimeError."""
+    (hero,) = world.resolve(None, (), [name]).blue
     near: list[tuple[float, str, list[str], str]] = []
     for m in maps(world, hero):
         for red in reds(world, hero):
@@ -92,28 +92,41 @@ def search(world: World, name: str) -> Reach:
                             "red": red, "banned": [], "six": top.blue, "gap": 0.0}
                 held = engine.infer(world, m.name, red, [hero.name], side=side, top=1)
                 near.append((top.score - held.score, m.name, red, side))
+    if not near:
+        raise RuntimeError("reach: no board to search for %s: the database holds no maps"
+                           % hero.name)
     near.sort(key=lambda t: (t[0], t[1], t[3]))
     for _, map_name, red, side in near[:CLOSEST]:
-        banned: list[str] = []
-        # one solve of this board per ban, not two: the board a ban produces is
-        # the board the next round starts from, so the round reads it
-        for _ in range(MAX_BANS + 1):
-            top = engine.infer(world, map_name, red, [], side=side, bans=banned, top=1)
-            if banned and hero.name in top.blue:
-                return {"hero": hero.name, "bans": len(banned), "map": map_name, "side": side,
-                        "red": red, "banned": banned, "six": top.blue, "gap": 0.0}
-            if len(banned) == MAX_BANS:
-                break
-            held = engine.infer(world, map_name, red, [hero.name], side=side, bans=banned,
-                                top=1)
-            rivals = [h for h in top.blue if _role(world, h) == hero.role
-                      and h not in held.blue and h not in red]
-            if not rivals:
-                break
-            banned = [*banned, rivals[0]]
+        found = _banning(world, hero, map_name, red, side)
+        if found is not None:
+            return found
     gap, map_name, red, side = near[0]
     return {"hero": hero.name, "bans": None, "map": map_name, "side": side, "red": red,
             "banned": [], "six": [], "gap": round(gap, 3)}
+
+
+def _banning(world: World, hero: Hero, map_name: str, red: list[str], side: str) -> Reach | None:
+    """One board's ban search: each round bans the first rival that holds the
+    hero's seat, up to MAX_BANS -> the board once the hero seats, or None when
+    it never does or no rival is left to ban."""
+    banned: list[str] = []
+    # one solve of this board per ban, not two: the board a ban produces is
+    # the board the next round starts from, so the round reads it
+    for _ in range(MAX_BANS + 1):
+        top = engine.infer(world, map_name, red, [], side=side, bans=banned, top=1)
+        if banned and hero.name in top.blue:
+            return {"hero": hero.name, "bans": len(banned), "map": map_name, "side": side,
+                    "red": red, "banned": banned, "six": top.blue, "gap": 0.0}
+        if len(banned) == MAX_BANS:
+            break
+        held = engine.infer(world, map_name, red, [hero.name], side=side, bans=banned,
+                            top=1)
+        rivals = [h for h in top.blue if _role(world, h) == hero.role
+                  and h not in held.blue and h not in red]
+        if not rivals:
+            break
+        banned = [*banned, rivals[0]]
+    return None
 
 
 def seated(world: World, board: Reach) -> bool:
