@@ -37,6 +37,11 @@ SHAPE_REACH = 4.0                 # a shape starts too when its best six is this
 PAIR_TRIES = 800                  # the most new sixes one refine scores bringing pairs in
 
 
+class Infeasible(Refusal):
+    """No six meets the playbook's limits on this board. The board and the
+    playbook answer it, so it is a Refusal: the server is not at fault."""
+
+
 class Solved(NamedTuple):
     """A board's search: the solver that ran it and its ranked winners, hydrated."""
     solver: "Solver"
@@ -405,8 +410,8 @@ def evaluate_comp(world: World, m: Map | None, heroes: Sequence[Hero], *,
                   swept: Swept | None = None) -> Evaluated:
     """Score one full six against the field the solver would search. `swept`
     takes a Swept from elsewhere - the same board's optimal search, which
-    sweeps the same field. A board with no feasible six is refused, as infer
-    refuses it."""
+    sweeps the same field. A board with no feasible six is Infeasible, as
+    infer refuses it."""
     if swept is None:
         solver = Solver(world, m, red=red, locked=[], banned=banned, side=side,
                         catalog=catalog, pool_size=pool_size)
@@ -415,8 +420,8 @@ def evaluate_comp(world: World, m: Map | None, heroes: Sequence[Hero], *,
     solver = swept.solver
     solver.considered = swept.size
     if not swept.feasible:
-        raise Refusal("no composition satisfies the limits on this board - relax a"
-                      " constraint in inference/strategies/")
+        raise Infeasible("no composition satisfies the limits on this board - relax a"
+                         " constraint in inference/strategies/")
     target = solver.score(solver.prepare(Candidate(heroes)))
     # rank against the field the search actually ends on. Ranking against the raw
     # sweep alone called a six first that the refinement had already beaten, so a

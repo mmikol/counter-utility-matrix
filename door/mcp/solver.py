@@ -128,7 +128,7 @@ def reach_tool(ctx: Context, hero: str) -> ToolReply:   # _tool: inference.reach
     found = reach.search(world, hero)
     where = "%s%s against %s" % (found["map"], " " + found["side"] if found["side"] else "",
                                  ", ".join(found["red"]) or "the likely six")
-    if found["bans"] is None:
+    if not found["seated"]:
         return ToolReply("%s is never the optimal pick, even with every ban; closest on %s,"
                          " %.2f behind" % (found["hero"], where, found["gap"]), found)
     return ToolReply("%s is optimal on %s%s: %s" % (

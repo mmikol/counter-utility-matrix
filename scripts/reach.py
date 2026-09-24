@@ -30,7 +30,7 @@ def main() -> int:
     unseated: list[str] = []
     for hero in sorted((h for h in world.heroes.values() if h.released), key=lambda h: h.name):
         found = reach.search(world, hero.name)
-        if found["bans"] is None:
+        if not found["seated"]:
             unseated.append("%s %.3f" % (hero.name, found["gap"]))
         else:
             seated.append(found)
@@ -40,7 +40,7 @@ def main() -> int:
     print(
         "recorded %d seated heroes under playbook %s, %d of them after bans; unseated: %s"
         % (
-            len(seated), playbook[:12], sum(1 for b in seated if b["bans"]),
+            len(seated), playbook[:12], sum(1 for b in seated if b["banned"]),
             ", ".join(unseated) or "none"))
     return 0
 

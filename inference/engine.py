@@ -38,7 +38,7 @@ from inference.plan import Seats, momentum, plan
 from inference.result import Alternative, Board, Pick, Result, ResultKind, Seat
 from inference.scoring import Candidate
 from inference.shapes import legal_shapes
-from inference.solver import Solved, Solver, Swept, evaluate_comp
+from inference.solver import Infeasible, Solved, Solver, Swept, evaluate_comp
 from inference.strategy import Strategy
 
 
@@ -179,7 +179,7 @@ def _optimal(
         solved = Solver(world, m, red=red_h, locked=blue_h, banned=bans_h, side=side,
                         catalog=catalog, pool_size=pool_size).solve(top=max(top, 1) + 1)
     if not solved.ranked:
-        raise Refusal("no composition satisfies the limits around the"
+        raise Infeasible("no composition satisfies the limits around the"
                          " locked %s picks - relax a constraint in inference/strategies/"
                          % seat)
     best = solved.ranked[0]

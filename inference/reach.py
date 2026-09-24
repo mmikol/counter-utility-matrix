@@ -23,6 +23,7 @@ from typing import NamedTuple, TypedDict
 from facts.draft import MAX_BANS, SIDES, Draft, is_sided
 from facts.model import Hero, Map, World
 from inference import engine
+from inference.solver import Infeasible
 
 MAPS = 4
 CLOSEST = 5         # boards the ban search starts from
@@ -30,11 +31,12 @@ CLOSEST = 5         # boards the ban search starts from
 
 class Reach(TypedDict):
     """A board a search found for a hero - the reach tool's answer and a row of
-    tests/fixtures/reach.json. bans counts the rivals banned (banned names them);
-    None means no board seated the hero, and the rest is the closest it came,
-    gap the score it fell short by."""
+    tests/fixtures/reach.json. seated says whether the hero is in the board's
+    optimal six; banned names the rivals banned, and the count is
+    len(banned). On a board that does not seat the hero the rest describes
+    the closest it came, gap the score it fell short by."""
     hero: str
-    bans: int | None
+    seated: bool
     map: str
     side: str
     red: list[str]
@@ -85,52 +87,72 @@ def _role(world: World, name: str) -> str | None:
 
 
 def search(world: World, name: str) -> Reach:
-    """The first board that seats the hero, bans 0..MAX_BANS; with none, bans
-    None and the closest it came. An unknown or announced hero is the Refusal
-    World.resolve gives every board tool; a database without maps leaves no
-    board to search, which is the server's fault, a RuntimeError."""
+    """The first board that seats the hero, bans 0..MAX_BANS; with none, the
+    closest it came, unseated. A board whose limits allow no six, or no six
+    holding the hero, is a miss, and the search goes on. It raises:
+
+        Refusal       an unknown or announced hero, as World.resolve refuses
+                      one on every board tool
+        RuntimeError  a database without maps, which leaves no board to
+                      search - the server's fault
+        Infeasible    a Refusal: no board the search tries allows a six
+                      within the playbook's limits
+    """
     (hero,) = world.resolve(None, (), [name]).blue
-    near: list[_Near] = []
-    for m in maps(world, hero):
-        for red in reds(world, hero):
-            for side in (SIDES if is_sided(m) else ("",)):
-                top = engine.infer(world, Draft(map_name=m.name, red=tuple(red), side=side), top=1)
-                if hero.name in top.blue:
-                    return {"hero": hero.name, "bans": 0, "map": m.name, "side": side,
-                            "red": red, "banned": [], "six": top.blue, "gap": 0.0}
-                held = engine.infer(world, Draft(map_name=m.name, red=tuple(red),
-                                                 blue=(hero.name,), side=side), top=1)
-                near.append(_Near(top.score - held.score, m.name, red, side))
-    if not near:
+    boards = maps(world, hero)
+    if not boards:
         raise RuntimeError("reach: no board to search for %s: the database holds no maps"
                            % hero.name)
+    near: list[_Near] = []
+    for m in boards:
+        for red in reds(world, hero):
+            for side in (SIDES if is_sided(m) else ("",)):
+                try:
+                    top = engine.infer(world, Draft(map_name=m.name, red=tuple(red), side=side),
+                                       top=1)
+                    if hero.name in top.blue:
+                        return {"hero": hero.name, "seated": True, "map": m.name, "side": side,
+                                "red": red, "banned": [], "six": top.blue, "gap": 0.0}
+                    held = engine.infer(world, Draft(map_name=m.name, red=tuple(red),
+                                                     blue=(hero.name,), side=side), top=1)
+                except Infeasible:
+                    continue
+                near.append(_Near(top.score - held.score, m.name, red, side))
+    if not near:
+        raise Infeasible("reach: no board the search tries seats %s within the playbook's"
+                         " limits - relax a constraint in inference/strategies/" % hero.name)
     near.sort(key=lambda n: (n.gap, n.map_name, n.side))
     for board in near[:CLOSEST]:
         found = _banning(world, hero, board.map_name, board.red, board.side)
         if found is not None:
             return found
     closest = near[0]
-    return {"hero": hero.name, "bans": None, "map": closest.map_name, "side": closest.side,
+    return {"hero": hero.name, "seated": False, "map": closest.map_name, "side": closest.side,
             "red": closest.red, "banned": [], "six": [], "gap": round(closest.gap, 3)}
 
 
 def _banning(world: World, hero: Hero, map_name: str, red: list[str], side: str) -> Reach | None:
     """One board's ban search: each round bans the first rival that holds the
     hero's seat, up to MAX_BANS -> the board once the hero seats, or None when
-    it never does or no rival is left to ban."""
+    it never does, no rival is left to ban or a ban leaves no six within the
+    playbook's limits."""
     banned: list[str] = []
     # one solve of this board per ban, not two: the board a ban produces is
     # the board the next round starts from, so the round reads it
     for _ in range(MAX_BANS + 1):
-        top = engine.infer(world, Draft(map_name=map_name, red=tuple(red),
-                                        bans=tuple(banned), side=side), top=1)
-        if banned and hero.name in top.blue:
-            return {"hero": hero.name, "bans": len(banned), "map": map_name, "side": side,
-                    "red": red, "banned": banned, "six": top.blue, "gap": 0.0}
-        if len(banned) == MAX_BANS:
-            break
-        held = engine.infer(world, Draft(map_name=map_name, red=tuple(red), blue=(hero.name,),
-                                         bans=tuple(banned), side=side), top=1)
+        try:
+            top = engine.infer(world, Draft(map_name=map_name, red=tuple(red),
+                                            bans=tuple(banned), side=side), top=1)
+            if banned and hero.name in top.blue:
+                return {"hero": hero.name, "seated": True, "map": map_name, "side": side,
+                        "red": red, "banned": banned, "six": top.blue, "gap": 0.0}
+            if len(banned) == MAX_BANS:
+                break
+            held = engine.infer(world, Draft(map_name=map_name, red=tuple(red),
+                                             blue=(hero.name,), bans=tuple(banned), side=side),
+                                top=1)
+        except Infeasible:
+            return None
         rivals = [h for h in top.blue if _role(world, h) == hero.role
                   and h not in held.blue and h not in red]
         if not rivals:
@@ -140,7 +162,11 @@ def _banning(world: World, hero: Hero, map_name: str, red: list[str], side: str)
 
 
 def seated(world: World, board: Reach) -> bool:
-    """Is the hero still in the optimal six of the board a search recorded for it?"""
-    top = engine.infer(world, Draft(map_name=board["map"], red=tuple(board["red"]),
-                                    bans=tuple(board["banned"]), side=board["side"]), top=1)
+    """Is the hero still in the optimal six of the board a search recorded for
+    it? A board the playbook's limits no longer fit has fallen: it seats no one."""
+    try:
+        top = engine.infer(world, Draft(map_name=board["map"], red=tuple(board["red"]),
+                                        bans=tuple(board["banned"]), side=board["side"]), top=1)
+    except Infeasible:
+        return False
     return board["hero"] in top.blue

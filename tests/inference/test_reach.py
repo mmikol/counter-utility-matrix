@@ -14,8 +14,9 @@ import pytest
 from db import Refusal
 from facts.model import World
 from inference import catalog, reach
+from inference.solver import Infeasible
 from scripts import reach as recorder
-from tests.inference import recorded
+from tests.inference import FIXTURE_PLAYBOOK, recorded
 
 UNSEATED = {"Freja", "Shion"}       # named, not waived - see the test
 
@@ -32,7 +33,7 @@ def test_every_hero_reach_finds_a_board_for_is_still_seated_and_none_is_newly_lo
     boards = fixture["boards"]
     released = {h.name for h in world.heroes.values() if h.released}
     on_file = {b["hero"] for b in boards}
-    assert all(b["bans"] is not None and b["bans"] <= reach.MAX_BANS for b in boards)
+    assert all(b["seated"] and len(b["banned"]) <= reach.MAX_BANS for b in boards)
     fell = [b["hero"] for b in boards if b["hero"] in released and not reach.seated(world, b)]
     # a stale fixture fails here, before the costly search for what it lost
     stale = (
@@ -41,7 +42,7 @@ def test_every_hero_reach_finds_a_board_for_is_still_seated_and_none_is_newly_lo
     assert len(fell) <= len(boards) // 5, "the recorded boards have gone stale%s: %s" % (
         stale, fell)
     lost = [name for name in sorted((released - on_file) | set(fell))
-            if reach.search(world, name)["bans"] is None]
+            if not reach.search(world, name)["seated"]]
     # Two heroes reach.search finds no board for. That is not a proof none exists -
     # the search tries four maps and a few reds per hero, so a board it never
     # visits could seat either of them - but it is what the search establishes,
@@ -66,7 +67,7 @@ def test_the_reach_fixture_names_the_playbook_it_was_recorded_under():
     boards = recorded("reach")["boards"]
     heroes = [b["hero"] for b in boards]
     assert len(set(heroes)) == len(heroes), "a hero is recorded twice"
-    assert all(b["bans"] is not None for b in boards), "an unseated board is on file"
+    assert all(b["seated"] for b in boards), "an unseated board is on file"
 
 
 def test_reach_refuses_a_hero_the_world_does_not_know():
@@ -83,6 +84,41 @@ def test_reach_without_a_map_pool_is_the_servers_fault(synthetic_world, monkeypa
     assert not isinstance(caught.value, Refusal)
 
 
+def test_a_board_no_six_fits_is_a_miss_and_the_search_goes_on(synthetic_world, monkeypatch):
+    """Harbor Gate, Anvil's best map, is made to allow no six: the search
+    counts it a miss and goes on to the next map, where it used to end on
+    the engine's refusal."""
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", FIXTURE_PLAYBOOK)
+    monkeypatch.setattr(reach, "reds", lambda world, hero: [[]])
+    infer = reach.engine.infer
+
+    def fenced(world, draft, **kw):
+        if draft.map_name == "Harbor Gate":
+            raise Infeasible("no composition satisfies the limits on this board")
+        return infer(world, draft, **kw)
+    monkeypatch.setattr(reach.engine, "infer", fenced)
+    anvil = synthetic_world.hero("Anvil")
+    board = reach.search(synthetic_world, "Anvil")
+    assert board["map"] in [m.name for m in reach.maps(synthetic_world, anvil)[1:]]
+
+
+def test_a_hero_no_board_fits_is_infeasible_not_a_crash(synthetic_world, monkeypatch):
+    """With no board the search tries allowing a six, reach refuses the hero
+    as the playbook's to relax, and a recorded board that no longer fits has
+    fallen: it seats no one."""
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", FIXTURE_PLAYBOOK)
+
+    def fenced(world, draft, **kw):
+        raise Infeasible("no composition satisfies the limits on this board")
+    monkeypatch.setattr(reach.engine, "infer", fenced)
+    with pytest.raises(Infeasible, match="no board the search tries seats Anvil") as caught:
+        reach.search(synthetic_world, "Anvil")
+    assert isinstance(caught.value, Refusal)
+    recorded_board = {"hero": "Anvil", "seated": True, "map": "Harbor Gate", "side": "",
+                      "red": [], "banned": [], "six": ["Anvil"], "gap": 0.0}
+    assert reach.seated(synthetic_world, recorded_board) is False
+
+
 def test_a_hero_its_best_map_favours_is_seated_there_with_no_ban(synthetic_world):
     """Anvil's map rates lift it most on Harbor Gate: the search tries that map
     first, finds Anvil in the optimal six against red's likely six, and the
@@ -91,7 +127,8 @@ def test_a_hero_its_best_map_favours_is_seated_there_with_no_ban(synthetic_world
     assert reach.maps(synthetic_world, anvil)[0].name == "Harbor Gate"
     assert reach.reds(synthetic_world, anvil)[0] == []
     board = reach.search(synthetic_world, "Anvil")
-    assert (board["bans"], board["map"], board["red"], board["gap"]) == (0, "Harbor Gate", [], 0.0)
+    assert (board["seated"], board["banned"], board["map"], board["red"], board["gap"]) == (
+        True, [], "Harbor Gate", [], 0.0)
     assert "Anvil" in board["six"] and reach.seated(synthetic_world, board)
 
 
@@ -116,10 +153,10 @@ def test_the_recorder_writes_every_seated_hero_beside_the_playbook_digest(
     def search(world, name):
         searched.append(name)
         if name == "Quarry":
-            return {"hero": name, "bans": None, "map": "Salt Flats", "side": "", "red": [],
+            return {"hero": name, "seated": False, "map": "Salt Flats", "side": "", "red": [],
                     "banned": [], "six": [], "gap": 1.235}
         banned = ["Needle"] if name == "Rook" else []
-        return {"hero": name, "bans": len(banned), "map": "Harbor Gate", "side": "attack",
+        return {"hero": name, "seated": True, "map": "Harbor Gate", "side": "attack",
                 "red": [], "banned": banned, "six": [name], "gap": 0.0}
     monkeypatch.setattr(recorder.psql, "default_dsn", lambda: "postgresql://nowhere")
     monkeypatch.setattr(recorder.psycopg, "connect", lambda dsn: _Connected())

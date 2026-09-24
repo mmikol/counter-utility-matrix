@@ -3,7 +3,7 @@
  "boards": [
   {
    "hero": "Ana",
-   "bans": 0,
+   "seated": true,
    "map": "Junkertown",
    "side": "defense",
    "red": [],
@@ -20,7 +20,7 @@
   },
   {
    "hero": "Anran",
-   "bans": 1,
+   "seated": true,
    "map": "Runasapi",
    "side": "",
    "red": [
@@ -46,7 +46,7 @@
   },
   {
    "hero": "Ashe",
-   "bans": 0,
+   "seated": true,
    "map": "Circuit Royal",
    "side": "attack",
    "red": [],
@@ -63,7 +63,7 @@
   },
   {
    "hero": "Baptiste",
-   "bans": 0,
+   "seated": true,
    "map": "New Queen Street",
    "side": "",
    "red": [
@@ -87,7 +87,7 @@
   },
   {
    "hero": "Bastion",
-   "bans": 0,
+   "seated": true,
    "map": "Antarctic Peninsula",
    "side": "",
    "red": [],
@@ -104,7 +104,7 @@
   },
   {
    "hero": "Brigitte",
-   "bans": 0,
+   "seated": true,
    "map": "Ilios",
    "side": "",
    "red": [],
@@ -121,7 +121,7 @@
   },
   {
    "hero": "Cassidy",
-   "bans": 0,
+   "seated": true,
    "map": "Busan",
    "side": "",
    "red": [
@@ -145,7 +145,7 @@
   },
   {
    "hero": "D.Mon",
-   "bans": 0,
+   "seated": true,
    "map": "Esperan\u00e7a",
    "side": "",
    "red": [],
@@ -162,7 +162,7 @@
   },
   {
    "hero": "D.Va",
-   "bans": 0,
+   "seated": true,
    "map": "Runasapi",
    "side": "",
    "red": [],
@@ -179,7 +179,7 @@
   },
   {
    "hero": "Domina",
-   "bans": 0,
+   "seated": true,
    "map": "Circuit Royal",
    "side": "attack",
    "red": [],
@@ -196,7 +196,7 @@
   },
   {
    "hero": "Doomfist",
-   "bans": 0,
+   "seated": true,
    "map": "Aatlis",
    "side": "",
    "red": [
@@ -220,7 +220,7 @@
   },
   {
    "hero": "Echo",
-   "bans": 0,
+   "seated": true,
    "map": "Eichenwalde",
    "side": "attack",
    "red": [
@@ -244,7 +244,7 @@
   },
   {
    "hero": "Emre",
-   "bans": 5,
+   "seated": true,
    "map": "Havana",
    "side": "attack",
    "red": [],
@@ -267,7 +267,7 @@
   },
   {
    "hero": "Genji",
-   "bans": 0,
+   "seated": true,
    "map": "Shambali Monastery",
    "side": "attack",
    "red": [
@@ -291,7 +291,7 @@
   },
   {
    "hero": "Hanzo",
-   "bans": 0,
+   "seated": true,
    "map": "Rialto",
    "side": "attack",
    "red": [],
@@ -308,7 +308,7 @@
   },
   {
    "hero": "Hazard",
-   "bans": 5,
+   "seated": true,
    "map": "Dorado",
    "side": "attack",
    "red": [],
@@ -331,7 +331,7 @@
   },
   {
    "hero": "Illari",
-   "bans": 2,
+   "seated": true,
    "map": "Suravasa",
    "side": "",
    "red": [
@@ -358,7 +358,7 @@
   },
   {
    "hero": "Jetpack Cat",
-   "bans": 0,
+   "seated": true,
    "map": "Ilios",
    "side": "",
    "red": [
@@ -382,7 +382,7 @@
   },
   {
    "hero": "Junker Queen",
-   "bans": 0,
+   "seated": true,
    "map": "Runasapi",
    "side": "",
    "red": [],
@@ -399,7 +399,7 @@
   },
   {
    "hero": "Junkrat",
-   "bans": 0,
+   "seated": true,
    "map": "Ilios",
    "side": "",
    "red": [
@@ -423,7 +423,7 @@
   },
   {
    "hero": "Juno",
-   "bans": 0,
+   "seated": true,
    "map": "Circuit Royal",
    "side": "attack",
    "red": [],
@@ -440,7 +440,7 @@
   },
   {
    "hero": "Kiriko",
-   "bans": 0,
+   "seated": true,
    "map": "Havana",
    "side": "attack",
    "red": [
@@ -464,7 +464,7 @@
   },
   {
    "hero": "Lifeweaver",
-   "bans": 0,
+   "seated": true,
    "map": "Esperan\u00e7a",
    "side": "",
    "red": [
@@ -488,7 +488,7 @@
   },
   {
    "hero": "L\u00facio",
-   "bans": 0,
+   "seated": true,
    "map": "Ilios",
    "side": "",
    "red": [
@@ -512,7 +512,7 @@
   },
   {
    "hero": "Mauga",
-   "bans": 1,
+   "seated": true,
    "map": "Busan",
    "side": "",
    "red": [
@@ -538,7 +538,7 @@
   },
   {
    "hero": "Mei",
-   "bans": 0,
+   "seated": true,
    "map": "Runasapi",
    "side": "",
    "red": [
@@ -562,7 +562,7 @@
   },
   {
    "hero": "Mercy",
-   "bans": 0,
+   "seated": true,
    "map": "Dorado",
    "side": "attack",
    "red": [],
@@ -579,7 +579,7 @@
   },
   {
    "hero": "Mizuki",
-   "bans": 0,
+   "seated": true,
    "map": "Samoa",
    "side": "",
    "red": [
@@ -603,7 +603,7 @@
   },
   {
    "hero": "Moira",
-   "bans": 0,
+   "seated": true,
    "map": "Colosseo",
    "side": "",
    "red": [
@@ -627,7 +627,7 @@
   },
   {
    "hero": "Orisa",
-   "bans": 0,
+   "seated": true,
    "map": "Busan",
    "side": "",
    "red": [
@@ -651,7 +651,7 @@
   },
   {
    "hero": "Pharah",
-   "bans": 0,
+   "seated": true,
    "map": "Lijiang Tower",
    "side": "",
    "red": [],
@@ -668,7 +668,7 @@
   },
   {
    "hero": "Ramattra",
-   "bans": 0,
+   "seated": true,
    "map": "Antarctic Peninsula",
    "side": "",
    "red": [
@@ -692,7 +692,7 @@
   },
   {
    "hero": "Reaper",
-   "bans": 0,
+   "seated": true,
    "map": "New Queen Street",
    "side": "",
    "red": [],
@@ -709,7 +709,7 @@
   },
   {
    "hero": "Reinhardt",
-   "bans": 0,
+   "seated": true,
    "map": "Shambali Monastery",
    "side": "attack",
    "red": [
@@ -733,7 +733,7 @@
   },
   {
    "hero": "Roadhog",
-   "bans": 0,
+   "seated": true,
    "map": "Ilios",
    "side": "",
    "red": [],
@@ -750,7 +750,7 @@
   },
   {
    "hero": "Sierra",
-   "bans": 5,
+   "seated": true,
    "map": "Watchpoint: Gibraltar",
    "side": "attack",
    "red": [
@@ -780,7 +780,7 @@
   },
   {
    "hero": "Sigma",
-   "bans": 0,
+   "seated": true,
    "map": "Circuit Royal",
    "side": "attack",
    "red": [
@@ -804,7 +804,7 @@
   },
   {
    "hero": "Sojourn",
-   "bans": 4,
+   "seated": true,
    "map": "Circuit Royal",
    "side": "defense",
    "red": [
@@ -833,7 +833,7 @@
   },
   {
    "hero": "Soldier: 76",
-   "bans": 0,
+   "seated": true,
    "map": "New Queen Street",
    "side": "",
    "red": [],
@@ -850,7 +850,7 @@
   },
   {
    "hero": "Sombra",
-   "bans": 0,
+   "seated": true,
    "map": "Esperan\u00e7a",
    "side": "",
    "red": [
@@ -874,7 +874,7 @@
   },
   {
    "hero": "Symmetra",
-   "bans": 0,
+   "seated": true,
    "map": "Lijiang Tower",
    "side": "",
    "red": [
@@ -898,7 +898,7 @@
   },
   {
    "hero": "Torbj\u00f6rn",
-   "bans": 2,
+   "seated": true,
    "map": "New Junk City",
    "side": "",
    "red": [
@@ -925,7 +925,7 @@
   },
   {
    "hero": "Tracer",
-   "bans": 0,
+   "seated": true,
    "map": "Runasapi",
    "side": "",
    "red": [
@@ -949,7 +949,7 @@
   },
   {
    "hero": "Vendetta",
-   "bans": 0,
+   "seated": true,
    "map": "Route 66",
    "side": "attack",
    "red": [],
@@ -966,7 +966,7 @@
   },
   {
    "hero": "Venture",
-   "bans": 0,
+   "seated": true,
    "map": "Aatlis",
    "side": "",
    "red": [],
@@ -983,7 +983,7 @@
   },
   {
    "hero": "Widowmaker",
-   "bans": 0,
+   "seated": true,
    "map": "Havana",
    "side": "attack",
    "red": [],
@@ -1000,7 +1000,7 @@
   },
   {
    "hero": "Winston",
-   "bans": 0,
+   "seated": true,
    "map": "New Junk City",
    "side": "",
    "red": [
@@ -1024,7 +1024,7 @@
   },
   {
    "hero": "Wrecking Ball",
-   "bans": 0,
+   "seated": true,
    "map": "Dorado",
    "side": "attack",
    "red": [
@@ -1048,7 +1048,7 @@
   },
   {
    "hero": "Wuyang",
-   "bans": 0,
+   "seated": true,
    "map": "Shambali Monastery",
    "side": "attack",
    "red": [
@@ -1072,7 +1072,7 @@
   },
   {
    "hero": "Zarya",
-   "bans": 2,
+   "seated": true,
    "map": "Oasis",
    "side": "",
    "red": [],
@@ -1092,7 +1092,7 @@
   },
   {
    "hero": "Zenyatta",
-   "bans": 0,
+   "seated": true,
    "map": "Circuit Royal",
    "side": "attack",
    "red": [],
