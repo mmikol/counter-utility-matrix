@@ -4,8 +4,9 @@ refusal answered as the caller's error, a fault as the server's, the
 strategy resources, and the audit line a call leaves even when the log
 cannot be written. None of it needs a database (tools/list and
 list_sources read nothing). This module holds the tool set a session sees.
-The HTTP door, the tools themselves and the entry point have modules of
-their own (test_mcp_http, test_mcp_tools, test_mcp_entry)."""
+The HTTP door, the tools themselves, the registry and the entry point have
+modules of their own (test_mcp_http, test_mcp_tools, test_mcp_registry,
+test_mcp_entry)."""
 
 import json
 import subprocess
