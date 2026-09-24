@@ -103,10 +103,8 @@ def _insert_modifiers(
         affects = modifiers.affected_quantity(code, value_text, keywords)
         if affects is None:
             continue
-        for value, numerator, _, _, _, _ in parse_measurements(
-            value_text, "percent"
-        ):
-            if value is None or numerator is None:
+        for measured in parse_measurements(value_text, "percent"):
+            if measured.value is None or measured.numerator is None:
                 continue
             cursor.execute(
                 "INSERT INTO ability_modifiers (ability_id, stat_key_id, affects,"
@@ -116,7 +114,7 @@ def _insert_modifiers(
                 " DO NOTHING",
                 (ability_id, key_ids[code], affects,
                  modifiers.applies_to(code, value_text, keywords),
-                 value, numerator, source_id),
+                 measured.value, measured.numerator, source_id),
             )
             written += cursor.rowcount
     return written
@@ -173,19 +171,19 @@ def _load_weapons(
         cursor: psycopg.Cursor, hero_id: int, weapons: list[WeaponEntry],
         key_ids: Mapping[str, int], source_id: int, tally: KitTally) -> None:
     """Weapons, their firing configs (with keywords), and the stats on each."""
-    for position, (weapon_name, configs) in enumerate(group_weapons(weapons)):
+    for position, weapon in enumerate(group_weapons(weapons)):
         cursor.execute(
             "INSERT INTO weapons (hero_id, name, position, source_id)"
             " VALUES (%s, %s, %s, %s)"
             " ON CONFLICT (hero_id, name) DO NOTHING RETURNING weapon_id",
-            (hero_id, weapon_name, position, source_id),
+            (hero_id, weapon.name, position, source_id),
         )
         row = cursor.fetchone()
         if row is None:
             continue
         tally.weapons += 1
 
-        for config_position, config in enumerate(configs):
+        for config_position, config in enumerate(weapon.configs):
             cursor.execute(
                 "INSERT INTO weapon_configs (weapon_id, slot_id, name,"
                 " weapon_type, keywords, position, source_id)"
@@ -212,14 +210,14 @@ def _load_abilities(
         source_id: int, tally: KitTally) -> None:
     """Classify the abilities Blizzard loaded, add the ones it omits, stat
     them, store their keywords. Weapon entries take part ONLY to classify."""
-    existing = {
+    existing: dict[str, int] = {
         ability_key(row[0]): row[1]
         for row in cursor.execute(
             "SELECT name, ability_id FROM abilities WHERE hero_id = %s",
             (hero_id,),
         ).fetchall()
     }
-    next_position = psql.scalar(cursor.execute(
+    next_position: int = psql.scalar(cursor.execute(
         "SELECT coalesce(max(position), -1) + 1 FROM abilities WHERE hero_id = %s",
         (hero_id,),
     ))
@@ -278,12 +276,12 @@ def _load_perks(
         cursor: psycopg.Cursor, hero_id: int, perks: list[PerkEntry],
         key_ids: Mapping[str, int], source_id: int, tally: KitTally) -> None:
     """Perk stats, and the link from a perk to the ability it alters."""
-    ability_names = [
+    ability_names: list[str] = [
         row[0] for row in cursor.execute(
             "SELECT name FROM abilities WHERE hero_id = %s", (hero_id,)
         ).fetchall()
     ]
-    perk_ids = {
+    perk_ids: dict[str, int] = {
         ability_key(row[0]): row[1]
         for row in cursor.execute(
             "SELECT name, perk_id FROM perks WHERE hero_id = %s", (hero_id,)

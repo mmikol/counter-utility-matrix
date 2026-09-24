@@ -21,6 +21,7 @@ those are different loadouts, not modes of one gun.
 """
 
 import re
+from typing import NamedTuple
 
 from db.data.wiki.kit_rows import WeaponEntry
 
@@ -71,22 +72,28 @@ def _merges(previous: WeaponEntry, entry: WeaponEntry) -> bool:
     return True
 
 
-def group_weapons(entries: list[WeaponEntry]) -> list[tuple[str, list[WeaponEntry]]]:
-    """[weapon entry] -> [(weapon_name, [config entry])] in source order.
+class Weapon(NamedTuple):
+    """A weapon and its firing configs, in source order."""
+    name: str
+    configs: list[WeaponEntry]
+
+
+def group_weapons(entries: list[WeaponEntry]) -> list[Weapon]:
+    """[weapon entry] -> [Weapon(name, [config entry])] in source order.
 
     Also names each ADS config after the weapon it belongs to. The wiki calls
     them anything - "Zoom (ADS)", "Take Aim (ADS)" - and the weapon's own name
     is only known once the configs are grouped, which is why it happens here.
     """
-    weapons: list[tuple[str, list[WeaponEntry]]] = []
+    weapons: list[Weapon] = []
     for entry in entries:
-        if weapons and _merges(weapons[-1][1][-1], entry):
-            weapons[-1][1].append(entry)
+        if weapons and _merges(weapons[-1].configs[-1], entry):
+            weapons[-1].configs.append(entry)
         else:
-            weapons.append((base_name(entry["name"]), [entry]))
+            weapons.append(Weapon(base_name(entry["name"]), [entry]))
 
-    for weapon_name, configs in weapons:
-        for config in configs:
+    for weapon in weapons:
+        for config in weapon.configs:
             if slot_id(config["mode"] or config["input_key"]) == ADS_SLOT:
-                config["display_name"] = "%s (ADS)" % weapon_name
+                config["display_name"] = "%s (ADS)" % weapon.name
     return weapons

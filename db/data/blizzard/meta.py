@@ -141,8 +141,8 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary
     rq = competitive_rq(pull.session, pull.cache_dir)
     baseline = fetch_slice(pull.session, {}, pull.cache_dir, rq)
     tiers = parse_filter_options(baseline, "filter-tier-select")
-    maps = [m for m in parse_filter_options(baseline, "filter-map-select")
-            if m[0] != "all-maps"]
+    maps = [(slug, label) for slug, label in parse_filter_options(baseline, "filter-map-select")
+            if slug != "all-maps"]
 
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, BLIZZARD, cao)

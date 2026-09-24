@@ -16,8 +16,11 @@ from typing import Literal, NamedTuple, TypedDict
 from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON
 from db.data.wiki import markup
 
-# A stat's value: (clean text, the wiki's raw markup).
-StatValue = tuple[str, str]
+
+class StatValue(NamedTuple):
+    """A stat's value: its clean text, and the wiki's raw markup it was read from."""
+    text: str
+    raw: str
 
 
 class KitEntry(TypedDict):
@@ -101,7 +104,7 @@ def _stats(fields: Mapping[str, str]) -> dict[str, StatValue]:
             continue
         value = markup.html_to_text(raw)
         if value:
-            stats[STAT_ALIASES.get(key, key)] = (value, raw)
+            stats[STAT_ALIASES.get(key, key)] = StatValue(value, raw)
     return stats
 
 

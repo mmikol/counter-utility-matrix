@@ -90,9 +90,9 @@ def _cells(row: str) -> list[str]:
 
 def _row_hero(cell: str) -> str | None:
     """The hero a row is about: its article link, else its icon's link=."""
-    for target in ROW_LINK_RE.findall(cell):
-        if not FILE_TARGET_RE.match(target):
-            return target.strip()
+    for link in ROW_LINK_RE.finditer(cell):
+        if not FILE_TARGET_RE.match(link.group(1)):
+            return link.group(1).strip()
     match = LINK_PARAM_RE.search(cell)
     return match.group(1).strip() if match else None
 
@@ -232,7 +232,7 @@ def pair_up(claims_by_hero: Mapping[str, list[tuple[str, str]]],
                 pair = (min(hero_id, other_id), max(hero_id, other_id))
                 stated.setdefault(pair, {}).setdefault(hero_id, advice)
 
-    pairs = {}
+    pairs: Pairs = {}
     for pair, advice_by_hero in stated.items():
         notes = list(advice_by_hero.values())
         uncut = [n for n in notes if clause(n) == clause(n, 10 ** 6)]

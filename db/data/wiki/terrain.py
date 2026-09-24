@@ -9,6 +9,7 @@ has about that stage. Both tables are reloaded wholesale.
 
 import re
 from collections.abc import Mapping
+from typing import NamedTuple
 
 import psycopg
 from psycopg.sql import SQL
@@ -63,9 +64,15 @@ WORDS_PER_RATE = 1000
 STAGE_MIN_WORDS = 20
 
 
-def sections(text: str) -> list[tuple[tuple[str, ...], str]]:
-    """[(heading path, body)] in article order; the lead's path is ()."""
-    out: list[tuple[tuple[str, ...], str]] = []
+class Section(NamedTuple):
+    """An article's section: its heading path, outermost first, and its body."""
+    path: tuple[str, ...]
+    body: str
+
+
+def sections(text: str) -> list[Section]:
+    """[Section(heading path, body)] in article order; the lead's path is ()."""
+    out: list[Section] = []
     path: list[tuple[int, str]] = []
     position = 0
     matches = list(HEADING_RE.finditer(text))
@@ -76,7 +83,7 @@ def sections(text: str) -> list[tuple[tuple[str, ...], str]]:
             path = [(d, title) for d, title in path if d < depth]
             path.append((depth, markup.TAG_RE.sub("", match.group(2)).strip()))
             position = match.end()
-        out.append((tuple(title for _, title in path), text[position:end]))
+        out.append(Section(tuple(title for _, title in path), text[position:end]))
     return out
 
 
@@ -327,7 +334,8 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> TerrainSumma
     source_id = psql.register_source(cursor, WIKI, psql.now())
     cursor.execute("DELETE FROM stage_terrain")
     cursor.execute("DELETE FROM map_terrain")
-    maps = cursor.execute("SELECT map_id, name FROM maps ORDER BY name").fetchall()
+    maps: list[tuple[int, str]] = cursor.execute(
+        "SELECT map_id, name FROM maps ORDER BY name").fetchall()
     stages: dict[int, tuple[bool, dict[str, int]]] = {}
     for map_id, stage_id, stage, hybrid in cursor.execute(
             "SELECT s.map_id, s.stage_id, s.name, EXISTS (SELECT 1 FROM map_modes mm"

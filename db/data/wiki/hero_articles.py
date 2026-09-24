@@ -117,7 +117,7 @@ def supplement_from_wikitext(text: str) -> tuple[ExtraStats, HeroProfile | None]
         for code in SUPPLEMENT_FIELDS:
             value = markup.wikitext_to_text(REF_RE.sub("", params.get(code, "")))
             if value:
-                stats[code] = (value, params[code])
+                stats[code] = StatValue(value, params[code])
         if stats:
             extra[ability_key(name)] = stats
     return extra, parse_hero_profile(text)
