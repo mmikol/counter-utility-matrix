@@ -1,10 +1,9 @@
 """A Result as it reads: unscored and why, the rendered breakdown, the
-facts a pick and a contribution cite, and the queue a win rate names."""
+facts a pick and a contribution cite, and the queue a win rate names.
+Every board is the synthetic World's: no database."""
 
 import os
 import shutil
-
-import pytest
 
 from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
@@ -12,17 +11,17 @@ from ui.facts import board_facts
 from ui.facts.draft import Draft
 
 
-@pytest.mark.invariant
-def test_a_playbook_that_scores_nothing_reads_unscored(world):
+def test_a_playbook_that_scores_nothing_reads_unscored(synthetic_world):
     """Hard limits and prose alone tie every legal six at zero: the results
     carry no share of a best, say so, and the verdict is the one line."""
     from inference import engine
+    world = synthetic_world
     reference = catalog.load(FIXTURE_PLAYBOOK)
     assert catalog.has_scoring_terms(reference)
     limit_only = [h for h in reference if h.form == "limit" and not h.soft]
     assert limit_only and not catalog.has_scoring_terms(limit_only)
-    b = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt")),
-                     catalog=limit_only)
+    draft = Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm", "Anvil"))
+    b = engine.board(world, draft, catalog=limit_only)
     d = b.to_dict()
     for key in ("blue", "red"):                     # the optimal is the reference: 100, always
         assert d[key]["scoring"] is True and d[key]["normalized"] == 100
@@ -31,22 +30,21 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world):
         assert all(a["normalized"] is None for a in d[key]["alternatives"])
     assert d["momentum"]["verdict"].startswith("unscored") and d["momentum"]["blue"] is None
     assert "(unscored)" in b.current.rendered() and "UNSCORED:" in b.current.rendered()
-    scored = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt")),
-                          catalog=reference).to_dict()
+    scored = engine.board(world, draft, catalog=reference).to_dict()
     assert scored["current"]["scoring"] is True
     assert scored["current"]["normalized"] is None   # two picks of six: no share to give
     assert 0 < scored["fill"]["normalized"] <= 100   # the filled six carries it
     assert scored["current"]["unscored"] is None
 
 
-@pytest.mark.invariant
 def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reason(
-        world, tmp_path):
+        synthetic_world, tmp_path):
     """A playbook whose only scoring term is guarded (hitscan cover while red
     fields a flier) scores nothing until the guard holds: the best six itself
     is zero, so no comp is a share of anything - the board says which
     strategy waits and for what, and scores once the flier appears."""
     from inference import engine
+    world = synthetic_world
     # the two-tank limit and one guarded heuristic: a scoring term that waits on red
     shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), tmp_path)
     (tmp_path / "fliers-need-cover.md").write_text(
@@ -54,7 +52,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
         "metric: team.hitscan\nweight: 1\nwhen: matchup.flyers >= 1\n---\nx\n", "utf-8")
     scratch = catalog.load(str(tmp_path))
     assert catalog.has_scoring_terms(scratch)
-    grounded = engine.board(world, Draft("King's Row", ("Zarya", "Ana"), ("Reinhardt", "Cassidy")),
+    grounded = engine.board(world, Draft("Harbor Gate", ("Anvil", "Balm"), ("Mortar", "Needle")),
                             catalog=scratch).to_dict()
     for key in ("blue", "red"):
         assert grounded[key]["scoring"] is True and grounded[key]["normalized"] == 100
@@ -80,7 +78,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     else:                         # the likely six fields no such flier: the one rule waits here too
         assert "waits for matchup.flyers >= 1" in empty["momentum"]["verdict"]
     assert empty["blue"]["red"] == empty["expected"]["blue"]           # countering the likely six
-    flying = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Reinhardt", "Cassidy")),
+    flying = engine.board(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Anvil", "Needle")),
                           catalog=scratch).to_dict()
     assert flying["blue"]["scoring"] is True and flying["blue"]["normalized"] == 100
     assert flying["current"]["unscored"] is None
@@ -111,13 +109,13 @@ def test_the_rendered_breakdown_marks_a_need():
     assert [c["need"] for c in r.to_dict()["contributions"]] == [False, True]
 
 
-@pytest.mark.invariant
-def test_a_metric_printed_inside_another_fact_cites_that_fact(world):
+def test_a_metric_printed_inside_another_fact_cites_that_fact(synthetic_world):
     """team.range_max rides the range_median line and team.cleanse the invuln
     line; a rule on either cites that fact, not its guard's."""
     from inference.result import _cited_fact
-    six = ["Reinhardt", "Sigma", "Ashe", "Cassidy", "Ana", "Kiriko"]
-    fs = board_facts.generate(world, Draft("King's Row", ("Zarya",), tuple(six), side="attack"))
+    six = ["Anvil", "Quarry", "Needle", "Flint", "Balm", "Sorrel"]
+    fs = board_facts.generate(synthetic_world,
+                              Draft("Harbor Gate", ("Mortar",), tuple(six), side="attack"))
     for metric, line in (("team.range_max", "team.range_median"), ("team.melee", "team.hitscan"),
                          ("team.cleanse", "team.invuln"), ("team.dps_count", "team.dps_floor"),
                          ("matchup.exposure_share", "matchup.coverage_share")):
@@ -125,19 +123,17 @@ def test_a_metric_printed_inside_another_fact_cites_that_fact(world):
         assert fact is not None and fact.key == line, metric
 
 
-@pytest.mark.invariant
-def test_a_mirror_pick_cites_its_own_facts_not_the_enemy_copy(world):
-    """Tracer on both teams: our Tracer's reasons come from our side of the
-    board - never "answers Ana" (our Ana, whom red's Tracer answers) and
-    never "partner of Winston" (red's Winston)."""
+def test_a_mirror_pick_cites_its_own_facts_not_the_enemy_copy(synthetic_world):
+    """Gale on both teams: our Gale's reasons come from our side of the
+    board - never "answers Anvil" (our Anvil, whom red's Gale answers) and
+    never "partner of Kite" (red's Kite)."""
     from inference import engine
-    r = engine.evaluate(world, Draft("King's Row", ("Winston", "Genji", "Tracer"),
-                                     ("D.Va", "Reinhardt", "Tracer", "Brigitte", "Lúcio", "Ana")))
-    ours = next(p for p in r.picks if p["hero"] == "Tracer")
-    partners = ours["why"].split(";")[0]          # red's Winston may answer her; he is no partner
-    assert "answers Ana" not in ours["why"] and "Winston" not in partners
-    clues = ("answers Genji", "answers Tracer", "partner of D.Va")
-    assert any(clue in ours["why"] for clue in clues)
+    r = engine.evaluate(synthetic_world, Draft(
+        "Harbor Gate", ("Kite", "Gale"), ("Anvil", "Mortar", "Gale", "Rook", "Balm", "Sorrel")))
+    ours = next(p for p in r.picks if p["hero"] == "Gale")
+    partners = [part for part in ours["why"].split("; ") if part.startswith("partner of")]
+    assert "answers Anvil" not in ours["why"] and not any("Kite" in part for part in partners)
+    assert "partner of Sorrel" in ours["why"]           # our Sorrel, beside our Gale
 
 
 def test_a_pick_and_the_plan_name_the_queue_the_rates_were_captured_in(

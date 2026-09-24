@@ -1,7 +1,8 @@
 """board(): both seats on opposite sides, the weights it is given, the fight
 odds, the shapes and the queue's tank limit, a team of seven, the likely six,
 a full six on control, every seat of a board on the synthetic World, and the
-page's boards superseding one another."""
+page's boards superseding one another. Every board is the synthetic World's:
+no database."""
 
 import pytest
 
@@ -10,42 +11,43 @@ from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts import compute
 from ui.facts.draft import MAX_TANKS, Draft
+from ui.facts.records import MapRate
 
 
-@pytest.mark.invariant
-def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world):
+def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(synthetic_world):
     from inference import engine
+    world = synthetic_world
     fix = catalog.load(FIXTURE_PLAYBOOK)        # the reference playbook has the side rules
-    b = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",), side="attack"),
+    b = engine.board(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm",), side="attack"),
                      catalog=fix)
     blue, red, cur = b.blue, b.red, b.current
     assert blue.seat == "blue" and blue.side == "attack" and blue.locked == []
-    absolute = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), (), side="attack"),
+    absolute = engine.infer(world, Draft("Harbor Gate", ("Mortar", "Gale"), (), side="attack"),
                             catalog=fix)
     assert blue.blue == absolute.blue                     # blue's optimal ignores your picks
     assert red.seat == "red" and red.side == "defense" and len(red.blue) == 6
     # red's optimal: their best counter to ours
-    assert red.locked == [] and red.red == ["Ana"]
-    theirs = engine.infer(world, Draft("King's Row", ("Ana",), (), side="defense"), catalog=fix)
+    assert red.locked == [] and red.red == ["Balm"]
+    theirs = engine.infer(world, Draft("Harbor Gate", ("Balm",), (), side="defense"), catalog=fix)
     assert red.blue == theirs.blue
-    assert cur.kind == "current" and cur.partial and cur.blue == ["Ana"]
+    assert cur.kind == "current" and cur.partial and cur.blue == ["Balm"]
     assert cur.contributions and cur.score is not None
     rc = b.red_current                                  # their comp as revealed, scored vs ours
     assert rc.seat == "red"
-    assert set(rc.blue) == {"Zarya", "Pharah"}
-    assert rc.red == ["Ana"]
+    assert set(rc.blue) == {"Mortar", "Gale"}
+    assert rc.red == ["Balm"]
     assert rc.partial
     assert rc.to_dict()["normalized"] is None        # a partial team has no share
     assert b.countered is not None and b.countered.kind == "countered"
-    fill = b.fill                                       # the empty slots, filled around Ana
+    fill = b.fill                                       # the empty slots, filled around Balm
     assert fill.kind == "fill"
-    assert fill.locked == ["Ana"]
+    assert fill.locked == ["Balm"]
     assert len(fill.blue) == 6
-    assert "Ana" in fill.blue
+    assert "Balm" in fill.blue
     assert [p["locked"] for p in fill.picks].count(True) == 1
     assert 0 < fill.to_dict()["normalized"] <= 100
-    around = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",), side="attack"),
-                          catalog=fix)
+    around = engine.infer(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm",),
+                                       side="attack"), catalog=fix)
     assert fill.blue == around.blue
     mo = b.momentum
     assert set(mo) >= {"blue", "red", "countered", "verdict", "partial"} and mo["partial"]
@@ -59,10 +61,10 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert "best counter" in mo["verdict"]
     # prose: the ground, what to play, them, the family
     plan = b.plan
-    assert plan.startswith("King's Row is a Hybrid map: a capture point and then the payload path")
+    assert plan.startswith("Harbor Gate is a Hybrid map: a capture point and then the payload path")
     assert "You are attacking: you have to break their hold" in plan
-    assert "The map rewards %s" % world.map("King's Row").style_top in plan
-    assert "Their 2 picks so far (Zarya, Pharah)" in plan and "answer" in plan
+    assert "The map rewards %s" % world.map("Harbor Gate").style_top in plan
+    assert "Their 2 picks so far (Mortar, Gale)" in plan and "answer" in plan
     assert "If you stray from the six, stay in its family. Tanks: " in plan
     assert "Above all: " in plan
     assert plan.endswith("Based on: the Role Queue rates and counters, the map, the side,"
@@ -81,19 +83,19 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert "defense-holds-the-ground" in ids
 
 
-@pytest.mark.invariant
-def test_the_board_scores_under_the_weights_it_is_given(world, kings_row_board):
+def test_the_board_scores_under_the_weights_it_is_given(synthetic_world, harbor_gate_board):
     """A weight set on the board changes the score, every result says the
     weights it was scored under, and the file is untouched."""
     from inference import engine
-    plain = kings_row_board
+    plain = harbor_gate_board
     fix = catalog.load(FIXTURE_PLAYBOOK)
     # a heuristic that actually moves this comp's score (one at the reference floor would not)
     moving = next(c["id"] for c in plain.current.contributions
                   if c["kind"] == "heuristic" and c.get("weighted"))
     heuristic = next(h for h in fix if h.id == moving)
     weights = {heuristic.id: 10.0 if heuristic.weight < 10 else 0.5}
-    tilted = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt")),
+    tilted = engine.board(synthetic_world,
+                          Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm", "Anvil")),
                           catalog=fix, brief=engine.Brief(weights=weights))
     assert tilted.current.to_dict()["weights"][heuristic.id] == weights[heuristic.id]
     assert plain.current.to_dict()["weights"][heuristic.id] == heuristic.weight
@@ -102,26 +104,24 @@ def test_the_board_scores_under_the_weights_it_is_given(world, kings_row_board):
                 if h.id == heuristic.id).weight == heuristic.weight
 
 
-@pytest.mark.invariant
-def test_fight_odds_pit_the_two_shares_against_each_other(world, kings_row_board):
+def test_fight_odds_pit_the_two_shares_against_each_other(synthetic_world, harbor_gate_board):
     """Both seats scored: each side's odds are its share over the two shares'
     sum, the pair splits 100, and the verdict says so; one seat unscored or
     empty: no odds."""
     from inference import engine
-    b = kings_row_board.to_dict()
+    b = harbor_gate_board.to_dict()
     mo = b["momentum"]
     n, m = mo["blue"], mo["red"]
     assert isinstance(n, int) and isinstance(m, int) and n + m > 0
     blue_odds = round(100.0 * n / (n + m))
     assert mo["odds"] == {"blue": blue_odds, "red": 100 - blue_odds}
     assert "fight odds blue %d%%, red %d%%" % (blue_odds, 100 - blue_odds) in mo["verdict"]
-    alone = engine.board(world, Draft("King's Row", ("Zarya", "Pharah")),
+    alone = engine.board(synthetic_world, Draft("Harbor Gate", ("Mortar", "Gale")),
                          catalog=catalog.load(FIXTURE_PLAYBOOK)).to_dict()
     assert alone["momentum"]["blue"] is None and alone["momentum"]["odds"] is None
 
 
-@pytest.mark.invariant
-def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
+def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(synthetic_world):
     """The roster enforces what the shape limits allow: the two-tank limit
     means no triple the solver would search seats a third tank, and the
     board says so in a form the script can read."""
@@ -134,82 +134,86 @@ def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
     assert (3, 2, 1) not in shapes
     seated = legal_shapes(cat, Shape(tanks=2, damage=3, supports=0))
     assert seated and all(t == 2 and d >= 3 for t, d, _ in seated)
-    b = engine.board(world, Draft("King's Row", ("Zarya",), ("Ana",)), catalog=cat)
+    b = engine.board(synthetic_world, Draft("Harbor Gate", ("Mortar",), ("Balm",)), catalog=cat)
     assert b.shapes == [list(s) for s in shapes]
     d = b.to_dict()
     assert d["shapes"] == b.shapes
     # red's likely six rides along - static: the map and the meta, not their reveal
-    assert d["expected"]["kind"] == "expected" and "Zarya" not in d["expected"]["blue"]
+    assert d["expected"]["kind"] == "expected" and "Mortar" not in d["expected"]["blue"]
     assert len(d["expected"]["picks"]) == 6 and all(p["why"] for p in d["expected"]["picks"])
     assert not any(p["locked"] for p in d["expected"]["picks"])
 
 
-@pytest.mark.invariant
-def test_the_queue_caps_tanks_at_two_whatever_the_playbook_holds(world):
+def test_the_queue_caps_tanks_at_two_whatever_the_playbook_holds(synthetic_world):
     """The shipped playbook writes no shape limit and scores nothing, so every
-    six ties and the map's win rates rank the pools - tanks, on most maps. The
-    queue's own limit binds all the same: no six the board shows fields a
-    third tank, the shapes the roster enforces stop at two, and a third tank
-    is refused as the queue's."""
+    six ties and the map's win rates rank the pools - tanks, once every tank
+    here wins ten points more. The queue's own limit binds all the same: no
+    six the board shows fields a third tank, the shapes the roster enforces
+    stop at two, and a third tank is refused as the queue's."""
     from inference import engine
+    world = synthetic_world
+    for h in world.heroes.values():
+        if h.role == "tank":
+            h.win += 10
+            h.map_rates = {mid: MapRate(r.win + 10, r.pick) for mid, r in h.map_rates.items()}
     shipped = catalog.load()
     assert not any(h.form == "limit" for h in shipped)       # the cap is the engine's
-    for map_name, blue in (("Blizzard World", []), ("Esperança", []),
-                           ("King's Row", ["Winston", "D.Va"])):
+    for map_name, blue in (("Harbor Gate", []), ("Ember Ruins", []),
+                           ("Harbor Gate", ["Anvil", "Kite"])):
         d = engine.board(world, Draft(map_name, (), tuple(blue)), catalog=shipped).to_dict()
         sixes = [d[seat]["blue"] for seat in ("blue", "red", "fill", "expected") if d[seat]]
         assert len(sixes) == (4 if blue else 3)
         for six in sixes:
             assert sum(world.hero(n).role == "tank" for n in six) <= MAX_TANKS, (map_name, six)
         assert max(t for t, _, _ in d["shapes"]) == MAX_TANKS
-    for blue in (["Winston", "D.Va", "Reinhardt"], ["Winston", "D.Va", "Reinhardt", "Ana"]):
+    for blue in (["Anvil", "Kite", "Mortar"], ["Anvil", "Kite", "Mortar", "Balm"]):
         with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
-            engine.board(world, Draft("King's Row", (), tuple(blue)), catalog=shipped)
+            engine.board(world, Draft("Harbor Gate", (), tuple(blue)), catalog=shipped)
     with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
-        engine.evaluate(world, Draft("King's Row", (),
-                                     ("Winston", "D.Va", "Reinhardt", "Ana", "Kiriko", "Ashe")),
+        engine.evaluate(world, Draft("Harbor Gate", (),
+                                     ("Anvil", "Kite", "Mortar", "Balm", "Tansy", "Needle")),
                         catalog=shipped)
 
 
-@pytest.mark.invariant
-def test_the_board_refuses_a_team_of_seven(world):
+def test_the_board_refuses_a_team_of_seven(synthetic_world):
     """engine.board is what every door reaches, the MCP tool with no wire to
     parse among them: a seventh pick on either team is refused before any
     search, where it used to be scored as a seven-hero comp."""
     from inference import engine
     fix = catalog.load(FIXTURE_PLAYBOOK)
-    seven = ["Ana", "Kiriko", "Lúcio", "Tracer", "Genji", "Sojourn", "Ashe"]
+    seven = ["Balm", "Myrrh", "Sorrel", "Tansy", "Rook", "Needle", "Flint"]
     with pytest.raises(Refusal, match="more than 6 red picks"):
-        engine.board(world, Draft("King's Row", tuple(seven), ()), catalog=fix)
+        engine.board(synthetic_world, Draft("Harbor Gate", tuple(seven), ()), catalog=fix)
     with pytest.raises(Refusal, match="more than 6 blue picks"):
-        engine.board(world, Draft("King's Row", (), tuple(seven)), catalog=fix)
+        engine.board(synthetic_world, Draft("Harbor Gate", (), tuple(seven)), catalog=fix)
 
 
-@pytest.mark.invariant
-def test_blue_counters_the_likely_six_until_red_reveals_a_pick(world, monkeypatch):
+def test_blue_counters_the_likely_six_until_red_reveals_a_pick(synthetic_world, monkeypatch):
     """With no red pick the board solves blue against red's likely six, so the
     opening suggestion is a counter to what the map and the meta say red
     fields; the first reveal replaces that with red's actual picks."""
     from inference import engine, parallel
+    world = synthetic_world
     monkeypatch.setattr(parallel, "available", lambda catalog=None: False)
-    m = world.map("King's Row")
+    m = world.map("Harbor Gate")
     likely = [p["hero"] for p in compute.expected_picks(world, m)]
-    b = engine.board(world, Draft("King's Row", (), ("Ana",)))
+    b = engine.board(world, Draft("Harbor Gate", (), ("Balm",)))
     assert b.blue.red == likely and b.current.red == likely and b.fill.red == likely
     assert b.expected.blue == likely and b.expected.kind == "expected"
     assert [p["hero"] for p in b.expected.picks] == likely
     assert "their likely starting comp" in b.rendered()
-    revealed = engine.board(world, Draft("King's Row", ("Zarya",), ("Ana",)))
-    assert revealed.blue.red == ["Zarya"] and revealed.current.red == ["Zarya"]
+    revealed = engine.board(world, Draft("Harbor Gate", ("Mortar",), ("Balm",)))
+    assert revealed.blue.red == ["Mortar"] and revealed.current.red == ["Mortar"]
     assert revealed.expected.blue == likely                      # static
 
 
-@pytest.mark.invariant
-def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
+def test_board_ranks_a_full_six_and_ignores_sides_on_control(synthetic_world):
     from inference import engine
+    world = synthetic_world
     fix = catalog.load(FIXTURE_PLAYBOOK)
-    six = ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]
-    b = engine.board(world, Draft("Ilios", ("Pharah",), tuple(six), side="attack"), catalog=fix)
+    six = ["Anvil", "Mortar", "Rook", "Needle", "Balm", "Tansy"]
+    b = engine.board(world, Draft("Ember Ruins", ("Gale",), tuple(six), side="attack"),
+                     catalog=fix)
     assert b.side == "" and b.blue.side == "" and b.red.side == ""
     assert b.current.kind == "evaluate" and b.current.rank >= 1
     assert set(b.current.blue) == set(six)
@@ -224,10 +228,10 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     assert b.plan.startswith("No map yet, so this is the meta's best six")
     assert b.plan.endswith("Based on: the Role Queue rates and counters.")
     assert len(b.blue.blue) == 6                      # the meta's best six, before any map
-    b = engine.board(world, Draft("Ilios", (), (), ("Widowmaker",)), catalog=fix)
+    b = engine.board(world, Draft("Ember Ruins", (), (), ("Needle",)), catalog=fix)
     assert b.plan.endswith("the map, 1 ban.") and b.plan.count("\n") >= 2
-    assert b.plan.startswith("Ilios is a Control map: one point in three arenas")
-    assert "The map rewards %s" % world.map("Ilios").style_top in b.plan
+    assert b.plan.startswith("Ember Ruins is a Control map: one point in three arenas")
+    assert "The map rewards %s" % world.map("Ember Ruins").style_top in b.plan
 
 
 def test_a_board_on_the_synthetic_world_holds_every_seat(synthetic_world, scratch_playbook):

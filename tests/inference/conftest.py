@@ -1,6 +1,6 @@
 """The inference tests' shared fixtures: a private copy of the reference
 playbook, for the tests that write to one; a two-file scratch playbook that
-scores every seat of a board on the synthetic World; and the King's Row
+scores every seat of a board on the synthetic World; and the Harbor Gate
 board the engine and plan tests read."""
 
 import os
@@ -30,11 +30,12 @@ def scratch_playbook(tmp_path):
     return catalog.load(str(tmp_path))
 
 
-@pytest.fixture(scope="module")
-def kings_row_board(world):
-    """The board the tests read most - King's Row, Zarya and Pharah revealed, Ana and
-    Reinhardt locked, the reference playbook - solved once per module (a caller's
-    catalog keeps the solve in one process)."""
+@pytest.fixture()
+def harbor_gate_board(synthetic_world):
+    """The board the tests read most - Harbor Gate, Mortar and Gale revealed, Balm
+    and Anvil locked, the reference playbook - solved on the synthetic World the
+    test is given (a caller's catalog keeps the solve in one process)."""
     from inference import engine
-    return engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt")),
+    return engine.board(synthetic_world,
+                        Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm", "Anvil")),
                         catalog=catalog.load(FIXTURE_PLAYBOOK))

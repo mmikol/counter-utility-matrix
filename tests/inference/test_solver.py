@@ -1,15 +1,17 @@
 """The search on a board: shape limits, a need and its budget, partners that
 only pay together, the scale a ban leaves alone, the ranking order and its
 tie-breaks, a rule scaled by the metric it names, and the reference sample
-of a small roster."""
+of a small roster. Every board is the synthetic World's: no database."""
 
 import copy
+import dataclasses
 import os
 import shutil
 
 import pytest
 
 from db import Refusal
+from db.data.names import name_key
 from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts.draft import Draft
@@ -17,16 +19,16 @@ from ui.facts.records import StyleScore, Synergy
 from ui.facts.team import team_metrics
 
 
-@pytest.mark.invariant
-def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(world, tmp_path):
+def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(synthetic_world, tmp_path):
     from inference import engine
+    world = synthetic_world
     fix = catalog.load(FIXTURE_PLAYBOOK)
     # two tanks is allowed under the two-tank limit; a third is not, and is the queue's
-    r = engine.infer(world, Draft("King's Row", ("Zarya",), ("Winston", "D.Va")), pool_size=4,
+    r = engine.infer(world, Draft("Harbor Gate", ("Needle",), ("Anvil", "Kite")), pool_size=4,
                      catalog=fix)
-    assert {"Winston", "D.Va"} <= set(r.blue)
+    assert {"Anvil", "Kite"} <= set(r.blue)
     with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
-        engine.infer(world, Draft("King's Row", (), ("Winston", "D.Va", "Reinhardt")),
+        engine.infer(world, Draft("Harbor Gate", (), ("Anvil", "Kite", "Mortar")),
                      pool_size=4, catalog=fix)
     # a stricter authored limit narrows the search the same way
     for name in os.listdir(FIXTURE_PLAYBOOK):
@@ -36,18 +38,20 @@ def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(world, tmp_
         "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and"
         " team.damage == 2 and team.supports == 2\n---\nx\n", "utf-8")
     cat = catalog.load(str(tmp_path))
-    r = engine.infer(world, Draft("King's Row", ("Zarya",), ("Ana",)), pool_size=4, catalog=cat)
+    r = engine.infer(world, Draft("Harbor Gate", ("Needle",), ("Balm",)), pool_size=4,
+                     catalog=cat)
     roles = sorted(world.hero(n).role for n in r.blue)
     assert roles == ["damage", "damage", "support", "support", "tank", "tank"]
 
 
-@pytest.mark.invariant
-def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(world, tmp_path):
+def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(
+        synthetic_world, tmp_path):
     """"A solo healer needs an escape" must not pay a six for fielding one
     support: met in full it costs nothing, unmet it costs the weight, and the
     needs written on one guard cost NEED_BUDGET together at most. A guard on
     the board (red, the map) stays a reward."""
     from inference import engine, scoring
+    world = synthetic_world
     shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), tmp_path)
     rule = ("---\nname: %s\nkind: heuristic\ndirection: maximize\nmetric: %s\nweight: 2\n"
             "when: %s\n---\nx\n")
@@ -57,42 +61,55 @@ def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(wor
     (tmp_path / "their-fliers.md").write_text(
         rule % ("Their fliers", "team.hitscan", "matchup.flyers >= 1"), "utf-8")
     scratch = catalog.load(str(tmp_path))
-    solo = engine.evaluate(world, Draft("King's Row", ("Pharah",),
-                                        ("Reinhardt", "Cassidy", "Tracer", "Genji", "Mei", "Ana")),
+    # Gale flies for red; blue fields Balm as its one support
+    solo = engine.evaluate(world, Draft("Harbor Gate", ("Gale",),
+                                        ("Anvil", "Mortar", "Rook", "Needle", "Flint", "Balm")),
                            catalog=scratch).to_dict()
     terms = {c["id"]: c for c in solo["contributions"]}
     needs = [terms["solo-%d" % i] for i in range(3)]
     assert all(c["applies"] and c["need"] and c["weighted"] <= 0 for c in needs)
     assert sum(c["weighted"] for c in needs) >= -scoring.NEED_BUDGET - 1e-9
     assert terms["their-fliers"]["need"] is False and terms["their-fliers"]["weighted"] >= 0
-    paired = ("Reinhardt", "Cassidy", "Tracer", "Genji", "Kiriko", "Ana")
-    pair = engine.evaluate(world, Draft("King's Row", ("Pharah",), paired),
+    paired = ("Anvil", "Mortar", "Rook", "Needle", "Balm", "Tansy")
+    pair = engine.evaluate(world, Draft("Harbor Gate", ("Gale",), paired),
                            catalog=scratch).to_dict()
     assert all(
         not c["applies"] and c["weighted"] == 0
         for c in pair["contributions"] if c["id"].startswith("solo-"))
 
 
-@pytest.mark.invariant
-def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path):
+def test_partners_that_only_pay_together_are_brought_in_together(synthetic_world, tmp_path):
     """One slot at a time, a pair worth nothing apart is never met: each partner
     alone only costs. The playbook here pays one synergy pair, the two
     lowest-standing heroes of their roles, outside the pools. The best six holds
     both, with the locked pick, the ban and the shape kept; the pair step off,
     the search stops short of it."""
     from inference import solver as solver_module
+    world = synthetic_world
+    # four a role are too few for a pool to leave anyone out once a pair's synergy
+    # lifts its standing: three stronger twins of each role's best widen the roster
+    next_id = max(world.heroes) + 1
+    for role in ("tank", "damage", "support"):
+        best = max((h for h in world.heroes.values() if h.role == role and h.released),
+                   key=lambda h: h.win)
+        for i in range(3):
+            twin = dataclasses.replace(best, id=next_id, name="%s %d" % (best.name, i + 2),
+                                       win=best.win + 1 + i)
+            world.heroes[twin.id] = twin
+            world.by_key[name_key(twin.name)] = twin.id
+            next_id += 1
     (tmp_path / "shape.md").write_text(
         "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and"
         " team.damage == 2 and team.supports == 2\n---\nx\n", "utf-8")
     rule = "---\nname: %s\nkind: heuristic\ndirection: maximize\nmetric: %s\nweight: %s\n---\nx\n"
     (tmp_path / "winning.md").write_text(rule % ("Winning", "team.win_mean", 1), "utf-8")
-    (tmp_path / "together.md").write_text(rule % ("Together", "team.synergy_edges", 0.75), "utf-8")
+    (tmp_path / "together.md").write_text(rule % ("Together", "team.synergy_edges", 0.5), "utf-8")
     scratch = catalog.load(str(tmp_path))
-    locked, banned = [world.hero("Reinhardt")], [world.hero("Mercy")]
+    locked, banned = [world.hero("Anvil")], [world.hero("Needle")]
 
     def solver_on(w):
         return solver_module.Solver(w, None, red=[], locked=locked, banned=banned,
-                                    catalog=scratch, pool_size=3)
+                                    catalog=scratch, pool_size=2)
 
     alone = copy.copy(world)                   # the same roster, no synergy pair yet
     alone.synergies, alone.partners = {}, {}
@@ -110,7 +127,7 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
         top = solver.solve(top=1).ranked[0]
         pooled = {h.id for pool in solver.pools().values() for h in pool}
         assert a.id not in pooled and b.id not in pooled      # the sweep never saw either
-        assert {a.name, b.name, "Reinhardt"} <= set(top.names) and "Mercy" not in top.names
+        assert {a.name, b.name, "Anvil"} <= set(top.names) and "Needle" not in top.names
         assert sorted(h.role for h in top.heroes) == ["damage"] * 2 + ["support"] * 2 + ["tank"] * 2
         assert any(c["id"] == "together" and c["raw"] == 1 for c in top.contributions)
         # with the pair step off, the two-at-once swap still reaches them: that is
@@ -131,8 +148,7 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
         assert not {a.name, b.name} & set(short.names) and short.score < top.score
 
 
-@pytest.mark.invariant
-def test_a_ban_does_not_rescale_the_board(world):
+def test_a_ban_does_not_rescale_the_board(synthetic_world):
     """The reference sample fixes every heuristic's [lo, hi], so it must not
     depend on the bans: banning a hero on neither team would otherwise move the
     score of an unchanged six, and `the best six here` would stop being a
@@ -142,16 +158,17 @@ def test_a_ban_does_not_rescale_the_board(world):
     from inference import catalog as catalog_module
     from inference import scoring
     from inference import solver as solver_module
+    world = synthetic_world
     catalog = catalog_module.load(FIXTURE_PLAYBOOK)
     assert catalog_module.has_scoring_terms(catalog)
-    red = ["Zarya", "Pharah"]
-    six = ["Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko"]
+    red = ["Mortar", "Gale"]
+    six = ["Anvil", "Kite", "Rook", "Needle", "Balm", "Tansy"]
     absent = [
         h.name for h in world.heroes.values()
-        if h.released and h.name not in six and h.name not in red][:2]
+        if h.released and h.name not in six and h.name not in red][:3]
 
     def score_under(bans):
-        m, red_h, _, bans_h = world.resolve("King's Row", red, [], bans)
+        m, red_h, _, bans_h = world.resolve("Harbor Gate", red, [], bans)
         solver = solver_module.Solver(world, m, red=red_h, locked=[], banned=bans_h,
                                       side="attack", catalog=catalog)
         solver.freeze_bounds()
@@ -159,18 +176,18 @@ def test_a_ban_does_not_rescale_the_board(world):
         return solver.score(cand, detail=False).score
 
     # the same six, the same number of bans, a different hero banned
-    first = score_under([absent[0], "Sombra"])
-    second = score_under([absent[1], "Sombra"])
+    first = score_under([absent[0], absent[2]])
+    second = score_under([absent[1], absent[2]])
     assert abs(first - second) < 1e-9, (first, second)
 
 
-@pytest.mark.invariant
-def test_the_order_of_a_six_does_not_decide_the_ranking(world):
+def test_the_order_of_a_six_does_not_decide_the_ranking(synthetic_world):
     """_rank_key's third element breaks ties, so it has to be a property of the
     hero set - in seat order one set keys 720 ways."""
     from inference import scoring
     from inference import solver as solver_module
-    heroes = [world.hero(n) for n in ("Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko")]
+    world = synthetic_world
+    heroes = [world.hero(n) for n in ("Anvil", "Kite", "Rook", "Needle", "Balm", "Tansy")]
     one = scoring.Candidate(heroes)
     other = scoring.Candidate(list(reversed(heroes)))
     one.score = other.score = 1.0
@@ -178,8 +195,7 @@ def test_the_order_of_a_six_does_not_decide_the_ranking(world):
     assert solver_module.Solver._rank_key(one) == solver_module.Solver._rank_key(other)
 
 
-@pytest.mark.invariant
-def test_a_rule_scales_by_the_metric_it_names(world, tmp_path):
+def test_a_rule_scales_by_the_metric_it_names(synthetic_world, tmp_path):
     """`confidence:` is an engine field, not a rule: a heuristic names any numeric
     metric and its weight rides on that metric's place between the low and high of
     whatever population the metric actually varies over. Nothing in the code knows
@@ -187,6 +203,11 @@ def test_a_rule_scales_by_the_metric_it_names(world, tmp_path):
     playbook, so the test holds whatever the shipped playbook carries."""
     from inference import engine, scoring
     from inference import solver as solver_module
+    world = synthetic_world
+    # Salt Flats barely leans: poke over dive by a tenth of a point
+    world.map("Salt Flats").styles = {
+        "poke": StyleScore(1.0, None), "dive": StyleScore(0.9, None),
+        "brawl": StyleScore(-1.0, None)}
     shutil.copytree(FIXTURE_PLAYBOOK, tmp_path, dirs_exist_ok=True)
     (tmp_path / "fit-the-map-style.md").write_text(
         "---\nname: Pick into what the map rewards\nkind: heuristic\ncategory: map\n"
@@ -199,11 +220,11 @@ def test_a_rule_scales_by_the_metric_it_names(world, tmp_path):
     assert [s.id for s in scaled] == ["fit-the-map-style"]
 
     def points(map_name, strategy_id):
-        m, red, _, _ = world.resolve(map_name, ["Zarya", "Pharah"], [], [])
+        m, red, _, _ = world.resolve(map_name, ["Anvil", "Gale"], [], [])
         solver = solver_module.Solver(world, m, red=red, locked=[],
                                       side=engine._side(m, "attack"), catalog=playbook)
         solver.freeze_bounds()
-        best = engine.infer(world, Draft(map_name, ("Zarya", "Pharah"),
+        best = engine.infer(world, Draft(map_name, ("Anvil", "Gale"),
                                          side=engine._side(m, "attack")),
                             top=1, catalog=playbook)
         cand = solver.prepare(scoring.Candidate([world.hero(n) for n in best.blue]))
@@ -212,21 +233,22 @@ def test_a_rule_scales_by_the_metric_it_names(world, tmp_path):
 
     # the map that leans hardest pays the map-style rule; the one that barely leans
     # pays almost none of it, and neither number is written anywhere
-    sure = points("Nepal", "fit-the-map-style")
-    unsure = points("Paraíso", "fit-the-map-style")
+    sure = points("Ember Ruins", "fit-the-map-style")
+    unsure = points("Salt Flats", "fit-the-map-style")
     assert sure["confidence_raw"] > unsure["confidence_raw"]
     assert sure["weighted"] > unsure["weighted"] * 5
 
 
-@pytest.mark.invariant
-def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
+def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(synthetic_world):
     """A set of style names iterates in an order that changes with the process's
     hash seed; the tie-breaks must not depend on it - two views of the same
     heroes whose style sets iterate in opposite orders agree on every metric,
-    and the same board solves to the same six twice in a row."""
+    and the same board solves to the same six twice in a row. Flint carries
+    two styles, so its set has two orders."""
     from inference import engine
-    heroes = [world.hero(n) for n in ("Reinhardt", "Zarya", "Widowmaker", "Ana", "Lúcio", "Mercy")]
-    forward = team_metrics(world, heroes, world.map("Ilios"), [])
+    world = synthetic_world
+    heroes = [world.hero(n) for n in ("Anvil", "Kite", "Flint", "Needle", "Balm", "Sorrel")]
+    forward = team_metrics(world, heroes, world.map("Ember Ruins"), [])
 
     from ui.facts import model
 
@@ -234,29 +256,29 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
         def __init__(self, hero):
             self.__dict__ = dict(hero.__dict__)
             self.styles = sorted(hero.styles, reverse=True)   # the other iteration order
-    backward = team_metrics(world, [Reversed(h) for h in heroes], world.map("Ilios"), [])
+    backward = team_metrics(world, [Reversed(h) for h in heroes], world.map("Ember Ruins"), [])
     for key in ("style_top", "style_lean", "style_counts", "style_fit"):
         assert forward[key] == backward[key], key
-    ilios = world.map("Ilios")
-    derived = dict(ilios.styles)
-    ilios.styles = {"poke": StyleScore(1.0, None), "dive": StyleScore(0.2, None),
+    ember = world.map("Ember Ruins")
+    derived = dict(ember.styles)
+    ember.styles = {"poke": StyleScore(1.0, None), "dive": StyleScore(0.2, None),
                     "brawl": StyleScore(1.0, None)}
     try:
-        assert ilios.style_top == "brawl" and ilios.style_margin == 0
+        assert ember.style_top == "brawl" and ember.style_margin == 0
     finally:
-        ilios.styles = derived
-    once = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",)))
-    twice = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",)))
+        ember.styles = derived
+    once = engine.infer(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm",)))
+    twice = engine.infer(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm",)))
     assert once.blue == twice.blue and abs(once.score - twice.score) < 1e-12
 
 
-@pytest.mark.invariant
-def test_a_board_confidence_reads_the_boards_own_ban_count(world, tmp_path):
+def test_a_board_confidence_reads_the_boards_own_ban_count(synthetic_world, tmp_path):
     """A confidence metric of the board is read over every map, and every map
     reads it with this board's bans: map.bans is the count made in this match,
     whatever map the population is drawn from."""
     from inference import scoring
     from inference import solver as solver_module
+    world = synthetic_world
     shutil.copytree(FIXTURE_PLAYBOOK, tmp_path, dirs_exist_ok=True)
     (tmp_path / "scale-by-the-bans.md").write_text(
         "---\nname: Pick into what the map rewards once the bans are in\nkind: heuristic\n"
@@ -266,8 +288,8 @@ def test_a_board_confidence_reads_the_boards_own_ban_count(world, tmp_path):
         "The share of the six tagged with the style the map rewards, weighed by how "
         "many bans are made.\n", encoding="utf-8")
     playbook = catalog.load(str(tmp_path))
-    m, red, _, banned = world.resolve("King's Row", ["Zarya", "Pharah"], [],
-                                      ["Widowmaker", "Sombra"])
+    m, red, _, banned = world.resolve("Harbor Gate", ["Mortar", "Gale"], [],
+                                      ["Needle", "Rook"])
     solver = solver_module.Solver(world, m, red=red, locked=[], banned=banned, side="attack",
                                   catalog=playbook)
     solver.freeze_bounds()
