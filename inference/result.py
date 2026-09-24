@@ -333,13 +333,28 @@ class Board:
         return "\n\n".join([*parts, "momentum: " + self.momentum["verdict"]])
 
 
+def rates_queue(fs: FactSet) -> str:
+    """The queue the board's rates were captured in, as the game names it
+    ("Role Queue"), read off the rates' meta.snapshot fact; empty where the
+    board holds none. The source publishes no Open Queue rates, so a pick's
+    win rate says which queue it is."""
+    for f in fs.find("meta.snapshot"):
+        queue = str(f.value.get("queue") or "")
+        if queue:
+            return queue.removeprefix("competitive_").replace("_", " ").title()
+    return ""
+
+
 def _reasons(fs: FactSet, hero_name: str, locked: bool) -> tuple[str, list[str]]:
     """The facts that justify one pick, from the board's own FactSet - the
     facts about OUR copy of the hero: a mirror pick has facts on both sides
     (red's Tracer answers our Ana; ours partners our D.Va), and only the
-    facts the FactSet filed under the seat's own side (its "blue") count."""
+    facts the FactSet filed under the seat's own side (its "blue") count. A
+    win rate names the queue it was captured in."""
     why: list[str] = []
     evidence: list[str] = []
+    queue = rates_queue(fs)
+    rated = ", %s" % queue if queue else ""
 
     def own(key: str) -> list[Fact]:
         return [f for f in fs.find(key, hero_name) if f.team in (None, "blue")]
@@ -356,7 +371,7 @@ def _reasons(fs: FactSet, hero_name: str, locked: bool) -> tuple[str, list[str]]
     if partners:
         why.append("partner of %s" % ", ".join(f.value for f in partners[:3]))
         evidence.extend(f.id for f in partners[:3])
-    cite("hero.map_win", lambda f: "wins %.1f%% here" % f.value)
+    cite("hero.map_win", lambda f: "wins %.1f%% here%s" % (f.value, rated))
     for f in own("hero.map_delta"):
         if f.value >= 2.5:
             why.append("map specialist (%+.1f)" % f.value)
@@ -365,7 +380,7 @@ def _reasons(fs: FactSet, hero_name: str, locked: bool) -> tuple[str, list[str]]
     cite("hero.map_strategy", lambda f: "top-%d map by rate" % f.value)
     cite("hero.vs_answered_by", lambda f: "CAUTION: answered by %s" % ", ".join(f.value))
     if not evidence:
-        cite("hero.rate", lambda f: "wins %.1f%% across all ranks" % f.value["win"])
+        cite("hero.rate", lambda f: "wins %.1f%% across all ranks%s" % (f.value["win"], rated))
     if locked:
         why.insert(0, "locked")
     return "; ".join(why), evidence

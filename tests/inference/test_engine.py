@@ -65,7 +65,7 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert "Their 2 picks so far (Zarya, Pharah)" in plan and "answer" in plan
     assert "If you stray from the six, stay in its family. Tanks: " in plan
     assert "Above all: " in plan
-    assert plan.endswith("Based on: the rates and counters, the map, the side,"
+    assert plan.endswith("Based on: the Role Queue rates and counters, the map, the side,"
                          " red's 2 revealed picks.")
     d = b.to_dict()
     assert d["side"] == "attack" and d["red"]["seat"] == "red" and d["current"]["partial"]
@@ -222,7 +222,7 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     assert b.momentum["verdict"] == "no picks yet on either side"
     assert b.momentum["blue"] is None and b.momentum["red"] is None
     assert b.plan.startswith("No map yet, so this is the meta's best six")
-    assert b.plan.endswith("Based on: the rates and counters.")
+    assert b.plan.endswith("Based on: the Role Queue rates and counters.")
     assert len(b.blue.blue) == 6                      # the meta's best six, before any map
     b = engine.board(world, Draft("Ilios", (), (), ("Widowmaker",)), catalog=fix)
     assert b.plan.endswith("the map, 1 ban.") and b.plan.count("\n") >= 2

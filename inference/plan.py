@@ -11,7 +11,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import NamedTuple
 
 from inference import catalog as catalog_module
-from inference.result import Momentum, Odds, Result
+from inference.result import Momentum, Odds, Result, rates_queue
 from ui.facts.draft import TEAM_SIZE
 from ui.facts.factset import FactSet
 from ui.facts.model import ROLES, Hero, Map, World
@@ -267,7 +267,8 @@ def plan(
                  _family_line(world, m, lean, bans), _above_all(blue_r, lean)):
         if line is not None:
             lines.append(line)
-    lines.append(_basis(m, side, bans, red_h))
+    queue = rates_queue(blue_r.facts) if blue_r.facts is not None else ""
+    lines.append(_basis(m, side, bans, red_h, queue))
     return "\n".join(lines)
 
 
@@ -451,9 +452,12 @@ def _above_all(blue_r: Result, lean: str) -> str | None:
             + "; ".join(titles.get(str(c["id"]), str(c["id"])).lower() for c in top) + ".")
 
 
-def _basis(m: Map | None, side: str, bans: Sequence[str], red_h: Sequence[Hero]) -> str:
-    """What the plan rests on."""
-    basis = ["the rates and counters"]
+def _basis(
+        m: Map | None, side: str, bans: Sequence[str], red_h: Sequence[Hero],
+        queue: str) -> str:
+    """What the plan rests on, the rates named by the queue they were
+    captured in."""
+    basis = ["the %srates and counters" % ("%s " % queue if queue else "")]
     if m is not None:
         basis.append("the map")
     if side:

@@ -1,5 +1,5 @@
-"""A Result as it reads: unscored and why, the rendered breakdown, and the
-facts a pick and a contribution cite."""
+"""A Result as it reads: unscored and why, the rendered breakdown, the
+facts a pick and a contribution cite, and the queue a win rate names."""
 
 import os
 import shutil
@@ -138,3 +138,19 @@ def test_a_mirror_pick_cites_its_own_facts_not_the_enemy_copy(world):
     assert "answers Ana" not in ours["why"] and "Winston" not in partners
     clues = ("answers Genji", "answers Tracer", "partner of D.Va")
     assert any(clue in ours["why"] for clue in clues)
+
+
+def test_a_pick_and_the_plan_name_the_queue_the_rates_were_captured_in(
+        synthetic_world, scratch_playbook):
+    """The source publishes no Open Queue rates, so each win rate a pick
+    cites and the plan's basis say which queue the rates come from: the
+    synthetic World's are Role Queue's."""
+    from inference import engine
+    from inference.result import rates_queue
+    b = engine.board(synthetic_world, Draft("Harbor Gate", ("Anvil",), side="attack"),
+                     catalog=scratch_playbook)
+    assert rates_queue(b.blue.facts) == "Role Queue"
+    assert b.plan.split("\n")[-1].startswith("Based on: the Role Queue rates and counters")
+    rates = [part for r in (b.blue, b.red) for p in r.picks for part in p["why"].split("; ")
+             if part.startswith("wins ")]
+    assert rates and all(part.endswith(", Role Queue") for part in rates)
