@@ -16,6 +16,7 @@ under 120 characters. The table is reloaded wholesale.
 import re
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import psycopg
 
@@ -113,8 +114,16 @@ SYNERGY = Column(heading="synergy", position=2, parameter="synergy",
 MATCHUP = Column(heading="match", position=1, parameter="matchup", ratings=("rating", "risk"))
 
 
-def _table_rows(table: str, heading: str, position: int) -> Iterator[tuple[str, str]]:
-    """(hero, cell of one column) per data row of one wikitable."""
+class Row(NamedTuple):
+    """One row of the section's tables: the hero it is about and the text of
+    one cell - the markup in section_rows, the plain advice in
+    parse_synergies."""
+    hero: str
+    cell: str
+
+
+def _table_rows(table: str, heading: str, position: int) -> Iterator[Row]:
+    """Row(hero, cell of one column) per data row of one wikitable."""
     for row in ROW_SPLIT_RE.split(table):
         cells = _cells(row)
         if not cells:
@@ -126,12 +135,12 @@ def _table_rows(table: str, heading: str, position: int) -> Iterator[tuple[str, 
             continue
         hero = _row_hero(cells[0])
         if hero and len(cells) > position:
-            yield hero, cells[position]
+            yield Row(hero, cells[position])
 
 
 def _template_rows(section: str, parameter: str,
-                   ratings: Sequence[str]) -> Iterator[tuple[str, str]]:
-    """(hero key, rated cell of one column) per hero of each {{MatchupTable/...}}."""
+                   ratings: Sequence[str]) -> Iterator[Row]:
+    """Row(hero key, rated cell of one column) per hero of each {{MatchupTable/...}}."""
     suffix = "_" + parameter
     for block in markup.find_templates(section, r"MatchupTable"):
         params = markup.parse_params(block)
@@ -140,11 +149,11 @@ def _template_rows(section: str, parameter: str,
                 hero = key[: -len(suffix)]
                 rated = [params.get("%s_%s" % (hero, rating), "").strip() for rating in ratings]
                 rating = " | ".join(r for r in rated if r)
-                yield hero, "'''%s''' %s" % (rating, value) if rating else value
+                yield Row(hero, "'''%s''' %s" % (rating, value) if rating else value)
 
 
-def section_rows(text: str, column: Column = SYNERGY) -> list[tuple[str, str]]:
-    """[(hero, cell)] - one column of the section's tables, in either markup.
+def section_rows(text: str, column: Column = SYNERGY) -> list[Row]:
+    """[Row(hero, cell)] - one column of the section's tables, in either markup.
     A template's ratings lead its cell in bold, as a wikitable writes them."""
     section = synergy_section(text)
     rows = list(_template_rows(section, column.parameter, column.ratings))
@@ -194,17 +203,17 @@ def clause(text: str, limit: int = NOTE_LIMIT) -> str:
     return sentence[:limit].rsplit(" ", 1)[0].rstrip(".;:, ")
 
 
-def parse_synergies(text: str) -> list[tuple[str, str]]:
-    """[(teammate name, advice)] - the claims one article's synergy cells make."""
+def parse_synergies(text: str) -> list[Row]:
+    """[Row(teammate name, advice)] - the claims one article's synergy cells make."""
     claims = []
-    for hero, cell in section_rows(text):
-        rating, advice = split_rating(cell)
+    for row in section_rows(text):
+        rating, advice = split_rating(row.cell)
         advice = plain(advice)
         if name_key(advice) in PLACEHOLDERS or rating in NOT_A_SYNERGY:
             continue
         if rating is None and NO_SYNERGY_RE.search(clause(advice, 10 ** 6)):
             continue
-        claims.append((hero, advice))
+        claims.append(Row(row.hero, advice))
     return claims
 
 
@@ -212,11 +221,11 @@ def parse_synergies(text: str) -> list[tuple[str, str]]:
 Pairs = dict[tuple[int, int], tuple[int, str]]
 
 
-def pair_up(claims_by_hero: Mapping[str, list[tuple[str, str]]],
+def pair_up(claims_by_hero: Mapping[str, Sequence[Row]],
             hero_ids: Mapping[str, int]) -> tuple[Pairs, list[str]]:
     """Claims per hero -> ({(low id, high id): (score, note)}, unresolved names).
 
-    claims_by_hero is {hero name: [(teammate name, advice)]}; hero_ids is
+    claims_by_hero is {hero name: [Row(teammate name, advice)]}; hero_ids is
     {name_key: hero_id}. The note comes from an article whose first sentence
     fits uncut when there is one, else from the first article by hero name.
     """

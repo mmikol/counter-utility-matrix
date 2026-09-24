@@ -94,6 +94,8 @@ def test_the_shared_row_parser_reads_the_match_up_column_of_a_wikitable():
     rows = dict(synergies.section_rows(WIKITABLE, synergies.MATCHUP))
     assert list(rows) == ["D.Va", "Orisa", "Hazard", "Widowmaker", "Pharah", "McCree", "Mei"]
     assert rows["Hazard"] == "<small>Hazard can be an interesting matchup.</small>"
+    hazard = synergies.section_rows(WIKITABLE, synergies.MATCHUP)[2]
+    assert (hazard.hero, hazard.cell) == ("Hazard", rows["Hazard"])
     assert rows["Pharah"].startswith("'''LOW RISK'''\n<small>Pharah's slow flight")
     # The synergy column of the same rows is untouched by the match-up one.
     assert dict(synergies.section_rows(WIKITABLE))["Orisa"] == (

@@ -127,10 +127,12 @@ def test_a_wikitable_row_is_a_claim_when_its_synergy_cell_holds_advice():
 
 
 def test_a_matchup_template_is_read_by_its_synergy_parameters_and_rating():
-    assert synergies.parse_synergies(TEMPLATE) == [
+    claims = synergies.parse_synergies(TEMPLATE)
+    assert claims == [
         ("ana", "Ana and Anran have strong synergy, though it requires coordination."),
         ("jetpackcat", "Lifeline tows her behind the enemy."),
     ]
+    assert (claims[1].hero, claims[1].cell) == ("jetpackcat", "Lifeline tows her behind the enemy.")
 
 
 def test_an_article_without_the_section_claims_nothing():

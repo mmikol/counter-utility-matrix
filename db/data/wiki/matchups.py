@@ -401,15 +401,15 @@ def parse_matchups(text: str, hero: str,
     known = known or {}
     unknown = Known(name=None, pronoun=None)
     readings = []
-    for other, cell in synergies.section_rows(text, synergies.MATCHUP):
-        key = synergies.RENAMED.get(name_key(other), name_key(other))
+    for row in synergies.section_rows(text, synergies.MATCHUP):
+        key = synergies.RENAMED.get(name_key(row.hero), name_key(row.hero))
         if key == name_key(hero):
             continue
         enemy = known.get(key, unknown)
-        reading = read_cell(cell, hero, enemy.name or other,
+        reading = read_cell(row.cell, hero, enemy.name or row.hero,
                             (known.get(name_key(hero), unknown).pronoun, enemy.pronoun))
         if reading.basis:
-            readings.append((other, reading))
+            readings.append((row.hero, reading))
     return readings
 
 
