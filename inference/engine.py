@@ -70,20 +70,28 @@ def field_size(pool: int) -> int:
 
 # the most candidates per role whose field fits the budget: 10, 411,825 sixes
 POOL_CEILING = max(p for p in range(2, 13) if field_size(p) <= FIELD_BUDGET)
+POOL_DEFAULT = 6            # candidates per role when a caller names none
+TOP_DEFAULT = 5             # alternatives when a caller names none
+TOP_CEILING = 20            # the most alternatives a caller may ask for
 
 
 def clamp_search(pool: str | float | None = None,
                  top: str | float | None = None) -> SearchBounds:
     """Bounds on the search: pool 2..POOL_CEILING candidates per role, top
-    1..20 alternatives. The pool is bounded by the field it would enumerate,
-    not by a round number: pool 12 is 1,345,960 legal sixes, which ran the
-    inference container out of memory. Every door that takes the two from a
-    caller - the MCP tools and the HTTP service - passes them through here,
-    so the search is bounded by one definition. Junk raises Refusal, which
-    every door answers as the caller's error."""
+    1..TOP_CEILING alternatives. A knob left out (None) takes its default,
+    POOL_DEFAULT or TOP_DEFAULT, and any number - 0 and negatives included -
+    is clamped into its range, so 0 reads as the floor whether it comes as an
+    int from an MCP tool or as the text "0" from a query string. The pool is
+    bounded by the field it would enumerate, not by a round number: pool 12
+    is 1,345,960 legal sixes, which ran the inference container out of
+    memory. Every door that takes the two from a caller - the MCP tools and
+    the HTTP service - passes them through here, so the search is bounded by
+    one definition. Anything else that is not a number, [] included, raises
+    Refusal, which every door answers as the caller's error."""
     try:
-        return SearchBounds(pool_size=max(2, min(int(pool or 6), POOL_CEILING)),
-                            top=max(1, min(int(top or 5), 20)))
+        return SearchBounds(
+            pool_size=max(2, min(int(POOL_DEFAULT if pool is None else pool), POOL_CEILING)),
+            top=max(1, min(int(TOP_DEFAULT if top is None else top), TOP_CEILING)))
     except (TypeError, ValueError) as error:
         raise Refusal("pool and top must be numbers: %s" % error) from error
 
@@ -98,7 +106,7 @@ class Brief(NamedTuple):
     only), whether to solve the countered case - the MCP board prints it, the
     page never reads it - and the check that says a newer request from the
     same client has superseded this one."""
-    pool_size: int = 6
+    pool_size: int = POOL_DEFAULT
     weights: Mapping[str, float] | None = None
     countered: bool = True
     superseded: Callable[[], bool] | None = None
@@ -123,20 +131,23 @@ def _side(m: Map | None, side: str) -> str:
 
 def infer(
         world: World, draft: Draft, *, catalog: list[Strategy] | None = None,
-        pool_size: int = 6, top: int = 5) -> Result:
+        pool_size: int = POOL_DEFAULT, top: int = TOP_DEFAULT) -> Result:
     """Blue's optimal six around its locked picks (`draft.blue`) against red's
-    revealed ones, on the draft's side of a sided map."""
-    return _optimal(world, draft, catalog=catalog or catalog_module.load(),
+    revealed ones, on the draft's side of a sided map. No catalog is the
+    playbook in force; a catalog given, [] included, is the caller's."""
+    return _optimal(world, draft,
+                    catalog=catalog_module.load() if catalog is None else catalog,
                     pool_size=pool_size, top=top, seat="blue", kind="infer",
                     solved=None, began=None).result
 
 
 def evaluate(
         world: World, draft: Draft, *, catalog: list[Strategy] | None = None,
-        pool_size: int = 6) -> Result:
+        pool_size: int = POOL_DEFAULT) -> Result:
     """Blue's full six (`draft.blue`), scored and ranked against the field the
-    solver would have searched."""
-    return _evaluated(world, draft, catalog=catalog or catalog_module.load(),
+    solver would have searched. No catalog is the playbook in force."""
+    return _evaluated(world, draft,
+                      catalog=catalog_module.load() if catalog is None else catalog,
                       pool_size=pool_size, seat="blue", kind="evaluate", swept=None)
 
 
@@ -300,9 +311,10 @@ def board(
     supersede.Superseded. A pooled pass that raises anything else cancels
     its unstarted tasks too, so a refused board leaves none queued.
     """
-    brief = brief or Brief()
+    brief = Brief() if brief is None else brief
     pooled = parallel.available(catalog)
-    catalog = catalog_module.weighted(catalog or catalog_module.load(), brief.weights)
+    catalog = catalog_module.weighted(
+        catalog_module.load() if catalog is None else catalog, brief.weights)
     watch = supersede.Watch(brief.superseded)
     if not pooled:
         return _board_once(world, draft, catalog=catalog, brief=brief, workers=None,
@@ -412,7 +424,7 @@ class _Pass:
         search's bounds and standing and draws no sample of its own."""
         if self.run is None or not wanted:
             return parallel.NullSplit(self.watch)
-        spec = parallel.Spec(draft, pool_size or self.brief.pool_size)
+        spec = parallel.Spec(draft, self.brief.pool_size if pool_size is None else pool_size)
         if scale_of is None:
             return parallel.Split(self.run, spec, slices)
         return parallel.Split(self.run, spec, slices, scale_of.bounds, scale_of.standing)
@@ -423,8 +435,9 @@ class _Pass:
         """`seat`'s optimal six on `draft`, taken from `search` where it ran
         across the pool and timed from when it was sent out."""
         return _optimal(self.world, draft, catalog=self.catalog,
-                        pool_size=pool_size or self.brief.pool_size, top=BOARD_TOP, seat=seat,
-                        kind=kind, solved=search.solved(), began=search.started)
+                        pool_size=self.brief.pool_size if pool_size is None else pool_size,
+                        top=BOARD_TOP, seat=seat, kind=kind, solved=search.solved(),
+                        began=search.started)
 
     def current(self, draft: Draft, optimal: _Optimal, search: Searching, *, seat: Seat) -> Result:
         """`seat`'s picks as they stand, on its optimal's scale; a full six is

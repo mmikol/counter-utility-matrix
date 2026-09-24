@@ -9,13 +9,23 @@ from typing import TypedDict
 
 from door.mcp.boards import board_tool
 from door.mcp.registry import Context, tool
-from door.mcp.schema import ToolReply
+from door.mcp.schema import Property, ToolReply
 from facts import tables
 from facts.draft import Draft
 from inference import catalog, engine, reach
 from inference.result import Result
 
 COMPACT_TERMS = 15        # the heaviest terms a compact reply carries
+
+# the search knobs as the tools describe them; clamp_search holds their rule
+TOP: Property = {
+    "type": "integer",
+    "description": "alternatives to return, 1 to %d (default %d)"
+                   % (engine.TOP_CEILING, engine.TOP_DEFAULT)}
+POOL: Property = {
+    "type": "integer",
+    "description": "candidates per role the search keeps, 2 to %d (default %d)"
+                   % (engine.POOL_CEILING, engine.POOL_DEFAULT)}
 
 
 class WeightedTerm(TypedDict):
@@ -48,9 +58,8 @@ class CompactInfer(TypedDict):
     " searched. Returns the comp, per-pick reasons with fact citations,"
     " the strategy score breakdown, and alternatives.",
     {
-        "top": {"type": "integer", "description": "alternatives to return (default 5)"},
-        "pool": {"type": "integer",
-                 "description": "candidates per role the search keeps (default 6)"},
+        "top": TOP,
+        "pool": POOL,
         "compact": {"type": "boolean",
                     "description": "true: a reply small enough to carry under a"
                                    " playbook of hundreds. The structured payload"
@@ -61,7 +70,7 @@ class CompactInfer(TypedDict):
                                    " (the %d heaviest terms, each an id and its"
                                    " weighted value)" % COMPACT_TERMS}})
 def infer(
-        ctx: Context, draft: Draft, top: int = 5, pool: int = 6,
+        ctx: Context, draft: Draft, top: int | None = None, pool: int | None = None,
         compact: bool = False) -> ToolReply:
     with ctx.connect() as cx:
         world = tables.load(cx)
@@ -141,14 +150,13 @@ def reach_tool(ctx: Context, hero: str) -> ToolReply:   # _tool: inference.reach
     " from the data alone (a two-two-two from the map's pick rates and the"
     " wiki's synergies, past the bans; static for the board, no strategy read).",
     {
-        "pool": {"type": "integer",
-                 "description": "candidates per role the search keeps (default 6)"},
+        "pool": POOL,
         "weights": {"type": "object",
                     "description": "{heuristic id: 0..10} - weights to score this"
                                    " board under instead of the files' (the playbook"
                                    " tab's sliders); the files are untouched"}})
 def board(
-        ctx: Context, draft: Draft, pool: int = 6,
+        ctx: Context, draft: Draft, pool: int | None = None,
         weights: Mapping[str, object] | None = None) -> ToolReply:
     with ctx.connect() as cx:
         world = tables.load(cx)

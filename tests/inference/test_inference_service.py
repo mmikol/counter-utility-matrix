@@ -24,17 +24,20 @@ def test_the_board_survives_the_round_trip_through_a_query_string():
 
 def test_both_doors_bound_the_search_with_one_clamp():
     """A caller naming pool or top reaches the same bounds through the service
-    as through the MCP tools: the engine owns the definition."""
+    as through the MCP tools: the engine owns the definition. Only a knob left
+    out takes the default; 0 is a number like any other, clamped to the floor
+    whether it comes as an int or as a query string's text."""
     from inference.engine import POOL_CEILING, clamp_search
     assert clamp_search(None, None) == (6, 5)                  # the defaults
-    assert clamp_search(0, 0) == (6, 5)                        # falsy reads as unset
+    assert clamp_search(0, 0) == (2, 1)                        # 0 is the floor, not unset
+    assert clamp_search("0", "0") == (2, 1)                    # on every door
+    assert clamp_search(-3, -3) == (2, 1)
     assert clamp_search(1, 0.5) == (2, 1)
     assert clamp_search(99, 99) == (POOL_CEILING, 20)
     assert clamp_search("8", "3") == (8, 3)                    # a query string is text
-    for junk in ("x", [1], object()):                          # a refusal, not a crash
+    for junk in ("x", [1], [], object()):                      # a refusal, not a crash
         with pytest.raises(Refusal, match="must be numbers"):
             clamp_search(junk)
-    assert clamp_search([], []) == (6, 5)                      # empty is unset, like None
 
 
 def test_the_pool_is_bounded_by_the_field_it_would_enumerate():

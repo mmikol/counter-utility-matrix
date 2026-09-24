@@ -189,6 +189,20 @@ def test_the_board_refuses_a_team_of_seven(synthetic_world):
         engine.board(synthetic_world, Draft("Harbor Gate", (), tuple(seven)), catalog=fix)
 
 
+def test_an_empty_catalog_is_the_callers_and_loads_no_playbook(synthetic_world, monkeypatch):
+    """Only a catalog left out is the playbook in force: [] is the caller's
+    own, as parallel.available already reads it, and scores nothing."""
+    from inference import engine
+
+    def load(directory=None):
+        raise AssertionError("the playbook was loaded")
+    monkeypatch.setattr(engine.catalog_module, "load", load)
+    result = engine.infer(synthetic_world, Draft("Harbor Gate"), catalog=[], top=1)
+    assert len(result.blue) == 6 and result.catalog == []
+    b = engine.board(synthetic_world, Draft("Harbor Gate"), catalog=[])
+    assert len(b.blue.blue) == 6 and b.blue.catalog == []
+
+
 def test_blue_counters_the_likely_six_until_red_reveals_a_pick(synthetic_world):
     """With no red pick the board solves blue against red's likely six, so the
     opening suggestion is a counter to what the map and the meta say red
