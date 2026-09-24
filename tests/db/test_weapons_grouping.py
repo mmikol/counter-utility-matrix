@@ -4,6 +4,8 @@ The trickiest calls in the repo, each shipped wrong once or nearly so:
 hip-fire + ADS are ONE weapon, primary + secondary usually merge, but two
 weapons of one class (Mauga's chainguns) share a head noun and must NOT."""
 
+from db import KIND_WEAPON
+from db.data.wiki.kit_rows import WeaponEntry
 from db.data.wiki.weapons import (
     base_name,
     group_weapons,
@@ -12,8 +14,8 @@ from db.data.wiki.weapons import (
 
 
 def entry(name, mode=None):
-    return {"name": name, "mode": mode, "input_key": None,
-            "display_name": name, "weapon_type": None, "stats": {}}
+    return WeaponEntry(name=name, mode=mode, input_key=None, keywords="", description="",
+                       stats={}, kind=KIND_WEAPON, display_name=name, weapon_type=None)
 
 
 def names(grouped):

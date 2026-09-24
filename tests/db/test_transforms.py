@@ -249,7 +249,7 @@ def test_the_ability_vocabulary_is_one_list():
     import re
 
     import db
-    from db.data.wiki.heroes import _ability_kind
+    from db.data.wiki.kit_rows import ability_kind
     path = os.path.join(db.ROOT, "db", "psql", "migrations", "002_heroes.sql")
     with open(path, encoding="utf-8") as handle:
         sql = handle.read()
@@ -262,8 +262,8 @@ def test_the_ability_vocabulary_is_one_list():
                             ("Passive", db.KIND_PASSIVE),
                             ("Ability", db.KIND_ABILITY),
                             ("", db.KIND_ABILITY)):
-        assert _ability_kind(base_type) == code
-    assert all(_ability_kind(t) in db.ABILITY_KINDS
+        assert ability_kind(base_type) == code
+    assert all(ability_kind(t) in db.ABILITY_KINDS
                for t in ("weapon", "WEAPON x", "an ultimate", "a passive", "anything"))
 
 

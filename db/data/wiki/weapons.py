@@ -22,6 +22,8 @@ those are different loadouts, not modes of one gun.
 
 import re
 
+from db.data.wiki.kit_rows import WeaponEntry
+
 ALT_SUFFIX_RE = re.compile(r"\s*(?:alt(?:ernate)?\s*fire|\(ads\))\s*$", re.I)
 WORD_RE = re.compile(r"[A-Za-z']+")
 
@@ -39,20 +41,23 @@ ADS_SLOT = SLOT_IDS["ads"]
 MERGEABLE_SEQUENCES = {("hip fire", "ads"), ("primary fire", "secondary fire")}
 
 
-def base_name(name):
+def base_name(name: str) -> str:
+    """A weapon's name without its "Alt Fire" or "(ADS)" suffix."""
     return ALT_SUFFIX_RE.sub("", name).strip()
 
 
-def head_noun(name):
+def head_noun(name: str) -> str:
+    """The last word of the base name, lowercased: "chaingun"."""
     words = WORD_RE.findall(base_name(name))
     return words[-1].lower() if words else ""
 
 
-def slot_id(mode):
+def slot_id(mode: str | None) -> int:
+    """A firing mode's weapon_config_slots.slot_id; an unknown mode is the default."""
     return SLOT_IDS.get((mode or "").strip().lower(), DEFAULT_SLOT)
 
 
-def _merges(previous, entry):
+def _merges(previous: WeaponEntry, entry: WeaponEntry) -> bool:
     previous_mode = (previous["mode"] or "").strip().lower()
     entry_mode = (entry["mode"] or "").strip().lower()
 
@@ -66,14 +71,14 @@ def _merges(previous, entry):
     return True
 
 
-def group_weapons(entries):
+def group_weapons(entries: list[WeaponEntry]) -> list[tuple[str, list[WeaponEntry]]]:
     """[weapon entry] -> [(weapon_name, [config entry])] in source order.
 
     Also names each ADS config after the weapon it belongs to. The wiki calls
     them anything - "Zoom (ADS)", "Take Aim (ADS)" - and the weapon's own name
     is only known once the configs are grouped, which is why it happens here.
     """
-    weapons = []
+    weapons: list[tuple[str, list[WeaponEntry]]] = []
     for entry in entries:
         if weapons and _merges(weapons[-1][1][-1], entry):
             weapons[-1][1].append(entry)
@@ -82,6 +87,6 @@ def group_weapons(entries):
 
     for weapon_name, configs in weapons:
         for config in configs:
-            if slot_id(config["mode"] or config.get("input_key")) == ADS_SLOT:
+            if slot_id(config["mode"] or config["input_key"]) == ADS_SLOT:
                 config["display_name"] = "%s (ADS)" % weapon_name
     return weapons

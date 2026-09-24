@@ -10,10 +10,10 @@ hero's health pool and, for a hero marked upcoming, its announcement.
 
 Loads weapons and their firing configs, classifies every ability, adds the
 abilities Blizzard does not publish, stores each ability's keywords, and
-attaches stat measurements to abilities, weapons and perks. Rows come back
-alphabetically, so weapons are sorted by firing slot here; grouping them
-into weapons is weapons.py's job. Runs after blizzard.heroes, which owns
-the hero, ability and perk rows this fills in.
+attaches stat measurements to abilities, weapons and perks. kit_rows.py
+reads the rows into each hero's kit; weapons.py groups its weapons. Runs
+after blizzard.heroes, which owns the hero, ability and perk rows this
+fills in.
 """
 
 import collections
@@ -21,13 +21,13 @@ import contextlib
 import datetime
 import re
 from collections.abc import Callable, Iterable, Mapping
-from typing import NotRequired, TypedDict
+from typing import TypedDict
 
 import psycopg
 import requests
 from psycopg.sql import SQL
 
-from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON, psql
+from db import PERK_TIERS, psql
 from db.data import fetch
 from db.data.names import abilities_named_in, ability_key
 from db.data.wiki import (
@@ -37,6 +37,13 @@ from db.data.wiki import (
     markup,
     modifiers,
 )
+from db.data.wiki.kit_rows import (
+    AbilityEntry,
+    PerkEntry,
+    StatValue,
+    WeaponEntry,
+    parse_rows,
+)
 from db.data.wiki.measurements import parse_measurements
 from db.data.wiki.weapons import (
     group_weapons,
@@ -45,26 +52,6 @@ from db.data.wiki.weapons import (
 
 # --- extract: markup -> Python ---------------------------------------------
 
-# A stat's value: (clean text, the wiki's raw markup).
-StatValue = tuple[str, str]
-
-
-class KitEntry(TypedDict):
-    """One Cargo row, read: a weapon's firing mode, an ability or a perk."""
-    name: str
-    mode: str | None
-    input_key: str | None
-    keywords: str
-    description: str
-    stats: dict[str, StatValue]
-    tier: NotRequired[str]                  # a perk's: minor or major
-    kind: NotRequired[str]                  # a weapon's or an ability's
-    weapon_type: NotRequired[str | None]    # a weapon's
-    display_name: NotRequired[str]          # a weapon's or an ability's
-
-
-# One hero's kit: (weapons, abilities, perks).
-HeroKit = tuple[list[KitEntry], list[KitEntry], list[KitEntry]]
 # {health, shield, armor} from a hero's infobox, each None when it gives none.
 HeroProfile = dict[str, int | None]
 # {ability key: {stat code: value}} - what an article adds to the Cargo kit.
@@ -76,102 +63,6 @@ class Announcement(TypedDict):
     subrole: str
     health: int | None
     release_date: datetime.date | None
-
-
-# Columns that describe the ability rather than measure it.
-NON_STAT_FIELDS = frozenset(
-    {"hero_name", "ability_name", "ability_type", "ability_key", "removed",
-     "official_description", "ability_keywords"}
-)
-
-STAT_ALIASES = {"range_distance": "range"}
-
-
-# Cargo returns rows alphabetically, but weapon grouping needs firing order.
-SLOT_RANK = {
-    "primary fire": 0, "hip fire": 0,
-    "secondary fire": 1, "ads": 1,
-}
-
-
-def _slot_rank(entry: KitEntry) -> int:
-    for token in (entry["mode"], entry["input_key"]):
-        rank = SLOT_RANK.get((token or "").strip().lower())
-        if rank is not None:
-            return rank
-    return 2
-
-
-def _ability_kind(base_type: str) -> str:
-    """The wiki's ability_type -> a code from the shared vocabulary. The kind_id
-    behind it comes from the ability_kinds table at write time, so the parser
-    never has to know the numbers."""
-    lowered = base_type.lower()
-    if lowered.startswith("weapon"):
-        return KIND_WEAPON
-    if "ultimate" in lowered:
-        return KIND_ULTIMATE
-    if "passive" in lowered:
-        return KIND_PASSIVE
-    return KIND_ABILITY
-
-
-def parse_rows(rows: Iterable[Mapping[str, str]]) -> dict[str, HeroKit]:
-    """Cargo rows -> {hero_name: (weapons, abilities, perks)}."""
-    heroes: dict[str, HeroKit] = {}
-    for row in rows:
-        # Cargo returns field names with spaces.
-        fields = {key.replace(" ", "_"): value for key, value in row.items()}
-
-        if (fields.get("removed") or "").strip():
-            continue  # retired kit
-        hero_name = (fields.get("hero_name") or "").strip()
-        name = markup.html_to_text(fields.get("ability_name"))
-        if not hero_name or not name:
-            continue
-
-        base_type, mode = markup.split_type(
-            markup.html_to_text(fields.get("ability_type"))
-        )
-        if not base_type:
-            continue
-
-        stats: dict[str, StatValue] = {}
-        for key, raw in fields.items():
-            if key in NON_STAT_FIELDS or not raw:
-                continue
-            code = STAT_ALIASES.get(key, key)
-            value = markup.html_to_text(raw)
-            if value:
-                stats[code] = (value, raw)
-
-        entry: KitEntry = {
-            "name": name,
-            "mode": mode,
-            "input_key": markup.html_to_text(fields.get("ability_key")) or None,
-            "keywords": markup.html_to_text(fields.get("ability_keywords")) or "",
-            "description": markup.html_to_text(fields.get("official_description")),
-            "stats": stats,
-        }
-
-        weapons, abilities, perks = heroes.setdefault(hero_name, ([], [], []))
-        if "perk" in base_type.lower():
-            entry["tier"] = "major" if "major" in base_type.lower() else "minor"
-            perks.append(entry)
-        elif base_type.lower().startswith("weapon"):
-            entry["kind"] = KIND_WEAPON
-            entry["weapon_type"] = (stats.get("shot_type", ("", ""))[0]
-                                    .split(";")[0].strip().lower() or None)
-            entry["display_name"] = name
-            weapons.append(entry)
-        else:
-            entry["kind"] = _ability_kind(base_type)
-            entry["display_name"] = name
-            abilities.append(entry)
-
-    for weapons, _, _ in heroes.values():
-        weapons.sort(key=_slot_rank)
-    return heroes
 
 
 def parse_hero_profile(text: str) -> HeroProfile:
@@ -351,14 +242,14 @@ def supplement_from_wikitext(
 
 
 def _insert_modifiers(
-        cursor: psycopg.Cursor, ability_id: int, entry: KitEntry, key_ids: Mapping[str, int],
-        source_id: int) -> int:
+        cursor: psycopg.Cursor, ability_id: int, entry: AbilityEntry,
+        key_ids: Mapping[str, int], source_id: int) -> int:
     """Store the buffs and debuffs an ability applies to someone's numbers."""
     written = 0
     for code, (value_text, _) in entry["stats"].items():
         if code not in modifiers.MODIFIER_STATS:
             continue
-        keywords = entry.get("keywords", "")
+        keywords = entry["keywords"]
         affects = modifiers.affected_quantity(code, value_text, keywords)
         if affects is None:
             continue
@@ -429,7 +320,7 @@ def _insert_stats(
 
 
 def _load_weapons(
-        cursor: psycopg.Cursor, hero_id: int, weapons: list[KitEntry],
+        cursor: psycopg.Cursor, hero_id: int, weapons: list[WeaponEntry],
         key_ids: Mapping[str, int], source_id: int, tally: collections.Counter[str]) -> None:
     """Weapons, their firing configs (with keywords), and the stats on each."""
     for position, (weapon_name, configs) in enumerate(group_weapons(weapons)):
@@ -453,7 +344,7 @@ def _load_weapons(
                 " RETURNING config_id",
                 (row[0], slot_id(config["mode"] or config["input_key"]),
                  config["display_name"], config["weapon_type"],
-                 config.get("keywords") or None, config_position, source_id),
+                 config["keywords"] or None, config_position, source_id),
             )
             config_row = cursor.fetchone()
             if config_row is None:
@@ -466,8 +357,8 @@ def _load_weapons(
 
 
 def _load_abilities(
-        cursor: psycopg.Cursor, hero_id: int, weapon_entries: list[KitEntry],
-        entries: list[KitEntry], key_ids: Mapping[str, int], kind_ids: Mapping[str, int],
+        cursor: psycopg.Cursor, hero_id: int, weapon_entries: list[WeaponEntry],
+        entries: list[AbilityEntry], key_ids: Mapping[str, int], kind_ids: Mapping[str, int],
         source_id: int, tally: collections.Counter[str]) -> None:
     """Classify the abilities Blizzard loaded, add the ones it omits, stat
     them, store their keywords. Weapon entries take part ONLY to classify."""
@@ -483,14 +374,14 @@ def _load_abilities(
         (hero_id,),
     ))
 
-    for entry in weapon_entries:
-        for candidate in (entry["name"], entry.get("display_name", "")):
-            ability_id = existing.get(ability_key(candidate)) if candidate else None
+    for weapon in weapon_entries:
+        for candidate in (weapon["name"], weapon["display_name"]):
+            ability_id = existing.get(ability_key(candidate))
             if ability_id is not None:
                 cursor.execute(
                     "UPDATE abilities SET kind_id = %s, keywords = %s"
                     " WHERE ability_id = %s",
-                    (kind_ids[entry["kind"]], entry.get("keywords") or None, ability_id),
+                    (kind_ids[weapon["kind"]], weapon["keywords"] or None, ability_id),
                 )
                 tally["classified"] += cursor.rowcount
                 break
@@ -504,7 +395,7 @@ def _load_abilities(
                 " VALUES (%s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (hero_id, name) DO NOTHING RETURNING ability_id",
                 (hero_id, kind_ids[entry["kind"]], entry["display_name"],
-                 entry["description"], entry.get("keywords") or None,
+                 entry["description"], entry["keywords"] or None,
                  next_position, source_id),
             )
             inserted = cursor.fetchone()
@@ -518,7 +409,7 @@ def _load_abilities(
             cursor.execute(
                 "UPDATE abilities SET kind_id = %s, keywords = %s"
                 " WHERE ability_id = %s",
-                (kind_ids[entry["kind"]], entry.get("keywords") or None, ability_id),
+                (kind_ids[entry["kind"]], entry["keywords"] or None, ability_id),
             )
             tally["classified"] += 1
 
@@ -534,7 +425,7 @@ def _load_abilities(
 
 
 def _load_perks(
-        cursor: psycopg.Cursor, hero_id: int, perks: list[KitEntry],
+        cursor: psycopg.Cursor, hero_id: int, perks: list[PerkEntry],
         key_ids: Mapping[str, int], source_id: int, tally: collections.Counter[str]) -> None:
     """Perk stats, and the link from a perk to the ability it alters."""
     ability_names = [
@@ -555,7 +446,7 @@ def _load_perks(
         # only ones, so they get rows of their own (Blizzard's replace them)
         position = {"minor": 0, "major": 0}
         for entry in perks:
-            tier = entry.get("tier", "minor")
+            tier = entry["tier"]
             position[tier] += 1
             if position[tier] > 2:
                 continue
@@ -563,7 +454,7 @@ def _load_perks(
                 "INSERT INTO perks (hero_id, tier_id, name, description, position, source_id)"
                 " VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (hero_id, name) DO NOTHING"
                 " RETURNING perk_id",
-                (hero_id, 2 if tier == "major" else 1, entry["name"], entry["description"],
+                (hero_id, PERK_TIERS[tier], entry["name"], entry["description"],
                  position[tier], source_id))
             row = cursor.fetchone()
             if row:

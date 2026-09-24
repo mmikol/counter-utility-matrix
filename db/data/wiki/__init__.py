@@ -2,6 +2,8 @@
 
     heroes         hero kits via the Cargo Abilities table: weapons and
                    firing configs, abilities, perks, stats, keywords
+    kit_rows       a Cargo Abilities row -> a typed weapon, ability or perk
+                   entry of one hero's kit
     maps           maps, game modes and stages from the Maps article
     patches        game versions from the Patches cargo table
     playstyles     the team-composition playstyles (dive, brawl, poke)
