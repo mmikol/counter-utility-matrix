@@ -14,10 +14,10 @@ import pytest
 
 from facts import board_facts, compute
 from facts.draft import Draft, board_query
-from inference import catalog, engine, scale, scoring, solver, tune
+from inference import catalog, engine, scale, scoring, solver
 from inference.result import Badge, Momentum, Pick
 from inference.scoring import Contribution
-from inference.strategy import StrategyRecord
+from inference.strategy import WEIGHT_RANGE, StrategyRecord
 from tests.inference import FIXTURE_PLAYBOOK
 from ui import board, pages
 
@@ -178,7 +178,7 @@ def test_the_scripts_write_the_ids_and_read_the_globals_the_shell_holds():
     """Every element a script looks up by a literal id is one the shell
     renders, the data attributes the clicks read are the shell's, each
     global the shell sets is read, and the weight slider and its number box
-    carry the bounds tune enforces."""
+    carry the bounds the strategy rule checks a weight against."""
     script, body = scripts(), pages.view_board(True)
     ids = set(re.findall(r"\bel\('([^']+)'\)", script))
     assert len(ids) >= 20
@@ -190,7 +190,7 @@ def test_the_scripts_write_the_ids_and_read_the_globals_the_shell_holds():
     assert names == ["TEAM", "BANS", "READ_ONLY"]
     for name in names:
         assert re.search(r"\b%s\b" % name, script), name
-    assert script.count("min='%g' max='%g' step='0.01'" % tune.WEIGHT_RANGE) == 2
+    assert script.count("min='%g' max='%g' step='0.01'" % WEIGHT_RANGE) == 2
 
 
 def test_the_scripts_read_payload_keys_the_server_writes(synthetic_world, monkeypatch):
