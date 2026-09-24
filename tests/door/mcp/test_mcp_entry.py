@@ -14,8 +14,10 @@ from door.mcp.__main__ import _status, main
 
 def test_the_entry_point_lists_tools_and_refuses_nonsense(capsys, tmp_path, monkeypatch):
     """Usage is 2, a refused call 1 with the reason on stderr; the strategies
-    call reaches the wrapper, so its audit line lands in tmp_path."""
-    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
+    call reaches the wrapper, so its audit line lands in tmp_path, under the
+    shell's name."""
+    path = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(path))
     assert main(["list"]) == 0
     out = capsys.readouterr().out
     assert "db_status" in out and "infer" in out
@@ -27,6 +29,9 @@ def test_the_entry_point_lists_tools_and_refuses_nonsense(capsys, tmp_path, monk
     assert main(["call", "metrics", "{not json"]) == 2
     assert main(["call", "metrics", "[1]"]) == 2
     assert "python -m door.mcp call" in capsys.readouterr().err
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [(e["tool"], e["client"], "refused" in e) for e in lines] == [
+        ("strategies", "shell", True)]
 
 
 @pytest.mark.invariant
@@ -43,14 +48,14 @@ def test_health_is_degraded_when_the_database_is_out_of_reach_and_crashes_otherw
     It reads the database directly, so a healthcheck leaves no audit line."""
     path = tmp_path / "audit.jsonl"
     monkeypatch.setenv("COUNTRIX_AUDIT", str(path))
-    status = _status(tools.Context(dsn="postgresql://nobody@127.0.0.1:9/nowhere"))
+    status = _status(tools.Context(dsn="postgresql://nobody@127.0.0.1:9/nowhere", client="test"))
     reply = status()
     assert reply["status"] == "degraded" and reply["error"]
 
     def no_database():
         raise psql.NoDatabaseError("no DATABASE_URL and no embedded cluster")
     monkeypatch.setattr(psql, "default_dsn", no_database)
-    reply = _status(tools.Context())()
+    reply = _status(tools.Context(client="test"))()
     assert reply["status"] == "degraded" and "no embedded cluster" in reply["error"]
 
     def broken(ctx):
@@ -67,7 +72,7 @@ def test_an_in_process_call_is_validated_against_the_tools_schema(tmp_path, monk
     is audited as refused, not as a crash."""
     path = tmp_path / "audit.jsonl"
     monkeypatch.setenv("COUNTRIX_AUDIT", str(path))
-    ctx = tools.Context(dsn="postgresql://nowhere")
+    ctx = tools.Context(dsn="postgresql://nowhere", client="test")
     with pytest.raises(Refusal, match="strategies: unknown argument"):
         ctx.call("strategies", bogus=1)
     with pytest.raises(Refusal, match="reach: 'hero' must be string"):
@@ -79,22 +84,23 @@ def test_an_in_process_call_is_validated_against_the_tools_schema(tmp_path, monk
 
 def test_an_in_process_tool_call_leaves_one_audit_line(tmp_path, monkeypatch):
     """The sentry's window is the audit log, so the refresher's and the shell's
-    path has to appear in it like a call through either door."""
+    path has to appear in it like a call through either door, under the
+    caller's name."""
     path = tmp_path / "audit.jsonl"
     monkeypatch.setenv("COUNTRIX_AUDIT", str(path))
-    ctx = tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x")
+    ctx = tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x", client="shell")
     ctx.call("list_sources")
     with pytest.raises(tools.NoSuchToolError):
         ctx.call("no_such_tool")          # never reached a tool: no line
     lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     assert [e["tool"] for e in lines] == ["list_sources"]
     assert lines[0]["transport"] == "in-process" and lines[0]["ok"] is True
-    assert lines[0]["client"] is None and "ms" in lines[0]
+    assert lines[0]["client"] == "shell" and "ms" in lines[0]
 
 
 def test_a_tool_argument_named_name_reaches_the_tool():
     """ctx.call takes the tool's name positionally, so add_strategy's own `name`
     argument is not swallowed by the call - it raised TypeError once."""
     with pytest.raises(tools.NoSuchToolError, match="no tool named 'no_such_tool'"):
-        tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x").call(
+        tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x", client="test").call(
             "no_such_tool", name="Players play optimally")

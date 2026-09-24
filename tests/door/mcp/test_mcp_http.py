@@ -124,8 +124,8 @@ def test_http_transport_guards_get_origin_and_health(http_server):
 
 def _http_server(tmp_path, token=None, rate_limit=120):
 
-    mcp = Server(tools.REGISTRY.bind(tools.Context(dsn="postgresql://nowhere")), None,
-                 audit_path=str(tmp_path / "audit.jsonl"))
+    ctx = tools.Context(dsn="postgresql://nowhere", client="test")
+    mcp = Server(tools.REGISTRY.bind(ctx), None, audit_path=str(tmp_path / "audit.jsonl"))
     httpd = HttpServer(("127.0.0.1", 0), mcp, lambda: {"status": "ok"}, token=token,
                        rate_limit=rate_limit)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()

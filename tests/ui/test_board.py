@@ -137,6 +137,11 @@ def test_storing_a_weight_is_a_tune_call_over_the_door(monkeypatch):
         assert calls[-1][1]["value"] == low
 
 
+def test_the_boards_in_process_tool_calls_are_audited_as_the_board():
+    # the context resolves its dsn lazily, so this opens no connection
+    assert board.tool_context().client == "board"
+
+
 @pytest.mark.invariant
 def test_storing_a_weight_locally_runs_the_tune_tool_in_process(db, dsn, tmp_path, monkeypatch):
     """Without an MCP URL the same call goes through the tool registry: the
@@ -154,7 +159,7 @@ def test_storing_a_weight_locally_runs_the_tune_tool_in_process(db, dsn, tmp_pat
             shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
     heuristic = next(h for h in catalog.load(FIXTURE_PLAYBOOK) if h.kind == "heuristic")
     monkeypatch.delenv("COUNTRIX_MCP_URL", raising=False)
-    monkeypatch.setattr(board, "tool_context", lambda: Sandbox(dsn=dsn))
+    monkeypatch.setattr(board, "tool_context", lambda: Sandbox(dsn=dsn, client="board"))
     monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))   # the playbook in force
     data, code = board.api_weight({"id": heuristic.id, "weight": 7.25})
     assert code == 200 and data["line"].startswith("tuned %s: weight" % heuristic.id)

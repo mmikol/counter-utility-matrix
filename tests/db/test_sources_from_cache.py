@@ -43,7 +43,7 @@ class Sandbox(tools.Context):
 
 @pytest.fixture()
 def ctx(db, dsn):
-    return Sandbox(dsn=dsn)
+    return Sandbox(dsn=dsn, client="test")
 
 
 @pytest.fixture()
@@ -123,7 +123,7 @@ def test_wiki_kits_store_the_numbers_the_pages_publish(db, dsn):
         def connect(self):
             return _ReadThenRolledBack(psycopg.connect(self.dsn), seen)
 
-    Reading(dsn=dsn).call("pull_kits")
+    Reading(dsn=dsn, client="test").call("pull_kits")
     assert seen == [
         # Cargo's heal is empty for Kasa; the article supplies it
         ("Mizuki", "Healing Kasa", "heal", 90.0, "hp", None, "1st bounce"),
@@ -161,7 +161,7 @@ def shared(db, dsn):
         def connect(self):
             return _Kept(connection)
 
-    yield Shared(dsn=dsn), connection
+    yield Shared(dsn=dsn, client="test"), connection
     connection.rollback()
     connection.close()
 

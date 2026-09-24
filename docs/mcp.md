@@ -35,9 +35,11 @@ per minute, and
 requires `Authorization: Bearer <token>` when `COUNTRIX_MCP_TOKEN`
 is set (in `.env`; `.mcp.json` sends it from the same variable). Every
 tool call is a line in the audit log, `db/raw/audit.jsonl`, that the
-sentry reads - over either transport and in-process, where the refresher
-and the shell call a tool directly; a line it cannot write is noted on
-stderr and the call goes on. The `query` tool connects as
+sentry reads - over either transport and in-process - under the caller's
+name: `stdio:<pid>` (the process that launched the server),
+`http:<address>/<session>`, and in-process `board`, `refresher`, `shell`,
+or `nested:<tool>` for one tool's call of another. A line it cannot write
+is noted on stderr and the call goes on. The `query` tool connects as
 `matrix_reader`, a login that can only `SELECT`, runs one read-only
 statement with a timeout, and refuses SQL that reaches for files or
 servers. The whole threat model is in [security.md](security.md).
@@ -117,7 +119,7 @@ The servers and the transports are above, the tool reference below.
 | `http.py` | The Streamable HTTP transport (`POST /mcp`, `GET /health`): the bearer token, the body and batch caps, and the rate limit per client address. |
 | `schema.py` | A tool as the protocol serves it: its arguments as JSON Schema (`ToolSchema`, which `tool_schema` builds, a `Property` per argument, whose type is one JSON type or a list of the types it admits), its reply (`ToolReply`: text, and the same as JSON), and the `Tool` that checks every call against the schema before the tool runs. |
 | `audit.py` | The audit line every call leaves in `db/raw/audit.jsonl`, through any door, in-process too (`AuditLine`): each argument by name with its size or type name, never its value. The sentry reads it. |
-| `registry.py` | The one registry every family declares its tools into (`REGISTRY`, its decorator `tool`). A `ToolSpec` is a tool as registered: name, description, JSON schema, function, its family - the module the function is defined in - and for a pull the source it reads. `Registry` lists the tools family by family in `FAMILIES`' order, whichever family imports first, refuses a name twice and derives the pulls; `run` is the audited in-process call, `write_docs` the tool reference below. `Context` is where a call lands - the database, the page caches, the log - and carries the registry, through which one tool calls another. |
+| `registry.py` | The one registry every family declares its tools into (`REGISTRY`, its decorator `tool`). A `ToolSpec` is a tool as registered: name, description, JSON schema, function, its family - the module the function is defined in - and for a pull the source it reads. `Registry` lists the tools family by family in `FAMILIES`' order, whichever family imports first, refuses a name twice and derives the pulls; `run` is the audited in-process call, `write_docs` the tool reference below. `Context` is where a call lands - the database, the page caches, the log, the caller its in-process calls are audited as - and carries the registry, through which one tool calls another on a copy named `nested:<tool>`. |
 | `tools.py` | Every family imported, so the registry is whole. It re-exports `REGISTRY`, `Context`, `Log`, `NoSuchToolError` and `StrategyResources` for the servers, the refresher, the shell and the board; the in-process call is `Context.call`. |
 | `pulls.py` | `list_sources`, the ten `pull_*` tools in dependency order (one source and domain each, each stated once through `pull_tool`), `load_authored`, `sync_all`. |
 | `lifecycle.py` | The database's life: `db_status` over `read_status`, which `/health` reads without the door, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, and read-only `query`, which says when it cut rows. |

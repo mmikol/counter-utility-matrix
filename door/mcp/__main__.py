@@ -56,7 +56,7 @@ def _call(ctx: tools.Context, name: str, text: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    ctx = tools.Context()
+    ctx = tools.Context(client="shell")
     server = Server(tools.REGISTRY.bind(ctx), tools.StrategyResources())
     if not argv:
         stdio.serve(server)

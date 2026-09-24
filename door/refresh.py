@@ -187,7 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # the full-refresh age has no flag: nothing passes one, and compose sets it
     full_days = float(os.environ.get("COUNTRIX_REFRESH_FULL_DAYS", DEFAULT_FULL_DAYS))
-    ctx = tools.Context(log=print)      # DATABASE_URL, or the embedded cluster
+    ctx = tools.Context(log=print, client="refresher")  # DATABASE_URL, or the embedded cluster
     if args.now:
         ok, _ = refresh_once(ctx, full=args.full or None, full_days=full_days)
         return 0 if ok else 1

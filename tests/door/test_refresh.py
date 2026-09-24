@@ -29,14 +29,15 @@ def test_cache_age_reads_the_newest_page(tmp_path):
 def test_refresh_once_survives_a_bad_day(monkeypatch):
     from door.mcp import tools
     logs = []
+    nowhere = tools.Context(dsn="postgresql://nowhere", client="test")
     monkeypatch.setattr(tools.Context, "call", lambda ctx, name, **kw: (_ for _ in ()).throw(
         RuntimeError("blizzard 504")))
-    ok, text = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"), logs.append)
+    ok, text = refresh.refresh_once(nowhere, logs.append)
     assert ok is False and "504" in text and any("FAILED" in line for line in logs)
     traceback = next(line for line in logs if line.startswith("Traceback"))
     assert traceback.endswith("RuntimeError: blizzard 504")
     monkeypatch.setattr(tools.Context, "call", lambda ctx, name, **kw: ("sync_all: done", {}))
-    ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"), logs.append)
+    ok, _ = refresh.refresh_once(nowhere, logs.append)
     assert ok is True
 
 
@@ -63,9 +64,12 @@ def test_a_schedule_refuses_a_time_that_is_not_hh_mm():
 
 def test_the_command_line_exits_with_the_refresh_verdict(monkeypatch):
     verdicts = iter([(False, "down"), (True, "")])
-    monkeypatch.setattr(refresh, "refresh_once", lambda ctx, **kw: next(verdicts))
+    contexts = []
+    monkeypatch.setattr(refresh, "refresh_once",
+                        lambda ctx, **kw: contexts.append(ctx) or next(verdicts))
     assert refresh.main(["--now"]) == 1
     assert refresh.main(["--now"]) == 0
+    assert [ctx.client for ctx in contexts] == ["refresher", "refresher"]   # its audit lines
 
 
 def test_the_refresh_clock_is_read_from_the_environment_at_start(monkeypatch):
@@ -106,7 +110,7 @@ def test_daily_refresh_touches_only_what_moves(monkeypatch):
     calls = []
     monkeypatch.setattr(tools.Context, "call", lambda ctx, name, **kw: calls.append(
         (name, kw.get("refresh"))) or ("%s: ok" % name, {}))
-    ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"),
+    ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere", client="test"),
                                  lambda m: None, full=False)
     # seasons first: the day's snapshots are stamped with the season live today
     assert ok and calls == [("pull_seasons", True), ("pull_rates", True),
@@ -118,7 +122,7 @@ def test_daily_refresh_touches_only_what_moves(monkeypatch):
     # the calls above are stubbed, so a renamed tool would pass them: the names are checked here
     assert {name for name, _ in calls} <= set(tools.REGISTRY.names())
     calls.clear()
-    ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"),
+    ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere", client="test"),
                                  lambda m: None, full=True)
     assert ok and calls == [("sync_all", True)]
     assert {name for name, _ in calls} <= set(tools.REGISTRY.names())

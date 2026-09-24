@@ -1,12 +1,14 @@
 """The audit log: one JSON line per tool call, through either transport and
-in-process, where the refresher and the shell call one directly - when, over
-which transport, from whom, which tool, the shape of its arguments, whether
-it succeeded, and how long it took. The sentry reads it. COUNTRIX_AUDIT
-moves it, read on every call.
+in-process - when, over which transport, from whom, which tool, the shape of
+its arguments, whether it succeeded, and how long it took. The sentry reads
+it. COUNTRIX_AUDIT moves it, read on every call.
 
-An argument is recorded by name with its length (a string, a list, an
-object) or its type name (anything else: int, float, bool, NoneType) -
-never its value.
+Every line names its caller: stdio:<pid> (the process that launched the
+stdio server), http:<address>/<session>, and in-process the board, the
+refresher, the shell, or nested:<tool> for a call one tool makes to
+another. An argument is recorded by name with its length (a string, a
+list, an object) or its type name (anything else: int, float, bool,
+NoneType) - never its value.
 
 A line that cannot be written is noted on stderr - never stdout, the stdio
 wire - and never raised: the door stays open if the log fails.
@@ -35,7 +37,7 @@ class AuditLine(TypedDict):
     milliseconds, and why it did not - a refusal's text or a crash's."""
     t: str
     transport: Transport
-    client: str | None
+    client: str
     tool: str
     args: dict[str, int | str]
     ok: bool
@@ -72,13 +74,14 @@ def _sizes(arguments: Mapping[str, object]) -> dict[str, int | str]:
 
 def audited[T](
         name: str, arguments: Mapping[str, object], call: Callable[[], T], transport: Transport,
-        client: str | None = None, audit_path: str | None = None) -> T:
-    """Run one tool call and leave exactly one audit line for it. Every path to
-    a tool - stdio, HTTP and the in-process calls the refresher and the shell
-    make - comes through here, so the sentry's window covers all three. A
-    Refusal - the tool refusing its input, the wrapper refusing the call - is
-    audited as refused; anything else as crashed. Each carries its message, the
-    crash with the error's type, as the door's reply does."""
+        client: str, audit_path: str | None = None) -> T:
+    """Run one tool call from `client` and leave exactly one audit line for
+    it. Every path to a tool - stdio, HTTP and the in-process calls of the
+    board, the refresher, the shell and one tool of another - comes through
+    here, so the sentry's window covers all three. A Refusal - the tool
+    refusing its input, the wrapper refusing the call - is audited as
+    refused; anything else as crashed. Each carries its message, the crash
+    with the error's type, as the door's reply does."""
     line = AuditLine(
         t=datetime.now(UTC).isoformat(timespec="seconds"), transport=transport, client=client,
         tool=name, args=_sizes(arguments), ok=False, ms=0)

@@ -55,8 +55,9 @@ def test_seasons_and_synergies_are_pulls_in_dependency_order():
 def test_every_pull_reads_blizzard_or_the_wiki():
     assert {spec.source for spec in tools.REGISTRY.pulls()} == {"blizzard", "wiki"}
     assert set(db.CACHE_DIRS) == {"blizzard", "wiki"}
-    assert set(tools.Context(dsn="postgresql://nowhere").caches) == {"blizzard", "wiki"}
-    _text, data = tools.Context(dsn="postgresql://nowhere").call("list_sources")
+    nowhere = tools.Context(dsn="postgresql://nowhere", client="test")
+    assert set(nowhere.caches) == {"blizzard", "wiki"}
+    _text, data = nowhere.call("list_sources")
     assert [s["code"] for s in data["sources"]] == ["blizzard", "wiki"]
     assert sorted(t for s in data["sources"] for t in s["tools"]) == sorted(
         spec.name for spec in tools.REGISTRY.pulls())
@@ -82,7 +83,8 @@ def test_pull_counters_runs_the_wikis_matchups(monkeypatch, tmp_path):
     monkeypatch.setattr(matchups, "run", run)
     # a cache folder of its own: the tool creates the one it is handed, and an
     # empty .cache-wiki at the root lets the next run's cache tests fetch
-    ctx = Offline(dsn="postgresql://nowhere", caches={"wiki": str(tmp_path / "wiki")})
+    ctx = Offline(dsn="postgresql://nowhere", caches={"wiki": str(tmp_path / "wiki")},
+                  client="test")
     text, data = ctx.call("pull_counters")
     assert seen == {"connection": "cx", "cache_dir": ctx.caches["wiki"]}
     assert text.splitlines()[0] == "pull_counters: counters stored"
@@ -98,7 +100,7 @@ def test_a_pull_hands_run_its_sources_cache_and_the_context_log(monkeypatch, tmp
         return {"snapshots": 1, "tables": ["meta_snapshots"]}
     monkeypatch.setattr(meta, "run", run)
     ctx = Offline(dsn="postgresql://nowhere", caches={"blizzard": str(tmp_path / "blizzard")},
-                  log=lambda line: None)
+                  log=lambda line: None, client="test")
     text, _ = ctx.call("pull_rates", refresh=True)
     assert text.splitlines()[0] == "pull_rates: snapshot stored"
     assert seen["connection"] == "cx"
@@ -120,7 +122,7 @@ def test_a_stale_page_is_named_in_the_pull_reply(monkeypatch, tmp_path):
         return {"snapshots": 1, "tables": ["meta_snapshots"]}
     monkeypatch.setattr(meta, "run", run)
     ctx = Offline(dsn="postgresql://nowhere", caches={"blizzard": str(tmp_path / "blizzard")},
-                  log=lambda line: None)
+                  log=lambda line: None, client="test")
     text, data = ctx.call("pull_rates", refresh=True)
     assert text.splitlines()[0] == "pull_rates: snapshot stored; stale: 1"
     assert data["stale"] == ["rates_x.html: gone"]
@@ -137,7 +139,7 @@ def test_a_pull_that_stores_no_table_says_nothing_stored(monkeypatch, tmp_path):
         return {"snapshot_id": None, "tables": []}
     monkeypatch.setattr(meta, "run", run)
     ctx = Offline(dsn="postgresql://nowhere", caches={"blizzard": str(tmp_path / "blizzard")},
-                  log=lambda line: None)
+                  log=lambda line: None, client="test")
     text, data = ctx.call("pull_rates", refresh=True)
     assert text.splitlines()[0] == "pull_rates: nothing stored; stale: 1"
     assert data["tables"] == [] and data["snapshot_id"] is None

@@ -1,10 +1,12 @@
 """The stdio transport, what .mcp.json launches: JSON-RPC one message per
 line on stdin, each answer one line on stdout. A batch - a JSON array - is
 answered with one array, and a line that is not JSON with a parse error.
-stdout is the wire, so nothing else is written to it.
+stdout is the wire, so nothing else is written to it. A call is audited
+as stdio:<pid>, the process that launched the server.
 """
 
 import json
+import os
 import sys
 from collections.abc import Iterable
 from typing import TextIO
@@ -13,9 +15,11 @@ from door.mcp.server import PARSE_ERROR, Response, Server, error_response
 
 
 def serve(mcp: Server, stdin: Iterable[str] | None = None, stdout: TextIO | None = None) -> None:
-    """Answer every line of stdin until it ends."""
+    """Answer every line of stdin until it ends, as the host process that
+    launched this one."""
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
+    client = "stdio:%d" % os.getppid()
     for line in stdin:
         line = line.strip()
         if not line:
@@ -26,7 +30,7 @@ def serve(mcp: Server, stdin: Iterable[str] | None = None, stdout: TextIO | None
             _write(stdout, error_response(None, PARSE_ERROR, "bad JSON"))
             continue
         messages = message if isinstance(message, list) else [message]
-        responses = [r for r in (mcp.handle(m) for m in messages) if r is not None]
+        responses = [r for r in (mcp.handle(m, client) for m in messages) if r is not None]
         if isinstance(message, list):
             if responses:
                 _write(stdout, responses)

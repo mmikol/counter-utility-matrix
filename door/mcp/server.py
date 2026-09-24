@@ -131,7 +131,7 @@ class Server:
         self.transport: Transport = "stdio"
         self.audit_path = audit_path
 
-    def handle(self, message: object, client: str | None = None) -> Response | None:
+    def handle(self, message: object, client: str) -> Response | None:
         """One decoded message from `client` (as the audit line names the
         caller) -> a response, or None for a notification. A message that is
         not an object or names no string method is INVALID_REQUEST, and a
@@ -163,7 +163,7 @@ class Server:
             self.log(traceback.format_exc())
             return error_response(msg_id, INTERNAL, "%s: %s" % (type(error).__name__, error))
 
-    def _methods(self, client: str | None) -> dict[str, Method]:
+    def _methods(self, client: str) -> dict[str, Method]:
         """The methods this server answers, a tools/call audited as `client`'s."""
         return {
             "initialize": self._initialize,
@@ -201,7 +201,7 @@ class Server:
     def _tools_list(self, params: Message) -> Message:
         return {"tools": [t.describe() for t in self.tools.values()]}
 
-    def _tools_call(self, params: Message, client: str | None) -> ToolResult:
+    def _tools_call(self, params: Message, client: str) -> ToolResult:
         if "name" not in params:
             raise InvalidParamsError("missing parameter 'name'")
         name = params["name"]

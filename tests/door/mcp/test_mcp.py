@@ -8,14 +8,16 @@ The HTTP door, the tools themselves, the registry and the entry point have
 modules of their own (test_mcp_http, test_mcp_tools, test_mcp_registry,
 test_mcp_entry)."""
 
+import io
 import json
+import os
 import subprocess
 import sys
 
 import pytest
 
 from db import ROOT, Refusal
-from door.mcp import tools
+from door.mcp import stdio, tools
 from door.mcp.audit import audit, audited
 from door.mcp.schema import Tool, tool_schema
 from door.mcp.server import Server
@@ -86,6 +88,20 @@ def test_bad_json_is_a_parse_error_not_a_crash():
     assert lines[1]["id"] == 9
 
 
+def test_a_stdio_call_is_audited_under_the_process_that_launched_it(tmp_path):
+    """Over stdio the caller is the host process that launched the server,
+    named by its pid."""
+    path = tmp_path / "audit.jsonl"
+    server = Server([Tool("t", "d", tool_schema(), lambda **kw: ("ok", {}))],
+                    audit_path=str(path))
+    out = io.StringIO()
+    stdio.serve(server, [json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                     "params": {"name": "t", "arguments": {}}})], out)
+    assert json.loads(out.getvalue())["result"]["isError"] is False
+    [line] = [json.loads(text) for text in path.read_text(encoding="utf-8").splitlines()]
+    assert (line["transport"], line["client"]) == ("stdio", "stdio:%d" % os.getppid())
+
+
 def test_tool_refuses_unknown_and_missing_arguments():
     tool = Tool("t", "d", tool_schema({
         "a": {"type": "string"}, "n": {"type": "integer"}, "x": {"type": "number"},
@@ -131,7 +147,7 @@ def test_server_reports_a_refused_tool_as_is_error(tmp_path):
                     audit_path=str(audit))
     for name, said in (("t", "no"), ("tuned", "no strategy 'x'")):
         reply = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                               "params": {"name": name, "arguments": {}}})
+                               "params": {"name": name, "arguments": {}}}, "test")
         assert reply["result"]["isError"] is True
         assert reply["result"]["content"][0]["text"] == said
     lines = [json.loads(line) for line in audit.read_text(encoding="utf-8").splitlines()]
@@ -150,7 +166,7 @@ def test_a_fault_inside_a_tool_is_internal_and_logged_not_a_bad_parameter(tmp_pa
     server = Server([Tool("t", "d", tool_schema(), crash)],
                     log=logged.append, audit_path=str(tmp_path / "audit.jsonl"))
     call = lambda method, params: server.handle(                      # noqa: E731
-        {"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+        {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}, "test")
     fault = call("tools/call", {"name": "t", "arguments": {}})["error"]
     assert fault["code"] == -32603 and "KeyError" in fault["message"]
     assert logged and "Traceback" in logged[0]
@@ -173,7 +189,7 @@ def test_a_request_of_the_wrong_shape_is_the_callers_error_and_logs_nothing(tmp_
                     audit_path=str(tmp_path / "audit.jsonl"))
 
     def error(message):
-        return server.handle(dict({"jsonrpc": "2.0", "id": 1}, **message))["error"]
+        return server.handle(dict({"jsonrpc": "2.0", "id": 1}, **message), "test")["error"]
     assert error({"method": 5}) == {"code": -32600, "message": "method must be a string"}
     assert error({"method": "tools/call", "params": [1]}) == {
         "code": -32602, "message": "params must be an object"}
@@ -182,7 +198,7 @@ def test_a_request_of_the_wrong_shape_is_the_callers_error_and_logs_nothing(tmp_
     assert error({"method": "resources/read", "params": {"uri": 5}}) == {
         "code": -32602, "message": "uri must be a string"}
     assert server.handle({"jsonrpc": "2.0", "method": "notifications/initialized",
-                          "params": [1]}) is None
+                          "params": [1]}, "test") is None
     assert logged == []
 
 
@@ -194,7 +210,7 @@ def test_the_strategy_resources_answer_an_unknown_uri_as_a_bad_parameter(tmp_pat
 
     def read(uri):
         return server.handle({"jsonrpc": "2.0", "id": 1, "method": "resources/read",
-                              "params": {"uri": uri}})
+                              "params": {"uri": uri}}, "test")
     missing = read("strategy://nope")["error"]
     assert missing == {"code": -32602, "message": "no resource at strategy://nope"}
     first = catalog.load()[0]
@@ -212,7 +228,7 @@ def test_a_key_error_while_reading_a_resource_is_the_servers_fault(tmp_path, mon
     server = Server([], tools.StrategyResources(), log=logged.append,
                     audit_path=str(tmp_path / "audit.jsonl"))
     fault = server.handle({"jsonrpc": "2.0", "id": 1, "method": "resources/read",
-                           "params": {"uri": "strategy://coverage"}})["error"]
+                           "params": {"uri": "strategy://coverage"}}, "test")["error"]
     assert fault["code"] == -32603 and fault["message"].startswith("KeyError")
     assert logged and "Traceback" in logged[0]
 
@@ -226,12 +242,12 @@ def test_a_broken_playbook_is_a_server_fault_at_the_door(tmp_path, monkeypatch):
     monkeypatch.setenv("COUNTRIX_STRATEGIES", str(empty))
     logged = []
     audit = tmp_path / "audit.jsonl"
-    server = Server(tools.REGISTRY.bind(tools.Context(dsn="postgresql://nowhere")),
+    server = Server(tools.REGISTRY.bind(tools.Context(dsn="postgresql://nowhere", client="test")),
                     tools.StrategyResources(), log=logged.append, audit_path=str(audit))
     for method, params in (("tools/call", {"name": "strategies", "arguments": {}}),
                            ("resources/list", {})):
         fault = server.handle({"jsonrpc": "2.0", "id": 1, "method": method,
-                               "params": params})["error"]
+                               "params": params}, "test")["error"]
         assert fault["code"] == -32603
         assert fault["message"].startswith("CatalogError: no strategies in")
     assert logged and all("Traceback" in entry for entry in logged)

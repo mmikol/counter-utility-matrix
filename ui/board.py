@@ -171,8 +171,9 @@ def solve_board(
 
 
 def tool_context() -> tools.Context:
-    """Where an in-process tool call lands: the database default_dsn() names."""
-    return tools.Context()
+    """Where an in-process tool call lands: the database default_dsn() names,
+    the call audited as the board's."""
+    return tools.Context(client="board")
 
 
 def api_weight(payload: Mapping[str, object] | None) -> web.Reply:

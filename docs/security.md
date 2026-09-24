@@ -81,10 +81,13 @@ claimed session id) and answers 429 past that, and - when
 `.mcp.json`; `/health` stays open for the healthchecks, and reads the
 database's state directly, leaving no audit line). Every tool call is
 one line in the audit log `db/raw/audit.jsonl`: when, transport (`stdio`,
-`http` or `in-process`, the last being the refresher's and the shell's
-direct calls), client, tool, each argument's name with its size or, for a
-number, a boolean or null, its type name (never its value), outcome,
-duration.
+`http` or `in-process`), the client it names, tool, each argument's name
+with its size or, for a number, a boolean or null, its type name (never
+its value), outcome, duration. No caller is anonymous: `stdio:<pid>` is
+the process that launched the stdio server, `http:<address>/<session>` a
+caller of the HTTP door, and in-process calls are the `board`'s, the
+`refresher`'s, the `shell`'s, or `nested:<tool>` for a call one tool makes
+to another, whichever door the outer call came through.
 
 **A failure says what failed, never where.** The board and the inference
 service answer a request that raises through `db/web.py`: a refusal - an
