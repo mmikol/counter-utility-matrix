@@ -79,10 +79,10 @@ def list_sources(ctx: Context) -> ToolReply:
 def _pull(ctx: Context, source: str, fn: PullFn, refresh: bool, **options: bool) -> PullSummary:
     """One pull against the database, reading through the source's page cache
     and logging to the context's log -> the summary its run() returns."""
-    pull = fetch.PullContext(ctx.cache(source), log=ctx.log)
     # refresh: every cached page counts as stale and is fetched again; the
     # cached copy survives a failed fetch (see db.data.fetch.cached)
-    with fetch.max_age(0 if refresh else None), ctx.connect() as cx:
+    pull = fetch.PullContext(ctx.cache(source), log=ctx.log, max_age=0 if refresh else None)
+    with ctx.connect() as cx:
         return fn(cx, pull, **options)
 
 

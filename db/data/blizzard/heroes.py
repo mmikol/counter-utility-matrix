@@ -327,8 +327,8 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummar
     the hero pages that would not fetch (missing): those heroes are stored
     from the roster and keep the text they had."""
     roster_soup = BeautifulSoup(
-        cached_get(pull.session, HEROES_URL, pull.cache_dir, cache_key(HEROES_URL),
-                   policy=PAGE_POLICY), "html.parser")
+        cached_get(pull, HEROES_URL, cache_key(HEROES_URL), policy=PAGE_POLICY),
+        "html.parser")
     subroles = parse_subroles(roster_soup)
     heroes = parse_roster(roster_soup)
     icons = parse_icons(roster_soup)
@@ -340,8 +340,8 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummar
     for index, hero in enumerate(heroes, start=1):
         slug = hero["slug"]
         try:
-            page = cached_get(pull.session, "%s/heroes/%s/" % (BASE_URL, slug),
-                              pull.cache_dir, cache_key(slug), policy=PAGE_POLICY)
+            page = cached_get(pull, "%s/heroes/%s/" % (BASE_URL, slug), cache_key(slug),
+                              policy=PAGE_POLICY)
         except fetch.FetchError as error:
             # the hero is still stored from the roster; its text stays as it was
             missing.append("%s: %s" % (hero["name"], error))

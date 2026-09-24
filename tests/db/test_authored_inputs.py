@@ -90,12 +90,11 @@ def test_pull_counters_runs_the_wikis_matchups(monkeypatch, tmp_path):
 
 
 def test_a_pull_hands_run_its_sources_cache_and_the_context_log(monkeypatch, tmp_path):
-    from db.data import fetch
     from db.data.blizzard import meta
     seen = {}
 
     def run(connection, pull):
-        seen.update(connection=connection, pull=pull, max_age=fetch._max_age())
+        seen.update(connection=connection, pull=pull)
         return {"snapshots": 1, "tables": ["meta_snapshots"]}
     monkeypatch.setattr(meta, "run", run)
     ctx = Offline(dsn="postgresql://nowhere", caches={"blizzard": str(tmp_path / "blizzard")},
@@ -105,8 +104,9 @@ def test_a_pull_hands_run_its_sources_cache_and_the_context_log(monkeypatch, tmp
     assert seen["connection"] == "cx"
     assert seen["pull"].cache_dir == ctx.caches["blizzard"]
     assert seen["pull"].log is ctx.log
-    assert seen["max_age"] == 0                    # refresh: every cached page is stale
-    assert fetch._max_age() is None                # and the policy is restored after
+    assert seen["pull"].max_age == 0               # refresh: every cached page is stale
+    ctx.call("pull_rates")
+    assert seen["pull"].max_age is None            # a build keeps every cached page
 
 
 def test_counterpick_is_gone_from_the_data_layer():

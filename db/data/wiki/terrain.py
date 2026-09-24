@@ -346,8 +346,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> TerrainSumma
 
     rows, words_read, stage_rows, stages_read = 0, 0, 0, 0
     without_text: list[str] = []
-    articles = fetch_articles(pull.session, [name for _, name in maps],
-                              pull.cache_dir, pull.log)
+    articles = fetch_articles(pull, [name for _, name in maps])
     for map_id, name in maps:
         if name not in articles.found:
             continue

@@ -38,7 +38,7 @@ def test_an_announced_hero_is_stored_from_its_article_and_the_rest_are_reported(
     overview page is no hero; Wraith's page would not fetch."""
     asked = []
 
-    def articles(session, titles, cache_dir, log):
+    def articles(pull, titles):
         asked.append(list(titles))
         return Articles({"All heroes": "An overview of every hero.",
                          "Doctrine": ARTICLE % ("Doctrine", "Survivor", "Doctrine"),
@@ -79,14 +79,14 @@ def test_the_pull_stores_every_kit_in_one_transaction_and_counts_what_it_read(mo
     """Anvil is on the roster and Doctrine is announced by its article, so
     both kits are stored; the overview page is skipped by name. The articles
     add Anvil's pools and three stats, and Kite's would not fetch."""
-    def articles(session, titles, cache_dir, log):
+    def articles(pull, titles):
         return Articles({"Doctrine": ARTICLE % ("Doctrine", "Survivor", "Doctrine")}, [])
 
-    def supplement(session, by_hero, cache_dir, log):
+    def supplement(pull, by_hero):
         assert sorted(by_hero) == ["All heroes", "Anvil", "Doctrine"]
         return Supplement({"Anvil": HeroProfile(health=400, shield=0, armor=300)}, 3,
                           ["Kite: gone"])
-    monkeypatch.setattr(heroes, "cargo_query", lambda session, table, fields, cache_dir: ROWS)
+    monkeypatch.setattr(heroes, "cargo_query", lambda pull, table, fields: ROWS)
     monkeypatch.setattr(heroes, "fetch_articles", articles)
     monkeypatch.setattr(heroes, "supplement_kits", supplement)
     connection = RecordingConnection(reads=[
@@ -111,7 +111,7 @@ def test_the_pull_stores_every_kit_in_one_transaction_and_counts_what_it_read(mo
 def test_the_pull_without_the_articles_reads_the_cargo_table_alone(monkeypatch):
     def refused(*args):
         raise AssertionError("supplement is off: no article is read for the kits")
-    monkeypatch.setattr(heroes, "cargo_query", lambda session, table, fields, cache_dir: ROWS)
+    monkeypatch.setattr(heroes, "cargo_query", lambda pull, table, fields: ROWS)
     monkeypatch.setattr(heroes, "fetch_articles", lambda *args: Articles({}, ["Doctrine: gone"]))
     monkeypatch.setattr(heroes, "supplement_kits", refused)
     connection = RecordingConnection(reads=[

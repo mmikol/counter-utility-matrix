@@ -18,7 +18,6 @@ import json
 from typing import NamedTuple
 
 import psycopg
-import requests
 from bs4 import BeautifulSoup, Tag
 
 from db import INPUT_DEVICE, PLATFORM, REGION, psql
@@ -89,10 +88,10 @@ REGION_PARAM = "Americas"         # the site's spelling of REGION
 REGION_NAME = "Americas"
 
 
-def competitive_rq(session: requests.Session, cache_dir: str | None) -> str:
+def competitive_rq(pull: fetch.PullContext) -> str:
     """The rq code the page currently assigns to Competitive - Role Queue."""
     page = cached_get(
-        session, RATES_URL, cache_dir,
+        pull, RATES_URL,
         cache_key("rates", "queue-vocabulary",
                   "input-%s" % INPUT_PARAM, "region-%s" % REGION_PARAM),
         params={"input": INPUT_PARAM, "region": REGION_PARAM},
@@ -107,12 +106,11 @@ def competitive_rq(session: requests.Session, cache_dir: str | None) -> str:
     return codes[0]
 
 
-def fetch_slice(session: requests.Session, params: dict[str, str], cache_dir: str | None,
-                rq: str) -> str:
+def fetch_slice(pull: fetch.PullContext, params: dict[str, str], rq: str) -> str:
     """One rates page for a given filter combination."""
     query = dict(params, rq=rq, input=INPUT_PARAM, region=REGION_PARAM)
     return cached_get(
-        session, RATES_URL, cache_dir,
+        pull, RATES_URL,
         cache_key("rates", *("%s-%s" % kv for kv in sorted(query.items()))),
         params=query, policy=RATES_POLICY,
     )
@@ -137,8 +135,8 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary
     one transaction -> the rows written, the snapshots held, the misses."""
     cao = psql.now()
 
-    rq = competitive_rq(pull.session, pull.cache_dir)
-    baseline = fetch_slice(pull.session, {}, pull.cache_dir, rq)
+    rq = competitive_rq(pull)
+    baseline = fetch_slice(pull, {}, rq)
     tiers = parse_filter_options(baseline, "filter-tier-select")
     maps = [(slug, label) for slug, label in parse_filter_options(baseline, "filter-map-select")
             if slug != "all-maps"]
@@ -201,7 +199,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary
     for code, _ in tiers:
         if code != ALL_TIER:
             rows += load_hero_slice(
-                fetch_slice(pull.session, {"tier": code}, pull.cache_dir, rq), code)
+                fetch_slice(pull, {"tier": code}, rq), code)
     pull.log("hero/tier rows: %d" % rows)
 
     # Per map, across all ranks. Map x tier would be 270 requests against
@@ -216,7 +214,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary
             skipped_maps.append(label)
             continue
         for name, win, pick, ban in parse_rows(
-            fetch_slice(pull.session, {"map": slug}, pull.cache_dir, rq)
+            fetch_slice(pull, {"map": slug}, rq)
         ):
             hero_id = hero_ids.get(name.lower())
             if hero_id is None:

@@ -267,7 +267,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> SynergiesSum
     cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
     released: dict[str, int] = dict(cursor.fetchall())
 
-    articles = fetch_articles(pull.session, released, pull.cache_dir, pull.log)
+    articles = fetch_articles(pull, released)
     claims = {name: parse_synergies(text) for name, text in articles.found.items()}
     if not any(claims.values()):
         raise WikiError("no hero article has a synergy claim")

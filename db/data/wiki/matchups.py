@@ -462,7 +462,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> CountersSumm
     cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
     released: dict[str, int] = dict(cursor.fetchall())
 
-    articles = fetch_articles(pull.session, released, pull.cache_dir, pull.log)
+    articles = fetch_articles(pull, released)
     known = {
         name_key(name): Known(name=name, pronoun=pronoun(articles.found.get(name, "")))
         for name in released}

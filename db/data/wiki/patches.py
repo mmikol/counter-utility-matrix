@@ -51,8 +51,7 @@ class PatchesSummary(PullSummary):
 def run(connection: psycopg.Connection, pull: fetch.PullContext) -> PatchesSummary:
     """Upsert every dated patch from the Patches cargo table -> the patches
     loaded, the undated ones skipped and the latest."""
-    patches, skipped = dated_patches(
-        cargo_query(pull.session, CARGO_TABLE, CARGO_FIELDS, pull.cache_dir))
+    patches, skipped = dated_patches(cargo_query(pull, CARGO_TABLE, CARGO_FIELDS))
 
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())

@@ -48,8 +48,7 @@ def _announce_heroes(
     read; the rest stay unknown."""
     stored: list[str] = []
     articles = fetch_articles(
-        pull.session, sorted(name for name in names if name.lower() not in hero_ids),
-        pull.cache_dir, pull.log)
+        pull, sorted(name for name in names if name.lower() not in hero_ids))
     for hero_name, text in articles.found.items():
         found = parse_announcement(text)
         if not found:
@@ -95,13 +94,13 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext, *,
     """Store the Cargo table's kits, with what each hero article adds unless
     supplement is off, in one transaction -> every row counted, the heroes
     announced and skipped, and the articles that would not fetch."""
-    rows = cargo_query(pull.session, CARGO_TABLE, CARGO_FIELDS, pull.cache_dir)
+    rows = cargo_query(pull, CARGO_TABLE, CARGO_FIELDS)
     by_hero = parse_kits(rows)
     pull.log("cargo rows: %d   heroes named: %d" % (len(rows), len(by_hero)))
 
     articles = Supplement({}, 0, [])
     if supplement:
-        articles = supplement_kits(pull.session, by_hero, pull.cache_dir, pull.log)
+        articles = supplement_kits(pull, by_hero)
         pull.log("supplemented stats: %d  (fields Cargo does not expose)" % articles.stats)
 
     cursor = connection.cursor()

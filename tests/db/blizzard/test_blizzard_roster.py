@@ -204,7 +204,7 @@ def test_a_hero_page_that_will_not_fetch_is_recorded_and_the_rest_are_stored(mon
     """A hero page gone from the cache and the network alike is one missing
     line, not a failed pull: the roster and every other hero page are still
     stored, and the missing hero's rows are left as they were."""
-    def pages(session, url, cache_dir, key, **kwargs):
+    def pages(pull, url, key, **kwargs):
         if key == "ana":
             raise fetch.FetchError("%s failed after 3 attempts: gone" % url)
         return HERO if key == "tracer" else ROSTER

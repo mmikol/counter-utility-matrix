@@ -1,5 +1,5 @@
-"""Fetching: the page cache, its freshness policy and the request loop,
-shared by every source.
+"""Fetching: the page cache, its freshness and the request loop, shared by
+every source.
 
     cached_get       one page, from the cache if it is there and fresh
     cached           the cache sequence every reader runs through: the fresh
@@ -7,18 +7,18 @@ shared by every source.
     request          one page asked for under a RequestPolicy and handed to
                      a reader; a failure is retried while attempts remain
     RequestPolicy    a source's attempts, backoff, timeout and pace
-    max_age          the freshness policy for a block, restored after it -
-                     what a pull wraps its run in. None keeps a page forever
-                     (a build from the caches), 0 refetches every page (the
-                     refresh); a page that fails to refetch keeps its cached
-                     copy, so a flaky source degrades to yesterday's numbers,
-                     never to an empty table
-    is_stale         whether a cached page is older than the policy in force
+    is_stale         whether a cached page is older than the max_age it is
+                     given
     cache_key        a request as a file name in the cache
     session          a requests session that identifies this project
     PullContext      what a pull's run() takes beside its connection: the page
-                     cache, the session and the log (stderr unless the caller
-                     names another - over stdio, stdout is the MCP wire)
+                     cache, the session, the log (stderr unless the caller
+                     names another - over stdio, stdout is the MCP wire) and
+                     the freshness, max_age. None keeps a page forever (a
+                     build from the caches), 0 refetches every page (the
+                     refresh); a page that fails to refetch keeps its cached
+                     copy, so a flaky source degrades to yesterday's numbers,
+                     never to an empty table
     prepare_cache    the cache directory a tool hands a pull
 
 Each source package (blizzard, wiki) names its own endpoints
@@ -26,29 +26,18 @@ and its own `sources` row, so provenance lives with the source. Fetching
 yields raw markup; reading it is the package's job.
 """
 
-import contextlib
 import dataclasses
 import os
 import random
 import re
 import sys
-import threading
 import time
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Mapping
 
 import requests
 
 MAX_BACKOFF = 60.0
 SECONDS_PER_HOUR = 3600.0
-
-# Seconds a cached page stays fresh; None means forever. The policy is per
-# thread because the door serves calls on threads: one caller's refresh must
-# not decide another caller's pull.
-_freshness = threading.local()
-
-
-def _max_age() -> float | None:
-    return getattr(_freshness, "seconds", None)
 
 
 class FetchError(Exception):
@@ -83,15 +72,36 @@ class RequestPolicy:
 DEFAULT_POLICY = RequestPolicy()
 
 
-@contextlib.contextmanager
-def max_age(seconds: float | None) -> Iterator[None]:
-    """The policy for one block, whatever it was before restored after it."""
-    held = _max_age()
-    _freshness.seconds = seconds
-    try:
-        yield
-    finally:
-        _freshness.seconds = held
+USER_AGENT = "countrix/0.1 (personal project; contact via repo)"
+
+
+def session(existing: requests.Session | None = None) -> requests.Session:
+    """A requests session (the given one, or a new one) that says who we are."""
+    s = existing or requests.Session()
+    s.headers.update({"User-Agent": USER_AGENT})
+    return s
+
+
+# Where a progress line goes - a pull's, a tool's, the sentry's: to_stderr
+# below, print, a list's append.
+type Log = Callable[[str], None]
+
+
+def to_stderr(line: str) -> None:
+    """A progress line on stderr: over stdio, stdout is the MCP wire."""
+    sys.stderr.write(line + "\n")
+
+
+@dataclasses.dataclass(frozen=True)
+class PullContext:
+    """What a pull runs with: the page cache it reads through (None reads
+    none), the session it fetches on, where its progress lines go, and the
+    seconds a cached page stays fresh - None keeps a page forever (a build
+    from the caches), 0 refetches every page (a refresh)."""
+    cache_dir: str | None
+    session: requests.Session = dataclasses.field(default_factory=session)
+    log: Log = to_stderr
+    max_age: float | None = None
 
 
 def _age(path: str) -> float:
@@ -99,12 +109,11 @@ def _age(path: str) -> float:
     return time.time() - os.path.getmtime(path)
 
 
-def is_stale(path: str) -> bool:
-    """A cached page older than the policy allows (never, when it is None)."""
-    seconds = _max_age()
-    if seconds is None or not os.path.exists(path):
+def is_stale(path: str, max_age: float | None) -> bool:
+    """A cached page older than `max_age` seconds (never, when it is None)."""
+    if max_age is None or not os.path.exists(path):
         return False
-    return _age(path) > seconds
+    return _age(path) > max_age
 
 
 def _read_cache(path: str) -> str:
@@ -164,18 +173,19 @@ def request[T](
     raise FetchError("%s failed after %d attempts: %s" % (url, policy.attempts, last_error))
 
 
-def cached(cache_dir: str | None, name: str, produce: Callable[[], str]) -> str:
-    """The text of cache file `name`, fresh from the cache or from produce().
+def cached(pull: PullContext, name: str, produce: Callable[[], str]) -> str:
+    """The text of cache file `name` in the pull's cache, fresh from the cache
+    or from produce().
 
-    A fresh copy is read and nothing is asked for. Otherwise produce() runs
-    and its text is written. When it fails with a FetchError, the stale copy
-    is kept, and the failure surfaces only when there is none. Without a
-    cache_dir it only produces.
+    A copy younger than the pull's max_age is read and nothing is asked for.
+    Otherwise produce() runs and its text is written. When it fails with a
+    FetchError, the stale copy is kept, and the failure surfaces only when
+    there is none. Without a cache_dir it only produces.
     """
-    if not cache_dir:
+    if not pull.cache_dir:
         return produce()
-    path = os.path.join(cache_dir, name)
-    if os.path.exists(path) and not is_stale(path):
+    path = os.path.join(pull.cache_dir, name)
+    if os.path.exists(path) and not is_stale(path, pull.max_age):
         return _read_cache(path)
     try:
         text = produce()
@@ -188,40 +198,11 @@ def cached(cache_dir: str | None, name: str, produce: Callable[[], str]) -> str:
 
 
 def cached_get(
-        session: requests.Session, url: str, cache_dir: str | None, key: str,
-        params: Mapping[str, str] | None = None, policy: RequestPolicy = DEFAULT_POLICY) -> str:
-    """One page as text, through the page cache as `key`.html."""
-    return cached(cache_dir, key + ".html",
-                  lambda: request(session, url, params, policy, lambda response: response.text))
-
-
-USER_AGENT = "countrix/0.1 (personal project; contact via repo)"
-
-
-def session(existing: requests.Session | None = None) -> requests.Session:
-    """A requests session (the given one, or a new one) that says who we are."""
-    s = existing or requests.Session()
-    s.headers.update({"User-Agent": USER_AGENT})
-    return s
-
-
-# Where a progress line goes - a pull's, a tool's, the sentry's: to_stderr
-# below, print, a list's append.
-type Log = Callable[[str], None]
-
-
-def to_stderr(line: str) -> None:
-    """A progress line on stderr: over stdio, stdout is the MCP wire."""
-    sys.stderr.write(line + "\n")
-
-
-@dataclasses.dataclass(frozen=True)
-class PullContext:
-    """What a pull runs with: the page cache it reads through (None reads
-    none), the session it fetches on and where its progress lines go."""
-    cache_dir: str | None
-    session: requests.Session = dataclasses.field(default_factory=session)
-    log: Log = to_stderr
+        pull: PullContext, url: str, key: str, params: Mapping[str, str] | None = None,
+        policy: RequestPolicy = DEFAULT_POLICY) -> str:
+    """One page as text, through the pull's page cache as `key`.html."""
+    return cached(pull, key + ".html", lambda: request(
+        pull.session, url, params, policy, lambda response: response.text))
 
 
 def prepare_cache(path: str | None) -> str | None:

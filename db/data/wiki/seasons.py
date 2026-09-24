@@ -109,8 +109,8 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> SeasonsSumma
     # fetch_articles: the table is reloaded and every snapshot restamped, so
     # a missing era would stamp its snapshots with an earlier era's season.
     # fetch_wikitext already serves the cached copy when the network fails.
-    for page in parse_subpages(fetch_wikitext(pull.session, SEASON_PAGE, pull.cache_dir)):
-        found = parse_seasons(fetch_wikitext(pull.session, page, pull.cache_dir))
+    for page in parse_subpages(fetch_wikitext(pull, SEASON_PAGE)):
+        found = parse_seasons(fetch_wikitext(pull, page))
         seasons.extend((name, started, page) for name, started in found)
     today = psql.now().date()
     started = sorted(((name, start, page) for name, start, page in seasons

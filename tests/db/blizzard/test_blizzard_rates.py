@@ -7,6 +7,7 @@ import json
 
 import pytest
 
+from db.data import fetch
 from db.data.blizzard import meta
 
 
@@ -27,7 +28,7 @@ def stub_fetch(monkeypatch, page):
     records each request as (url, key, params, policy)."""
     calls = []
 
-    def fake(session, url, cache_dir, key, params=None, policy=None):
+    def fake(pull, url, key, params=None, policy=None):
         calls.append((url, key, params, policy))
         return page
 
@@ -86,7 +87,7 @@ def test_the_queue_code_is_read_from_the_page_not_hardcoded(monkeypatch, code):
     # the cache holds pages under both codes: Blizzard has renumbered the queue
     calls = stub_fetch(monkeypatch, select("filter-rq-select", [
         ("0", "Quick Play - Role Queue"), (code, "Competitive - Role Queue")]))
-    assert meta.competitive_rq(None, "cache") == code
+    assert meta.competitive_rq(fetch.PullContext("cache")) == code
     assert calls == [(meta.RATES_URL, "rates_queue_vocabulary_input_Console_region_Americas",
                       {"input": "Console", "region": "Americas"}, meta.RATES_POLICY)]
 
@@ -98,7 +99,7 @@ def test_the_queue_code_is_read_from_the_page_not_hardcoded(monkeypatch, code):
 def test_a_queue_filter_without_exactly_one_competitive_queue_is_refused(monkeypatch, options):
     stub_fetch(monkeypatch, select("filter-rq-select", options))
     with pytest.raises(meta.RatesError, match="exactly one"):
-        meta.competitive_rq(None, "cache")
+        meta.competitive_rq(fetch.PullContext("cache"))
 
 
 @pytest.mark.parametrize("params, key", [
@@ -109,7 +110,7 @@ def test_a_slice_is_cached_under_the_name_the_cache_already_holds(monkeypatch, p
     # .cache-blizzard holds both names: a changed name would refetch ~40 pages
     # at the rates page's pace of six attempts and 5 s a page
     calls = stub_fetch(monkeypatch, "<main></main>")
-    assert meta.fetch_slice(None, params, "cache", "2") == "<main></main>"
+    assert meta.fetch_slice(fetch.PullContext("cache"), params, "2") == "<main></main>"
     query = dict(params, rq="2", input="Console", region="Americas")
     assert calls == [(meta.RATES_URL, key, query, meta.RATES_POLICY)]
     assert (meta.RATES_POLICY.attempts, meta.RATES_POLICY.delay) == (6, 5.0)

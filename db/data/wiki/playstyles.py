@@ -56,7 +56,7 @@ class PlaystylesSummary(PullSummary):
 def run(connection: psycopg.Connection, pull: fetch.PullContext) -> PlaystylesSummary:
     """Reload the playstyles and the heroes listed under each -> the styles,
     the hero links stored and the names that matched no hero."""
-    playstyles = parse_playstyles(fetch_wikitext(pull.session, COMPOSITION_PAGE, pull.cache_dir))
+    playstyles = parse_playstyles(fetch_wikitext(pull, COMPOSITION_PAGE))
 
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())

@@ -11,11 +11,9 @@ release day.
 import contextlib
 import datetime
 import re
-from collections.abc import Callable
 from typing import NamedTuple, TypedDict
 
-import requests
-
+from db.data.fetch import PullContext
 from db.data.names import ability_key
 from db.data.wiki import fetch_articles, markup
 from db.data.wiki.kits.kit_rows import HeroKit, StatValue
@@ -131,13 +129,11 @@ class Supplement(NamedTuple):
     missing: list[str]
 
 
-def supplement_kits(
-        session: requests.Session, by_hero: dict[str, HeroKit], cache_dir: str | None,
-        log: Callable[[str], None]) -> Supplement:
+def supplement_kits(pull: PullContext, by_hero: dict[str, HeroKit]) -> Supplement:
     """Read every hero's article, merge the stats it adds into the kit in
     place where Cargo left them empty, and keep the hero's pools. A hero whose
     article will not fetch keeps its Cargo kit and is recorded as missing."""
-    articles = fetch_articles(session, sorted(by_hero), cache_dir, log)
+    articles = fetch_articles(pull, sorted(by_hero))
     profiles: dict[str, HeroProfile] = {}
     stats = 0
     for hero_name, text in articles.found.items():

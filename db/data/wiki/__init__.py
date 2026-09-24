@@ -38,7 +38,7 @@ will not fetch is recorded by name and the rest are read.
 """
 
 import json
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from typing import NamedTuple
 
 import requests
@@ -46,6 +46,7 @@ import requests
 from db import Source
 from db.data.fetch import (
     FetchError,
+    PullContext,
     RateLimitError,
     RequestPolicy,
     cache_key,
@@ -107,9 +108,7 @@ def _wikitext(response: requests.Response, title: str) -> str:
     return node
 
 
-def cargo_query(
-        session: requests.Session, table: str, fields: Sequence[str],
-        cache_dir: str | None) -> list[dict[str, str]]:
+def cargo_query(pull: PullContext, table: str, fields: Sequence[str]) -> list[dict[str, str]]:
     """Every row of a Cargo table, paginated.
 
     Cargo exposes the wiki's structured data directly, which is far steadier
@@ -117,8 +116,8 @@ def cargo_query(
     waits it out, and the whole result is cached as one file.
     """
     rows: list[dict[str, str]] = json.loads(cached(
-        cache_dir, cache_key("cargo", table.lower()) + ".json",
-        lambda: json.dumps(_cargo_pages(session, table, fields), ensure_ascii=False)))
+        pull, cache_key("cargo", table.lower()) + ".json",
+        lambda: json.dumps(_cargo_pages(pull.session, table, fields), ensure_ascii=False)))
     return rows
 
 
@@ -144,10 +143,10 @@ def _cargo_pages(
         offset += CARGO_PAGE_SIZE
 
 
-def fetch_wikitext(session: requests.Session, title: str, cache_dir: str | None) -> str:
+def fetch_wikitext(pull: PullContext, title: str) -> str:
     """Raw wikitext of one article, cached so reruns don't re-hit the wiki."""
-    return cached(cache_dir, cache_key(title) + ".wikitext", lambda: request(
-        session, WIKI_API,
+    return cached(pull, cache_key(title) + ".wikitext", lambda: request(
+        pull.session, WIKI_API,
         {"action": "parse", "page": title, "prop": "wikitext", "format": "json"},
         ARTICLE_POLICY, lambda response: _wikitext(response, title)))
 
@@ -159,9 +158,7 @@ class Articles(NamedTuple):
     missing: list[str]
 
 
-def fetch_articles(
-        session: requests.Session, titles: Iterable[str], cache_dir: str | None,
-        log: Callable[[str], None]) -> Articles:
+def fetch_articles(pull: PullContext, titles: Iterable[str]) -> Articles:
     """Every title's wikitext -> Articles: the ones that fetch, and the ones
     that raise FetchError - a WikiError, or a request that failed - each
     logged as it happens. Every per-article loop reads through this one
@@ -170,8 +167,8 @@ def fetch_articles(
     missing: list[str] = []
     for title in titles:
         try:
-            found[title] = fetch_wikitext(session, title, cache_dir)
+            found[title] = fetch_wikitext(pull, title)
         except FetchError as error:
             missing.append("%s: %s" % (title, error))
-            log("  %-22s %s" % (title, error))
+            pull.log("  %-22s %s" % (title, error))
     return Articles(found, missing)
