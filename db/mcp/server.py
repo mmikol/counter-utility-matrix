@@ -134,7 +134,7 @@ class Server:
             return {"jsonrpc": "2.0", "id": msg_id, "result": handler(params)}
         except InvalidParamsError as bad:
             return self._error(msg_id, INVALID_PARAMS, str(bad))
-        except Exception as error:      # never let one request kill the wire
+        except Exception as error:  # noqa: BLE001  # never let one request kill the wire
             self.log(traceback.format_exc())
             return self._error(msg_id, INTERNAL, "%s: %s"
                                % (type(error).__name__, error))

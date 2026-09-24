@@ -132,7 +132,7 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/infer":
                     return self._json(*handle_infer(cx, query))
                 return self._json(*handle_evaluate(cx, query))
-        except Exception:
+        except Exception:  # noqa: BLE001  # the request boundary
             self._json({"error": traceback.format_exc()}, 500)
 
 

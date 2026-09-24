@@ -7,13 +7,15 @@ target-version = "py312"
 extend-exclude = ["db/psql/cluster", "db/raw", ".cache-*"]
 
 [tool.ruff.lint]
-# pycodestyle, pyflakes, isort, bugbear, comprehensions, simplify, pyupgrade,
-# naming, ruff's own checks, misc lints - the standard set, minus what the
-# house style does on purpose: %-formatting (UP031/UP032), the ∪ and · in
-# prose (RUF001-003), mutable class attributes as vocabulary (RUF012).
+# pycodestyle, pyflakes, isort, bugbear, blind excepts, comprehensions,
+# simplify, pyupgrade, naming, ruff's own checks, misc lints - the standard
+# set, minus what the house style does on purpose: %-formatting
+# (UP031/UP032), the ∪ and · in prose (RUF001-003), mutable class attributes
+# as vocabulary (RUF012). A catch of every Exception is a boundary - a
+# request, a daemon's pass - and says so: `# noqa: BLE001  # <why>`.
 # Public functions carry full type annotations, and a record that crosses a
 # module boundary is a dataclass or TypedDict rather than a bare dict or tuple.
-select = ["E", "W", "F", "I", "B", "C4", "SIM", "UP", "N", "RUF", "PIE"]
+select = ["E", "W", "F", "I", "B", "BLE", "C4", "SIM", "UP", "N", "RUF", "PIE"]
 ignore = ["UP031", "UP032", "RUF001", "RUF002", "RUF003", "RUF012"]
 
 [tool.ruff.lint.isort]

@@ -111,7 +111,7 @@ def refresh_once(ctx, log=print, full=None, full_days=DEFAULT_FULL_DAYS):
             parts.append(tools.run_tool(ctx, "load_authored")[0].split(";")[0])
             parts.append(tools.run_tool(ctx, "export_csv")[0])
             text = "; ".join(parts)
-    except Exception as error:      # a failed refresh leaves yesterday's data in place
+    except Exception as error:  # noqa: BLE001  # a failed refresh leaves yesterday's data in place
         log("refresh: FAILED after %.0fs: %s: %s"
             % (time.time() - started, type(error).__name__, error))
         return False, str(error)

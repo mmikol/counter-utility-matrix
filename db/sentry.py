@@ -22,7 +22,9 @@ Every COUNTRIX_SENTRY_EVERY seconds (30):
                    flags, the counts - which `orchestrator.py status` prints
 
     python -m db.sentry            the loop (the sentry container)
-    python -m db.sentry --once     one pass, exit 0 when nothing is wrong
+    python -m db.sentry --once     one pass, exit 0 when nothing is wrong and
+                                   1 when something is; any other argument
+                                   prints this text and exits 2
 """
 
 import json
@@ -30,6 +32,7 @@ import os
 import re
 import sys
 import time
+import traceback
 import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -306,26 +309,32 @@ def run_forever(
         every: float = EVERY, watch: Watch | None = None,
         sleep: Callable[[float], object] = time.sleep) -> NoReturn:
     """A pass every `every` seconds, each reading the audit log on from where
-    the last one stopped."""
+    the last one stopped. A pass that fails leaves a report that is not ok."""
     watch = watch or Watch()
     watch.log("sentry: watching the playbook, the database and the door every %gs" % every)
     offset = 0
     while True:
         try:
             offset = run_once(watch, offset)["audit_offset"]
-        except Exception as error:      # a failed pass is logged, the loop goes on
-            watch.log("sentry: pass failed: %s: %s" % (type(error).__name__, error))
+        except Exception as error:  # noqa: BLE001  # a failed pass must not stop the daemon
+            watch.log(traceback.format_exc().rstrip())
+            failure = "pass failed: %s: %s" % (type(error).__name__, error)
+            watch.log("sentry: " + failure)
+            # said in the report, or status prints the last pass's verdict as current
+            _write_report(_report([], None, [failure], DoorTally(offset=offset)), watch)
         sleep(every)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """The command line -> its exit code; the loop never returns."""
     argv = sys.argv[1:] if argv is None else argv
     if argv == ["--once"]:
         return 0 if run_once()["ok"] else 1
     if argv:
-        sys.exit(__doc__)
+        print(__doc__, file=sys.stderr)
+        return 2
     run_forever()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

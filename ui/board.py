@@ -393,7 +393,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(*api_weight(payload if isinstance(payload, dict) else {}))
         except ValueError:
             return self._json({"error": "bad JSON"}, 400)
-        except Exception:
+        except Exception:  # noqa: BLE001  # the request boundary
             return self._failed(path)
 
     def do_GET(self) -> None:
@@ -421,7 +421,7 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/api/facts":
                     return self._json(*api_facts(cx, query))
                 return self._json(*api_infer(cx, query))
-        except Exception:
+        except Exception:  # noqa: BLE001  # the request boundary
             return self._failed(path)
 
 def main() -> None:

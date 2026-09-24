@@ -75,9 +75,9 @@ def test_a_line_cut_by_the_seek_or_still_being_written_is_not_malformed(tmp_path
     # inside a character, and the log's last line can be half written
     audit = tmp_path / "audit.jsonl"
     old = datetime.fromtimestamp(time.time() - 3600, UTC).isoformat(timespec="seconds")
-    first = (json.dumps({"t": old, "tool": "tune", "refused": "Lúcio"}, ensure_ascii=False)
+    first = (json.dumps({"t": old, "tool": "tune", "refused": "L\u00facio"}, ensure_ascii=False)
              + "\n").encode()
-    size = first.index("ú".encode()) + 1 + sentry.AUDIT_TAIL_BYTES     # its second byte
+    size = first.index("\u00fa".encode()) + 1 + sentry.AUDIT_TAIL_BYTES     # its second byte
     skeleton = len(json.dumps({"t": old, "tool": "facts", "pad": ""})) + 1
     filler = json.dumps({"t": old, "tool": "facts", "pad": "x" * (size - len(first) - skeleton)})
     audit.write_bytes(first + filler.encode() + b"\n")
@@ -108,6 +108,34 @@ def test_one_pass_writes_the_report(tmp_path, monkeypatch):
     assert json.loads((tmp_path / "sentry.json").read_text())["flags"] == report["flags"]
     clean = sentry.run_once(dataclasses.replace(watch, scan_database=False))
     assert clean["ok"] is True and clean["flags"] == []
+
+
+def test_a_failed_pass_leaves_a_report_that_is_not_ok(tmp_path, monkeypatch):
+    # said in the report, or `orchestrator.py status` prints the last good pass as current
+    def broken(watch, offset):
+        raise RuntimeError("disk gone")
+
+    def sleep(seconds):
+        raise KeyboardInterrupt
+    monkeypatch.setattr(sentry, "run_once", broken)
+    seen = []
+    watch = sentry.Watch(report_path=str(tmp_path / "sentry.json"), log=seen.append)
+    with pytest.raises(KeyboardInterrupt):
+        sentry.run_forever(0, watch, sleep=sleep)
+    report = json.loads((tmp_path / "sentry.json").read_text())
+    assert report["ok"] is False and report["flags"] == ["pass failed: RuntimeError: disk gone"]
+    traceback = next(m for m in seen if m.startswith("Traceback"))
+    assert traceback.endswith("RuntimeError: disk gone")
+    assert seen[-1] == "sentry: pass failed: RuntimeError: disk gone"
+
+
+def test_a_usage_error_exits_2_and_one_pass_exits_with_its_verdict(monkeypatch, capsys):
+    assert sentry.main(["--bogus"]) == 2
+    assert "python -m db.sentry" in capsys.readouterr().err
+    verdicts = iter([{"ok": True}, {"ok": False}])
+    monkeypatch.setattr(sentry, "run_once", lambda: next(verdicts))
+    assert sentry.main(["--once"]) == 0
+    assert sentry.main(["--once"]) == 1
 
 
 def test_a_column_the_scan_cannot_read_is_a_flag_and_a_missing_one_is_not():
