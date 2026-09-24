@@ -5,7 +5,9 @@ Latest hands a server one ticket per request and client. Each board's
 Watch holds its ticket and every task its searches submit; each round of
 each search asks it first, and once the ticket is superseded it cancels
 the tasks no worker has taken and raises Superseded. A board solved in
-this process asks the same Watch, so it stops the same way.
+this process asks the same Watch, so it stops the same way. The same
+cancel_all runs on every other exit of a pooled board, so a board that
+raises leaves no task queued behind it.
 """
 
 import threading
@@ -59,17 +61,24 @@ class Cancellable(Protocol):
 class Watch:
     """One board's check against being superseded, and every future its
     searches submitted. Each round of each search calls check(): once the
-    board is superseded, the futures that have not started are cancelled and
-    the round raises Superseded, so a stale board stops holding the pool."""
+    board is superseded, cancel_all() cancels the futures that have not
+    started and the round raises Superseded, so a stale board stops holding
+    the pool. board() calls cancel_all() on every other exit of a pooled pass
+    too."""
 
     def __init__(self, superseded: Callable[[], bool] | None = None) -> None:
         self.superseded = superseded
         self.futures: list[Cancellable] = []
 
+    def cancel_all(self) -> None:
+        """Cancel every task the board submitted that no worker has taken; one
+        running or done is left as it is."""
+        for future in self.futures:
+            future.cancel()
+
     def check(self) -> None:
         """Raise Superseded, cancelling what has not started, once a newer
         request has replaced this board."""
         if self.superseded is not None and self.superseded():
-            for future in self.futures:
-                future.cancel()
+            self.cancel_all()
             raise Superseded("a newer board from the same client superseded this one")

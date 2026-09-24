@@ -294,31 +294,37 @@ def board(
     anywhere in the pooled pass is noted on stderr, drops the pool and runs
     the same pass here. A board the brief's check reports superseded stops
     at its next round, its unstarted tasks cancelled, and raises
-    supersede.Superseded.
+    supersede.Superseded. A pooled pass that raises anything else cancels
+    its unstarted tasks too, so a refused board leaves none queued.
     """
     brief = brief or Brief()
     pooled = parallel.available(catalog)
     catalog = catalog_module.weighted(catalog or catalog_module.load(), brief.weights)
+    watch = supersede.Watch(brief.superseded)
     if not pooled:
-        return _board_once(world, draft, catalog=catalog, brief=brief, workers=None)
+        return _board_once(world, draft, catalog=catalog, brief=brief, workers=None,
+                           watch=watch)
     try:
         return _board_once(world, draft, catalog=catalog, brief=brief,
-                           workers=parallel.POOL.executor())
+                           workers=parallel.POOL.executor(), watch=watch)
     except BrokenProcessPool as error:
         sys.stderr.write("countrix: a solver worker died (%s: %s); the board solves again in"
                          " this process\n" % (type(error).__name__, error))
         parallel.POOL.drop()
-    return _board_once(world, draft, catalog=catalog, brief=brief, workers=None)
+    finally:
+        watch.cancel_all()          # a no-op after a whole pass, which read every task
+    return _board_once(world, draft, catalog=catalog, brief=brief, workers=None, watch=watch)
 
 
 def _board_once(
         world: World, draft: Draft, *, catalog: list[Strategy], brief: Brief,
-        workers: parallel.Workers | None) -> Board:
+        workers: parallel.Workers | None, watch: supersede.Watch) -> Board:
     """The board, its searches split across `workers`, or each run in this
-    process where there are none. The rounds go in the order that keeps the
-    pool full: the two optimal seats rank their rosters and sweep, the fills
-    sweep on their seats' scales, the seats merge and are solved, and the
-    countered case, which needs red's six, sweeps while the fills merge."""
+    process where there are none, every round asking `watch` whether the
+    board is superseded. The rounds go in the order that keeps the pool
+    full: the two optimal seats rank their rosters and sweep, the fills sweep
+    on their seats' scales, the seats merge and are solved, and the countered
+    case, which needs red's six, sweeps while the fills merge."""
     m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
     draft = draft._replace(side=_side(m, draft.side))
     _check_teams(red_h, blue_h)
@@ -331,7 +337,7 @@ def _board_once(
     ours = draft._replace(red=enemy)                   # blue's current comp and fill
     theirs = Draft(map_name=draft.map_name, red=draft.blue, blue=draft.red, bans=draft.bans,
                    side=opposite(draft.side))
-    solve = _Pass(world, catalog, brief, workers)
+    solve = _Pass(world, catalog, brief, workers, watch)
     blue_split, red_split = solve.split(blue_seat, solve.half), solve.split(red_seat, solve.rest)
     blue_split.rank_roster()
     red_split.rank_roster()
@@ -379,14 +385,15 @@ type Searching = parallel.Split | parallel.NullSplit
 
 class _Pass:
     """One pass of a board: the world, the weighted playbook and the brief it
-    is solved under, and the searches it sends out - blue's and its fill's
-    over half the pool's workers, red's, its fill's and the countered case's
-    over the rest - or each seat searching for itself where there are none."""
+    is solved under, the board's Watch, and the searches it sends out -
+    blue's and its fill's over half the pool's workers, red's, its fill's
+    and the countered case's over the rest - or each seat searching for
+    itself where there are none."""
 
     def __init__(self, world: World, catalog: list[Strategy], brief: Brief,
-                 workers: parallel.Workers | None) -> None:
+                 workers: parallel.Workers | None, watch: supersede.Watch) -> None:
         self.world, self.catalog, self.brief = world, catalog, brief
-        self.watch = supersede.Watch(brief.superseded)
+        self.watch = watch
         size = workers.size if workers is not None else 0
         self.half = max(1, size // 2)
         self.rest = max(1, size - self.half)
