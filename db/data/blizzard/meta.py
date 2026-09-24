@@ -15,12 +15,16 @@ vocabularies as ordinary select options.
 """
 
 import json
+from collections.abc import Callable
+from typing import NamedTuple, TypedDict
 
-from bs4 import BeautifulSoup
+import psycopg
+import requests
+from bs4 import BeautifulSoup, Tag
 
 from db import INPUT_DEVICE, PLATFORM, REGION, psql
-from db.data import fetch
-from db.data.blizzard import BLIZZARD, RATES_URL
+from db.data import fetch, returned_int
+from db.data.blizzard import BLIZZARD, RATES_URL, attr
 from db.data.fetch import cache_key, cached_get
 from db.psql import current_patch, current_season
 
@@ -30,35 +34,42 @@ class RatesError(Exception):
     pass
 
 
-def parse_rows(html):
+class RateRow(NamedTuple):
+    name: str
+    win_rate: float | None
+    pick_rate: float | None
+    ban_rate: float | None
+
+
+def parse_rows(html: str) -> list[RateRow]:
     """[(hero_name, win_rate, pick_rate, ban_rate)] from the data table JSON."""
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("blz-data-table")
-    if table is None or not table.get("rows"):
+    if not isinstance(table, Tag) or not table.get("rows"):
         raise RatesError("no blz-data-table rows attribute - the page changed")
 
     stats = []
-    for row in json.loads(table["rows"]):
+    for row in json.loads(attr(table, "rows")):
         cells = row.get("cells", {})
         name = cells.get("name")
         if not name:
             continue
         stats.append(
-            (name, cells.get("winrate"), cells.get("pickrate"), cells.get("banrate"))
+            RateRow(name, cells.get("winrate"), cells.get("pickrate"), cells.get("banrate"))
         )
     if not stats:
         raise RatesError("data table held no hero rows")
     return stats
 
 
-def parse_filter_options(html, select_id):
+def parse_filter_options(html: str, select_id: str) -> list[tuple[str, str]]:
     """[(value, label)] for one filter dropdown."""
     soup = BeautifulSoup(html, "html.parser")
     select = soup.find("select", id=select_id)
-    if select is None:
+    if not isinstance(select, Tag):
         raise RatesError("no %s on the page" % select_id)
     return [
-        (option.get("value"), option.get_text(strip=True))
+        (attr(option, "value"), option.get_text(strip=True))
         for option in select.find_all("option")
         if option.get("value")
     ]
@@ -78,7 +89,7 @@ REGION_PARAM = "Americas"         # the site's spelling of REGION
 REGION_NAME = "Americas"
 
 
-def competitive_rq(session, cache_dir):
+def competitive_rq(session: requests.Session, cache_dir: str | None) -> str:
     """The rq code the page currently assigns to Competitive - Role Queue."""
     page = cached_get(
         session, RATES_URL, cache_dir,
@@ -96,7 +107,8 @@ def competitive_rq(session, cache_dir):
     return codes[0]
 
 
-def fetch_slice(session, params, cache_dir, rq):
+def fetch_slice(session: requests.Session, params: dict[str, str], cache_dir: str | None,
+                rq: str) -> str:
     """One rates page for a given filter combination."""
     query = dict(params, rq=rq, input=INPUT_PARAM, region=REGION_PARAM)
     return cached_get(
@@ -106,7 +118,24 @@ def fetch_slice(session, params, cache_dir, rq):
     )
 
 
-def run(connection, cache_dir=None, session=None, log=print):
+class RatesSummary(TypedDict):
+    queue: str
+    platform: str
+    region: str
+    tiers: int
+    maps: int
+    hero_rows: int
+    map_rows: int
+    snapshot_id: int
+    snapshots: int
+    unmatched: list[str]
+    skipped_maps: list[str]
+    tables: list[str]
+
+
+def run(connection: psycopg.Connection, cache_dir: str | None = None,
+        session: requests.Session | None = None,
+        log: Callable[[str], None] = print) -> RatesSummary:
     session = fetch.session(session)
     cao = psql.now()
 
@@ -124,9 +153,9 @@ def run(connection, cache_dir=None, session=None, log=print):
         " RETURNING region_id",
         (REGION, REGION_NAME, source_id),
     )
-    region_id = cursor.fetchone()[0]
+    region_id = returned_int(cursor)
 
-    tier_ids = {}
+    tier_ids: dict[str, int] = {}
     for order, (code, name) in enumerate(tiers):
         cursor.execute(
             "INSERT INTO competitive_tiers (code, name, rank_order, source_id)"
@@ -135,7 +164,7 @@ def run(connection, cache_dir=None, session=None, log=print):
             " rank_order = EXCLUDED.rank_order RETURNING tier_id",
             (code.lower(), name, order, source_id),
         )
-        tier_ids[code] = cursor.fetchone()[0]
+        tier_ids[code] = returned_int(cursor)
 
     cursor.execute(
         "INSERT INTO meta_snapshots (captured_at, queue, platform, input,"
@@ -144,13 +173,13 @@ def run(connection, cache_dir=None, session=None, log=print):
         (cao, QUEUE_NAME, PLATFORM, INPUT_DEVICE,
          current_patch(cursor), current_season(cursor), source_id),
     )
-    snapshot_id = cursor.fetchone()[0]
+    snapshot_id = returned_int(cursor)
 
     hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
     map_ids = psql.lookup_ids(cursor, "maps", "name", "map_id")
-    unmatched = set()
+    unmatched: set[str] = set()
 
-    def load_hero_slice(html, tier_code):
+    def load_hero_slice(html: str, tier_code: str) -> int:
         written = 0
         for name, win, pick, ban in parse_rows(html):
             hero_id = hero_ids.get(name.lower())
@@ -180,7 +209,8 @@ def run(connection, cache_dir=None, session=None, log=print):
     # 30, and the source refuses connections well before the end of a sweep
     # that size; rows carry tier_id (all ranks) so widening needs no
     # migration, only the inner loop.
-    map_rows, skipped_maps = 0, []
+    map_rows = 0
+    skipped_maps: list[str] = []
     for slug, label in maps:
         map_id = map_ids.get(label.lower())
         if map_id is None:
@@ -205,7 +235,7 @@ def run(connection, cache_dir=None, session=None, log=print):
             )
             map_rows += 1
     connection.commit()
-    snapshots = cursor.execute("SELECT count(*) FROM meta_snapshots").fetchone()[0]
+    snapshots = returned_int(cursor.execute("SELECT count(*) FROM meta_snapshots"))
     log("hero/map rows: %d   snapshots held: %d" % (map_rows, snapshots))
     return {"queue": QUEUE_NAME, "platform": PLATFORM, "region": REGION,
             "tiers": len(tier_ids), "maps": len(maps) - len(skipped_maps),

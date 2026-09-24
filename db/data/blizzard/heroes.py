@@ -8,12 +8,17 @@ stats, the missing abilities and the maps come from the wiki.
 """
 
 import re
+from collections.abc import Callable
+from datetime import datetime
+from typing import TypedDict
 
-from bs4 import BeautifulSoup
+import psycopg
+import requests
+from bs4 import BeautifulSoup, Tag
 
 from db import psql
-from db.data import fetch
-from db.data.blizzard import BASE_URL, BLIZZARD, HEROES_URL
+from db.data import fetch, returned_int
+from db.data.blizzard import BASE_URL, BLIZZARD, HEROES_URL, attr
 from db.data.fetch import cache_key, cached_get
 
 # One host serves every page. A keep-alive socket it drops fails one request,
@@ -22,7 +27,40 @@ PAGE_POLICY = fetch.RequestPolicy(attempts=3)
 
 # --- extract: markup -> Python ---------------------------------------------
 
-def html_to_text(node):
+class Subrole(TypedDict):
+    code: str
+    role_code: str
+    name: str
+    passive_description: str
+
+
+class RoleIcons(TypedDict):
+    roles: dict[str, str]           # code -> icon url
+    subroles: dict[str, str]
+
+
+class RosterHero(TypedDict):
+    slug: str
+    name: str
+    role_code: str
+    subrole_code: str
+    portrait_url: str | None
+
+
+class AbilityText(TypedDict):
+    name: str
+    description: str
+    position: int
+
+
+class PerkText(TypedDict):
+    tier_id: int
+    name: str
+    description: str
+    position: int
+
+
+def html_to_text(node: Tag) -> str:
     """Plain gameplay text from a BeautifulSoup node.
 
     Ability descriptions embed input-icon <img> tags mid-sentence and wrap
@@ -43,22 +81,22 @@ class ScrapeError(Exception):
     pass
 
 
-def _style_url(node):
-    match = URL_IN_STYLE_RE.search(node.get("style", "") or "")
+def _style_url(node: Tag) -> str | None:
+    match = URL_IN_STYLE_RE.search(attr(node, "style") if node.has_attr("style") else "")
     return match.group(2) if match else None
 
 
-def parse_subroles(soup):
+def parse_subroles(soup: BeautifulSoup) -> dict[str, Subrole]:
     """The ten subroles and the passive each one grants."""
-    subroles = {}
+    subroles: dict[str, Subrole] = {}
     for div in soup.select("div.subrole[data-role][data-subrole]"):
         spans = div.find_all("span")
         if len(spans) != 2:
             continue
-        code = div["data-subrole"]
+        code = attr(div, "data-subrole")
         subroles[code] = {
             "code": code,
-            "role_code": div["data-role"],
+            "role_code": attr(div, "data-role"),
             # The label span reads "Tactician: ".
             "name": spans[0].get_text(strip=True).rstrip(":").strip(),
             "passive_description": html_to_text(spans[1]),
@@ -68,31 +106,32 @@ def parse_subroles(soup):
     return subroles
 
 
-def parse_icons(soup):
+def parse_icons(soup: BeautifulSoup) -> RoleIcons:
     """{'roles': {code: url}, 'subroles': {code: url}} - the icons the site's
     own role and subrole filters draw. The board draws the role ones."""
-    roles, subroles = {}, {}
+    roles: dict[str, str] = {}
+    subroles: dict[str, str] = {}
     for option in soup.select("option.role[data-role]"):
         url = _style_url(option)
-        if url and option["data-role"] != "all-heroes":
-            roles[option["data-role"]] = url
+        if url and attr(option, "data-role") != "all-heroes":
+            roles[attr(option, "data-role")] = url
     for option in soup.select("option.subrole[data-subrole]"):
         url = _style_url(option)
         if url:
-            subroles[option["data-subrole"]] = url
+            subroles[attr(option, "data-subrole")] = url
     for card in soup.select("a.hero-card"):
         icon = card.find("blz-card")
-        if icon is not None and icon.get("icon") and card.get("data-role"):
-            roles.setdefault(card["data-role"], icon["icon"])
+        if isinstance(icon, Tag) and icon.get("icon") and card.get("data-role"):
+            roles.setdefault(attr(card, "data-role"), attr(icon, "icon"))
     return {"roles": roles, "subroles": subroles}
 
 
-def parse_roster(soup):
+def parse_roster(soup: BeautifulSoup) -> list[RosterHero]:
     """Every hero card: slug, name, role, subrole, portrait."""
-    heroes = []
+    heroes: list[RosterHero] = []
     for card in soup.select("a.hero-card"):
         heading = card.find("h2", attrs={"slot": "heading"})
-        href = card.get("href", "")
+        href = attr(card, "href") if card.has_attr("href") else ""
         if heading is None or not href:
             raise ScrapeError("hero card missing a name or link: %r" % card.get("id"))
         portrait = card.find("blz-image", class_="heroCardPortrait")
@@ -100,9 +139,11 @@ def parse_roster(soup):
             {
                 "slug": href.rstrip("/").rsplit("/", 1)[-1],
                 "name": heading.get_text(strip=True),
-                "role_code": card["data-role"],
-                "subrole_code": card["data-subrole"],
-                "portrait_url": portrait.get("src") if portrait is not None else None,
+                "role_code": attr(card, "data-role"),
+                "subrole_code": attr(card, "data-subrole"),
+                "portrait_url": (attr(portrait, "src")
+                                 if isinstance(portrait, Tag) and portrait.has_attr("src")
+                                 else None),
             }
         )
     if not heroes:
@@ -110,7 +151,7 @@ def parse_roster(soup):
     return heroes
 
 
-def parse_abilities(soup, slug):
+def parse_abilities(soup: BeautifulSoup, slug: str) -> list[AbilityText]:
     """Ordered abilities for one hero. Nothing here classifies an ability:
     Blizzard labels neither weapons nor ultimates; kind_id is left NULL for
     the wiki load to fill in."""
@@ -122,7 +163,7 @@ def parse_abilities(soup, slug):
     if not slides:
         raise ScrapeError("%s: no abilities found" % slug)
 
-    abilities = []
+    abilities: list[AbilityText] = []
     for position, slide in enumerate(slides):
         heading = slide.find("h3", class_="heading")
         description = slide.find("p", attrs={"slot": "description"})
@@ -138,16 +179,16 @@ def parse_abilities(soup, slug):
     return abilities
 
 
-def parse_perks(soup, slug):
+def parse_perks(soup: BeautifulSoup, slug: str) -> list[PerkText]:
     """The four perks: two minor (level 2) and two major (level 3).
     Stadium Powers live in their own section and are deliberately not read."""
     section = soup.find("blz-section", id="perks")
     if section is None:
         raise ScrapeError("%s: no perks section" % slug)
 
-    perks = []
+    perks: list[PerkText] = []
     for category in section.select("div.perk-category"):
-        tier_codes = [c for c in category.get("class", []) if c in PERK_TIERS]
+        tier_codes = [c for c in category.get_attribute_list("class") if c in PERK_TIERS]
         if len(tier_codes) != 1:
             raise ScrapeError("%s: perk category has no tier: %r" % (slug, category.get("class")))
         tier_code = tier_codes[0]
@@ -182,8 +223,9 @@ def parse_perks(soup, slug):
 ROLE_NAMES = {"tank": "Tank", "damage": "Damage", "support": "Support"}
 
 
-def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
-         cao):
+def load(connection: psycopg.Connection, subroles: dict[str, Subrole],
+         heroes: list[RosterHero], abilities_by_slug: dict[str, list[AbilityText]],
+         perks_by_slug: dict[str, list[PerkText]], icons: RoleIcons, cao: datetime) -> None:
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, BLIZZARD, cao)
 
@@ -198,7 +240,7 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
             " RETURNING role_id",
             (code, ROLE_NAMES[code], icons["roles"].get(code), source_id),
         )
-        role_ids[code] = cursor.fetchone()[0]
+        role_ids[code] = returned_int(cursor)
 
     subrole_ids = {}
     for subrole in sorted(subroles.values(), key=lambda s: (s["role_code"], s["code"])):
@@ -220,7 +262,7 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
                 source_id,
             ),
         )
-        subrole_ids[subrole["code"]] = cursor.fetchone()[0]
+        subrole_ids[subrole["code"]] = returned_int(cursor)
 
     for hero in heroes:
         cursor.execute(
@@ -241,7 +283,7 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
                 source_id,
             ),
         )
-        hero_id = cursor.fetchone()[0]
+        hero_id = returned_int(cursor)
 
         for ability in abilities_by_slug[hero["slug"]]:
             cursor.execute(
@@ -274,7 +316,18 @@ def load(connection, subroles, heroes, abilities_by_slug, perks_by_slug, icons,
     connection.commit()
 
 
-def run(connection, cache_dir=None, session=None, log=print):
+class HeroesSummary(TypedDict):
+    heroes: int
+    subroles: int
+    abilities: int
+    perks: int
+    portraits: int
+    tables: list[str]
+
+
+def run(connection: psycopg.Connection, cache_dir: str | None = None,
+        session: requests.Session | None = None,
+        log: Callable[[str], None] = print) -> HeroesSummary:
     """Pull the roster and every hero page, clean them, store them.
     Returns a summary dict."""
     session = fetch.session(session)
