@@ -350,7 +350,7 @@ class Objective:
         the sample never moved - normalises everything to 0.5."""
         self._norms = []
         for g in self.heuristics:
-            lo, hi = self.bounds.get(g.id, Interval(0.0, 0.0))
+            lo, hi = self.bounds.get(g.id, Interval(low=0.0, high=0.0))
             self._norms.append(Norm(
                 strategy=g, low=lo, span=hi - lo if hi > lo else None,
                 weight=g.weight * self._needs.get(g.id, 1.0),

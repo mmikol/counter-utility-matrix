@@ -276,7 +276,8 @@ def _widen(bounds: Bounds, part: Mapping[str, Interval]) -> Bounds:
     """Widen each heuristic's low and high to cover one slice's, in place."""
     for key, got in part.items():
         seen = bounds.get(key)
-        bounds[key] = Interval(min(got.low, seen.low), max(got.high, seen.high)) if seen else got
+        bounds[key] = Interval(low=min(got.low, seen.low),
+                               high=max(got.high, seen.high)) if seen else got
     return bounds
 
 

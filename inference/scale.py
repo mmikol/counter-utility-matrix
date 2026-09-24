@@ -97,6 +97,11 @@ def _prepared(objective: Objective, index: int = 0, count: int = 1) -> list[Cand
             if not c.violations]
 
 
+def _spanning(values: Sequence[float]) -> Interval:
+    """The lowest and highest of values; 0.0 and 0.0 when there are none."""
+    return Interval(low=min(values), high=max(values)) if values else Interval(low=0.0, high=0.0)
+
+
 def _confidence_bounds(objective: Objective, spec: MetricKey, index: int,
                        prepared: Sequence[Candidate]) -> Interval:
     """The low and high a rule's confidence metric (`spec`, its namespace and
@@ -113,9 +118,9 @@ def _confidence_bounds(objective: Objective, spec: MetricKey, index: int,
         readings = [compute.map_metrics(m, objective.side, ban_count=ban_count).get(spec.key)
                     for m in objective.world.maps.values()]
         over = [float(number(v)) for v in readings if v is not None]
-        return Interval(min(over), max(over)) if over else Interval(0.0, 0.0)
+        return _spanning(over)
     seen = [value for c in prepared if (value := c.confidence[index]) is not None]
-    return Interval(min(seen), max(seen)) if seen else Interval(0.0, 0.0)
+    return _spanning(seen)
 
 
 def reference_bounds(objective: Objective, index: int = 0, count: int = 1) -> Bounds:
@@ -128,7 +133,7 @@ def reference_bounds(objective: Objective, index: int = 0, count: int = 1) -> Bo
     for i, g in enumerate(objective.heuristics):
         values = [value for c in prepared if (value := c.raw[i]) is not None]
         if values:
-            out[g.id] = Interval(min(values), max(values))
+            out[g.id] = _spanning(values)
         spec = objective.confidence_metrics[i]
         if spec is not None:
             out[g.id + CONFIDENCE_KEY] = _confidence_bounds(objective, spec, i, prepared)
@@ -214,7 +219,7 @@ def freeze(objective: Objective) -> Tally:
     bounds: Bounds = {}
     for i, g in enumerate(objective.heuristics):
         values = [value for c in over if (value := c.raw[i]) is not None]
-        bounds[g.id] = Interval(min(values), max(values)) if values else Interval(0.0, 0.0)
+        bounds[g.id] = _spanning(values)
         spec = objective.confidence_metrics[i]
         if spec is not None:
             bounds[g.id + CONFIDENCE_KEY] = _confidence_bounds(objective, spec, i, over)

@@ -135,7 +135,7 @@ def _table_rows(table: str, heading: str, position: int) -> Iterator[Row]:
             continue
         hero = _row_hero(cells[0])
         if hero and len(cells) > position:
-            yield Row(hero, cells[position])
+            yield Row(hero=hero, cell=cells[position])
 
 
 def _template_rows(section: str, parameter: str,
@@ -149,7 +149,7 @@ def _template_rows(section: str, parameter: str,
                 hero = key[: -len(suffix)]
                 rated = [params.get("%s_%s" % (hero, rating), "").strip() for rating in ratings]
                 rating = " | ".join(r for r in rated if r)
-                yield Row(hero, "'''%s''' %s" % (rating, value) if rating else value)
+                yield Row(hero=hero, cell="'''%s''' %s" % (rating, value) if rating else value)
 
 
 def section_rows(text: str, column: Column = SYNERGY) -> list[Row]:
@@ -213,7 +213,7 @@ def parse_synergies(text: str) -> list[Row]:
             continue
         if rating is None and NO_SYNERGY_RE.search(clause(advice, 10 ** 6)):
             continue
-        claims.append(Row(row.hero, advice))
+        claims.append(Row(hero=row.hero, cell=advice))
     return claims
 
 
