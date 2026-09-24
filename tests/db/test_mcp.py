@@ -249,7 +249,10 @@ def test_a_compact_infer_names_the_silent_heuristics_and_fits_a_reply(ctx):
 # --- the Streamable HTTP transport (the data-layer container's door) -----------
 
 @pytest.fixture(scope="module")
-def http_server():
+def http_server(tmp_path_factory):
+    """The server over HTTP on a free port, once it answers /health. A child
+    that exits first, or never answers, fails the fixture with its own
+    stderr, which goes to a file: a pipe nobody reads fills and blocks it."""
     import socket
     import time
     import urllib.request
@@ -257,18 +260,32 @@ def http_server():
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
     sock.close()
-    proc = subprocess.Popen([sys.executable, "-m", "db.mcp", "--http", "127.0.0.1:%d" % port],
-                            cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     base = "http://127.0.0.1:%d" % port
-    for _ in range(50):
+    log = tmp_path_factory.mktemp("mcp_http") / "stderr.log"
+    with log.open("wb") as err:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "db.mcp", "--http", "127.0.0.1:%d" % port],
+            cwd=ROOT, stdout=subprocess.DEVNULL, stderr=err)
         try:
-            urllib.request.urlopen(base + "/health", timeout=2)
-            break
-        except OSError:
-            time.sleep(0.2)
-    yield base
-    proc.terminate()
-    proc.wait(timeout=10)
+            # a cold pgserver boots behind /health
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                if proc.poll() is not None:
+                    pytest.fail("the mcp http server exited with %d before answering /health:\n%s"
+                                % (proc.returncode,
+                                   log.read_text(encoding="utf-8", errors="replace")))
+                try:
+                    with urllib.request.urlopen(base + "/health", timeout=2):
+                        break
+                except OSError:
+                    time.sleep(0.2)
+            else:
+                pytest.fail("the mcp http server did not answer /health within 30 s:\n%s"
+                            % log.read_text(encoding="utf-8", errors="replace"))
+            yield base
+        finally:
+            proc.terminate()
+            proc.wait(timeout=10)
 
 
 def _post(base, payload, headers=None):
