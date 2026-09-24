@@ -54,10 +54,11 @@ def test_the_pooled_and_the_in_process_board_run_one_orchestration(
 
 
 def test_a_dying_worker_reruns_the_same_board_in_this_process(
-        monkeypatch, synthetic_world, scratch_playbook):
-    """A BrokenProcessPool anywhere in the pooled pass drops the pool and runs
-    the board again here: at the first round, and after the two optimal seats
-    are solved, the Board is the one this process answers alone."""
+        monkeypatch, capsys, synthetic_world, scratch_playbook):
+    """A BrokenProcessPool anywhere in the pooled pass is noted on stderr, drops
+    the pool and runs the board again here: at the first round, and after the
+    two optimal seats are solved, the Board is the one this process answers
+    alone."""
     alone, _ = traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=False)
     _, whole = traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True)
     seated = [i for i, c in enumerate(whole) if c.what == "solved"][1] + 2
@@ -66,6 +67,7 @@ def test_a_dying_worker_reruns_the_same_board_in_this_process(
                                     pooled=True, breaks_after=breaks_after)
         assert trace[breaks_after:] == [Call("drop")], breaks_after
         assert _timeless(board) == _timeless(alone), breaks_after
+        assert "worker died (BrokenProcessPool: a worker died)" in capsys.readouterr().err
 
 
 def test_a_board_without_the_countered_case_sends_none_of_its_rounds(

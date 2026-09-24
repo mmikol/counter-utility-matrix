@@ -12,6 +12,7 @@ current blue picks as they stand. The records are result.py's, the prose
 plan.py's and the process pool parallel.py's.
 """
 
+import sys
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures.process import BrokenProcessPool
@@ -289,9 +290,10 @@ def board(
 
     Across the pool the searches are split and walked through their rounds
     together; in this process each seat searches for itself. A worker dying
-    anywhere in the pooled pass drops the pool and runs the same pass here. A
-    board the brief's check reports superseded stops at its next round, its
-    unstarted tasks cancelled, and raises supersede.Superseded.
+    anywhere in the pooled pass is noted on stderr, drops the pool and runs
+    the same pass here. A board the brief's check reports superseded stops
+    at its next round, its unstarted tasks cancelled, and raises
+    supersede.Superseded.
     """
     brief = brief or Brief()
     pooled = parallel.available(catalog)
@@ -301,8 +303,10 @@ def board(
     try:
         return _board_once(world, draft, catalog=catalog, brief=brief,
                            workers=parallel.POOL.executor())
-    except BrokenProcessPool:
-        parallel.POOL.drop()                   # a worker died: this board, in this process
+    except BrokenProcessPool as error:
+        sys.stderr.write("countrix: a solver worker died (%s: %s); the board solves again in"
+                         " this process\n" % (type(error).__name__, error))
+        parallel.POOL.drop()
     return _board_once(world, draft, catalog=catalog, brief=brief, workers=None)
 
 
