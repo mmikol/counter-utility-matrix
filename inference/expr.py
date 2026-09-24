@@ -28,7 +28,7 @@ UNARY = (ast.Not, ast.USub, ast.UAdd)
 
 # what an expression evaluates to: the whitelist admits no other constant or
 # display, and a list or tuple holds the same
-Value = int | float | bool | str | list["Value"] | tuple["Value", ...] | None
+type Value = int | float | bool | str | list[Value] | tuple[Value, ...] | None
 
 
 class ExprError(ValueError):

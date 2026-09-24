@@ -146,10 +146,10 @@ class SynergyPair(NamedTuple):
 # A metric's value: a count or a figure, a name, the names it lists, the
 # synergy pairs, the picks per style tag, or the answering picks per enemy.
 # The registry test pins which key holds which.
-MetricValue = (
+type MetricValue = (
     int | float | str | list[str] | list[SynergyPair] | dict[str, int]
     | dict[str, list[str]])
-MetricBag = dict[str, MetricValue]
+type MetricBag = dict[str, MetricValue]
 # the types a numeric metric holds: one tuple, built once, since the solver
 # tests a value against it for every heuristic of every candidate
 NUMBER_TYPES = (int, float)

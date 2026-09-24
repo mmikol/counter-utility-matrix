@@ -85,7 +85,7 @@ class Measurement(NamedTuple):
 
 
 # A measurement before its text: (value, numerator, denominator, window, condition).
-Reading = tuple[float | None, str | None, str | None, float | None, str | None]
+type Reading = tuple[float | None, str | None, str | None, float | None, str | None]
 
 
 def normalise_unit(unit: str | None) -> tuple[str | None, str | None]:

@@ -52,8 +52,8 @@ from inference.expr import Expr, ExprError, Section, compile_expr
 from inference.frontmatter import Frontmatter, Scalar
 
 # a strategy's kind, as its frontmatter names it, and its form, as its fields make it
-Kind = Literal["constraint", "heuristic", "assumption"]
-Form = Literal["limit", "scored", "heuristic", "assumption", "draft"]
+type Kind = Literal["constraint", "heuristic", "assumption"]
+type Form = Literal["limit", "scored", "heuristic", "assumption", "draft"]
 KINDS: tuple[Kind, ...] = ("constraint", "heuristic", "assumption")
 # load() sorts by this index within a kind, so draft sits last for a
 # heuristic draft as well as a constraint one

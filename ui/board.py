@@ -37,14 +37,10 @@ from psycopg.rows import TupleRow
 from db import psql, web
 from door.mcp import tools
 from facts import board_facts, tables
-from facts.draft import Draft, board_query, is_sided, parse_board
+from facts.draft import Draft, Query, board_query, is_sided, parse_board
 from inference import catalog as catalog_module
 from inference import engine, parallel, supersede
 from ui import pages
-
-# a parsed query string; a JSON endpoint answers it with a db.web.Reply, a JSON
-# object and an HTTP status
-type Query = Mapping[str, Sequence[str]]
 
 STORE_REASON = "stored from the board's slider"
 MAX_WEIGHT_BODY = 4096        # bytes: a weight is a two-field JSON object

@@ -24,7 +24,7 @@ SERVER_INFO = {"name": "countrix", "version": "2.1.0"}
 
 # A JSON object: a request's params as json.loads reads them, or a method's
 # result. Arbitrary JSON, so a value read from one is narrowed before use.
-Message = dict[str, object]
+type Message = dict[str, object]
 
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL = (
     -32700, -32600, -32601, -32602, -32603)

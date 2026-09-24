@@ -12,7 +12,7 @@ from facts.team import RANK_SENSITIVE, SPECIALIST_DELTA
 
 # a kit trait as the fact states it - key, sentence, value, unit - or None
 # where the kit does not carry it
-TraitRow = tuple[str, str, object, str | None] | None
+type TraitRow = tuple[str, str, object, str | None] | None
 
 
 def _trim(text: str | None, limit: int = 110) -> str:

@@ -36,7 +36,7 @@ class Announcement(TypedDict):
 
 
 # {ability key: {stat code: value}} - what an article adds to the Cargo kit.
-ExtraStats = dict[str, dict[str, StatValue]]
+type ExtraStats = dict[str, dict[str, StatValue]]
 
 
 def parse_hero_profile(text: str) -> HeroProfile | None:

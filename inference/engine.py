@@ -374,7 +374,7 @@ def _drafting(seat: Draft) -> bool:
 
 
 # a search sent across the pool, or one each seat runs for itself
-Searching = parallel.Split | parallel.NullSplit
+type Searching = parallel.Split | parallel.NullSplit
 
 
 class _Pass:

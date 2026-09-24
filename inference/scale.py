@@ -41,7 +41,7 @@ class Standing:
     sixes: int = 0
 
 
-Tally = dict[int, Standing]                     # hero id -> its standing
+type Tally = dict[int, Standing]                # hero id -> its standing
 
 
 def sample(objective: Objective, size: int = REFERENCE_SIZE) -> list[Candidate]:

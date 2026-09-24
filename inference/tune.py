@@ -50,7 +50,7 @@ MAX_PROSE = 20000          # characters in a strategy's prose
 MAX_SENTENCES = 3          # a strategy's prose is three sentences at most
 _SENTENCE_END = re.compile(r"[.!?](?:[\"')\]`]*)(?:\s|$)")
 
-Pairs = Sequence[tuple[str, object]]
+type Pairs = Sequence[tuple[str, object]]
 
 
 class TuneError(Refusal):

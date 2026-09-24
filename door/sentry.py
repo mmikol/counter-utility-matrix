@@ -43,14 +43,13 @@ import psycopg
 from psycopg.sql import SQL
 
 from db import RAW_DIR, psql
+from db.data.fetch import Log
 from door.mcp.audit import default_audit_path  # the door's own, one definition
 from door.mcp.http import RATE_LIMIT  # the door's own, one definition
 from inference import catalog as catalog_module
 from inference.strategy import CatalogError, Strategy
 
 EVERY = 30.0                 # seconds between passes; COUNTRIX_SENTRY_EVERY, read by main()
-
-Log = Callable[[str], object]
 
 REPORT_PATH = os.path.join(RAW_DIR, "sentry.json")
 AUDIT_TAIL_BYTES = 262144  # 256 KiB: the last minute's lines with room to spare

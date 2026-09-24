@@ -160,7 +160,7 @@ def _prime(token: str | None = None, data: bytes | None = None) -> int:
 
 
 # a playbook folder's stamp: each file's name, modification time and size
-Stamp = list[tuple[str, int, int]]
+type Stamp = list[tuple[str, int, int]]
 
 
 class _Held:

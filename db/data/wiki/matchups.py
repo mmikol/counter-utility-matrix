@@ -54,7 +54,7 @@ class Known(NamedTuple):
     pronoun: str | None
 
 
-Pronouns = tuple[str | None, str | None]
+type Pronouns = tuple[str | None, str | None]
 
 # A cell's leading bold label: '''HIGH RISK''', '''<nowiki>A | B</nowiki>'''.
 LABEL_RE = re.compile(r"^(?:\s|<(?!nowiki)[^>]+>)*'''\s*(?:<nowiki>)?(.*?)(?:</nowiki>)?\s*'''",
@@ -414,7 +414,7 @@ def parse_matchups(text: str, hero: str,
 
 
 # {(loser id, winner id): the sentence that decided it}
-Edges = dict[tuple[int, int], str]
+type Edges = dict[tuple[int, int], str]
 
 
 def combine(readings_by_hero: Mapping[str, list[tuple[str, Reading]]],

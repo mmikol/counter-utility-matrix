@@ -50,7 +50,11 @@ class Draft(NamedTuple):
 # neither door owns the other's spelling. A Draft holds tuples: a list in a field
 # makes an equal-looking Draft compare unequal.
 
-def parse_board(query: Mapping[str, Sequence[str]]) -> Draft:
+# A parsed query string, as both doors hand it to parse_board
+type Query = Mapping[str, Sequence[str]]
+
+
+def parse_board(query: Query) -> Draft:
     """The board a parsed query names, its bans cut to MAX_BANS. A team of
     more than TEAM_SIZE picks is refused, not cut: no lobby seats it, and a
     cut would answer a board the caller did not send."""

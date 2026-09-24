@@ -205,7 +205,8 @@ def session(existing: requests.Session | None = None) -> requests.Session:
     return s
 
 
-# Where a pull's progress lines go: to_stderr below, print, a list's append.
+# Where a progress line goes - a pull's, a tool's, the sentry's: to_stderr
+# below, print, a list's append.
 type Log = Callable[[str], None]
 
 

@@ -25,7 +25,6 @@ stderr.
 
 import argparse
 import os
-from collections.abc import Mapping, Sequence
 from typing import Literal, NotRequired, TypedDict
 from urllib.parse import parse_qs, urlsplit
 
@@ -33,14 +32,10 @@ import psycopg
 
 from db import psql, web
 from facts import tables
-from facts.draft import parse_board
+from facts.draft import Query, parse_board
 from inference import catalog as catalog_module
 from inference import engine, parallel, supersede
 from inference.strategy import CatalogError
-
-# A parsed query string. A handler answers a db.web.Reply: a JSON object and
-# its status.
-Query = Mapping[str, Sequence[str]]
 
 SOLVES = ("/board", "/infer", "/evaluate")     # the routes that search, and connect
 

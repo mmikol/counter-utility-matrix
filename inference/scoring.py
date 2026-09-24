@@ -34,8 +34,8 @@ class Interval(NamedTuple):
 
 # The records the objective passes around. A namespace is the metric bags by
 # section.
-Bounds = dict[str, Interval]                    # id, or id + CONFIDENCE_KEY -> low, high
-Namespace = dict[str, MetricBag]
+type Bounds = dict[str, Interval]               # id, or id + CONFIDENCE_KEY -> low, high
+type Namespace = dict[str, MetricBag]
 
 
 class MetricKey(NamedTuple):

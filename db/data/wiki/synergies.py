@@ -218,7 +218,7 @@ def parse_synergies(text: str) -> list[Row]:
 
 
 # {(low id, high id): (score, note)}
-Pairs = dict[tuple[int, int], tuple[int, str]]
+type Pairs = dict[tuple[int, int], tuple[int, str]]
 
 
 def pair_up(claims_by_hero: Mapping[str, Sequence[Row]],

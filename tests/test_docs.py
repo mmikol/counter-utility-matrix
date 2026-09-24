@@ -1,9 +1,9 @@
 """Every link resolves, every skill names real tools and only strategies the
 playbook holds, the root overview and every package map name what they hold,
 only the door calls the playbook's writers, each layer imports only the
-layers below it, every shallow indent sits on a four-column stop, and the
-sections db_docs generates match what the code generates today. Pure,
-except the schema check."""
+layers below it, every shallow indent sits on a four-column stop, every type
+alias is a type statement, and the sections db_docs generates match what the
+code generates today. Pure, except the schema check."""
 
 import ast
 import json
@@ -209,6 +209,33 @@ def test_no_module_reads_the_environment_at_import():
         frozen += ["%s:%d" % (os.path.relpath(path, ROOT), line)
                    for line in _import_time_reads(tree)]
     assert not frozen, frozen
+
+
+def _bare_aliases(tree):
+    """Line numbers of the module-level assignments that read as a type
+    alias: one CamelCase name (an UPPER constant is not one) bound to a
+    subscript or a union."""
+    return [node.lineno for node in tree.body
+            if isinstance(node, ast.Assign) and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and re.match(r"[A-Z][a-z]\w*", node.targets[0].id)
+            and (isinstance(node.value, ast.Subscript)
+                 or (isinstance(node.value, ast.BinOp) and isinstance(node.value.op, ast.BitOr)))]
+
+
+def test_every_type_alias_is_a_type_statement():
+    """An alias is a PEP 695 type statement: a bare assignment is another
+    runtime object under the same name, and two spellings leave the next
+    alias without a rule to follow."""
+    assert _bare_aliases(ast.parse("Pairs = dict[int, str]\nSeat = int | None\n"
+                                   "SIDES = ('a', 'b')\nMAX_BANS = 5\n"
+                                   "type Query = int\n")) == [1, 2]
+    bare = []
+    for path in _python_files("db", "facts", "inference", "door", "ui", "scripts"):
+        with open(path, encoding="utf-8") as handle:
+            tree = ast.parse(handle.read(), path)
+        bare += ["%s:%d" % (os.path.relpath(path, ROOT), line) for line in _bare_aliases(tree)]
+    assert not bare, bare
 
 
 def test_the_migrations_row_names_every_migration():

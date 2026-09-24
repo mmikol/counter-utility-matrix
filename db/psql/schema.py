@@ -110,7 +110,7 @@ def table_count(connection: psycopg.Connection) -> int:
         "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"))
 
 
-State = Literal["empty", "stale", "unfilled", "current"]
+type State = Literal["empty", "stale", "unfilled", "current"]
 
 
 def state(connection: psycopg.Connection) -> State:

@@ -17,9 +17,9 @@ import re
 from typing import NamedTuple
 
 # one value: a string, a number, a boolean, a [list] of values, or null
-Scalar = str | int | float | bool | list["Scalar"] | None
+type Scalar = str | int | float | bool | list[Scalar] | None
 # a file's frontmatter: flat keys, and one level of indented mapping (params:)
-Frontmatter = dict[str, Scalar | dict[str, Scalar]]
+type Frontmatter = dict[str, Scalar | dict[str, Scalar]]
 
 _WORDS: dict[str, bool | None] = {"true": True, "yes": True, "false": False, "no": False,
                                   "null": None, "none": None, "~": None}

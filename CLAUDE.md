@@ -242,6 +242,10 @@ db <- facts <- inference <- door <- ui.
   not an ad-hoc dict or tuple. `Any` is for arbitrary JSON. mypy holds the
   annotations in CI (`[tool.mypy]` in pyproject.toml, `warn_unused_ignores`
   among them); the tests need none and are not checked.
+- A type alias is a PEP 695 `type` statement, never a bare assignment; a
+  recursive one names itself unquoted. It is defined in one module and
+  imported everywhere else; `test_every_type_alias_is_a_type_statement`
+  fails a bare one.
 - Imports sit in the module's import block; an optional dependency is
   imported there inside `try`/`except ImportError`, as pgserver is in
   `db/psql/__init__.py`. A function-level import is a deliberate deferral

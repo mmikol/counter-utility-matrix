@@ -20,10 +20,10 @@ from inference.scoring import Candidate, Contribution
 from inference.strategy import Strategy
 
 # A result or a board as to_dict() serves it: a JSON object, read by the shells.
-Payload = dict[str, object]
+type Payload = dict[str, object]
 # what a result is, which its heading names, and the seat whose six it is
-ResultKind = Literal["infer", "evaluate", "current", "countered", "fill", "expected"]
-Seat = Literal["blue", "red"]
+type ResultKind = Literal["infer", "evaluate", "current", "countered", "fill", "expected"]
+type Seat = Literal["blue", "red"]
 
 
 class Pick(TypedDict):
