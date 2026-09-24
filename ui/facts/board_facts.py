@@ -31,8 +31,8 @@ them by key, and rendered as sentences so a person - or the /comp skill -
 can read them as evidence. Ids are dense and stable within a board.
 
 This module writes the meta, the bans, the map and the playbook's record;
-a hero's facts are ui.facts.hero_facts', a team's and the matchup's
-ui.facts.team_facts'.
+ui.facts.hero_facts writes a hero's facts, and ui.facts.team_facts a
+team's and the matchup's.
 """
 
 from db import Refusal
