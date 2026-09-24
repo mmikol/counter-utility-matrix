@@ -346,6 +346,6 @@ def _hero_versus(
         edge = world.synergy(h.id, mate.id)
         if edge:
             fs.add("hero", name, "hero.with_ally", "%s %s + %s (%s/3): %s"
-                % (team, name, mate.name, edge[0] if edge[0] is not None else "?",
-                    edge[1] or "no note"), value=mate.name, source="synergies",
+                % (team, name, mate.name, edge.score if edge.score is not None else "?",
+                    edge.note or "no note"), value=mate.name, source="synergies",
                 team=team)

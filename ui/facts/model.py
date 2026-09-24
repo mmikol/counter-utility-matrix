@@ -173,11 +173,11 @@ class Map:
     def style_top(self) -> str | None:
         if not self.styles:
             return None
-        return sorted(self.styles, key=lambda s: (-(self.styles[s][0] or 0), s))[0]
+        return sorted(self.styles, key=lambda s: (-(self.styles[s].score or 0), s))[0]
 
     @property
     def style_margin(self) -> float:
-        scores = sorted((v[0] or 0 for v in self.styles.values()), reverse=True)
+        scores = sorted((v.score or 0 for v in self.styles.values()), reverse=True)
         if len(scores) >= 2:
             return round(scores[0] - scores[1], 3)
         return scores[0] if scores else 0

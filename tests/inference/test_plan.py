@@ -13,6 +13,7 @@ from inference.expr import Expr
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts import board_facts
 from ui.facts.draft import Draft
+from ui.facts.records import StyleScore
 from ui.facts.team import team_metrics
 
 
@@ -142,7 +143,8 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     from inference.result import Result
     from inference.scoring import Contribution
     m = copy.copy(world.map("King's Row"))
-    m.styles = {"brawl": (1.0, None), "dive": (-0.5, None), "poke": (0.0, None)}   # a brawl map
+    m.styles = {"brawl": StyleScore(1.0, None), "dive": StyleScore(-0.5, None),
+                "poke": StyleScore(0.0, None)}     # a brawl map
     rules = [
         Ns(
             id="two-supports-hold", name="Two supports hold a six", kind="constraint",

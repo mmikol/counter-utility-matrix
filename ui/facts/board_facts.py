@@ -188,7 +188,7 @@ def _map_terrain(fs: FactSet, m: Map) -> None:
 def _map_styles(fs: FactSet, m: Map) -> None:
     """The styles the map rewards: the rates' half, the terrain's half, the
     sum, and the style on top."""
-    ranked_styles = sorted(m.styles, key=lambda s: (-m.styles[s][0], s))
+    ranked_styles = sorted(m.styles, key=lambda s: (-m.styles[s].score, s))
     for style in ranked_styles:
         if style in m.rate_lift:
             score = m.rate_lift[style]
@@ -204,8 +204,8 @@ def _map_styles(fs: FactSet, m: Map) -> None:
                 source="map_terrain")
     for style in ranked_styles:
         fs.add("map", m.name, "map.style", "%s on %s: %+.1f sd (%s)"
-            % (style, m.name, m.styles[style][0], _halves(m, style)),
-            value={"style": style, "score": m.styles[style][0],
+            % (style, m.name, m.styles[style].score, _halves(m, style)),
+            value={"style": style, "score": m.styles[style].score,
                 "terrain": m.terrain_lean.get(style), "rates": m.rate_lift.get(style)},
             source="derived:map.style")
     top = m.style_top                   # None exactly when the map has no styles
@@ -241,7 +241,7 @@ def _map_heroes(fs: FactSet, world: World, m: Map) -> None:
             fs.add("map", m.name, "map.playbook_pick", "%s is %s's top-%d map by Blizzard's"
                 " map rates" % (m.name, h.name, h.best_maps.index(m.id) + 1),
                 value=h.name, source="derived:map.playbook_pick")
-    for style in sorted(m.styles, key=lambda s: (-m.styles[s][0], s)):
+    for style in sorted(m.styles, key=lambda s: (-m.styles[s].score, s)):
         fits = [h for h in ranked if style in h.styles][:6]
         if fits:
             fs.add("map", m.name, "map.style_fit", "%s heroes who hold up on %s: %s"

@@ -13,6 +13,7 @@ from db import Refusal
 from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts.draft import Draft
+from ui.facts.records import StyleScore, Synergy
 from ui.facts.team import team_metrics
 
 
@@ -102,8 +103,9 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
             for r in ("tank", "damage", "support")}
     for a, b in ((last["support"][0], last["support"][1]), (last["tank"][0], last["damage"][0])):
         paired = copy.copy(world)
-        paired.synergies = {frozenset((a.id, b.id)): (1.0, "scratch")}
-        paired.partners = {a.id: {b.id: (1.0, "scratch")}, b.id: {a.id: (1.0, "scratch")}}
+        pair = Synergy(1, "scratch")
+        paired.synergies = {frozenset((a.id, b.id)): pair}
+        paired.partners = {a.id: {b.id: pair}, b.id: {a.id: pair}}
         solver = solver_on(paired)
         top = solver.solve(top=1).ranked[0]
         pooled = {h.id for pool in solver.pools().values() for h in pool}
@@ -234,7 +236,8 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
         assert forward[key] == backward[key], key
     ilios = world.map("Ilios")
     derived = dict(ilios.styles)
-    ilios.styles = {"poke": (1.0, None), "dive": (0.2, None), "brawl": (1.0, None)}
+    ilios.styles = {"poke": StyleScore(1.0, None), "dive": StyleScore(0.2, None),
+                    "brawl": StyleScore(1.0, None)}
     try:
         assert ilios.style_top == "brawl" and ilios.style_margin == 0
     finally:
