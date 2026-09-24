@@ -16,7 +16,7 @@ import os
 from db import ROOT, Refusal
 from door.mcp.registry import Context, tool
 from door.mcp.schema import Properties, Property, ToolReply
-from door.mcp.server import Resource, ResourceText
+from door.mcp.server import NoSuchResourceError, Resource, ResourceText
 from facts import compute
 from inference import catalog, derive, tune
 from inference.strategy import FIELDS, TUNABLE, Field, FieldKind
@@ -204,4 +204,4 @@ class StrategyResources:
         for h in catalog.load():
             if h.id == hid:
                 return ResourceText(uri=uri, mimeType="text/markdown", text=h.raw)
-        raise KeyError(uri)
+        raise NoSuchResourceError(uri)

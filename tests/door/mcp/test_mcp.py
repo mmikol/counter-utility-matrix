@@ -196,9 +196,25 @@ def test_the_strategy_resources_answer_an_unknown_uri_as_a_bad_parameter(tmp_pat
         return server.handle({"jsonrpc": "2.0", "id": 1, "method": "resources/read",
                               "params": {"uri": uri}})
     missing = read("strategy://nope")["error"]
-    assert missing["code"] == -32602 and missing["message"].startswith("no resource at")
+    assert missing == {"code": -32602, "message": "no resource at strategy://nope"}
     first = catalog.load()[0]
     assert read("strategy://" + first.id)["result"]["contents"][0]["text"] == first.raw
+
+
+def test_a_key_error_while_reading_a_resource_is_the_servers_fault(tmp_path, monkeypatch):
+    """Only NoSuchResourceError says the uri names nothing. A KeyError raised
+    while a resource is read - inside the catalog, say - is INTERNAL, with
+    its traceback in the log, as a fault inside a tool is."""
+    def broken(directory=None):
+        raise KeyError("inside the catalog")
+    monkeypatch.setattr(catalog, "load", broken)
+    logged = []
+    server = Server([], tools.StrategyResources(), log=logged.append,
+                    audit_path=str(tmp_path / "audit.jsonl"))
+    fault = server.handle({"jsonrpc": "2.0", "id": 1, "method": "resources/read",
+                           "params": {"uri": "strategy://coverage"}})["error"]
+    assert fault["code"] == -32603 and fault["message"].startswith("KeyError")
+    assert logged and "Traceback" in logged[0]
 
 
 def test_a_broken_playbook_is_a_server_fault_at_the_door(tmp_path, monkeypatch):

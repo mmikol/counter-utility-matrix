@@ -96,9 +96,17 @@ class ResourceText(TypedDict):
     text: str
 
 
+class NoSuchResourceError(KeyError):
+    """No resource at the uri a caller asked for - told apart from a KeyError
+    raised while reading one, which is the server's fault."""
+
+    def __str__(self) -> str:
+        return "no resource at %s" % self.args[0]
+
+
 class Resources(Protocol):
     """What a server serves as MCP resources: a listing, and one resource by
-    uri, a KeyError when nothing is at it."""
+    uri, a NoSuchResourceError when nothing is at it."""
 
     def list(self) -> list[Resource]: ...
 
@@ -227,5 +235,5 @@ class Server:
             raise InvalidParamsError("uri must be a string")
         try:
             return {"contents": [self.resources.read(uri)]}
-        except KeyError as unknown:
-            raise InvalidParamsError("no resource at %s" % unknown) from unknown
+        except NoSuchResourceError as unknown:
+            raise InvalidParamsError(str(unknown)) from unknown
