@@ -1,80 +1,15 @@
 """The process pool the board splits its searches across: the round order,
-a dying worker's board run again in this process, a superseded board's
-cancelled rounds, the pooled board against the sequential one, the workers'
-start, and the two settings."""
-
-from concurrent.futures.process import BrokenProcessPool
+a dying worker's board run again in this process, the pooled board against
+the sequential one, the workers' start, and the two settings. A superseded
+board's cancelled rounds are test_supersede's."""
 
 import pytest
 
 from inference import catalog
 from inference.strategy import CatalogError
 from tests.inference import FIXTURE_PLAYBOOK
+from tests.inference.tracing import TRACED, Call, traced_board
 from ui.facts.draft import Draft
-
-
-class _Call:
-    """One round of the pool, as the trace records it."""
-
-    def __init__(self, what, **kw):
-        self.what, self.kw = what, kw
-
-    def __eq__(self, other):
-        return (self.what, self.kw) == (other.what, other.kw)
-
-    def __repr__(self):
-        return "%s(%s)" % (self.what, ", ".join("%s=%r" % kv for kv in sorted(self.kw.items())))
-
-
-# red revealed and one blue pick locked on a sided map: all four searches run
-TRACED = Draft("Harbor Gate", ("Anvil",), ("Balm",), side="attack")
-
-
-def _traced_board(
-        monkeypatch, world, playbook, *, pooled, breaks_after=None, brief=None, trace=None):
-    """board() for real, in this process, on the synthetic World, under
-    `brief`. Pooled, a recording Split with the real one's constructor stands
-    in for the workers: it checks the board's watch and traces each round,
-    hands back None from solved() and swept() so each seat searches for
-    itself, and after `breaks_after` rounds a worker dies. Only the pool
-    module's public names are patched. -> (the Board, the trace)."""
-    from inference import engine, parallel
-    trace = [] if trace is None else trace
-
-    class Split:
-        started = None                  # the seat searches for itself, and times it
-
-        def __init__(self, run, spec, slices, bounds=None, standing=None):
-            self.run, self.spec, self.bounds, self.standing = run, spec, bounds, standing
-
-        def _round(self, name):
-            self.run.watch.check()
-            seat = self.spec.draft
-            trace.append(_Call(name, locked=seat.blue, enemy=seat.red, pool=self.spec.pool_size))
-            if breaks_after is not None and len(trace) >= breaks_after:
-                raise BrokenProcessPool("a worker died")
-
-        def rank_roster(self):
-            self._round("rank_roster")
-
-        def sweep(self):
-            self._round("sweep")
-
-        def merge(self):
-            self._round("merge")
-
-        def solved(self):
-            self._round("solved")
-
-        def swept(self):
-            self._round("swept")
-
-    monkeypatch.setattr(parallel, "available", lambda catalog=None: pooled)
-    monkeypatch.setattr(parallel.POOL, "executor",
-                        lambda: parallel.Workers(executor=None, size=6))
-    monkeypatch.setattr(parallel.POOL, "drop", lambda: trace.append(_Call("drop")))
-    monkeypatch.setattr(parallel, "Split", Split)
-    return engine.board(world, TRACED, catalog=playbook, brief=brief), trace
 
 
 def _timeless(board):
@@ -94,8 +29,8 @@ def test_the_pooled_and_the_in_process_board_run_one_orchestration(
     then does the countered case sweep against red's six - blue's best
     counter, and blue's pick filled on its scale. In this process no split is
     built. Both answer the same Board."""
-    alone, none = _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=False)
-    pooled, trace = _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True)
+    alone, none = traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=False)
+    pooled, trace = traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True)
     assert none == []
     enemy, ours = TRACED.red, TRACED.blue
     blue = {"locked": (), "enemy": enemy, "pool": 6}
@@ -105,16 +40,16 @@ def test_the_pooled_and_the_in_process_board_run_one_orchestration(
     against = {"locked": (), "enemy": tuple(alone.red.blue), "pool": 4}
     answer = {"locked": ours, "enemy": tuple(alone.red.blue), "pool": 4}
     assert trace == [
-        _Call("rank_roster", **blue), _Call("rank_roster", **red),
-        _Call("sweep", **blue), _Call("sweep", **red),
-        _Call("sweep", **fill), _Call("sweep", **red_fill),
-        _Call("merge", **blue), _Call("merge", **red),
-        _Call("solved", **blue), _Call("solved", **red),
-        _Call("sweep", **against), _Call("sweep", **answer),
-        _Call("merge", **fill), _Call("merge", **red_fill),
-        _Call("merge", **against), _Call("merge", **answer),
-        _Call("solved", **fill), _Call("solved", **red_fill),
-        _Call("solved", **against), _Call("solved", **answer)]
+        Call("rank_roster", **blue), Call("rank_roster", **red),
+        Call("sweep", **blue), Call("sweep", **red),
+        Call("sweep", **fill), Call("sweep", **red_fill),
+        Call("merge", **blue), Call("merge", **red),
+        Call("solved", **blue), Call("solved", **red),
+        Call("sweep", **against), Call("sweep", **answer),
+        Call("merge", **fill), Call("merge", **red_fill),
+        Call("merge", **against), Call("merge", **answer),
+        Call("solved", **fill), Call("solved", **red_fill),
+        Call("solved", **against), Call("solved", **answer)]
     assert _timeless(pooled) == _timeless(alone)
 
 
@@ -123,13 +58,13 @@ def test_a_dying_worker_reruns_the_same_board_in_this_process(
     """A BrokenProcessPool anywhere in the pooled pass drops the pool and runs
     the board again here: at the first round, and after the two optimal seats
     are solved, the Board is the one this process answers alone."""
-    alone, _ = _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=False)
-    _, whole = _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True)
+    alone, _ = traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=False)
+    _, whole = traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True)
     seated = [i for i, c in enumerate(whole) if c.what == "solved"][1] + 2
     for breaks_after in (1, seated):
-        board, trace = _traced_board(monkeypatch, synthetic_world, scratch_playbook,
-                                     pooled=True, breaks_after=breaks_after)
-        assert trace[breaks_after:] == [_Call("drop")], breaks_after
+        board, trace = traced_board(monkeypatch, synthetic_world, scratch_playbook,
+                                    pooled=True, breaks_after=breaks_after)
+        assert trace[breaks_after:] == [Call("drop")], breaks_after
         assert _timeless(board) == _timeless(alone), breaks_after
 
 
@@ -139,57 +74,15 @@ def test_a_board_without_the_countered_case_sends_none_of_its_rounds(
     countered round reaches the pool, the Board holds none and the verdict no
     hedge. The rest is the board the MCP tool gets."""
     from inference import engine
-    full, whole = _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True)
-    lean, trace = _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True,
-                                brief=engine.Brief(countered=False))
+    full, whole = traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True)
+    lean, trace = traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True,
+                               brief=engine.Brief(countered=False))
     assert trace == [c for c in whole if c.kw["pool"] != 4] != whole
     assert "your picks hold" in full.momentum["verdict"]
     assert lean.countered is None and lean.momentum["countered"] is None
     assert "your picks hold" not in lean.momentum["verdict"]
     assert ({k: v for k, v in _timeless(lean).items() if k not in ("countered", "momentum")}
             == {k: v for k, v in _timeless(full).items() if k not in ("countered", "momentum")})
-
-
-def test_a_superseded_search_cancels_every_task_that_has_not_started(
-        synthetic_world, scratch_playbook):
-    """Each round first asks whether a newer board from the same client has
-    replaced this one. Once one has, every task the board queued and no
-    worker took is cancelled, and the round raises Superseded - a Refusal,
-    which the doors answer 400 with no traceback."""
-    from concurrent.futures import Future
-
-    from db import Refusal
-    from inference import parallel, supersede
-
-    class Queued:
-        def submit(self, task, *args):
-            return Future()                   # queued: no worker has taken it
-    newer = []
-    watch = supersede.Watch(lambda: bool(newer))
-    run = parallel.Run(Queued(), synthetic_world, scratch_playbook, None, 6, watch)
-    split = parallel.Split(run, parallel.Spec(TRACED, 6), 3)
-    assert len(watch.futures) == 3 and not any(f.cancelled() for f in watch.futures)
-    newer.append("the next board")
-    with pytest.raises(supersede.Superseded):
-        split.rank_roster()
-    assert all(f.cancelled() for f in watch.futures)
-    assert issubclass(supersede.Superseded, Refusal)
-
-
-def test_a_superseded_board_is_not_solved_again_in_this_process(
-        monkeypatch, synthetic_world, scratch_playbook):
-    """A superseded pooled board is not a dead worker: it raises, the pool is
-    kept, and the board is not run a second time here."""
-    from inference import engine, supersede
-    checks, trace = [], []
-
-    def superseded():
-        checks.append(1)
-        return len(checks) > 4
-    with pytest.raises(supersede.Superseded):
-        _traced_board(monkeypatch, synthetic_world, scratch_playbook, pooled=True,
-                      brief=engine.Brief(superseded=superseded), trace=trace)
-    assert len(trace) == 4 and _Call("drop") not in trace
 
 
 @pytest.mark.invariant
