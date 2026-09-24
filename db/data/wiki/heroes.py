@@ -20,8 +20,12 @@ import collections
 import contextlib
 import datetime
 import re
+from collections.abc import Callable, Iterable, Mapping
+from typing import NotRequired, TypedDict
 
+import psycopg
 import requests
+from psycopg.sql import SQL
 
 from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON, psql
 from db.data import fetch
@@ -42,6 +46,42 @@ from db.data.wiki.weapons import (
 
 # --- extract: markup -> Python ---------------------------------------------
 
+# {stat code: (the value as text, the cell as the wiki wrote it)}
+Stats = dict[str, tuple[str, str]]
+
+
+class KitEntry(TypedDict):
+    """One Cargo row, cleaned: a weapon's firing mode, an ability or a perk."""
+    name: str
+    mode: str | None
+    input_key: str | None
+    keywords: str
+    description: str
+    stats: Stats
+    kind: NotRequired[str]                  # weapons and abilities: a KIND_* code
+    display_name: NotRequired[str]          # weapons and abilities
+    weapon_type: NotRequired[str | None]    # weapons
+    tier: NotRequired[str]                  # perks: minor or major
+
+
+# One hero's kit: (weapons, abilities, perks).
+Kit = tuple[list[KitEntry], list[KitEntry], list[KitEntry]]
+
+
+class Profile(TypedDict, total=False):
+    """A hero's pools from its infobox; empty when the article has none."""
+    health: int | None
+    shield: int | None
+    armor: int | None
+
+
+class Announcement(TypedDict):
+    """An upcoming hero, from its article."""
+    role: str
+    subrole: str
+    health: int | None
+    release_date: datetime.date | None
+
 # Columns that describe the ability rather than measure it.
 NON_STAT_FIELDS = frozenset(
     {"hero_name", "ability_name", "ability_type", "ability_key", "removed",
@@ -58,7 +98,7 @@ SLOT_RANK = {
 }
 
 
-def _slot_rank(entry):
+def _slot_rank(entry: KitEntry) -> int:
     for token in (entry["mode"], entry["input_key"]):
         rank = SLOT_RANK.get((token or "").strip().lower())
         if rank is not None:
@@ -66,7 +106,7 @@ def _slot_rank(entry):
     return 2
 
 
-def _ability_kind(base_type):
+def _ability_kind(base_type: str) -> str:
     """The wiki's ability_type -> a code from the shared vocabulary. The kind_id
     behind it comes from the ability_kinds table at write time, so the parser
     never has to know the numbers."""
@@ -80,9 +120,9 @@ def _ability_kind(base_type):
     return KIND_ABILITY
 
 
-def parse_rows(rows):
+def parse_rows(rows: Iterable[Mapping[str, str | None]]) -> dict[str, Kit]:
     """Cargo rows -> {hero_name: (weapons, abilities, perks)}."""
-    heroes = {}
+    heroes: dict[str, Kit] = {}
     for row in rows:
         # Cargo returns field names with spaces.
         fields = {key.replace(" ", "_"): value for key, value in row.items()}
@@ -100,7 +140,7 @@ def parse_rows(rows):
         if not base_type:
             continue
 
-        stats = {}
+        stats: Stats = {}
         for key, raw in fields.items():
             if key in NON_STAT_FIELDS or not raw:
                 continue
@@ -109,7 +149,7 @@ def parse_rows(rows):
             if value:
                 stats[code] = (value, raw)
 
-        entry = {
+        entry: KitEntry = {
             "name": name,
             "mode": mode,
             "input_key": markup.html_to_text(fields.get("ability_key")) or None,
@@ -138,7 +178,7 @@ def parse_rows(rows):
     return heroes
 
 
-def parse_hero_profile(text):
+def parse_hero_profile(text: str) -> Profile:
     """{health, shield, armor} for one hero, from its infobox.
 
     Blizzard publishes no hero health at all, and the wiki keeps it on the
@@ -147,20 +187,22 @@ def parse_hero_profile(text):
     """
     for block in markup.find_templates(text, r"Infobox character"):
         params = markup.parse_params(block)
-        profile = {}
-        for field in ("health", "shield", "armor"):
-            value = markup.wikitext_to_text(params.get(field, ""))
-            digits = re.match(r"\s*(\d+)", value)
-            profile[field] = int(digits.group(1)) if digits else None
-        return profile
+        return Profile(health=_pool(params, "health"), shield=_pool(params, "shield"),
+                       armor=_pool(params, "armor"))
     return {}
+
+
+def _pool(params: dict[str, str], field: str) -> int | None:
+    """An infobox's number for one pool, or None when it gives none."""
+    digits = re.match(r"\s*(\d+)", markup.wikitext_to_text(params.get(field, "")))
+    return int(digits.group(1)) if digits else None
 
 
 UPCOMING_RE = re.compile(r"\{\{\s*Upcoming\s*\}\}", re.I)
 RELEASE_RE = re.compile(r"release[^.]{0,80}?\bon\s+([A-Z][a-z]+ \d{1,2}, \d{4})")
 
 
-def parse_announcement(text):
+def parse_announcement(text: str | None) -> Announcement | None:
     """An article marked {{Upcoming}} -> {role, subrole, health, release_date}
     from its infobox and its release sentence; None for a released hero (no
     marker) or an infobox without a role."""
@@ -174,19 +216,21 @@ def parse_announcement(text):
             return None
         health = re.match(r"\s*(\d+)", markup.wikitext_to_text(params.get("health", "")))
         released = RELEASE_RE.search(markup.wikitext_to_text(text))
-        release_date = None
+        release_date: datetime.date | None = None
         if released:
             # a date the wiki spells another way leaves release_date as it is
             with contextlib.suppress(ValueError):
                 release_date = datetime.datetime.strptime(released.group(1),
                                                           "%B %d, %Y").date()
-        return {"role": role, "subrole": subrole,
-                "health": int(health.group(1)) if health else None,
-                "release_date": release_date}
+        return Announcement(role=role, subrole=subrole,
+                            health=int(health.group(1)) if health else None,
+                            release_date=release_date)
     return None
 
 
-def announce_heroes(cursor, session, names, hero_ids, cache_dir, source_id, log=print):
+def announce_heroes(cursor: psycopg.Cursor, session: requests.Session, names: Iterable[str],
+                    hero_ids: dict[str, int], cache_dir: str | None, source_id: int,
+                    log: Callable[[str], None] = print) -> tuple[list[str], list[str]]:
     """Heroes the Cargo table names that the roster lacks: those whose
     article is marked upcoming get a row - role, subrole, health, release
     day, status announced - so their kit loads and the board can show
@@ -194,7 +238,8 @@ def announce_heroes(cursor, session, names, hero_ids, cache_dir, source_id, log=
     (the names stored, the pages that would not fetch), and adds each stored
     hero's id to `hero_ids`, which the kit and ability lookups that follow
     read; the rest stay unknown."""
-    stored, missing = [], []
+    stored: list[str] = []
+    missing: list[str] = []
     for hero_name in sorted(names):
         if hero_name.lower() in hero_ids:
             continue
@@ -223,7 +268,7 @@ def announce_heroes(cursor, session, names, hero_ids, cache_dir, source_id, log=
             " RETURNING hero_id",
             (slug, hero_name, role_id, subrole_id, found["health"], found["release_date"],
              source_id))
-        hero_ids[hero_name.lower()] = cursor.fetchone()[0]
+        hero_ids[hero_name.lower()] = psql.scalar(cursor)
         stored.append(hero_name)
         log("announced hero stored: %s (%s, %s%s)" % (
             hero_name, found["role"], found["subrole"],
@@ -287,17 +332,18 @@ RETIRED_BLOCK_RE = re.compile(r"\(old\)\s*$", re.I)
 REF_RE = re.compile(r"<ref\b[^>]*/>|<ref\b[^>]*>.*?</ref>", re.I | re.S)
 
 
-def supplement_from_wikitext(session, hero_name, cache_dir):
+def supplement_from_wikitext(session: requests.Session, hero_name: str,
+                             cache_dir: str | None) -> tuple[dict[str, Stats], Profile]:
     """One hero page -> ({ability ability_key: {stat: ...}}, {health/shield/armor}).
     A page that will not fetch raises; run() records it among the pull's missing."""
     text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
-    extra = {}
+    extra: dict[str, Stats] = {}
     for block in markup.find_templates(text, r"Ability[ _]details"):
         params = markup.parse_params(block)
         name = markup.wikitext_to_text(params.get("ability_name", ""))
         if not name or RETIRED_BLOCK_RE.search(name):
             continue
-        stats = {}
+        stats: Stats = {}
         for code in SUPPLEMENT_FIELDS:
             value = markup.wikitext_to_text(REF_RE.sub("", params.get(code, "")))
             if value:
@@ -307,7 +353,8 @@ def supplement_from_wikitext(session, hero_name, cache_dir):
     return extra, parse_hero_profile(text)
 
 
-def _insert_modifiers(cursor, ability_id, entry, key_ids, source_id):
+def _insert_modifiers(cursor: psycopg.Cursor, ability_id: int, entry: KitEntry,
+                      key_ids: dict[str, int], source_id: int) -> int:
     """Store the buffs and debuffs an ability applies to someone's numbers."""
     written = 0
     for code, (value_text, _) in entry["stats"].items():
@@ -336,9 +383,10 @@ def _insert_modifiers(cursor, ability_id, entry, key_ids, source_id):
     return written
 
 
-def _register_stat_keys(cursor, codes, source_id):
+def _register_stat_keys(cursor: psycopg.Cursor, codes: Iterable[str],
+                        source_id: int) -> dict[str, int]:
     """Upsert the stat keys and return {code: stat_key_id}."""
-    ids = {}
+    ids: dict[str, int] = {}
     for code in sorted(codes):
         cursor.execute(
             "INSERT INTO stat_keys (code, label, unit, source_id)"
@@ -347,13 +395,22 @@ def _register_stat_keys(cursor, codes, source_id):
             " unit = EXCLUDED.unit RETURNING stat_key_id",
             (code, code.replace("_", " "), STAT_UNITS.get(code), source_id),
         )
-        ids[code] = cursor.fetchone()[0]
+        ids[code] = psql.scalar(cursor)
     return ids
 
 
-def _insert_stats(cursor, table, owner_column, owner_id, stats, key_ids, source_id):
+def _insert_stats(cursor: psycopg.Cursor, table: str, owner_column: str, owner_id: int,
+                  stats: Stats, key_ids: dict[str, int], source_id: int) -> int:
     """Write one row per measurement. Returns how many rows were written."""
-    table, owner_column = psql.identifier(table), psql.identifier(owner_column)
+    insert = SQL(
+        "INSERT INTO {table} ({owner}, stat_key_id, value, unit_numerator,"
+        " unit_denominator, denominator_value, condition, value_text,"
+        " raw_value, source_id)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        " ON CONFLICT ({owner}, stat_key_id, value, unit_numerator,"
+        " unit_denominator, denominator_value, condition, value_text)"
+        " DO NOTHING").format(table=psql.identifier(table),
+                              owner=psql.identifier(owner_column))
     written = 0
     for code, (value_text, raw) in stats.items():
         default_unit = STAT_UNITS.get(code)
@@ -364,14 +421,7 @@ def _insert_stats(cursor, table, owner_column, owner_id, stats, key_ids, source_
             if denominator is None and implied and value is not None:
                 denominator, window = implied, 1
             cursor.execute(
-                "INSERT INTO %s (%s, stat_key_id, value, unit_numerator,"
-                " unit_denominator, denominator_value, condition, value_text,"
-                " raw_value, source_id)"
-                " VALUES (%%s, %%s, %%s, %%s, %%s, %%s, %%s, %%s, %%s, %%s)"
-                " ON CONFLICT (%s, stat_key_id, value, unit_numerator,"
-                " unit_denominator, denominator_value, condition, value_text)"
-                " DO NOTHING"
-                % (table, owner_column, owner_column),
+                insert,
                 (owner_id, key_ids[code], value, numerator, denominator, window,
                  condition, text, raw, source_id),
             )
@@ -379,7 +429,9 @@ def _insert_stats(cursor, table, owner_column, owner_id, stats, key_ids, source_
     return written
 
 
-def _load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally):
+def _load_weapons(cursor: psycopg.Cursor, hero_id: int, weapons: list[KitEntry],
+                  key_ids: dict[str, int], source_id: int,
+                  tally: collections.Counter[str]) -> None:
     """Weapons, their firing configs (with keywords), and the stats on each."""
     for position, (weapon_name, configs) in enumerate(group_weapons(weapons)):
         cursor.execute(
@@ -414,8 +466,10 @@ def _load_weapons(cursor, hero_id, weapons, key_ids, source_id, tally):
             )
 
 
-def _load_abilities(cursor, hero_id, weapon_entries, entries, key_ids, kind_ids,
-                   source_id, tally):
+def _load_abilities(cursor: psycopg.Cursor, hero_id: int, weapon_entries: list[KitEntry],
+                    entries: list[KitEntry], key_ids: dict[str, int],
+                    kind_ids: dict[str, int], source_id: int,
+                    tally: collections.Counter[str]) -> None:
     """Classify the abilities Blizzard loaded, add the ones it omits, stat
     them, store their keywords. Weapon entries take part ONLY to classify."""
     existing = {
@@ -425,10 +479,10 @@ def _load_abilities(cursor, hero_id, weapon_entries, entries, key_ids, kind_ids,
             (hero_id,),
         ).fetchall()
     }
-    next_position = cursor.execute(
+    next_position = psql.scalar(cursor.execute(
         "SELECT coalesce(max(position), -1) + 1 FROM abilities WHERE hero_id = %s",
         (hero_id,),
-    ).fetchone()[0]
+    ))
 
     for entry in weapon_entries:
         for candidate in (entry["name"], entry.get("display_name", "")):
@@ -480,7 +534,9 @@ def _load_abilities(cursor, hero_id, weapon_entries, entries, key_ids, kind_ids,
         )
 
 
-def _load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
+def _load_perks(cursor: psycopg.Cursor, hero_id: int, perks: list[KitEntry],
+                key_ids: dict[str, int], source_id: int,
+                tally: collections.Counter[str]) -> None:
     """Perk stats, and the link from a perk to the ability it alters."""
     ability_names = [
         row[0] for row in cursor.execute(
@@ -493,9 +549,9 @@ def _load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
             "SELECT name, perk_id FROM perks WHERE hero_id = %s", (hero_id,)
         ).fetchall()
     }
-    if not perk_ids and perks and cursor.execute(
+    if not perk_ids and perks and psql.scalar(cursor.execute(
             "SELECT status FROM heroes WHERE hero_id = %s", (hero_id,)
-            ).fetchone()[0] == "announced":
+            )) == "announced":
         # Blizzard has not published the hero yet: the wiki's perks are the
         # only ones, so they get rows of their own (Blizzard's replace them)
         position = {"minor": 0, "major": 0}
@@ -535,7 +591,9 @@ def _load_perks(cursor, hero_id, perks, key_ids, source_id, tally):
             tally["perk_links"] += cursor.rowcount
 
 
-def run(connection, cache_dir=None, session=None, supplement=True, log=print):
+def run(connection: psycopg.Connection, cache_dir: str | None = None,
+        session: requests.Session | None = None, supplement: bool = True,
+        log: Callable[[str], None] = print) -> dict[str, object]:
     """Pull the Cargo table (and each hero article), clean, store."""
     session = fetch.session(session)
 
@@ -543,7 +601,9 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
     by_hero = parse_rows(rows)
     log("cargo rows: %d   heroes named: %d" % (len(rows), len(by_hero)))
 
-    profiles, supplemented, missing = {}, 0, []
+    profiles: dict[str, Profile] = {}
+    supplemented = 0
+    missing: list[str] = []
     if supplement:
         for hero_name, (weapons, abilities, perks) in sorted(by_hero.items()):
             try:
@@ -564,9 +624,9 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
     source_id = psql.register_source(cursor, WIKI, psql.now())
     for table in ("ability_modifiers", "perk_ability_effects", "perk_stats",
                   "weapon_stats", "ability_stats", "weapon_configs", "weapons"):
-        cursor.execute("DELETE FROM " + psql.identifier(table))
+        cursor.execute(SQL("DELETE FROM {}").format(psql.identifier(table)))
 
-    all_codes = set()
+    all_codes: set[str] = set()
     for weapons, abilities, perks in by_hero.values():
         for entry in weapons + abilities + perks:
             all_codes.update(entry["stats"])
@@ -577,8 +637,8 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
                                            source_id, log)
     missing += unfetched
 
-    tally = collections.Counter()
-    unknown_heroes = []
+    tally: collections.Counter[str] = collections.Counter()
+    unknown_heroes: list[str] = []
     for hero_name, profile in profiles.items():
         hero_id = hero_ids.get(hero_name.lower())
         if hero_id is None:
@@ -602,7 +662,7 @@ def run(connection, cache_dir=None, session=None, supplement=True, log=print):
         _load_perks(cursor, hero_id, perks, key_ids, source_id, tally)
     connection.commit()
 
-    summary = dict(tally)
+    summary: dict[str, object] = dict(tally)
     summary.update({
         "cargo_rows": len(rows), "supplemented": supplemented, "missing": missing,
         "unknown_heroes": sorted(unknown_heroes), "announced": announced,

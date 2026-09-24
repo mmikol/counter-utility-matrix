@@ -30,13 +30,20 @@ import re
 import sys
 import time
 import unicodedata
+from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import NamedTuple, NoReturn, TypedDict
+
+import psycopg
+from psycopg.sql import SQL
 
 from db import RAW_DIR, psql
 from db.mcp.server import AUDIT_PATH, RATE_LIMIT  # one definition: the door's own
 from inference import catalog as catalog_module
 
 EVERY = float(os.environ.get("COUNTRIX_SENTRY_EVERY", "30"))
+
+Log = Callable[[str], None]
 
 REPORT_PATH = os.path.join(RAW_DIR, "sentry.json")
 QUARANTINE = ".quarantined"
@@ -60,7 +67,7 @@ INJECTION = [re.compile(p, re.I | re.S) for p in (
 INVISIBLE = re.compile("[\u200b-\u200f\u2060\ufeff\u00ad]")
 
 
-def normalised(text):
+def normalised(text: str | None) -> str:
     """One shape for the scan: compatibility-folded, no zero-width characters."""
     return INVISIBLE.sub("", unicodedata.normalize("NFKC", text or ""))
 
@@ -70,7 +77,7 @@ TEXT_COLUMNS = (("abilities", ("description",)), ("perks", ("description",)),
                 ("seasons", ("name", "note")), ("strategies", ("body",)))
 
 
-def injected(text):
+def injected(text: str | None) -> str | None:
     """The first instruction-like pattern in `text`, or None."""
     text = normalised(text)
     for pattern in INJECTION:
@@ -80,7 +87,7 @@ def injected(text):
     return None
 
 
-def _quarantine(directory, name, why, log):
+def _quarantine(directory: str, name: str, why: str, log: Log) -> bool:
     src = os.path.join(directory, name)
     dst = src + QUARANTINE
     try:
@@ -92,11 +99,12 @@ def _quarantine(directory, name, why, log):
     return True
 
 
-def check_playbook(directory=None, log=print):
+def check_playbook(directory: str | None = None, log: Log = print
+                   ) -> tuple[list[str], list[catalog_module.Strategy] | None]:
     """Load the catalog; quarantine what will not load or reads like an
     instruction -> (quarantined names, catalog or None)."""
     directory = directory or catalog_module.strategies_dir()
-    quarantined = []
+    quarantined: list[str] = []
     for _ in range(100):
         try:
             cat = catalog_module.load(directory)
@@ -124,20 +132,18 @@ def check_playbook(directory=None, log=print):
     return quarantined, None
 
 
-def scan(cx):
+def scan(cx: psycopg.Connection) -> list[str]:
     """Instruction-like text in TEXT_COLUMNS over one connection -> flags, one
     per column at most. A table or column the database lacks is skipped; any
     other failure is a flag of its own, so the guard never reports clean about
     text it could not read."""
-    import psycopg
-    flags = []
+    flags: list[str] = []
     for table, columns in TEXT_COLUMNS:
         for column in columns:
             try:
                 rows = cx.execute(
-                    "SELECT %s FROM %s WHERE %s IS NOT NULL"
-                    % (psql.identifier(column), psql.identifier(table),
-                       psql.identifier(column))).fetchall()
+                    SQL("SELECT {col} FROM {table} WHERE {col} IS NOT NULL").format(
+                        col=psql.identifier(column), table=psql.identifier(table))).fetchall()
             except (psycopg.errors.UndefinedTable, psycopg.errors.UndefinedColumn):
                 cx.rollback()        # a schema this build does not have: nothing to read
                 continue
@@ -155,7 +161,7 @@ def scan(cx):
     return flags
 
 
-def check_database(dsn=None):
+def check_database(dsn: str | None = None) -> list[str]:
     """Instruction-like free text in the database -> flags."""
     try:
         import psycopg
@@ -167,14 +173,24 @@ def check_database(dsn=None):
         return ["database not scanned: %s" % type(error).__name__]
 
 
-def check_door(audit_path=None, offset=0):
+class DoorTally(NamedTuple):
+    """What the audit log says about the last minute, and where reading stopped."""
+    offset: int
+    recent: int
+    refused: int
+    crashed: int
+    hot: list[str | None]           # clients past the rate limit
+
+
+def check_door(audit_path: str | None = None, offset: int = 0) -> DoorTally:
     """Read the audit log from `offset` -> (new offset, calls in the last minute,
     refusals, crashes, clients past the limit)."""
     audit_path = audit_path or AUDIT_PATH
     now = time.time()
-    recent, refused, crashed, per_client = 0, 0, 0, {}
+    recent, refused, crashed = 0, 0, 0
+    per_client: dict[str | None, int] = {}
     if not os.path.exists(audit_path):
-        return 0, 0, 0, 0, []
+        return DoorTally(0, 0, 0, 0, [])
     size = os.path.getsize(audit_path)
     with open(audit_path, encoding="utf-8") as handle:
         # re-read the last minute's worth even when the offset is ahead: the
@@ -194,12 +210,25 @@ def check_door(audit_path=None, offset=0):
             crashed += 1 if entry.get("crashed") else 0
         offset = handle.tell()
     hot = [c for c, n in per_client.items() if n >= RATE_LIMIT]
-    return offset, recent, refused, crashed, hot
+    return DoorTally(offset, recent, refused, crashed, hot)
 
 
-def run_once(directory=None, audit_path=None, dsn=None, log=print,
-             report_path=None, scan_database=True, offset=0):
-    """One pass -> the report dict, also written to db/raw/sentry.json."""
+class Report(TypedDict):
+    """One pass, as db/raw/sentry.json holds it and `orchestrator.py status` reads it."""
+    checked_at: str
+    ok: bool
+    playbook: int | None
+    quarantined: list[str]
+    flags: list[str]
+    calls_last_minute: int
+    refused_last_minute: int
+    audit_offset: int
+
+
+def run_once(directory: str | None = None, audit_path: str | None = None,
+             dsn: str | None = None, log: Log = print, report_path: str | None = None,
+             scan_database: bool = True, offset: int = 0) -> Report:
+    """One pass -> the report, also written to db/raw/sentry.json."""
     quarantined, cat = check_playbook(directory, log)
     flags = check_database(dsn) if scan_database else []
     offset, recent, refused, crashed, hot = check_door(audit_path, offset)
@@ -207,12 +236,12 @@ def run_once(directory=None, audit_path=None, dsn=None, log=print,
         flags.append("%d tool call(s) crashed in the last minute" % crashed)
     if hot:
         flags.append("client(s) past the rate limit: %s" % ", ".join(str(c) for c in hot))
-    report = {"checked_at": datetime.now(UTC).isoformat(timespec="seconds"),
-              "ok": not quarantined and not flags and cat is not None,
-              "playbook": None if cat is None else len(cat),
-              "quarantined": quarantined, "flags": flags,
-              "calls_last_minute": recent, "refused_last_minute": refused,
-              "audit_offset": offset}
+    report = Report(checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
+                    ok=not quarantined and not flags and cat is not None,
+                    playbook=None if cat is None else len(cat),
+                    quarantined=quarantined, flags=flags,
+                    calls_last_minute=recent, refused_last_minute=refused,
+                    audit_offset=offset)
     report_path = report_path or REPORT_PATH
     try:
         os.makedirs(os.path.dirname(report_path), exist_ok=True)
@@ -228,7 +257,8 @@ def run_once(directory=None, audit_path=None, dsn=None, log=print,
     return report
 
 
-def run_forever(every=EVERY, log=print, sleep=time.sleep):
+def run_forever(every: float = EVERY, log: Log = print,
+                sleep: Callable[[float], None] = time.sleep) -> NoReturn:
     log("sentry: watching the playbook, the database and the door every %gs" % every)
     offset = 0
     while True:
@@ -239,7 +269,7 @@ def run_forever(every=EVERY, log=print, sleep=time.sleep):
         sleep(every)
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if argv == ["--once"]:
         return 0 if run_once()["ok"] else 1

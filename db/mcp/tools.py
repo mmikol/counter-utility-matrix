@@ -14,6 +14,7 @@ import re
 import sys
 
 import psycopg
+from psycopg.sql import SQL
 
 from db import CACHE_DIRS, ROOT, embed, psql
 from db.data import fetch
@@ -277,7 +278,7 @@ def db_status(ctx):
                       "counters", "synergies", "strategies"):
                 if cx.execute("select to_regclass(%s)", (t,)).fetchone()[0]:
                     counts[t] = cx.execute(
-                        "select count(*) from " + psql.identifier(t)).fetchone()[0]
+                        SQL("select count(*) from {}").format(psql.identifier(t))).fetchone()[0]
             if "heroes" in counts:
                 counts["announced"] = cx.execute(
                     "select count(*) from heroes where status = 'announced'").fetchone()[0]

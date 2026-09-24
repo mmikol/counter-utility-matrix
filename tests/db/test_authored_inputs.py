@@ -149,12 +149,15 @@ def test_the_migration_that_drops_counterpick_is_one_transaction():
 
 
 def test_a_table_name_that_reaches_sql_text_is_checked():
-    """psycopg parameterises values, never identifiers, so every writer that
-    names a table in the statement itself goes through psql.identifier. The
-    names all come from a literal or the catalog; this is what keeps it so."""
+    """psycopg parameterises values, never identifiers, so a name reaches SQL
+    text only as the sql.Identifier psql.identifier returns once the name has
+    passed its check. The names all come from a literal or the catalog; this
+    is what keeps it so."""
+    from psycopg.sql import Identifier
+
     from db.psql import identifier
     for good in ("heroes", "ability_stats", "weapon_configs", "hero_id", "_x9"):
-        assert identifier(good) == good
+        assert identifier(good) == Identifier(good)
     for bad in ("heroes; drop table heroes", "Heroes", "hero-id", "", None, "1table",
                 "heroes ", "heroes--", "*"):
         with pytest.raises(ValueError, match="not a SQL identifier"):

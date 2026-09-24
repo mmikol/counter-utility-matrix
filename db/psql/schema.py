@@ -12,7 +12,7 @@ import glob
 import os
 import re
 
-import psycopg
+from psycopg.sql import SQL, Identifier
 
 from db import ROOT, embed
 
@@ -92,12 +92,8 @@ def drop_all(connection):
             ).fetchall()
         ]
         if tables:
-            cursor.execute(
-                "DROP TABLE IF EXISTS %s CASCADE"
-                % ", ".join(
-                    psycopg.sql.Identifier(t).as_string(connection) for t in tables
-                )
-            )
+            cursor.execute(SQL("DROP TABLE IF EXISTS {} CASCADE").format(
+                SQL(", ").join(Identifier(t) for t in tables)))
     connection.commit()
     return tables
 

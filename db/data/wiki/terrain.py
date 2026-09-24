@@ -8,8 +8,11 @@ has about that stage. Both tables are reloaded wholesale.
 """
 
 import re
+from collections.abc import Callable
 
+import psycopg
 import requests
+from psycopg.sql import SQL
 
 from db import psql
 from db.data import fetch
@@ -59,9 +62,11 @@ MIN_WORDS = 60
 STAGE_MIN_WORDS = 20
 
 
-def sections(text):
+def sections(text: str) -> list[tuple[tuple[str, ...], str]]:
     """[(heading path, body)] in article order; the lead's path is ()."""
-    out, path, position = [], [], 0
+    out: list[tuple[tuple[str, ...], str]] = []
+    path: list[tuple[int, str]] = []
+    position = 0
     matches = list(HEADING_RE.finditer(text))
     for index, match in enumerate([None, *matches]):
         end = matches[index].start() if index < len(matches) else len(text)
@@ -74,7 +79,7 @@ def sections(text):
     return out
 
 
-def is_kept(path):
+def is_kept(path: tuple[str, ...]) -> bool:
     """A section is kept unless its heading, or one above it, is dropped; a
     rework's own section is kept regardless. The lead is dropped: it states
     the mode and the release date."""
@@ -85,7 +90,7 @@ def is_kept(path):
     return not any(DROPPED_HEADING_RE.search(title) for title in path)
 
 
-def stripped(body):
+def stripped(body: str) -> str:
     """A section's wikitext without what is dropped whole."""
     for pattern in (markup.COMMENT_RE, REF_RE, GALLERY_RE, TABLE_RE, FILE_RE):
         body = pattern.sub(" ", body)
@@ -95,7 +100,7 @@ def stripped(body):
     return BLANK_NOTICE_RE.sub(" ", body)
 
 
-def prose(body):
+def prose(body: str) -> str:
     """Stripped wikitext -> its prose, the list items that are names dropped."""
     lines = []
     for line in body.splitlines():
@@ -107,14 +112,15 @@ def prose(body):
     return markup.wikitext_to_text("\n".join(lines))
 
 
-def plain(body):
+def plain(body: str) -> str:
     """A section's wikitext -> its prose."""
     return prose(stripped(body))
 
 
-def paragraphs(body):
+def paragraphs(body: str) -> list[str]:
     """A section's wikitext -> the prose of each paragraph and list item."""
-    blocks, open_block = [], False
+    blocks: list[str] = []
+    open_block = False
     for line in stripped(body).splitlines():
         if not line.strip():
             open_block = False
@@ -126,7 +132,7 @@ def paragraphs(body):
     return [text for text in map(prose, blocks) if text]
 
 
-def terrain_text(text):
+def terrain_text(text: str) -> str:
     """The article's text about the ground: the infobox's terrain line, then
     every kept section's heading and prose."""
     parts = [markup.wikitext_to_text(m) for m in INFOBOX_TERRAIN_RE.findall(text)]
@@ -136,11 +142,11 @@ def terrain_text(text):
     return " . ".join(part for part in parts if part)
 
 
-def word_count(text):
+def word_count(text: str) -> int:
     return len(WORD_RE.findall(text))
 
 
-def stage_texts(text, stages, phases=False):
+def stage_texts(text: str, stages: list[str], phases: bool = False) -> dict[str, str]:
     """{stage: the article's text about it}, every stage present.
 
     A stage's text is every kept section under a heading that names it, and
@@ -157,7 +163,7 @@ def stage_texts(text, stages, phases=False):
         headings[stages[0]].update(stretches[:1])
         headings[stages[-1]].update(stretches[1:])
     named = {stage: re.compile(r"\b%s\b" % re.escape(stage)) for stage in stages}
-    parts = {stage: [] for stage in stages}
+    parts: dict[str, list[str]] = {stage: [] for stage in stages}
     for path, body in sections(text):
         if not is_kept(path):
             continue
@@ -176,7 +182,7 @@ def stage_texts(text, stages, phases=False):
 
 # --- the lexicon: one pattern per terrain feature --------------------------
 
-def _pattern(*alternatives):
+def _pattern(*alternatives: str) -> re.Pattern[str]:
     return re.compile(r"\b(?:%s)\b" % "|".join(alternatives), re.I)
 
 
@@ -274,40 +280,43 @@ FEATURES = {
 }
 
 
-def count_features(text):
+def count_features(text: str) -> dict[str, int]:
     """{feature: mentions} over a plain text, every feature present."""
     return {feature: len(pattern.findall(text))
             for feature, pattern in FEATURES.items()}
 
 
-def per_thousand(mentions, words):
+def per_thousand(mentions: int, words: int) -> float:
     return round(mentions * 1000.0 / words, 2) if words else 0.0
 
 
 # --- store ---------------------------------------------------------------------
 
-def _store(cursor, table, key, key_id, counts, words, source_id):
+def _store(cursor: psycopg.Cursor, table: str, key: str, key_id: int,
+           counts: dict[str, int], words: int, source_id: int) -> int:
+    insert = SQL("INSERT INTO {} ({}, feature, mentions, per_thousand, source_id)"
+                 " VALUES (%s, %s, %s, %s, %s)").format(psql.identifier(table),
+                                                        psql.identifier(key))
     for feature, mentions in counts.items():
         cursor.execute(
-            "INSERT INTO %s (%s, feature, mentions, per_thousand, source_id)"
-            " VALUES (%%s, %%s, %%s, %%s, %%s)"
-            % (psql.identifier(table), psql.identifier(key)),
-            (key_id, feature, mentions, per_thousand(mentions, words), source_id))
+            insert, (key_id, feature, mentions, per_thousand(mentions, words), source_id))
     return len(counts)
 
 
-def _counted(counts):
+def _counted(counts: dict[str, int]) -> str:
     return "  ".join("%s %d" % (f, n) for f, n in counts.items() if n)
 
 
-def run(connection, cache_dir=None, session=None, log=print):
+def run(connection: psycopg.Connection, cache_dir: str | None = None,
+        session: requests.Session | None = None,
+        log: Callable[[str], None] = print) -> dict[str, object]:
     session = fetch.session(session)
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())
     cursor.execute("DELETE FROM stage_terrain")
     cursor.execute("DELETE FROM map_terrain")
     maps = cursor.execute("SELECT map_id, name FROM maps ORDER BY name").fetchall()
-    stages = {}
+    stages: dict[int, tuple[bool, dict[str, int]]] = {}
     for map_id, stage_id, stage, hybrid in cursor.execute(
             "SELECT s.map_id, s.stage_id, s.name, EXISTS (SELECT 1 FROM map_modes mm"
             " JOIN game_modes g USING (mode_id)"
@@ -315,8 +324,9 @@ def run(connection, cache_dir=None, session=None, log=print):
             " FROM map_stages s ORDER BY s.map_id, s.position").fetchall():
         stages.setdefault(map_id, (hybrid, {}))[1][stage] = stage_id
 
-    rows, words_read, without_text = 0, 0, []
-    stage_rows, stages_read, missing = 0, 0, []
+    rows, words_read, stage_rows, stages_read = 0, 0, 0, 0
+    without_text: list[str] = []
+    missing: list[str] = []
     for map_id, name in maps:
         try:
             article = fetch_wikitext(session, name.replace(" ", "_"), cache_dir)

@@ -164,8 +164,9 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   Locally, `db_migrate` keeps the data; `db_rebuild` drops it.
 - Over stdio, stdout is the JSON-RPC wire. Code reachable from a tool logs
   through `ctx.log` or stderr, never `print`. A refusal raises `ToolError`.
-- SQL identifiers go through `db.psql.identifier()`; values are always
-  parameters.
+- A table or column name reaches SQL only as the `psycopg.sql.Identifier`
+  that `db.psql.identifier()` returns, composed with `psycopg.sql.SQL`;
+  values are always parameters.
 - Pulls read only Blizzard's site and the wiki, through the page caches,
   each at its own pace: `fetch.cached_get` for Blizzard pages, 5 s for the
   rates (`db/data/blizzard/meta.py`), the wiki's own client with a 0.5 s delay

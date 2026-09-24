@@ -82,13 +82,16 @@ text as SQL or change settings are withdrawn from `PUBLIC`. The statement
 runs read-only under a ten-second timeout; the first 200 rows come back,
 a result is capped at a megabyte, cells at two thousand characters.
 
-**A table name in the statement is checked.** psycopg parameterises values
-and never identifiers, so the writers that name a table or column in the
-SQL text itself - the exports, the stat inserts, the terrain store, the
-lookups, the sentry's scan - pass the name through `psql.identifier()`,
-which refuses anything but lowercase, digits and underscores. Every such
-name comes from a literal or from the catalog today; the check is what
-keeps a later caller from changing that quietly.
+**A table name in the statement is checked and quoted.** psycopg
+parameterises values and never identifiers, so the writers that name a
+table or column in the SQL text itself - the exports, the stat inserts,
+the terrain store, the lookups, the sentry's scan, `db_status`'s counts -
+pass the name through `psql.identifier()`, which refuses anything but
+lowercase, digits and underscores and returns a `psycopg.sql.Identifier`.
+The statement is composed with `psycopg.sql.SQL`, which quotes it; no name
+is spliced into SQL text with `%` or `+`. Every such name comes from a
+literal or from the catalog today; the check is what keeps a later caller
+from changing that quietly.
 
 **Files are written by validated tools only.** A strategy's id is its
 filename, lowercase-kebab and nothing else, so no path leaves the folder

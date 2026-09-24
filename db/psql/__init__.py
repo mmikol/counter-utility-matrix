@@ -4,8 +4,12 @@
                        db/psql/cluster (pgserver, first touch)
     register_source    the `sources` row a page or a file becomes, upserted;
                        every table's rows carry its source_id
+    identifier         a table or column name on its way into SQL text,
+                       checked and quoted
     lookup_ids         {name: id} for matching what a source says against
                        what is loaded
+    scalar             the one value a statement returns: a count, an
+                       upsert's RETURNING
     now, current_patch, current_season
                        what a capture is stamped with
     export             the CSV mirror under db/raw, and its mark
@@ -18,6 +22,10 @@ import json
 import os
 import re
 from datetime import UTC, datetime
+from typing import Any
+
+import psycopg
+from psycopg.sql import SQL, Identifier
 
 from db import DEFAULT_DB_DIR, RAW_DIR
 
@@ -46,14 +54,16 @@ def default_dsn():
 IDENTIFIER_RE = re.compile(r"[a-z_][a-z0-9_]*\Z")
 
 
-def identifier(name):
-    """A table or column name on its way into SQL text, checked. psycopg
+def identifier(name: str) -> Identifier:
+    """A table or column name on its way into SQL text: checked against the
+    lowercase allowlist IDENTIFIER_RE, then quoted by psycopg. psycopg
     parameterises values and never identifiers, so every writer that names a
-    table in the statement itself passes it through here: the names all come
-    from a literal or from the catalog today, and this is what keeps it so."""
+    table in the statement itself composes it with psycopg.sql through here.
+    The names all come from a literal or from the catalog today, and this is
+    what keeps it so."""
     if not IDENTIFIER_RE.match(name or ""):
         raise ValueError("not a SQL identifier: %r" % (name,))
-    return name
+    return Identifier(name)
 
 
 def lookup_ids(cursor, table, name_column, id_column):
@@ -61,10 +71,20 @@ def lookup_ids(cursor, table, name_column, id_column):
     return {
         row[0].lower(): row[1]
         for row in cursor.execute(
-            "SELECT %s, %s FROM %s"
-            % (identifier(name_column), identifier(id_column), identifier(table))
+            SQL("SELECT {}, {} FROM {}").format(
+                identifier(name_column), identifier(id_column), identifier(table))
         ).fetchall()
     }
+
+
+def scalar(cursor: psycopg.Cursor[Any]) -> Any:
+    """The first column of the row the last statement returned - an aggregate,
+    an upsert's RETURNING, a lookup by key - for a statement that always
+    returns one. No row is a bug in the statement, and raises."""
+    row = cursor.fetchone()
+    if row is None:
+        raise RuntimeError("a statement that always returns a row returned none")
+    return row[0]
 
 
 def now():
@@ -137,17 +157,17 @@ def export(connection, raw_dir=RAW_DIR):
     counts = []
     for table in table_names(connection):
         path = os.path.join(raw_dir, table + ".csv")
+        name = identifier(table)
         with open(path, "w", encoding="utf-8", newline="") as handle, connection.cursor().copy(
-                "COPY (SELECT * FROM %s) TO STDOUT WITH (FORMAT csv, HEADER true)"
-                % identifier(table)
-                ) as copy:
+                SQL("COPY (SELECT * FROM {}) TO STDOUT WITH (FORMAT csv, HEADER true)")
+                .format(name)) as copy:
             for chunk in copy:
                 handle.write(bytes(chunk).decode("utf-8"))
         # Counted from the database, not by counting newlines: descriptions
         # embed newlines, which inflates the latter.
         counts.append(
             (table, connection.execute(
-                "SELECT count(*) FROM " + identifier(table)).fetchone()[0])
+                SQL("SELECT count(*) FROM {}").format(name)).fetchone()[0])
         )
     current = {table + ".csv" for table, _ in counts}
     for stale in sorted(set(os.listdir(raw_dir)) - current):
