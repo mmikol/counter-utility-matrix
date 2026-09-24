@@ -7,6 +7,10 @@ the solver still reaches. Run from the repo root:
 
     OPTIMAL_SOURCES=~/countrix-study/brute/proof100.jsonl .venv/bin/python -m scripts.optimal
 
+OPTIMAL_KEEP caps the boards kept (20), and OPTIMAL_STALE_BANNED=0 lets the
+boards with bans back in once they are proven again (it is 1, holding them
+out, by default).
+
 The fixture records the digest of the playbook in force (COUNTRIX_STRATEGIES
 selects another), and the gate refuses boards proved under a different one, so
 that playbook must be the one the enumeration ran under.

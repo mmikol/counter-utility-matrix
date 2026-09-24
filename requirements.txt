@@ -14,6 +14,6 @@ pgserver==0.1.4; sys_platform == "darwin" or platform_machine in "x86_64 AMD64"
 
 # Development
 pytest>=7.0
-ruff>=0.16          # the linter: pycodestyle, pyflakes, isort, bugbear ... (pyproject.toml)
+ruff==0.16.7        # the linter (pyproject.toml); pinned, since a new release finds new errors in old code
 mypy==2.3.1         # the types (pyproject.toml); pinned, since a new release finds new errors in old code
 pytest-cov>=7.0     # coverage; the bar is in pyproject.toml
