@@ -250,10 +250,11 @@ refuses a banned pick, an unknown hero, or a hero on both teams.
 
 What a Hero, a Map and the World hand to the metrics, the facts engine and
 the solver, each shape declared once: a hero's `Modifier`s, `PerkEffect`s,
-`Rates` per tier and `MapRate` per map; a stage's `StageTerrain`; the
-World's `Synergy` pairs, `Snapshot` provenance and the `Patch`es newer
-than the rates. `Snapshot` is a TypedDict and the rest are NamedTuples, so
-a reader that unpacks one still does.
+`Rates` per tier and `MapRate` per map; a stage's `StageTerrain` and a
+map's `StyleScore` per playstyle; the World's `Synergy` pairs, `Snapshot`
+provenance and the `Patch`es newer than the rates. `Snapshot` is a
+TypedDict and the rest are NamedTuples, so a reader that unpacks one still
+does.
 
 ### `tables.py` - the load
 
@@ -322,7 +323,7 @@ keys once and in registry order. Beside them rides `_answered`, the
 answering picks per enemy the facts engine words; the solver asks for
 the bag `lean=True`, which leaves it empty. `MetricBag` is the shape every
 metric section comes in: a dict of `MetricValue`, a count or figure, a
-name, a name list, the synergy pairs, the style tally or the answers.
+name, a name list, the `SynergyPair`s, the style tally or the answers.
 `number`, `text`, `names` and their siblings read a value as the kind a
 caller needs and refuse any other, so a text metric never reaches
 arithmetic unnoticed.

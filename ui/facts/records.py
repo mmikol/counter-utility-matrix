@@ -44,6 +44,13 @@ class StageTerrain(NamedTuple):
     mentions: int
 
 
+class StyleScore(NamedTuple):
+    """How much a map rewards one playstyle, in sd: the rates' lift plus the
+    terrain's lean. The load writes no note: it is always None."""
+    score: float
+    note: None
+
+
 # --- the World's ---------------------------------------------------------
 
 class Synergy(NamedTuple):

@@ -43,7 +43,7 @@ from ui.facts.factset import PLAYBOOK_SCOPE, FactSet
 from ui.facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Map, Resolved, World
 
 
-def _g(value: object) -> str:
+def _g(value: float) -> str:
     return "%g" % value if isinstance(value, float) else str(value)
 
 
@@ -164,11 +164,11 @@ def _map_terrain(fs: FactSet, m: Map) -> None:
             fs.add("map", m.name, "map.stage_terrain",
                 "%s - %s: %s" % (m.name, stage, "; ".join(
                     "%s, %.1f sd above the ordinary stage (%d mentions in the wiki's article)"
-                    % (f.replace("_", " "), z, m.stage_terrain[stage][f][1])
+                    % (f.replace("_", " "), z, m.stage_terrain[stage][f].mentions)
                     for f, z in standouts)),
                 value={"stage": stage, "features": [
-                    {"feature": f, "z": z, "per_thousand": m.stage_terrain[stage][f][0],
-                        "mentions": m.stage_terrain[stage][f][1]} for f, z in standouts]},
+                    {"feature": f, "z": z, "per_thousand": m.stage_terrain[stage][f].per_thousand,
+                        "mentions": m.stage_terrain[stage][f].mentions} for f, z in standouts]},
                 source="stage_terrain")
     if m.terrain:
         for feature in sorted(TERRAIN_FEATURES, key=lambda f: (-abs(m.terrain_z[f]), f)):

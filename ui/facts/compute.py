@@ -16,7 +16,7 @@ which the description says) and `map.known` tells a strategy which.
 
 from collections import OrderedDict
 from collections.abc import Iterable, Sequence
-from typing import TypedDict
+from typing import NamedTuple, TypedDict
 
 from ui.facts.draft import EXPECTED_SHAPE, is_sided
 from ui.facts.model import ROLES, TERRAIN_FEATURES, Hero, Map, World
@@ -204,15 +204,21 @@ def phases(m: Map | None) -> list[str]:
     return list(m.stages) if m is not None and is_sided(m) else []
 
 
-def stage_standouts(m: Map, stage: str) -> list[tuple[str, float]]:
-    """[(feature, z)] a stage's own text stresses: z at or over TERRAIN_STANDOUT
+class Standout(NamedTuple):
+    """A terrain feature a stage's own text stresses, and its z there."""
+    feature: str
+    z: float
+
+
+def stage_standouts(m: Map, stage: str) -> list[Standout]:
+    """The features a stage's own text stresses: z at or over TERRAIN_STANDOUT
     on STAGE_MENTIONS or more mentions, largest first, STAGE_FEATURES at most.
     Stage texts are short: one mention swings the rate, and none says nothing."""
     terrain, z = m.stage_terrain.get(stage, {}), m.stage_z.get(stage, {})
-    found = [(f, z[f]) for f in TERRAIN_FEATURES
+    found = [Standout(f, z[f]) for f in TERRAIN_FEATURES
             if f in terrain and z.get(f, 0.0) >= TERRAIN_STANDOUT
-            and terrain[f][1] >= STAGE_MENTIONS]
-    return sorted(found, key=lambda fz: (-fz[1], fz[0]))[:STAGE_FEATURES]
+            and terrain[f].mentions >= STAGE_MENTIONS]
+    return sorted(found, key=lambda s: (-s.z, s.feature))[:STAGE_FEATURES]
 
 
 def map_metrics(m: Map | None, side: str = "", *, ban_count: int) -> MetricBag:

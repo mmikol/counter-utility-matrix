@@ -28,6 +28,7 @@ from ui.facts.records import (
     Rates,
     Snapshot,
     StageTerrain,
+    StyleScore,
     Synergy,
 )
 from ui.facts.scalars import derive
@@ -99,7 +100,8 @@ def map_styles(w: World) -> None:
     """Map.rate_lift[S]: for a playstyle S and a map, the mean, over released
     heroes tagged S, each weighted 1/(its tag count), of the hero's win rate
     on the map minus its overall win rate, z-scored across the maps.
-    Map.styles[S] = (rate_lift[S] + terrain_lean[S], None); a missing half is 0."""
+    Map.styles[S]: StyleScore(rate_lift[S] + terrain_lean[S]); a missing half
+    is 0."""
     rated = sorted(
         ((h, h.win) for h in w.heroes.values() if h.released and h.styles and h.win is not None),
         key=lambda pair: pair[0].id)
@@ -121,7 +123,7 @@ def map_styles(w: World) -> None:
             w.maps[mid].rate_lift[style] = z
     for m in maps:
         m.styles = {
-            s: (round(m.rate_lift.get(s, 0.0) + m.terrain_lean.get(s, 0.0), 3), None)
+            s: StyleScore(round(m.rate_lift.get(s, 0.0) + m.terrain_lean.get(s, 0.0), 3), None)
             for s in sorted(set(m.rate_lift) | set(m.terrain_lean))}
 
 
@@ -133,8 +135,8 @@ def best_maps(w: World) -> None:
         if overall is None:
             continue
         lifts = sorted(
-            (-round(win - overall, 3), w.maps[mid].name, mid)
-            for mid, (win, _) in h.map_rates.items() if win > overall)
+            (-round(rate.win - overall, 3), w.maps[mid].name, mid)
+            for mid, rate in h.map_rates.items() if rate.win > overall)
         h.best_maps = [mid for _, _, mid in lifts[:3]]
 
 

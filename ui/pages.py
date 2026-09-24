@@ -9,6 +9,7 @@ these; nothing here reads the database or knows a route's handler.
 
 import html
 import os
+from typing import NamedTuple
 
 from ui.facts.draft import MAX_BANS, TEAM_SIZE
 
@@ -46,8 +47,14 @@ STATIC_TYPES = {".css": "text/css; charset=utf-8",
                 ".woff2": "font/woff2"}
 
 
-def static_file(name: str) -> tuple[bytes, str] | None:
-    """(bytes, content type) for a file under ui/static, or None."""
+class StaticFile(NamedTuple):
+    """A file under ui/static as it is served: its bytes and content type."""
+    body: bytes
+    content_type: str
+
+
+def static_file(name: str) -> StaticFile | None:
+    """A file under ui/static, or None where the name is not one served."""
     ext = os.path.splitext(name)[1]
     if "/" in name or ".." in name or ext not in STATIC_TYPES:
         return None
@@ -55,7 +62,7 @@ def static_file(name: str) -> tuple[bytes, str] | None:
     if not os.path.isfile(path):
         return None
     with open(path, "rb") as handle:
-        return handle.read(), STATIC_TYPES[ext]
+        return StaticFile(handle.read(), STATIC_TYPES[ext])
 
 
 # --- the pages -------------------------------------------------------------------

@@ -238,7 +238,7 @@ def _hero_rate_flags(fs: FactSet, h: Hero, team: str) -> None:
     """What the rates warn of: a rank-sensitive hero, a moving one, a likely ban."""
     name = h.name
     if h.rank_spread >= RANK_SENSITIVE:
-        lo = min(w[0] for w in h.by_tier.values() if w[0] is not None)
+        lo = min(r.win for r in h.by_tier.values() if r.win is not None)
         fs.add("hero", name, "hero.rank_sensitivity", "RANK-SENSITIVE: %s swings %.1f"
             " points across ranks (%.1f%%-%.1f%%)"
             % (name, h.rank_spread, lo, lo + h.rank_spread), value=h.rank_spread,
@@ -257,7 +257,7 @@ def _hero_best_maps(fs: FactSet, world: World, h: Hero, team: str) -> None:
     line per map - with a map, the facts on it are the whole story."""
     name = h.name
     if h.map_rates:
-        best = sorted(h.map_rates.items(), key=lambda kv: -kv[1][0])[:3]
+        best = sorted(h.map_rates.items(), key=lambda kv: -kv[1].win)[:3]
         fs.add("hero", name, "hero.rate_maps", "%s's best maps: %s" % (name, ", ".join(
             "%s (%.1f%%)" % (world.maps[mid].name, win) for mid, (win, _) in best)),
             value=[world.maps[mid].name for mid, _ in best], source="map_meta", team=team)

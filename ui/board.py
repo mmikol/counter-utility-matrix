@@ -92,7 +92,9 @@ def read_only() -> bool:
     return os.environ.get("COUNTRIX_READ_ONLY", "1").lower() not in ("0", "no", "false")
 
 
-def remote(path: str, query: Mapping[str, object] | None = None, payload: object = None) -> Reply:
+def remote(
+        path: str, query: Mapping[str, str | Sequence[str]] | None = None,
+        payload: object = None) -> Reply:
     """Forward to the inference service -> (json, status). A service that
     does not answer is a 502, and a line on stderr naming why."""
     url = inference_url() + path
@@ -148,7 +150,7 @@ def api_board(query: Query) -> Reply:
     weights = catalog_module.parse_weights(query.get("weights", []))
     client = (query.get("client") or [""])[0]
     if inference_url():
-        forward: dict[str, object] = dict(board_query(draft))
+        forward: dict[str, str | list[str]] = dict(board_query(draft))
         if weights:
             forward["weights"] = ["%s:%g" % kv for kv in sorted(weights.items())]
         if client:
@@ -274,8 +276,8 @@ class Handler(web.Handler):
                 served = pages.static_file(path[len("/static/"):])
                 if served is None:
                     return self._not_found(path)
-                data, ctype = served
-                return self._send(data, ctype, headers={"Cache-Control": "no-cache"})
+                return self._send(
+                    served.body, served.content_type, headers={"Cache-Control": "no-cache"})
             if path == "/math":
                 return self._html(pages.view_math())
             if path == "/tests":

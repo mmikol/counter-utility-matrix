@@ -23,6 +23,7 @@ from ui.facts.records import (
     Rates,
     Snapshot,
     StageTerrain,
+    StyleScore,
     Synergy,
 )
 
@@ -166,7 +167,7 @@ class Map:
         self.terrain_z = dict.fromkeys(TERRAIN_FEATURES, 0.0)   # see tables.map_terrain
         self.rate_lift: dict[str, float] = {}                   # style -> z: see tables.map_styles
         self.terrain_lean: dict[str, float] = {}                # style -> z: see tables.map_terrain
-        self.styles: dict[str, tuple[float, None]] = {}         # style -> (lift + lean, None)
+        self.styles: dict[str, StyleScore] = {}     # style -> score: see tables.map_styles
 
     @property
     def style_top(self) -> str | None:

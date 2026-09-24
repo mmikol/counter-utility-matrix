@@ -260,7 +260,7 @@ def _cohesion_facts(w: _TeamWriter, figures: dict[str, float]) -> None:
     if figures["size"] < 2:
         return
     label, metrics = w.label, w.metrics
-    pairs = "; ".join("%s+%s" % p[:2] for p in synergy_pairs(metrics["pairs"]))
+    pairs = "; ".join("%s+%s" % (p.first, p.second) for p in synergy_pairs(metrics["pairs"]))
     w.fact("synergy_edges", "%s cohesion: %d of %d possible synergy edges (density %.2f,"
         " score sum %d)%s" % (label, figures["synergy_edges"],
             figures["size"] * (figures["size"] - 1) // 2,

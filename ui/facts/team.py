@@ -13,6 +13,7 @@ readers narrow a value where one kind is read.
 import statistics
 from collections import Counter, OrderedDict
 from collections.abc import Iterable
+from typing import NamedTuple
 
 from ui.facts.draft import EXPECTED_SHAPE, TEAM_SIZE
 from ui.facts.model import SQUISHY_POOL, Hero, Map, World
@@ -134,11 +135,19 @@ TEAM_METRICS = OrderedDict([
 ])
 
 
+class SynergyPair(NamedTuple):
+    """A wiki synergy pair among the picks: its two heroes in pick order, and
+    its score out of 3 (0 where the wiki gives none)."""
+    first: str
+    second: str
+    score: int
+
+
 # A metric's value: a count or a figure, a name, the names it lists, the
-# synergy pairs (two names and the pair's score), the picks per style tag, or
-# the answering picks per enemy. The registry test pins which key holds which.
+# synergy pairs, the picks per style tag, or the answering picks per enemy.
+# The registry test pins which key holds which.
 MetricValue = (
-    int | float | str | list[str] | list[tuple[str, str, int]] | dict[str, int]
+    int | float | str | list[str] | list[SynergyPair] | dict[str, int]
     | dict[str, list[str]])
 MetricBag = dict[str, MetricValue]
 # the types a numeric metric holds: one tuple, built once, since the solver
@@ -177,8 +186,8 @@ def names(value: MetricValue) -> list[str]:
     raise TypeError("a metric read as names holds %r" % (value,))
 
 
-def synergy_pairs(value: MetricValue) -> list[tuple[str, str, int]]:
-    """team.pairs: each synergy pair as two names and the pair's score."""
+def synergy_pairs(value: MetricValue) -> list[SynergyPair]:
+    """team.pairs: the synergy pairs among the picks."""
     if isinstance(value, list):
         pairs = [x for x in value if isinstance(x, tuple)]
         if len(pairs) == len(value):
@@ -228,7 +237,7 @@ def team_metrics(world: World, heroes: Iterable[Hero], m: Map | None = None,
     meta = _meta(heroes, m, top_ban)
     return {**_shape(heroes, m), **_durability(heroes), **_damage(heroes),
             **_sustain(world, heroes), **_tools(heroes), **_cohesion(world, heroes),
-            **meta, **_on_map(heroes, m, meta["win_mean"], meta["pick_mass"]),
+            **meta, **_on_map(heroes, m, number(meta["win_mean"]), number(meta["pick_mass"])),
             **_versus(world, heroes, enemies, top_ban, lean)}
 
 
@@ -362,20 +371,20 @@ def _tools(heroes: list[Hero]) -> MetricBag:
 def _cohesion(world: World, heroes: list[Hero]) -> MetricBag:
     """The wiki's synergy pairs among the picks, and the graph they make."""
     n = len(heroes)
-    pairs: list[tuple[str, str, int]] = []
+    pairs: list[SynergyPair] = []
     adjacency: dict[int, set[int]] = {h.id: set() for h in heroes}
     for i, a in enumerate(heroes):
         for b in heroes[i + 1:]:
             edge = world.synergy(a.id, b.id)
             if edge:
-                pairs.append((a.name, b.name, edge[0] or 0))
+                pairs.append(SynergyPair(a.name, b.name, edge[0] or 0))
                 adjacency[a.id].add(b.id)
                 adjacency[b.id].add(a.id)
     possible = n * (n - 1) // 2
     # a hero the wiki pairs with no one at all is unknown, not alone: unknown is not a number
     isolated = [h.name for h in heroes
                 if n >= 2 and not adjacency[h.id] and world.partners.get(h.id)]
-    return {"synergy_edges": len(pairs), "synergy_score": sum(p[2] for p in pairs),
+    return {"synergy_edges": len(pairs), "synergy_score": sum(p.score for p in pairs),
             "synergy_density": len(pairs) / possible if possible else 0.0,
             "isolated_count": len(isolated), "isolated": isolated,
             "core_size": _largest_component(adjacency), "pairs": pairs}
@@ -400,8 +409,8 @@ def _meta(heroes: list[Hero], m: Map | None, top_ban: Hero | None) -> MetricBag:
             "trend_sum": sum(h.trend for h in heroes if h.trend is not None)}
 
 
-def _on_map(heroes: list[Hero], m: Map | None, win_mean: MetricValue,
-            pick_mass: MetricValue) -> MetricBag:
+def _on_map(heroes: list[Hero], m: Map | None, win_mean: float,
+            pick_mass: float) -> MetricBag:
     """The picks on this map's rates; without a map, the all-ranks figures the
     meta section read, and zeros."""
     if m is None:
