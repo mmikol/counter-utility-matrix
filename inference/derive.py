@@ -6,7 +6,8 @@ asks Claude Code in print mode (`claude -p`) - headless, on the
 subscription, no key - for a JSON answer, then stores it through
 tune.complete, which validates the fields against the catalog before
 anything is written. A refused answer is sent back once with the catalog's
-objection; a second refusal leaves the draft as it was.
+objection; a second refusal leaves the draft as it was. A run completes
+at most MAX_PER_RUN drafts; the rest wait for the next, counted as deferred.
 
     derive()                 every draft in inference/strategies/
     derive(["heal-line"])    one
@@ -21,11 +22,14 @@ import json
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404  # the claude CLI, run as an argv list, never a shell
 import tempfile
+from collections.abc import Callable, Collection, Iterable
+from typing import TypedDict
 
 from inference import catalog as catalog_module
 from inference import tune
+from inference.catalog import Strategy
 from ui.facts import compute
 
 CLI_ENV = "COUNTRIX_CLAUDE"
@@ -36,9 +40,27 @@ MAX_PER_RUN = 10            # drafts completed per run
 PROSE_CAP = 8000            # characters of a draft's prose shown to the model
 FIELDS = {"metric", "direction", "weight", "when", "require", "soft", "bonus", "penalty",
           "params", "kind", "category"}
+DERIVED_BY = "claude -p (derive)"     # who asked, in the tuning log's line
 
 
-def style_anchors(catalog):
+class Derived(TypedDict):
+    """One draft completed: the form it took and each field's text."""
+    id: str
+    form: str
+    set: dict[str, str]
+
+
+class DeriveResult(TypedDict):
+    """One derive() run: the drafts completed; the drafts refused twice, each
+    with the last objection; why the run stopped or never started, or None;
+    and how many drafts past MAX_PER_RUN wait for the next run."""
+    derived: list[Derived]
+    failed: dict[str, str]
+    skipped: str | None
+    deferred: int
+
+
+def style_anchors(catalog: Iterable[Strategy]) -> list[Strategy]:
     """The finished files the prompt shows as its style: one of each form the
     playbook holds, the first by id."""
     out, forms = [], set()
@@ -53,7 +75,7 @@ class CliUnavailableError(RuntimeError):
     """No usable CLI: absent, or not signed in. Drafts stay pending."""
 
 
-def cli():
+def cli() -> str | None:
     """The claude CLI to run, or None."""
     explicit = os.environ.get(CLI_ENV)
     if explicit:
@@ -65,11 +87,14 @@ def cli():
     return None
 
 
-def available():
+def available() -> bool:
+    """Whether the claude CLI is on this machine."""
     return cli() is not None
 
 
-def vocabulary():
+def vocabulary() -> str:
+    """The metric registry as the prompt shows it, one key a line; the enemy.*
+    mirror of team.* is left out."""
     reg = compute.registry()
     lines = []
     for key, meaning in reg.items():
@@ -79,7 +104,7 @@ def vocabulary():
     return "\n".join(lines)
 
 
-def prompt(draft, catalog, objection=None):
+def prompt(draft: Strategy, catalog: Iterable[Strategy], objection: str = "") -> str:
     """What the model is asked. Three inputs from the person; the rest inferred."""
     anchors = "\n\n".join(h.raw.split("\n---")[0] + "\n---" for h in style_anchors(catalog))
     fields = ('{"metric": "<numeric key>", "direction": "maximize|minimize", "weight": <1-4>}'
@@ -131,7 +156,14 @@ prose:
     return text
 
 
-def parse(output):
+def _is_params(value: object) -> bool:
+    """NAME: number pairs, a bool not counted as a number."""
+    return isinstance(value, dict) and all(
+        isinstance(k, str) and isinstance(v, (int, float)) and not isinstance(v, bool)
+        for k, v in value.items())
+
+
+def parse(output: str) -> tuple[dict[str, object], str]:
     """The JSON object in the model's answer -> (fields, reason)."""
     m = re.search(r"\{.*\}", output, re.S)
     if not m:
@@ -146,26 +178,24 @@ def parse(output):
     if "kind" in fields and fields["kind"] != "assumption":
         raise ValueError("a draft keeps its kind unless it turns out to be an assumption")
     params = fields.get("params")
-    if params is not None and not (isinstance(params, dict) and all(
-            isinstance(k, str) and isinstance(v, (int, float)) and not isinstance(v, bool)
-            for k, v in params.items())):
+    if params is not None and not _is_params(params):
         raise ValueError("params must be NAME: number")
     return fields, str(data.get("reason") or "derived from the prose")[:500]
 
 
-def run_cli(text, timeout=TIMEOUT):
+def run_cli(text: str, timeout: float = TIMEOUT) -> str:
     """Ask claude -p from a neutral directory (no project settings, no MCP
     servers) with no session inherited -> the answer text."""
     binary = cli()
     if not binary:
         raise RuntimeError("no claude CLI on this machine (set %s)" % CLI_ENV)
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
+    argv = [binary, "-p", "--output-format", "text", "--no-session-persistence",
+            "--strict-mcp-config", "--tools", "", "--max-turns", "2"]
     try:
-        done = subprocess.run([binary, "-p", "--output-format", "text",
-                               "--no-session-persistence", "--strict-mcp-config",
-                               "--tools", "", "--max-turns", "2"],
-                              input=text, capture_output=True, text=True, timeout=timeout,
-                              env=env, cwd=tempfile.gettempdir())
+        done = subprocess.run(  # nosec B603  # argv list, no shell; the prompt goes on stdin
+            argv, input=text, capture_output=True, text=True, timeout=timeout, env=env,
+            cwd=tempfile.gettempdir())
     except OSError as error:
         raise RuntimeError("could not run the claude CLI: %s" % error) from error
     if done.returncode != 0:
@@ -177,56 +207,69 @@ def run_cli(text, timeout=TIMEOUT):
     return done.stdout
 
 
-def derive(ids=None, directory=None, runner=run_cli, log=print, by="claude -p (derive)"):
-    """Complete every draft (or the named ones) -> {"derived": [...], "failed": {...},
-    "skipped": reason|None}."""
+def _pending(catalog: Iterable[Strategy], ids: Collection[str] | None) -> list[Strategy]:
+    """The drafts to derive: every one, or the ones ids names."""
+    return [h for h in catalog if h.pending and (not ids or h.id in ids)]
+
+
+def derive(ids: Collection[str] | None = None, directory: str | None = None,
+           runner: Callable[[str], str] = run_cli,
+           log: Callable[[str], object] = print) -> DeriveResult:
+    """Complete every draft (or the named ones), at most MAX_PER_RUN a run.
+    derived holds each draft completed, with its form and fields; failed each
+    draft refused twice, with the last objection; skipped why the run stopped
+    or never started (nothing pending, no CLI, signed out), else None;
+    deferred how many drafts past the cap wait for the next run."""
     directory = directory or catalog_module.strategies_dir()
     catalog = catalog_module.load(directory)
-    drafts = [h for h in catalog if h.pending and (not ids or h.id in ids)]
-    out = {"derived": [], "failed": {}, "skipped": None}
+    drafts = _pending(catalog, ids)
     if not drafts:
-        out["skipped"] = "nothing pending"
+        skipped = "nothing pending"
+    elif runner is run_cli and not available():
+        skipped = "no claude CLI here; drafts stay pending (run /strategy, or derive on the host)"
+    else:
+        skipped = None
+    out: DeriveResult = {"derived": [], "failed": {}, "skipped": skipped,
+                         "deferred": max(0, len(drafts) - MAX_PER_RUN)}
+    if out["skipped"]:
         return out
-    if len(drafts) > MAX_PER_RUN:
-        out["skipped"] = "%d draft(s) left for the next run (at most %d per run)" % (
-            len(drafts) - MAX_PER_RUN, MAX_PER_RUN)
-        drafts = drafts[:MAX_PER_RUN]
-    if runner is run_cli and not available():
-        out["skipped"] = ("no claude CLI here; drafts stay pending"
-                          " (run /strategy, or derive on the host)")
-        return out
-    for draft in drafts:
-        objection = None
+    for draft in drafts[:MAX_PER_RUN]:
+        objection, completed = "", False
         for attempt in (1, 2):
             try:
                 fields, reason = parse(runner(prompt(draft, catalog, objection)))
-                done = tune.complete(draft.id, fields, reason, directory=directory, by=by)
+                done = tune.complete(draft.id, fields, reason, directory=directory,
+                                     by=DERIVED_BY)
                 log("derive: %s -> %s (%s)" % (draft.id, done["form"], ", ".join(
                     "%s=%s" % kv for kv in done["set"].items())))
                 out["derived"].append({"id": draft.id, "form": done["form"], "set": done["set"]})
+                completed = True
                 break
             except ValueError as error:                 # a TuneError is one
                 objection = str(error)
                 log("derive: %s attempt %d refused: %s" % (draft.id, attempt, objection))
             except CliUnavailableError as error:
                 out["skipped"] = str(error)
-                log("derive: " + out["skipped"])
+                log("derive: %s" % error)
                 return out
             except (RuntimeError, subprocess.TimeoutExpired) as error:
                 objection = str(error)
                 log("derive: %s: %s" % (draft.id, objection))
                 break
-        if draft.id not in [d["id"] for d in out["derived"]]:
+        if not completed:
             out["failed"][draft.id] = objection
     return out
 
 
-def derive_rendered(result):
+def derive_rendered(result: DeriveResult) -> str:
     """The derive() bag as lines. A free <noun>_rendered() reads plain data -
     a result dict or a catalog; a bound .rendered() belongs to a result object."""
     parts = ["derive: %d completed" % len(result["derived"])] if result["derived"] else []
     if result["skipped"]:
         parts.append("derive: " + result["skipped"])
+    if result["deferred"]:
+        parts.append("derive: %d draft(s) left for the next run (at most %d per run)"
+                     % (result["deferred"], MAX_PER_RUN))
     parts += ["  %s -> %s" % (d["id"], d["form"]) for d in result["derived"]]
     parts += ["  %s FAILED: %s" % kv for kv in result["failed"].items()]
     return "\n".join(parts)

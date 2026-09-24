@@ -336,6 +336,7 @@ def test_metrics_tool_serves_the_vocabulary():
 def test_derive_strategies_is_idle_with_nothing_pending():
     text, data = tools.run_tool(tools.Context(dsn="postgresql://nowhere"), "derive_strategies")
     assert data["skipped"] == "nothing pending" and "nothing pending" in text
+    assert data["deferred"] == 0
 
 
 # --- the door's guards: token, size, rate, audit ------------------------------------------

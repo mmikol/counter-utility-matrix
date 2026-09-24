@@ -225,6 +225,28 @@ def test_derive_without_a_signed_in_cli_leaves_drafts_pending(catalog_copy, monk
     assert next(h for h in catalog.load(catalog_copy) if h.id == "heal-line").pending
 
 
+def test_derive_counts_drafts_past_the_cap_apart_from_why_it_stopped(catalog_copy, monkeypatch):
+    """The drafts past MAX_PER_RUN are deferred, a count of their own: a run
+    that stops signed out still says how many wait, and a run that completes
+    its share says it stopped for nothing."""
+    from inference import derive
+    monkeypatch.setattr(derive, "MAX_PER_RUN", 2)
+    for hid in ("draft-a", "draft-b", "draft-c"):
+        _draft(catalog_copy, hid, "heuristic")
+    def not_logged_in(text):
+        raise derive.CliUnavailableError("the claude CLI is not signed in: run `claude login` once")
+    result = derive.derive(directory=catalog_copy, runner=not_logged_in, log=lambda m: None)
+    assert "not signed in" in result["skipped"] and result["deferred"] == 1
+    assert not result["derived"]
+    def answer(text):
+        return ('{"fields": {"metric": "team.heal_peak_total", "direction": "maximize",'
+                ' "weight": 2}, "reason": "r"}')
+    result = derive.derive(directory=catalog_copy, runner=answer, log=lambda m: None)
+    assert len(result["derived"]) == 2 and result["deferred"] == 1
+    assert result["skipped"] is None
+    assert "1 draft(s) left for the next run" in derive.derive_rendered(result)
+
+
 def test_tune_and_complete_refuse_ids_that_are_paths(catalog_copy):
     for bad in ("../../README", "coverage/../vintage", "Coverage", ""):
         with pytest.raises(tune.TuneError, match="no strategy"):
