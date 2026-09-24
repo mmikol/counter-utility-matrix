@@ -365,8 +365,9 @@ def agents() -> int:
                               % (AGENT_RUN_TIMEOUT // HOUR)])
     said = (done.stdout.strip() + "\n" + done.stderr.strip()).strip()
     if done.returncode != 0 and derive.not_signed_in(said):
-        print("agents: skipped - the claude CLI is not signed in; run `%s login` once on"
-              " this machine (the stack is up; drafts stay pending)" % command[0])
+        print(
+            "agents: skipped - the claude CLI is not signed in; run `%s login` once on"
+            " this machine (the stack is up; drafts stay pending)" % command[0])
         return 0
     print(said)
     if done.returncode != 0:
@@ -384,8 +385,9 @@ def run() -> int:
         if code:
             return code
     else:
-        print("agents: skipped - no claude CLI signed in on this host (the stack is up;"
-              " drafts stay pending)")
+        print(
+            "agents: skipped - no claude CLI signed in on this host (the stack is up;"
+            " drafts stay pending)")
     print("\nthe app is up: %s" % BOARD)
     return 0
 
@@ -394,8 +396,9 @@ def report(ok: bool, lines: list[str]) -> int:
     """Print the lines, then READY or NOT READY with the URLs -> the exit code."""
     for line in lines:
         print("  " + line)
-    print("%s - board %s, inference %s, MCP over HTTP %s"
-          % ("READY" if ok else "NOT READY", BOARD, INFERENCE, MCP_URL))
+    print(
+        "%s - board %s, inference %s, MCP over HTTP %s"
+        % ("READY" if ok else "NOT READY", BOARD, INFERENCE, MCP_URL))
     return 0 if ok else 1
 
 
@@ -412,9 +415,10 @@ def refresh() -> int:
 def test() -> int:
     """The suite inside the image: coverage writes to the tmpfs (the root is
     read-only); the shipped playbook is used whatever .env names."""
-    sh("docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage",
-       "-e", "COUNTRIX_STRATEGIES=", "data",
-       "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--cov", timeout=HOUR)
+    sh(
+        "docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage",
+        "-e", "COUNTRIX_STRATEGIES=", "data",
+        "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--cov", timeout=HOUR)
     return 0
 
 

@@ -7,8 +7,9 @@ tools mirror it into the database.
     tune("anti-air", "when", "enemy.flyers >= 1 and map.known == 1", "...")
 
     add("shut-off-heals", "Shut off a heavy heal line", "constraint", prose,
-        {"when": "enemy.heal_ratio >= params.HEAL_RATIO",
-         "bonus": "min(team.antiheal, 1) * 1.5", "params": {"HEAL_RATIO": 1.0}},
+        {
+            "when": "enemy.heal_ratio >= params.HEAL_RATIO",
+            "bonus": "min(team.antiheal, 1) * 1.5", "params": {"HEAL_RATIO": 1.0}},
         "user: one anti-heal pick against a heavy heal line")
     complete("a-draft", {"metric": "team.dps_floor", "direction": "maximize",
                          "weight": 2}, "inferred from the prose")
@@ -35,8 +36,9 @@ from typing import TypedDict
 from db import Refusal
 from inference import catalog as catalog_module
 
-SCALARS = ("weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric",
-           "kind", "category")
+SCALARS = (
+    "weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric",
+    "kind", "category")
 # the string fields: the four expressions and the names a strategy carries
 TEXT_FIELDS = ("when", "require", "bonus", "penalty", "metric", "direction", "category")
 WEIGHT_RANGE = (0.0, 10.0)
@@ -124,8 +126,7 @@ def _set_scalar(lines: list[str], field: str, value: object) -> str | None:
             old = line.split(":", 1)[1].strip()
             lines[i] = "%s: %s" % (field, _format(value))
             return old
-    at = next((i for i, line in enumerate(lines) if line.strip() == "params:"),
-              _header_end(lines))
+    at = next((i for i, line in enumerate(lines) if line.strip() == "params:"), _header_end(lines))
     lines.insert(at, "%s: %s" % (field, _format(value)))
     return None
 
@@ -275,8 +276,9 @@ def _commit(directory: str, hid: str, text: str,
 
 # --- the three changes -------------------------------------------------------------
 
-def tune(hid: str, field: str, value: object, reason: str, directory: str | None = None,
-         by: str = "claude-code-session") -> Change:
+def tune(
+        hid: str, field: str, value: object, reason: str, directory: str | None = None,
+        by: str = "claude-code-session") -> Change:
     """Apply one change -> the field's old and new text and the log line."""
     directory = _where(directory)[0]
     _reason(reason, "a tuning change needs a reason")
@@ -289,8 +291,9 @@ def tune(hid: str, field: str, value: object, reason: str, directory: str | None
     return {"id": hid, "field": field, "old": old, "new": _format(value), "line": line}
 
 
-def complete(hid: str, fields: Mapping[str, object] | None, reason: str,
-             directory: str | None = None, by: str = "claude-code-session") -> Completion:
+def complete(
+        hid: str, fields: Mapping[str, object] | None, reason: str,
+        directory: str | None = None, by: str = "claude-code-session") -> Completion:
     """Set several frontmatter fields at once - what /strategy infers for a
     draft - validated as a whole, logged as one line -> the form it took and
     each field's text."""

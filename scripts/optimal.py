@@ -86,8 +86,8 @@ def main() -> int:
     when there is nothing to record or the kept set would make a vacuous gate."""
     # the enumerations live outside the repo - hours of compute a file, kept
     # where they were produced
-    sources = [os.path.expanduser(p)
-               for p in os.environ.get("OPTIMAL_SOURCES", "").split(os.pathsep) if p]
+    sources = [
+        os.path.expanduser(p) for p in os.environ.get("OPTIMAL_SOURCES", "").split(os.pathsep) if p]
     keep = int(os.environ.get("OPTIMAL_KEEP", "20"))
     stale_banned = os.environ.get("OPTIMAL_STALE_BANNED", "1") == "1"
     if not sources:
@@ -107,9 +107,9 @@ def main() -> int:
     playbook = catalog.playbook_digest()
     with open(OUT, "w", encoding="utf-8") as handle:
         json.dump({"playbook": playbook, "boards": kept}, handle, indent=1)
-    print("recorded %d proven boards over %d maps under playbook %s; %d of them need a hero"
-          " the pool cut" % (len(kept), len({r["board"]["map"] for r in kept}), playbook[:12],
-                             hard))
+    print(
+        "recorded %d proven boards over %d maps under playbook %s; %d of them need a hero"
+        " the pool cut" % (len(kept), len({r["board"]["map"] for r in kept}), playbook[:12], hard))
     return 0
 
 

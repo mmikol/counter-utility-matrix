@@ -3,12 +3,12 @@ ban rates as a dated snapshot, sliced by skill tier and by map.
 
 Three deliberate restrictions, all recorded on the snapshot:
 
-  queue     Competitive - Role Queue (the page offers no Open Queue). The rq
-            code is read from the page's own queue filter, never hardcoded:
-            Blizzard renumbered it once and the old code silently served a
-            different population.
-  platform  Console (the parameter is spelled input=Console).
-  region    Americas, on every request including the baseline.
+    queue       Competitive - Role Queue (the page offers no Open Queue). The rq
+                code is read from the page's own queue filter, never hardcoded:
+                Blizzard renumbered it once and the old code silently served a
+                different population.
+    platform    Console (the parameter is spelled input=Console).
+    region      Americas, on every request including the baseline.
 
 The page carries its rows as JSON on a blz-data-table element, and its filter
 vocabularies as ordinary select options.
@@ -169,8 +169,9 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary
         "INSERT INTO meta_snapshots (captured_at, queue, platform, input,"
         " patch_id, season_id, source_id)"
         " VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING snapshot_id",
-        (cao, QUEUE_NAME, PLATFORM, INPUT_DEVICE,
-         current_patch(cursor), current_season(cursor), source_id),
+        (
+            cao, QUEUE_NAME, PLATFORM, INPUT_DEVICE,
+            current_patch(cursor), current_season(cursor), source_id),
     )
     snapshot_id = psql.scalar(cursor)
 

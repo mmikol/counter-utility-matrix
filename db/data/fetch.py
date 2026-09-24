@@ -128,8 +128,9 @@ def cache_key(*parts: object) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "_", "_".join(str(p) for p in parts)).strip("_")
 
 
-def request[T](session: requests.Session, url: str, params: Mapping[str, str] | None,
-               policy: RequestPolicy, read: Callable[[requests.Response], T]) -> T:
+def request[T](
+        session: requests.Session, url: str, params: Mapping[str, str] | None,
+        policy: RequestPolicy, read: Callable[[requests.Response], T]) -> T:
     """One page asked for under `policy`, and what `read` makes of it.
 
     A requests failure or a RateLimitError from `read` is retried while attempts
@@ -182,9 +183,9 @@ def cached(cache_dir: str | None, name: str, produce: Callable[[], str]) -> str:
     return text
 
 
-def cached_get(session: requests.Session, url: str, cache_dir: str | None, key: str,
-               params: Mapping[str, str] | None = None,
-               policy: RequestPolicy = DEFAULT_POLICY) -> str:
+def cached_get(
+        session: requests.Session, url: str, cache_dir: str | None, key: str,
+        params: Mapping[str, str] | None = None, policy: RequestPolicy = DEFAULT_POLICY) -> str:
     """One page as text, through the page cache as `key`.html."""
     return cached(cache_dir, key + ".html",
                   lambda: request(session, url, params, policy, lambda response: response.text))

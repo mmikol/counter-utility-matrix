@@ -221,9 +221,10 @@ def parse_perks(soup: BeautifulSoup, slug: str) -> list[PerkText]:
 ROLE_NAMES = {"tank": "Tank", "damage": "Damage", "support": "Support"}
 
 
-def _store(cursor: psycopg.Cursor, subroles: dict[str, Subrole],
-           heroes: list[RosterHero], abilities_by_slug: dict[str, list[AbilityText]],
-           perks_by_slug: dict[str, list[PerkText]], icons: RoleIcons, cao: datetime) -> None:
+def _store(
+        cursor: psycopg.Cursor, subroles: dict[str, Subrole], heroes: list[RosterHero],
+        abilities_by_slug: dict[str, list[AbilityText]], perks_by_slug: dict[str, list[PerkText]],
+        icons: RoleIcons, cao: datetime) -> None:
     """Upsert the roles, subroles, heroes and each hero's abilities and perks."""
     source_id = psql.register_source(cursor, BLIZZARD, cao)
 

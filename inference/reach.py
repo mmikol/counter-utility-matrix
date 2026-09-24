@@ -13,9 +13,9 @@ tool no metric reads, a rule that charges it for what it is not, or a board this
 does not reach. Fifty-one of the fifty-three released heroes have a board; Freja and
 Shion do not, as of the scale that stopped moving with the bans.
 
-    maps   the four its map rates lift it most on (its three best maps are among them)
-    reds   none (blue counters the likely six); the heroes it answers, two a role, the
-           most exposed to it first; the same without the heroes that answer it back
+    maps    the four its map rates lift it most on (its three best maps are among them)
+    reds    none (blue counters the likely six); the heroes it answers, two a role, the
+            most exposed to it first; the same without the heroes that answer it back
 """
 
 from typing import NamedTuple, TypedDict

@@ -165,10 +165,8 @@ def _measure_range(spread: re.Match[str], condition: str | None,
     low, high = sorted((float(spread.group(1)), float(spread.group(2))))
     window = 1 if denominator else None
     return [
-        (low, numerator or default_unit, denominator, window,
-         _join(condition, "min")),
-        (high, numerator or default_unit, denominator, window,
-         _join(condition, "max")),
+        (low, numerator or default_unit, denominator, window, _join(condition, "min")),
+        (high, numerator or default_unit, denominator, window, _join(condition, "max")),
     ]
 
 
@@ -196,8 +194,7 @@ def _variants(part: str, condition: str | None) -> list[tuple[str, str | None]]:
         numbers = tiered.group(1).split("/")
         trailing = tiered.group(2).strip()
         return [
-            (("%s %s" % (number, trailing)).strip(),
-             _join(condition, "variant %d" % index))
+            (("%s %s" % (number, trailing)).strip(), _join(condition, "variant %d" % index))
             for index, number in enumerate(numbers, start=1)
         ]
 

@@ -35,12 +35,13 @@ MIGRATIONS_DIR = os.path.join(ROOT, "db", "psql", "migrations")
 # Which domain the data dictionary files a table under, keyed by the migration
 # that last created it. A migration that creates no surviving table needs no
 # entry; a table with none falls to "foundation".
-DOC_DOMAIN = {"001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES",
-              "003_maps.sql": "MAPS", "004_meta.sql": "META",
-              "005_playbook.sql": "PLAYBOOK",
-              "008_schema_migrations.sql": "foundation",
-              "010_constraints_and_heuristics.sql": "INFERENCE",
-              "020_map_terrain.sql": "MAPS", "021_stage_terrain.sql": "MAPS"}
+DOC_DOMAIN = {
+    "001_initial_schema.sql": "foundation", "002_heroes.sql": "HEROES",
+    "003_maps.sql": "MAPS", "004_meta.sql": "META",
+    "005_playbook.sql": "PLAYBOOK",
+    "008_schema_migrations.sql": "foundation",
+    "010_constraints_and_heuristics.sql": "INFERENCE",
+    "020_map_terrain.sql": "MAPS", "021_stage_terrain.sql": "MAPS"}
 
 
 class SchemaError(Exception):
@@ -342,8 +343,7 @@ def generate_docs(connection: psycopg.Connection, path: str | None = None) -> st
     tables = psql.table_names(connection)
     columns = {t: _columns(connection, t) for t in tables}
     fks = _foreign_keys(connection)
-    domain = {t: DOC_DOMAIN.get(origins.get(t, NO_ORIGIN).migration, "foundation")
-              for t in tables}
+    domain = {t: DOC_DOMAIN.get(origins.get(t, NO_ORIGIN).migration, "foundation") for t in tables}
     path = path or os.path.join(ROOT, "docs", "db.md")
     embed(path, "erd", _erd(tables, fks, domain))
     embed(path, "dictionary", _dictionary(tables, columns, fks, domain, origins))
