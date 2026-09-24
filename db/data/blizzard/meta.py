@@ -23,7 +23,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from db import INPUT_DEVICE, PLATFORM, REGION, psql
-from db.data import fetch, returned_int
+from db.data import fetch
 from db.data.blizzard import BLIZZARD, RATES_URL, attr
 from db.data.fetch import cache_key, cached_get
 from db.psql import current_patch, current_season
@@ -153,7 +153,7 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
         " RETURNING region_id",
         (REGION, REGION_NAME, source_id),
     )
-    region_id = returned_int(cursor)
+    region_id = psql.scalar(cursor)
 
     tier_ids: dict[str, int] = {}
     for order, (code, name) in enumerate(tiers):
@@ -164,7 +164,7 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
             " rank_order = EXCLUDED.rank_order RETURNING tier_id",
             (code.lower(), name, order, source_id),
         )
-        tier_ids[code] = returned_int(cursor)
+        tier_ids[code] = psql.scalar(cursor)
 
     cursor.execute(
         "INSERT INTO meta_snapshots (captured_at, queue, platform, input,"
@@ -173,7 +173,7 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
         (cao, QUEUE_NAME, PLATFORM, INPUT_DEVICE,
          current_patch(cursor), current_season(cursor), source_id),
     )
-    snapshot_id = returned_int(cursor)
+    snapshot_id = psql.scalar(cursor)
 
     hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
     map_ids = psql.lookup_ids(cursor, "maps", "name", "map_id")
@@ -235,7 +235,7 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
             )
             map_rows += 1
     connection.commit()
-    snapshots = returned_int(cursor.execute("SELECT count(*) FROM meta_snapshots"))
+    snapshots = psql.scalar(cursor.execute("SELECT count(*) FROM meta_snapshots"))
     log("hero/map rows: %d   snapshots held: %d" % (map_rows, snapshots))
     return {"queue": QUEUE_NAME, "platform": PLATFORM, "region": REGION,
             "tiers": len(tier_ids), "maps": len(maps) - len(skipped_maps),

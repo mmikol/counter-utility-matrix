@@ -17,7 +17,7 @@ import requests
 from bs4 import BeautifulSoup, Tag
 
 from db import psql
-from db.data import fetch, returned_int
+from db.data import fetch
 from db.data.blizzard import BASE_URL, BLIZZARD, HEROES_URL, attr
 from db.data.fetch import cache_key, cached_get
 
@@ -240,7 +240,7 @@ def load(connection: psycopg.Connection, subroles: dict[str, Subrole],
             " RETURNING role_id",
             (code, ROLE_NAMES[code], icons["roles"].get(code), source_id),
         )
-        role_ids[code] = returned_int(cursor)
+        role_ids[code] = psql.scalar(cursor)
 
     subrole_ids = {}
     for subrole in sorted(subroles.values(), key=lambda s: (s["role_code"], s["code"])):
@@ -262,7 +262,7 @@ def load(connection: psycopg.Connection, subroles: dict[str, Subrole],
                 source_id,
             ),
         )
-        subrole_ids[subrole["code"]] = returned_int(cursor)
+        subrole_ids[subrole["code"]] = psql.scalar(cursor)
 
     for hero in heroes:
         cursor.execute(
@@ -283,7 +283,7 @@ def load(connection: psycopg.Connection, subroles: dict[str, Subrole],
                 source_id,
             ),
         )
-        hero_id = returned_int(cursor)
+        hero_id = psql.scalar(cursor)
 
         for ability in abilities_by_slug[hero["slug"]]:
             cursor.execute(

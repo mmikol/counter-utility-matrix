@@ -11,23 +11,9 @@ page to table, plus what they share.
                   strategies in inference/strategies/
     fetch         the page cache, its freshness policy and the request loop
     names         matching hero, map and ability names across sources
-    returned_int  the int a writer's statement returned: an id, a count
 
 Each fetched source's domain module ends in a
 run(connection, cache_dir, session, log); authored/ has no run - the
 strategies mirror is inference.catalog.mirror.
 The MCP tools call them. Nothing here is an entry point of its own.
 """
-
-import psycopg
-
-
-def returned_int(cursor: psycopg.Cursor) -> int:
-    """The int in the one row the cursor's last statement returned - an id
-    from RETURNING, a count. A statement that returned no row is a broken
-    statement, raised as LookupError."""
-    row = cursor.fetchone()
-    if row is None:
-        raise LookupError("the statement returned no row")
-    value: int = row[0]
-    return value
