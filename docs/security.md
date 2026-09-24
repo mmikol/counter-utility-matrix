@@ -135,8 +135,10 @@ share one network: Docker publishes a port only for a container on a
 routable network, and the sentry needs the database, so what keeps
 `inference`, `ui`, `db` and `sentry` off the internet is that their code
 opens no connection out - only the two pull-side containers fetch
-anything, from two fixed hosts: Blizzard's site and the wiki. Every
-published port binds to 127.0.0.1.
+anything, from two fixed hosts: Blizzard's site and the wiki. The page the
+board serves loads nothing from another host either: its display font
+ships in `ui/static` with its licence. Every published port binds to
+127.0.0.1.
 
 **The sentry watches.** The `sentry` container (`db/sentry.py`) checks, every
 thirty seconds: that every file in `inference/strategies/` loads through

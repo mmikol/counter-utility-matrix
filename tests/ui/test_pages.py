@@ -4,6 +4,7 @@ and the scripts' source. What a script says in JavaScript is its own:
 grepping it proves the source says what the page needs, not that the page
 runs, so each test pins the line a behaviour hangs on."""
 
+import os
 import re
 
 from ui import pages
@@ -194,6 +195,20 @@ def test_the_page_is_a_shell_over_static_files():
     data, ctype = pages.static_file("board.css")
     assert ctype.startswith("text/css") and b".tile.banned" in data
     assert pages.static_file("../board.py") is None and pages.static_file("nope.js") is None
+
+
+def test_the_display_font_ships_with_the_board_and_its_licence():
+    """The page loads nothing from another host: the headings' face is served
+    from ui/static, and the SIL OFL that lets it travel travels beside it."""
+    data, ctype = pages.static_file("bebas-neue.woff2")
+    assert ctype == "font/woff2" and data.startswith(b"wOF2")
+    css = pages.static_file("board.css")[0].decode()
+    assert "@font-face" in css and "url('/static/bebas-neue.woff2')" in css
+    assert "fonts.googleapis" not in css and "@import" not in css
+    assert pages.static_file("OFL.txt") is None            # beside the font, not served
+    with open(os.path.join(pages.STATIC_DIR, "OFL.txt"), encoding="utf-8") as handle:
+        licence = handle.read()
+    assert "SIL OPEN FONT LICENSE Version 1.1" in licence and "Dharma Type" in licence
 
 
 def test_the_math_page_states_the_equation_and_the_layers():

@@ -146,7 +146,10 @@ def test_the_page_the_statics_the_math_and_the_strategies_need_no_database(
     assert b"What is claimed" in body and b"What is not proven" in body
     code, ctype, body = get(served + "/static/board.css")
     assert code == 200 and "text/css" in ctype and b".tile" in body
+    code, ctype, body = get(served + "/static/bebas-neue.woff2")
+    assert code == 200 and ctype == "font/woff2" and body.startswith(b"wOF2")
     assert get(served + "/static/nope.txt")[0] == 404
+    assert get(served + "/static/OFL.txt")[0] == 404        # the licence ships, unserved
     code, _, body = get(served + "/math")
     assert code == 200 and b"The Counter Utility Matrix" in body
     code, _, body = get(served + "/api/strategies")

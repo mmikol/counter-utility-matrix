@@ -1,5 +1,5 @@
 """The board's HTML: the page shell, the math and tests pages, and the static
-files they load - the stylesheet and the scripts.
+files they load - the stylesheet, the scripts and the display font.
 
 The page is a shell over the static files: board.js loads last because it
 calls into comps.js and playbook.js, and TEAM and BANS come from the page so
@@ -34,10 +34,11 @@ def esc(x: object) -> str:
 # --- the static files ----------------------------------------------------------
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
-# what is served, by extension: the pages' articles (.html) sit beside these
-# and are not
+# what is served, by extension: the pages' articles (.html) and the font's
+# licence (.txt) sit beside these and are not
 STATIC_TYPES = {".css": "text/css; charset=utf-8",
-                ".js": "application/javascript; charset=utf-8"}
+                ".js": "application/javascript; charset=utf-8",
+                ".woff2": "font/woff2"}
 
 
 def static_file(name: str) -> tuple[bytes, str] | None:

@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
+/* the display face ships beside this file, its SIL OFL 1.1 in OFL.txt: nothing loads from another host */
+@font-face { font-family:"Bebas Neue"; src:url('/static/bebas-neue.woff2') format('woff2'); font-display:swap; }
 :root { color-scheme: dark; --bg:#0d1017; --panel:#151a23; --panel2:#1b212c;
   --line:#2a3240; --text:#e9ecf1; --muted:#8d97a8; --red:#ff4b57; --red2:#a8232d;
   --blue:#3ea6ff; --blue2:#1f5fa8; --gold:#f5a623; --green:#5ad17a; }

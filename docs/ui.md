@@ -36,6 +36,8 @@ ui/
   pages.py         the page shell, the math and tests pages, the static files they load
   static/
     board.css      the look: the game's - dark surfaces, Bebas Neue headings, a gold accent, red and blue for the sides
+    bebas-neue.woff2  the display face, Bebas Neue Regular, served from the board itself
+    OFL.txt        its licence, the SIL Open Font License 1.1, which travels with the font
     board.js       state, the rosters, the picks, the bans, the fetches, boot
     comps.js       the comps tab: a seat's result and the two seats
     playbook.js    the playbook tab: the groups, the cards, the weight sliders
@@ -59,10 +61,10 @@ ui/
 ## `board.py` and `pages.py` - the page and its endpoints
 
 `pages.py` renders the page, and `board.py` serves it and answers the JSON
-endpoints. The page is a shell: the stylesheet and the scripts are static
-files, and `TEAM` (six), `BANS` (five) and whether the board writes are the
-only values the page injects, so the scripts have no constant to keep in
-step with the Python.
+endpoints. The page is a shell: the stylesheet, the scripts and the font are
+static files, and `TEAM` (six), `BANS` (five) and whether the board writes
+are the only values the page injects, so the scripts have no constant to
+keep in step with the Python.
 
 Every route stands behind the guard `db/web.py` puts on all three servers:
 a request whose `Host` or `Origin` names neither a local name nor one the
@@ -77,7 +79,7 @@ reason.
 | route | serves |
 | --- | --- |
 | `/` | the board: map selector, attack/defense switch (Escort and Hybrid maps), the bans bar, the red and blue rosters grouped by role with the announced hero at the end, and three panels - **comps**, **facts**, **playbook** |
-| `/static/<file>` | `board.css`, `board.js`, `comps.js`, `playbook.js` - stylesheets and scripts, nothing else |
+| `/static/<file>` | `board.css`, `board.js`, `comps.js`, `playbook.js`, `bebas-neue.woff2` - stylesheets, scripts and the display font, nothing else |
 | `/api/roster` | every hero (role, subrole, portrait, status, release day), every map (mode, top style, sided or not), the role icons, and the patches newer than the rates |
 | `/api/facts?map=&side=&red=&blue=&bans=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
 | `/api/board?map=&side=&red=&blue=&bans=[&weights=&client=]` | the board solved at any stage - the inference layer's `board()` in-process, or the service's `/board` when `COUNTRIX_INFERENCE_URL` is set, forwarded before any connection opens: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, the empty blue slots filled, red's likely starting comp, the fight odds, the game plan and the shapes the limits allow, under the playbook tab's weights. The page reads no countered case, so none is solved; a newer board from the same `client` (one lane when none is named) supersedes one still solving, which answers 400 |
@@ -194,7 +196,9 @@ stripe, Bebas Neue for headings and labels, a gold accent for what
 matters, red and blue for the two sides, blue, green and sand for
 constraints, heuristics and assumptions - every colour a token in
 `:root`. The rosters are laid out like a hero select: role columns and
-portrait tiles.
+portrait tiles. The face is served from `static/` with its licence, so
+the page loads nothing from another host; Impact stands in until it
+arrives.
 
 ## `facts/` - everything the database knows about a board
 
