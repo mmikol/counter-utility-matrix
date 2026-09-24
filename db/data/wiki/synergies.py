@@ -14,6 +14,11 @@ under 120 characters. The table is reloaded wholesale.
 """
 
 import re
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from typing import TypedDict
+
+import psycopg
+import requests
 
 from db import psql
 from db.data import fetch
@@ -62,7 +67,7 @@ NO_SYNERGY_RE = re.compile(
 RENAMED = {"mccree": "cassidy"}
 
 
-def synergy_section(text):
+def synergy_section(text: str) -> str:
     """The article's synergy section, or '' when it has none."""
     match = SECTION_RE.search(text)
     if not match:
@@ -72,7 +77,7 @@ def synergy_section(text):
     return body[: following.start()] if following else body
 
 
-def _cells(row):
+def _cells(row: str) -> list[str]:
     """The cells of one wikitable row; a cell runs until the next | or ! line."""
     cells = []
     for line in row.split("\n"):
@@ -84,7 +89,7 @@ def _cells(row):
     return [CELL_ATTRIBUTES_RE.sub("", cell, count=1).strip() for cell in cells]
 
 
-def _row_hero(cell):
+def _row_hero(cell: str) -> str | None:
     """The hero a row is about: its article link, else its icon's link=."""
     for target in ROW_LINK_RE.findall(cell):
         if not FILE_TARGET_RE.match(target):
@@ -96,11 +101,12 @@ def _row_hero(cell):
 # A column of the section's tables: the word its wikitable heading holds and
 # its position when a table has no heading row; its template parameter and
 # that parameter's rating parameters.
-SYNERGY = ("synergy", 2, "synergy", ("synergy_rating",))
-MATCHUP = ("match", 1, "matchup", ("rating", "risk"))
+Column = tuple[str, int, str, tuple[str, ...]]
+SYNERGY: Column = ("synergy", 2, "synergy", ("synergy_rating",))
+MATCHUP: Column = ("match", 1, "matchup", ("rating", "risk"))
 
 
-def _table_rows(table, heading, position):
+def _table_rows(table: str, heading: str, position: int) -> Iterator[tuple[str, str]]:
     """(hero, cell of one column) per data row of one wikitable."""
     for row in ROW_SPLIT_RE.split(table):
         cells = _cells(row)
@@ -116,7 +122,8 @@ def _table_rows(table, heading, position):
             yield hero, cells[position]
 
 
-def _template_rows(section, parameter, ratings):
+def _template_rows(section: str, parameter: str,
+                   ratings: Sequence[str]) -> Iterator[tuple[str, str]]:
     """(hero key, rated cell of one column) per hero of each {{MatchupTable/...}}."""
     suffix = "_" + parameter
     for block in markup.find_templates(section, r"MatchupTable"):
@@ -129,7 +136,7 @@ def _template_rows(section, parameter, ratings):
                 yield hero, "'''%s''' %s" % (rating, value) if rating else value
 
 
-def section_rows(text, column=SYNERGY):
+def section_rows(text: str, column: Column = SYNERGY) -> list[tuple[str, str]]:
     """[(hero, cell)] - one column of the section's tables, in either markup.
     A template's ratings lead its cell in bold, as a wikitable writes them."""
     heading, position, parameter, ratings = column
@@ -140,7 +147,7 @@ def section_rows(text, column=SYNERGY):
     return rows
 
 
-def split_rating(cell):
+def split_rating(cell: str) -> tuple[str | None, str]:
     """'''STRONG SYNERGY''' advice -> ('strong', advice). No rating -> (None, cell)."""
     match = RATING_RE.match(cell)
     if not match:
@@ -149,7 +156,7 @@ def split_rating(cell):
     return (None if rating in UNRATED else rating), cell[match.end():]
 
 
-def paragraphs(cell):
+def paragraphs(cell: str) -> list[str]:
     """A cell's paragraphs as plain text, the empty ones dropped."""
     text = REF_RE.sub("", markup.COMMENT_RE.sub("", cell))
     text = markup.FILE_LINK_RE.sub("", text)
@@ -157,12 +164,12 @@ def paragraphs(cell):
     return [text for text in texts if text]
 
 
-def plain(cell):
+def plain(cell: str) -> str:
     """The first paragraph of a cell's advice as plain text."""
     return next(iter(paragraphs(cell)), "")
 
 
-def clause(text, limit=NOTE_LIMIT):
+def clause(text: str, limit: int = NOTE_LIMIT) -> str:
     """The first sentence, cut to a clause under `limit` characters: a long
     sentence loses its opener, then everything past its last clause that fits."""
     end = SENTENCE_END_RE.search(text)
@@ -181,7 +188,7 @@ def clause(text, limit=NOTE_LIMIT):
     return sentence[:limit].rsplit(" ", 1)[0].rstrip(".;:, ")
 
 
-def parse_synergies(text):
+def parse_synergies(text: str) -> list[tuple[str, str]]:
     """[(teammate name, advice)] - the claims one article's synergy cells make."""
     claims = []
     for hero, cell in section_rows(text):
@@ -195,14 +202,20 @@ def parse_synergies(text):
     return claims
 
 
-def pair_up(claims_by_hero, hero_ids):
+# {(low id, high id): (score, note)}
+Pairs = dict[tuple[int, int], tuple[int, str]]
+
+
+def pair_up(claims_by_hero: Mapping[str, list[tuple[str, str]]],
+            hero_ids: Mapping[str, int]) -> tuple[Pairs, list[str]]:
     """Claims per hero -> ({(low id, high id): (score, note)}, unresolved names).
 
     claims_by_hero is {hero name: [(teammate name, advice)]}; hero_ids is
     {name_key: hero_id}. The note comes from an article whose first sentence
     fits uncut when there is one, else from the first article by hero name.
     """
-    stated, unmatched = {}, []
+    stated: dict[tuple[int, int], dict[int, str]] = {}
+    unmatched: list[str] = []
     for hero in sorted(claims_by_hero):
         hero_id = hero_ids[name_key(hero)]
         for teammate, advice in claims_by_hero[hero]:
@@ -224,13 +237,25 @@ def pair_up(claims_by_hero, hero_ids):
 
 # --- store ---------------------------------------------------------------------
 
-def run(connection, cache_dir=None, session=None, log=print):
+class SynergiesSummary(TypedDict):
+    synergies: int
+    mutual: int
+    articles: int
+    unpaired: list[str]
+    unmatched: list[str]
+    tables: list[str]
+
+
+def run(connection: psycopg.Connection, cache_dir: str | None = None,
+        session: requests.Session | None = None,
+        log: Callable[[str], None] = print) -> SynergiesSummary:
     session = fetch.session(session)
     cursor = connection.cursor()
     cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
-    released = dict(cursor.fetchall())
+    released: dict[str, int] = dict(cursor.fetchall())
 
-    claims, missing = {}, []
+    claims: dict[str, list[tuple[str, str]]] = {}
+    missing: list[str] = []
     for name in released:
         try:
             claims[name] = parse_synergies(fetch_wikitext(session, name, cache_dir))

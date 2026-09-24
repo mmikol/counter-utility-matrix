@@ -8,7 +8,8 @@ has about that stage. Both tables are reloaded wholesale.
 """
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from typing import TypedDict
 
 import psycopg
 import requests
@@ -94,7 +95,7 @@ def stripped(body: str) -> str:
     """A section's wikitext without what is dropped whole."""
     for pattern in (markup.COMMENT_RE, REF_RE, GALLERY_RE, TABLE_RE, FILE_RE):
         body = pattern.sub(" ", body)
-    previous = None
+    previous: str | None = None
     while previous != body:
         previous, body = body, INNER_TEMPLATE_RE.sub(" ", body)
     return BLANK_NOTICE_RE.sub(" ", body)
@@ -292,8 +293,20 @@ def per_thousand(mentions: int, words: int) -> float:
 
 # --- store ---------------------------------------------------------------------
 
+class TerrainSummary(TypedDict):
+    maps: int
+    without_text: list[str]
+    missing: list[str]
+    rows: int
+    words: int
+    stages: int
+    stages_no_text: int
+    stage_rows: int
+    tables: list[str]
+
+
 def _store(
-        cursor: psycopg.Cursor, table: str, key: str, key_id: int, counts: dict[str, int],
+        cursor: psycopg.Cursor, table: str, key: str, key_id: int, counts: Mapping[str, int],
         words: int, source_id: int) -> int:
     insert = SQL("INSERT INTO {} ({}, feature, mentions, per_thousand, source_id)"
                  " VALUES (%s, %s, %s, %s, %s)").format(psql.identifier(table),
@@ -304,14 +317,14 @@ def _store(
     return len(counts)
 
 
-def _counted(counts: dict[str, int]) -> str:
+def _counted(counts: Mapping[str, int]) -> str:
     return "  ".join("%s %d" % (f, n) for f, n in counts.items() if n)
 
 
 def run(
         connection: psycopg.Connection, cache_dir: str | None = None,
         session: requests.Session | None = None,
-        log: Callable[[str], object] = print) -> dict[str, object]:
+        log: Callable[[str], None] = print) -> TerrainSummary:
     session = fetch.session(session)
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())

@@ -24,7 +24,11 @@ reloaded wholesale: one row means countered_by_id answers hero_id.
 
 import re
 import unicodedata
-from collections import namedtuple
+from collections.abc import Callable, Mapping
+from typing import NamedTuple, TypedDict
+
+import psycopg
+import requests
 
 from db import psql
 from db.data import fetch
@@ -35,10 +39,23 @@ from db.data.wiki import WIKI, WikiError, fetch_wikitext, synergies
 
 # verdict +1, 0 or -1; score the signed margin; basis "rating", "prose" or
 # None for an unwritten cell; sentence what decided it.
-Reading = namedtuple("Reading", "verdict score basis sentence")
+class Reading(NamedTuple):
+    verdict: int
+    score: float
+    basis: str | None
+    sentence: str
+
+
 UNWRITTEN = Reading(0, 0.0, None, "")
+
+
 # What the roster and a hero's own article say of it: its name, 'he' or 'she'.
-Known = namedtuple("Known", "name pronoun")
+class Known(NamedTuple):
+    name: str | None
+    pronoun: str | None
+
+
+Pronouns = tuple[str | None, str | None]
 
 # A cell's leading bold label: '''HIGH RISK''', '''<nowiki>A | B</nowiki>'''.
 LABEL_RE = re.compile(r"^(?:\s|<(?!nowiki)[^>]+>)*'''\s*(?:<nowiki>)?(.*?)(?:</nowiki>)?\s*'''",
@@ -107,8 +124,13 @@ WORST = (r"(?:worst|biggest|greatest|main|primary|strongest|hardest|toughest|dea
 # you", "blocks your". A verdict cue ("counters you", "easy target") weighs 1 to 2.
 DETAIL = 0.5
 
+
+def _compiled(cues: list[tuple[str, float]]) -> list[tuple[re.Pattern[str], float]]:
+    return [(re.compile(pattern, re.I), weight) for pattern, weight in cues]
+
+
 # What the enemy does to the hero. Each: (pattern over the normalised text, weight).
-THREAT_CUES = [
+THREAT_CUES = _compiled([
     # "Sombra is one of your biggest counters", "a hard counter to you"
     (r"\byour (?:\w+ ){0,2}counters?\b|\byour %s (?:\w+ )?(?:threats?|nightmares?"
      r"|enem(?:y|ies)|problems?|fears?|match-?ups?)\b" % WORST, 2.0),
@@ -161,10 +183,10 @@ THREAT_CUES = [
     (r"\b%s %s%s\b(?! against foe)" % (FOES, MODAL, WINS), 1.5),
     (r"\bsuperior(?:ity)? (?:to|over) you\b|\badvantage over you\b|\bbetter of you\b", 1.5),
     (r"\bfoe (?:will |can )?ha(?:s|ve) (?:no|little) (?:trouble|difficulty|problems?)\b", 1.0),
-]
+])
 
 # What the hero does to the enemy.
-ADVANTAGE_CUES = [
+ADVANTAGE_CUES = _compiled([
     # "you counter", "Pharah is the ultimate hard counter to Junkrat"
     (r"\byou %s(?:hard[- ]?|directly |completely |heavily )?counters? "
      r"(?:foe|(?:most|all|many) of foe)" % MODAL, 2.0),
@@ -215,10 +237,7 @@ ADVANTAGE_CUES = [
     (r"\bfoe (?:will |should |may |might )?ha(?:s|ve) (?:a )?(?:hard|difficult|tough|rough)"
      r" time\b|\bfoe (?:will |can )?ha(?:s|ve) (?:trouble|difficulty|problems?)\b", 1.0),
     (r"\bat a (?:\w+ )?disadvantage against you\b", 1.5),
-]
-
-THREAT_CUES = [(re.compile(pattern, re.I), weight) for pattern, weight in THREAT_CUES]
-ADVANTAGE_CUES = [(re.compile(pattern, re.I), weight) for pattern, weight in ADVANTAGE_CUES]
+])
 
 # A cue this close after a negation reads the other way, at this fraction.
 NEGATION_RE = re.compile(r"(?:\bnot|n't|\bcannot|\bnever|\bno longer|\bhardly|\brarely|\bseldom"
@@ -235,7 +254,7 @@ LATER_WEIGHT = 0.2
 MARGIN = 1.0
 
 
-def split_label(cell):
+def split_label(cell: str) -> tuple[list[str], str]:
     """'''A | B''' advice -> (['a', 'b'], advice). No label -> ([], cell)."""
     match = LABEL_RE.match(cell)
     if not match or not re.search(r"MATCH-?UP|VS\.?$|RISK|PRIORITY|^TBA", match.group(1), re.I):
@@ -244,15 +263,17 @@ def split_label(cell):
     return [part for part in parts if part], cell[match.end():]
 
 
-def _steps(scale, vocabulary):
+def _steps(scale: str, vocabulary: Mapping[str, float]) -> float | None:
     """'EVEN -> WEAK' -> the mean of its ends on a vocabulary; None off it."""
     ends = [vocabulary.get(end.strip().lower()) for end in scale.split("->")]
-    return None if None in ends else sum(ends) / len(ends)
+    known = [end for end in ends if end is not None]
+    return sum(known) / len(known) if len(known) == len(ends) else None
 
 
-def read_label(parts):
+def read_label(parts: list[str]) -> tuple[float | None, float]:
     """Label parts -> (matchup steps or None, risk weight or 0.0)."""
-    steps, risk = None, 0.0
+    steps: float | None = None
+    risk = 0.0
     for part in parts:
         matchup, danger = MATCHUP_RATING_RE.match(part), RISK_RATING_RE.match(part)
         if matchup and steps is None:
@@ -262,12 +283,12 @@ def read_label(parts):
     return steps, risk
 
 
-def prose(cell):
+def prose(cell: str) -> str:
     """Every paragraph of a cell's advice as one line of plain text."""
     return " ".join(" ".join(synergies.paragraphs(cell)).split())
 
 
-def _names(hero):
+def _names(hero: str) -> list[str]:
     """What the prose may call a hero, longest first: its name, that name without
     accents and without punctuation, its nicknames."""
     plain = "".join(c for c in unicodedata.normalize("NFKD", hero) if not unicodedata.combining(c))
@@ -275,7 +296,7 @@ def _names(hero):
     return sorted(names | set(NICKNAMES.get(name_key(hero), ())), key=len, reverse=True)
 
 
-def pronoun(text):
+def pronoun(text: str) -> str | None:
     """'he' or 'she': the pronoun an article uses of its hero, counted outside
     the match-up section, where the enemies are. None when neither leads."""
     rest = text.replace(synergies.synergy_section(text), "")
@@ -283,7 +304,8 @@ def pronoun(text):
     return "he" if he > 2 * she else "she" if she > 2 * he else None
 
 
-def normalise(text, hero, other, pronouns=(None, None)):
+def normalise(text: str, hero: str, other: str,
+              pronouns: Pronouns = (None, None)) -> str:
     """The article hero -> you / your; the enemy -> foe / foe's. he, she, him,
     his, her -> the one of the two whose pronoun it is; where that does not
     tell them apart, the enemy where the text says you, else the last named."""
@@ -295,7 +317,7 @@ def normalise(text, hero, other, pronouns=(None, None)):
     second_person = bool(SECOND_PERSON_RE.search(text))
     last = [sides[-1]]
 
-    def replace(match):
+    def replace(match: re.Match[str]) -> str:
         for i, side in enumerate(sides):
             if match.group("side%d" % i):
                 last[0] = side
@@ -312,8 +334,9 @@ def normalise(text, hero, other, pronouns=(None, None)):
     return token.sub(replace, text)
 
 
-def sentences(text):
-    parts, start = [], 0
+def sentences(text: str) -> list[str]:
+    parts: list[str] = []
+    start = 0
     for end in synergies.SENTENCE_END_RE.finditer(text):
         parts.append(text[start: end.end()])
         start = end.end()
@@ -321,7 +344,7 @@ def sentences(text):
     return [part.strip() for part in parts if part.strip()]
 
 
-def score_sentence(sentence):
+def score_sentence(sentence: str) -> tuple[float, float]:
     """(advantage, threat) a normalised sentence's cues add, before its place.
     Where cues overlap one counts: a plain one before a negated one, then the
     heavier, then the longer."""
@@ -334,17 +357,19 @@ def score_sentence(sentence):
                 found.append((negated, -weight, match.start() - match.end(), match.start(),
                               side, match.end()))
     conceded = [m.span() for m in CONCESSION_RE.finditer(sentence)]
-    totals, counted = [0.0, 0.0], []
+    totals = [0.0, 0.0]
+    counted: list[tuple[int, int]] = []
     for negated, weight, _, start, side, end in sorted(found):
         if any(start < b and a < end for a, b in counted):
             continue
         counted.append((start, end))
         weight = -weight * (CONCEDED if any(a <= start < b for a, b in conceded) else 1)
         totals[1 - side if negated else side] += weight * (NEGATED if negated else 1)
-    return tuple(totals)
+    return totals[0], totals[1]
 
 
-def read_cell(cell, hero, other, pronouns=(None, None)):
+def read_cell(cell: str, hero: str, other: str,
+              pronouns: Pronouns = (None, None)) -> Reading:
     """One Match-Up cell -> Reading, from `hero`'s seat about the enemy `other`.
     pronouns is (the hero's, the enemy's), each 'he', 'she' or None."""
     label, advice = split_label(cell)
@@ -370,7 +395,8 @@ def read_cell(cell, hero, other, pronouns=(None, None)):
     return Reading(verdict, round(margin, 2), "prose", sentence)
 
 
-def parse_matchups(text, hero, known=None):
+def parse_matchups(text: str, hero: str,
+                   known: Mapping[str, Known] | None = None) -> list[tuple[str, Reading]]:
     """[(enemy name, Reading)] - one article's written Match-Up cells. known is
     {name_key: Known}: a template names its rows by key, and the prose is read
     by the roster's name and the pronoun."""
@@ -389,11 +415,17 @@ def parse_matchups(text, hero, known=None):
     return readings
 
 
-def combine(readings_by_hero, hero_ids):
+# {(loser id, winner id): the sentence that decided it}
+Edges = dict[tuple[int, int], str]
+
+
+def combine(readings_by_hero: Mapping[str, list[tuple[str, Reading]]],
+            hero_ids: Mapping[str, int]) -> tuple[Edges, list[tuple[int, int]], list[str]]:
     """Readings per article -> ({(loser id, winner id): sentence}, contradicted
     pairs, unresolved names). hero_ids is {name_key: hero_id}. The sentence is
     the first article's by hero name."""
-    seats, unmatched = {}, []
+    seats: Edges = {}
+    unmatched: list[str] = []
     for hero in sorted(readings_by_hero):
         hero_id = hero_ids[name_key(hero)]
         for other, reading in readings_by_hero[hero]:
@@ -413,13 +445,29 @@ def combine(readings_by_hero, hero_ids):
 
 # --- store ---------------------------------------------------------------------
 
-def run(connection, cache_dir=None, session=None, log=print):
+class CountersSummary(TypedDict):
+    counters: int
+    articles: int
+    cells: int
+    rated: int
+    no_verdict: int
+    contradicted: list[str]
+    unwritten: list[str]
+    no_edge: list[str]
+    unmatched: list[str]
+    tables: list[str]
+
+
+def run(connection: psycopg.Connection, cache_dir: str | None = None,
+        session: requests.Session | None = None,
+        log: Callable[[str], None] = print) -> CountersSummary:
     session = fetch.session(session)
     cursor = connection.cursor()
     cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
-    released = dict(cursor.fetchall())
+    released: dict[str, int] = dict(cursor.fetchall())
 
-    articles, missing = {}, []
+    articles: dict[str, str] = {}
+    missing: list[str] = []
     for name in released:
         try:
             articles[name] = fetch_wikitext(session, name, cache_dir)
