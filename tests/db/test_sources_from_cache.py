@@ -61,6 +61,7 @@ def test_blizzard_roster_pulls_from_the_cache(ctx):
     text, data = tools.run_tool(ctx, "pull_heroes")
     assert text.startswith("pull_heroes: roster stored") and data["heroes"] >= 50
     assert "heroes" in data["tables"]
+    assert data["missing"] == []                 # every hero page read from the cache
 
 
 @needs_caches

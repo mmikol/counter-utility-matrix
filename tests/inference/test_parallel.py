@@ -8,6 +8,7 @@ from concurrent.futures.process import BrokenProcessPool
 import pytest
 
 from inference import catalog
+from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts.draft import Draft
 
 
@@ -194,19 +195,30 @@ def test_a_superseded_board_is_not_solved_again_in_this_process(
 def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(world, monkeypatch):
     """Every search is cut into slices across the pool and merged here; the
     answer is byte-for-byte the sequential one, the board's weight overrides
-    included (a worker loads the playbook from its files)."""
+    included (a worker loads the playbook from its files). The reference
+    playbook is in force, so the sixes score and the overrides weigh
+    something; a worker reads the playbook's folder from the environment it
+    was spawned with, so the pool is started for it and dropped after."""
     from inference import engine, parallel
     if not parallel.available():
         pytest.skip("one core, or COUNTRIX_PARALLEL=0")
-    assert parallel.warm() == parallel.worker_count() >= 6
-    weights = {
-        h.id: 10.0 if h.weight < 10 else 0.5 for h in catalog.load() if h.kind == "heuristic"}
-    draft = Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt"), side="attack")
-    split = engine.board(world, draft, brief=engine.Brief(weights=weights))
-    assert split.blue.to_dict()["weights"] == weights         # the override reached the worker
-    monkeypatch.setenv("COUNTRIX_PARALLEL", "0")
-    assert not parallel.available()
-    straight = engine.board(world, draft, brief=engine.Brief(weights=weights))
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", FIXTURE_PLAYBOOK)
+    parallel.POOL.drop()
+    try:
+        assert parallel.warm() == parallel.worker_count() >= 6
+        weights = {
+            h.id: 10.0 if h.weight < 10 else 0.5
+            for h in catalog.load() if h.kind == "heuristic"}
+        assert weights                                 # or the overrides prove nothing
+        draft = Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt"), side="attack")
+        split = engine.board(world, draft, brief=engine.Brief(weights=weights))
+        assert split.blue.to_dict()["weights"] == weights     # the override reached the worker
+        assert split.blue.unscored() is None                  # the six scored
+        monkeypatch.setenv("COUNTRIX_PARALLEL", "0")
+        assert not parallel.available()
+        straight = engine.board(world, draft, brief=engine.Brief(weights=weights))
+    finally:
+        parallel.POOL.drop()
 
     def timeless(b):
         d = b.to_dict()

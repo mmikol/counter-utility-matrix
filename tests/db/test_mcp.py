@@ -75,8 +75,9 @@ def test_bad_json_is_a_parse_error_not_a_crash():
     proc = subprocess.Popen([sys.executable, "-m", "db.mcp"], cwd=ROOT,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True)
-    out, _ = proc.communicate("{not json\n" + json.dumps(
+    out, err = proc.communicate("{not json\n" + json.dumps(
         {"jsonrpc": "2.0", "id": 9, "method": "ping"}) + "\n", timeout=60)
+    assert proc.returncode == 0, err          # a server that died says why
     lines = [json.loads(line) for line in out.splitlines() if line.strip()]
     assert lines[0]["error"]["code"] == -32700
     assert lines[1]["id"] == 9

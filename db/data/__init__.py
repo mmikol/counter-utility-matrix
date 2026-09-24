@@ -15,7 +15,7 @@ page to table, plus what they share.
 Each fetched source's domain module ends in a run(connection, pull) - pull
 a fetch.PullContext: the page cache, the session and the log - that returns
 a PullSummary: the tables it wrote, and for a pull that reads one article
-per entity, the articles that would not fetch (ArticlePullSummary).
+or page per entity, the ones that would not fetch (ArticlePullSummary).
 authored/ has no run - the strategies mirror is inference.catalog.mirror.
 The MCP pull tools (db/mcp) import and call them. Nothing here is an entry
 point of its own.
@@ -30,6 +30,6 @@ class PullSummary(TypedDict):
 
 
 class ArticlePullSummary(PullSummary):
-    """The summary of a pull that fetches one article per entity: missing
-    holds 'title: error' for each article that would not fetch."""
+    """The summary of a pull that fetches one article or page per entity:
+    missing holds 'name: error' for each that would not fetch."""
     missing: list[str]

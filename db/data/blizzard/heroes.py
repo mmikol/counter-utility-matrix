@@ -15,7 +15,7 @@ import psycopg
 from bs4 import BeautifulSoup, Tag
 
 from db import PERK_TIERS, psql
-from db.data import PullSummary, fetch
+from db.data import ArticlePullSummary, fetch
 from db.data.blizzard import BASE_URL, BLIZZARD, HEROES_URL, attr
 from db.data.fetch import cache_key, cached_get
 
@@ -284,7 +284,7 @@ def _store(
         )
         hero_id = psql.scalar(cursor)
 
-        for ability in abilities_by_slug[hero["slug"]]:
+        for ability in abilities_by_slug.get(hero["slug"], ()):
             cursor.execute(
                 # Upserting by name means a RENAMED ability collides with its
                 # own old row on (hero_id, position) and fails the stage. That
@@ -299,7 +299,7 @@ def _store(
                 (hero_id, ability["name"], ability["description"],
                  ability["position"], source_id),
             )
-        for perk in perks_by_slug[hero["slug"]]:
+        for perk in perks_by_slug.get(hero["slug"], ()):
             cursor.execute(
                 "INSERT INTO perks (hero_id, tier_id, name, description, position,"
                 " source_id) VALUES (%s, %s, %s, %s, %s, %s)"
@@ -313,7 +313,7 @@ def _store(
             )
 
 
-class HeroesSummary(PullSummary):
+class HeroesSummary(ArticlePullSummary):
     heroes: int
     subroles: int
     abilities: int
@@ -323,7 +323,9 @@ class HeroesSummary(PullSummary):
 
 def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummary:
     """Store the roster and every hero page's ability and perk text, in one
-    transaction -> the heroes, subroles, abilities, perks and portraits."""
+    transaction -> the heroes, subroles, abilities, perks and portraits, and
+    the hero pages that would not fetch (missing): those heroes are stored
+    from the roster and keep the text they had."""
     roster_soup = BeautifulSoup(
         cached_get(pull.session, HEROES_URL, pull.cache_dir, cache_key(HEROES_URL),
                    policy=PAGE_POLICY), "html.parser")
@@ -334,10 +336,17 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummar
 
     abilities_by_slug: dict[str, list[AbilityText]] = {}
     perks_by_slug: dict[str, list[PerkText]] = {}
+    missing: list[str] = []
     for index, hero in enumerate(heroes, start=1):
         slug = hero["slug"]
-        page = cached_get(pull.session, "%s/heroes/%s/" % (BASE_URL, slug),
-                          pull.cache_dir, cache_key(slug), policy=PAGE_POLICY)
+        try:
+            page = cached_get(pull.session, "%s/heroes/%s/" % (BASE_URL, slug),
+                              pull.cache_dir, cache_key(slug), policy=PAGE_POLICY)
+        except fetch.FetchError as error:
+            # the hero is still stored from the roster; its text stays as it was
+            missing.append("%s: %s" % (hero["name"], error))
+            pull.log("  [%2d/%d] %-18s %s" % (index, len(heroes), hero["name"], error))
+            continue
         soup = BeautifulSoup(page, "html.parser")
         abilities_by_slug[slug] = parse_abilities(soup, slug)
         perks_by_slug[slug] = parse_perks(soup, slug)
@@ -354,5 +363,6 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummar
         "abilities": sum(len(a) for a in abilities_by_slug.values()),
         "perks": sum(len(p) for p in perks_by_slug.values()),
         "portraits": sum(1 for h in heroes if h["portrait_url"]),
+        "missing": missing,
         "tables": ["roles", "subroles", "heroes", "abilities", "perks"],
     }

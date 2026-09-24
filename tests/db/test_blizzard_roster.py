@@ -1,10 +1,14 @@
 """Unit tests: the roster page and a hero page read into subroles, icons,
-hero cards, abilities and perks. No database, no network: the pages are
-inline HTML."""
+hero cards, abilities and perks, and the pull over them. No database, no
+network: the pages are inline HTML."""
+
+import itertools
 
 import pytest
 from bs4 import BeautifulSoup
 
+from db.data import fetch
+from db.data.blizzard import heroes as blizzard_heroes
 from db.data.blizzard.heroes import (
     ScrapeError,
     node_text,
@@ -193,3 +197,54 @@ def test_stadium_powers_are_not_read_as_perks():
 def test_a_malformed_perks_section_is_refused_by_name(page, reason):
     with pytest.raises(ScrapeError, match=reason):
         parse_perks(soup(page), "ana")
+
+
+# --- the pull over the pages ------------------------------------------------
+
+class _Cursor:
+    """Records each statement; every RETURNING reads back the next id."""
+
+    def __init__(self):
+        self.statements, self._ids = [], itertools.count(1)
+
+    def execute(self, sql, params=()):
+        self.statements.append((sql, params))
+        return self
+
+    def fetchone(self):
+        return (next(self._ids),)
+
+
+class _Connection:
+    def __init__(self):
+        self.cursors = []
+
+    def cursor(self):
+        self.cursors.append(_Cursor())
+        return self.cursors[-1]
+
+    def commit(self):
+        pass
+
+
+def test_a_hero_page_that_will_not_fetch_is_recorded_and_the_rest_are_stored(monkeypatch):
+    """A hero page gone from the cache and the network alike is one missing
+    line, not a failed pull: the roster and every other hero page are still
+    stored, and the missing hero's rows are left as they were."""
+    def pages(session, url, cache_dir, key, **kwargs):
+        if key == "ana":
+            raise fetch.FetchError("%s failed after 3 attempts: gone" % url)
+        return HERO if key == "tracer" else ROSTER
+    monkeypatch.setattr(blizzard_heroes, "cached_get", pages)
+    connection = _Connection()
+    summary = blizzard_heroes.run(connection, fetch.PullContext(None, log=lambda line: None))
+    assert [line.split(":")[0] for line in summary["missing"]] == ["Ana"]
+    assert summary["heroes"] == 2 and summary["abilities"] == 2 and summary["perks"] == 4
+    [cursor] = connection.cursors
+    stored = [
+        params[0] for sql, params in cursor.statements if sql.startswith("INSERT INTO heroes")]
+    assert stored == ["ana", "tracer"]
+    owners = {
+        params[0] for sql, params in cursor.statements
+        if sql.startswith(("INSERT INTO abilities", "INSERT INTO perks"))}
+    assert len(owners) == 1                  # one hero's rows, Tracer's; none written for Ana

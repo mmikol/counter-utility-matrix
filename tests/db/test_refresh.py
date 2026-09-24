@@ -283,7 +283,10 @@ def test_daily_refresh_touches_only_what_moves(monkeypatch):
     # daily refetch would keep the wiki cache young and full_due() never true
     assert not set(refresh.DAILY) & {"pull_kits", "pull_synergies", "pull_counters"}
     assert "pull_counters" in [spec.name for spec in tools.REGISTRY.pulls()]
+    # the calls above are stubbed, so a renamed tool would pass them: the names are checked here
+    assert {name for name, _ in calls} <= set(tools.REGISTRY.names())
     calls.clear()
     ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"),
                                  lambda m: None, full=True)
     assert ok and calls == [("sync_all", True)]
+    assert {name for name, _ in calls} <= set(tools.REGISTRY.names())

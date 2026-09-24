@@ -136,11 +136,14 @@ def test_a_ban_does_not_rescale_the_board(world):
     """The reference sample fixes every heuristic's [lo, hi], so it must not
     depend on the bans: banning a hero on neither team would otherwise move the
     score of an unchanged six, and `the best six here` would stop being a
-    function of the six. Bans screen the candidate field, not the scale."""
+    function of the six. Bans screen the candidate field, not the scale. The
+    reference playbook scores: under one that scores nothing every six reads
+    0 and the check could not fail."""
     from inference import catalog as catalog_module
     from inference import scoring
     from inference import solver as solver_module
-    catalog = catalog_module.load()
+    catalog = catalog_module.load(FIXTURE_PLAYBOOK)
+    assert catalog_module.has_scoring_terms(catalog)
     red = ["Zarya", "Pharah"]
     six = ["Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko"]
     absent = [
