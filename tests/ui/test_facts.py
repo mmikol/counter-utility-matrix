@@ -2,8 +2,9 @@
 heroes, the terrain and stage facts, the map-rate and best-map facts and the
 provenance. The values here are the scrape's, pinned on purpose; the
 arithmetic behind them runs on the synthetic World in test_team.py,
-test_metrics.py, test_tables.py and test_board_facts.py, and what the load
-itself reads is test_world.py's."""
+test_metrics.py, test_tables.py, test_board_facts.py, test_hero_facts.py and
+test_team_facts.py, and what the load itself reads is test_world.py's,
+test_world_kits.py's and test_world_maps.py's."""
 
 import statistics
 

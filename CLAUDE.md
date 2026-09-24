@@ -163,8 +163,8 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 - Adding or renaming an MCP tool: regenerate docs/mcp.md; the backticked tool
   names in `.claude/skills/refresh/SKILL.md` must equal
   `orchestrator.AGENT_TOOL_NAMES`; each house skill must still name the tools
-  `MUST_NAME` (tests/test_docs.py) lists; tests/db/test_mcp.py holds the tool
-  set too.
+  `MUST_NAME` (tests/test_docs.py) lists; tests/db/mcp/test_mcp.py holds the
+  tool set too.
 - A new strategy file is cited as a ``- `id` `` line in `inference/README.md`.
   A house skill or a doc names a strategy only by an id the playbook
   holds: a backticked id the record cites and `inference/strategies/`

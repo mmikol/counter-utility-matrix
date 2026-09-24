@@ -1,0 +1,164 @@
+"""The heroes the load builds from the database: the whole roster with its
+kit numbers, each read in its own units - an ultimate's numbers its own, a
+percent not hit points, a sum not one hit - the weapon a hero fights with,
+the tools counted once, the roster-wide benches and no hole in a released
+hero's core numbers. The scrape is the point: every figure is the wiki's.
+The derivation's rules are tests/ui/test_scalars.py's and test_kit.py's."""
+
+import statistics
+
+import pytest
+
+pytestmark = pytest.mark.invariant
+
+
+def test_world_loads_the_whole_roster_with_kit_numbers(world):
+    assert len(world.heroes) > 40 and len(world.maps) >= 25
+    ana = world.hero("Ana")
+    assert ana.role == "support" and ana.hitscan
+    # an ultimate's numbers are its own: Nano Boost's 250 is not Ana's healing,
+    # Self-Destruct's 1000 not D.Va's burst, Transcendence not Zenyatta's rate,
+    # Deadeye's lock-on not Cassidy's reach
+    assert 75 <= ana.peak_heal < 250
+    assert world.hero("D.Va").burst < 1000 <= world.hero("D.Va").ult_damage
+    assert world.hero("Zenyatta").hps < 100
+    assert 30 <= world.hero("Cassidy").max_range < world.hero("Widowmaker").max_range
+    assert "Sleep Dart" in ana.cc_tools
+    assert world.hero("Pharah").flyer and not world.hero("Reinhardt").flyer
+    assert world.hero("Reinhardt").barrier_hp >= 1000
+    assert world.hero("Kiriko").cleanse_tools
+    assert world.heal_bench > 0
+
+
+def test_kit_rows_are_read_in_their_own_units(world):
+    # a percent is not hit points: lifesteal is a share, overhealth its published cap,
+    # EMP a damage ultimate that adds no hit points
+    reaper, mauga, sombra = world.hero("Reaper"), world.hero("Mauga"), world.hero("Sombra")
+    assert reaper.self_heal == 0 and reaper.lifesteal == pytest.approx(0.3)
+    assert mauga.peak_heal == 0 and mauga.self_hps == 0 and mauga.lifesteal == 1.0
+    # an own heal that runs for a duration is also a cast: a share of the held rate
+    # for Overdrive's 3 s, a rate for its longest duration, "100 over 3 seconds".
+    # A passive's share has no duration; Siphon Blaster heals off its own damage
+    assert mauga.self_heal == pytest.approx(mauga.dps * 3.0)
+    assert world.hero("Junker Queen").self_heal == 100 and world.hero("Mei").self_heal == 250
+    assert world.hero("Roadhog").self_heal == 450 and world.hero("Emre").self_heal == 30
+    assert world.hero("Domina").self_heal == 0
+    assert world.hero("Sigma").overhealth == 400 and mauga.overhealth == 150
+    assert world.hero("Lifeweaver").overhealth == 100 == world.hero("Brigitte").overhealth
+    assert sombra.dmg_ult and sombra.ult_damage == 0 and sombra.dmg_amp == 0
+    # a sum, a volley and a window's total are not one hit or a rate
+    hazard = world.hero("Hazard")
+    assert hazard.burst == 75 and hazard.ult_damage == 90
+    assert world.hero("Ramattra").burst == 65
+    assert world.hero("Zenyatta").burst == 100 and world.hero("Widowmaker").burst >= 250
+    # an ultimate fired at its rate for its duration, under the roster's cap
+    assert world.hero("Pharah").ult_damage == world.ult_cap
+    assert 130 < world.hero("Venture").ult_damage < world.ult_cap
+    # three charges of 180; a 175 heavy round on a 2.5 s cooldown, four in 8.8 s
+    assert world.hero("Shion").ult_damage == 540
+    assert world.hero("Emre").ult_damage == 700
+    assert world.hero("Bastion").ult_damage == 550 and world.hero("Genji").ult_damage > 900
+    # sustained rates: the reload in the row's text, the swing the rate counts,
+    # the magazine's share where no reload figure is usable
+    assert world.hero("Zenyatta").dps == pytest.approx(108.7)
+    # both chainguns off one magazine: 138.88 for 8.64 s of every 10.64
+    assert world.hero("Mauga").dps == pytest.approx(112.78, abs=0.01)
+    assert world.hero("Mauga").hitscan_range == 40
+    assert world.hero("Wuyang").dps == pytest.approx(128.21)
+    assert world.hero("Vendetta").dps == pytest.approx(53.1)
+    cat = world.hero("Jetpack Cat")
+    assert cat.dps == pytest.approx(87.18, abs=0.01) and cat.hps == pytest.approx(cat.dps)
+
+
+def test_the_weapon_a_hero_fights_with_sets_its_kind_and_reach(world):
+    winston, torb, ramattra = (world.hero(n) for n in ("Winston", "Torbjörn", "Ramattra"))
+    assert not winston.hitscan and winston.beam and winston.max_range == 8
+    assert winston.burst == 60 and winston.pierces_barrier
+    assert not torb.melee and not torb.pierces_barrier and torb.max_range == 0
+    assert torb.self_heal == 0 and torb.self_hps == 0
+    assert ramattra.melee and ramattra.pierces_barrier and ramattra.dps == 100
+    assert ramattra.max_range == 0 and world.hero("Anran").max_range == 0
+    # Nemesis Form's 275 armor for 8 s of every 16: the form's, not the base row's.
+    # An ultimate's armor (Rally) stays out
+    assert ramattra.form_armor == 137.5 and ramattra.armor == 100 and ramattra.pool == 375
+    assert [h.name for h in world.heroes.values() if h.form_armor] == ["Ramattra"]
+    assert world.hero("Mei").max_range == 12 and world.hero("Sojourn").max_range == 60
+    dmon, dva = world.hero("D.Mon"), world.hero("D.Va")
+    assert dmon.max_range == 4 and dmon.dps == pytest.approx(91.2) and dmon.ult_damage == 125
+    assert dva.burst == 25 and dva.cc_tools == [] and dmon.cc_tools == ["Surging Strike"]
+    # a healing beam is not a beam; a kick is not a barrier piercer
+    assert not world.hero("Mercy").beam and not world.hero("Illari").beam
+    assert world.hero("Moira").beam
+    assert not world.hero("Zenyatta").pierces_barrier
+
+
+def test_tools_are_counted_once_and_for_what_they_do(world):
+    names = ("Sigma", "Junkrat", "Pharah", "Freja", "Reinhardt", "Doomfist", "Mauga")
+    assert [world.hero(n).aoe_count for n in names] == [3, 4, 3, 2, 1, 3, 3]
+    assert world.hero("Baptiste").aoe_count == 3 and world.hero("Baptiste").aoe_damage == 0
+    # a damaging piece typed Area of effect counts without the tag; a piece that
+    # deals no damage (Defense Matrix, Kinetic Grasp) does not
+    names = ("Sierra", "Orisa", "Emre", "Lúcio", "Jetpack Cat", "D.Va", "Sigma")
+    area = {n: (world.hero(n).aoe_count, world.hero(n).aoe_damage) for n in names}
+    assert area == {
+        "Sierra": (2, 2), "Orisa": (2, 2), "Emre": (3, 3), "Lúcio": (4, 1),
+        "Jetpack Cat": (3, 2), "D.Va": (2, 2), "Sigma": (3, 3)}
+    assert world.hero("Junkrat").aoe_damage == 4
+    assert world.hero("Soldier: 76").cc_tools == [] and world.hero("Emre").cc_tools == []
+    assert "Concussion Mine" in world.hero("Junkrat").cc_tools
+    assert world.hero("Sierra").mobility_tools == ["Anchor Drone"]
+    # typed Movement with no movement tag; a speed buff alone is not one
+    assert world.hero("Emre").mobility_tools == ["Siphon Blaster"]
+    assert "Roll" in world.hero("Wrecking Ball").mobility_tools
+    assert "Commanding Shout" not in world.hero("Junker Queen").mobility_tools
+    assert "Nemesis Form" not in world.hero("Ramattra").mobility_tools
+    assert sum(1 for h in world.heroes.values() if h.released and h.mobility_tools) == 39
+    assert world.hero("Zarya").deployables == []
+    assert world.hero("Baptiste").invuln_tools == ["Immortality Field"]
+    doomfist = world.hero("Doomfist")
+    assert doomfist.cleanse_tools == [] and doomfist.invuln_tools == []
+    assert 2.5 not in world.hero("Emre").cooldowns
+    # what lands on a teammate, apart from what saves only its owner
+    picks = [world.hero(n) for n in ("Kiriko", "Reaper", "Venture", "Baptiste", "Mercy", "Moira")]
+    assert [h.name for h in picks if h.cleanse_tools] == ["Kiriko", "Reaper", "Venture", "Moira"]
+    assert [h.name for h in picks if h.team_cleanse_tools] == ["Kiriko"]     # Protection Suzu
+    assert all(h.invuln_tools for h in picks)
+    assert [h.name for h in picks if h.save_tools] == ["Kiriko", "Baptiste", "Mercy"]
+    assert world.hero("Zenyatta").team_cleanse_tools == ["Transcendence"]
+    # Reinhardt's 300 is a swing, all he fights with; Widowmaker's is the biggest shot here
+    five = [world.hero(n) for n in ("Reinhardt", "Ana", "Widowmaker", "Tracer", "Winston")]
+    reinhardt, widowmaker = world.hero("Reinhardt"), world.hero("Widowmaker")
+    assert reinhardt.burst == 300 and reinhardt.melee_only and not widowmaker.melee_only
+    assert widowmaker.burst == max(h.burst for h in five if not h.melee_only)
+    assert [h.name for h in five if h.hitscan] == ["Ana", "Widowmaker", "Tracer"]
+    assert [h.name for h in five if h.hitscan_range >= 30] == ["Widowmaker"]     # 70 m
+    # 30 m answers a flier (Shion's pistols), 25 m does not
+    four = [world.hero(n) for n in ("Shion", "Wrecking Ball", "Junker Queen", "Cassidy")]
+    assert all(h.hitscan for h in four) and world.hero("Shion").hitscan_range == 30
+    assert [h.name for h in four if h.hitscan_range >= 30] == ["Shion", "Cassidy"]
+    # an explosion does not crit: Freja's bolt is 35 to the head, 75 flat
+    assert world.hero("Freja").burst == 75
+
+
+def test_an_announced_hero_sets_no_roster_wide_figure(world):
+    out = [h for h in world.heroes.values() if h.released and h.role == "support"]
+    assert world.heal_bench == 2 * statistics.median(h.peak_heal for h in out if h.peak_heal)
+    assert world.hps_bench == 2 * statistics.median(h.hps for h in out if h.hps)
+    assert world.ult_cap == max(h.ult_damage for h in world.heroes.values() if h.released)
+
+
+def test_no_released_hero_is_missing_a_core_kit_number(world):
+    """The kit block carries most of the playbook's weight, and a hole in it is
+    silent: a tank that deals no damage still scores, just wrongly. Domina read
+    zero because her beam publishes a rate only as damage `over time`."""
+    holes = []
+    for hero in sorted(world.heroes.values(), key=lambda h: h.name):
+        if not hero.released:
+            continue
+        if not hero.pool:
+            holes.append("%s has no health pool" % hero.name)
+        if not hero.dps:
+            holes.append("%s deals no damage" % hero.name)
+        if hero.role == "support" and not hero.hps:
+            holes.append("%s is a support that heals nothing" % hero.name)
+    assert not holes, holes
