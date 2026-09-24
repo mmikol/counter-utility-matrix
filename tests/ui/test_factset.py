@@ -47,8 +47,9 @@ def test_a_fact_is_a_frozen_record_and_the_draft_serves_as_lists():
     """A fact, once numbered, does not change; the board it describes reaches
     the JSON as the lists the page and the MCP payload have always read."""
     fs = FactSet(Draft("King's Row", ("Zarya",), ("Ana",), ("Sombra",), "attack"))
-    fs.add("hero", "Ana", "hero.pool", "Ana pool: 250", source="heroes", value=250, unit="hp",
-           team="blue")
+    fs.add(
+        "hero", "Ana", "hero.pool", "Ana pool: 250", source="heroes", value=250, unit="hp",
+        team="blue")
     [fact] = fs.facts
     with pytest.raises(dataclasses.FrozenInstanceError):
         fact.text = "Ana pool: 300"

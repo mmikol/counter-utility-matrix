@@ -160,8 +160,8 @@ def test_the_data_dictionary_says_counters_are_the_wikis_matchups():
 
 def test_the_migration_that_drops_counterpick_is_one_transaction():
     from db.psql import schema
-    [sql] = [m.sql for m in schema.read_migrations()
-             if m.name == "019_wiki_replaces_counterpick.sql"]
+    [sql] = [
+        m.sql for m in schema.read_migrations() if m.name == "019_wiki_replaces_counterpick.sql"]
     body = [line for line in sql.splitlines() if line and not line.startswith("--")]
     assert body[0] == "BEGIN;" and body[-1] == "COMMIT;"
     assert "DROP TABLE IF EXISTS map_strategy;" in body

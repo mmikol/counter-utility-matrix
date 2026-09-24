@@ -37,9 +37,11 @@ def main() -> int:
     playbook = catalog.playbook_digest()
     with open(OUT, "w", encoding="utf-8") as handle:
         json.dump({"playbook": playbook, "boards": seated}, handle, indent=1)
-    print("recorded %d seated heroes under playbook %s, %d of them after bans; unseated: %s"
-          % (len(seated), playbook[:12], sum(1 for b in seated if b["bans"]),
-             ", ".join(unseated) or "none"))
+    print(
+        "recorded %d seated heroes under playbook %s, %d of them after bans; unseated: %s"
+        % (
+            len(seated), playbook[:12], sum(1 for b in seated if b["bans"]),
+            ", ".join(unseated) or "none"))
     return 0
 
 

@@ -68,8 +68,9 @@ def _announce_heroes(
             " ON CONFLICT (slug) DO UPDATE SET release_date = EXCLUDED.release_date,"
             " health = coalesce(EXCLUDED.health, heroes.health), cao = now()"
             " RETURNING hero_id",
-            (slug, hero_name, role_id, subrole_id, found["health"], found["release_date"],
-             source_id))
+            (
+                slug, hero_name, role_id, subrole_id, found["health"], found["release_date"],
+                source_id))
         hero_ids[hero_name.lower()] = psql.scalar(cursor)
         stored.append(hero_name)
         pull.log("announced hero stored: %s (%s, %s%s)" % (

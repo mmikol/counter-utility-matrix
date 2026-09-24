@@ -31,8 +31,9 @@ SUBPAGE_RE = re.compile(r"\{\{\s*main\s*\|\s*(%s/[^}|]+?)\s*\}\}" % SEASON_PAGE,
 ARC_RE = re.compile(r"^\s*'{2,5}([^'\n]+?)'{2,5} is the \d{4} arc\b", re.M)
 HEADING_RE = re.compile(r"^===\s*(Season\s+\d+.*?)\s*===[ \t]*$", re.M | re.I)
 
-MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august",
-          "september", "october", "november", "december"]
+MONTHS = [
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december"]
 # "4 October 2022", "June 20, 2024", "June 20 2024"; the year may be left
 # to the other end of the run: "(February 18 - 22 April 2025)".
 DATE = (r"(?:(\d{1,2})\s+(%(m)s)|(%(m)s)\s+(\d{1,2}))(?:,?\s*(\d{4}))?"

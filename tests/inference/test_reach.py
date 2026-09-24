@@ -30,8 +30,9 @@ def test_every_hero_reach_finds_a_board_for_is_still_seated_and_none_is_newly_lo
     assert all(b["bans"] is not None and b["bans"] <= reach.MAX_BANS for b in boards)
     fell = [b["hero"] for b in boards if b["hero"] in released and not reach.seated(world, b)]
     # a stale fixture fails here, before the costly search for what it lost
-    stale = ("" if fixture["playbook"] == catalog.playbook_digest()
-             else " - recorded under a different playbook")
+    stale = (
+        "" if fixture["playbook"] == catalog.playbook_digest()
+        else " - recorded under a different playbook")
     assert len(fell) <= len(boards) // 5, "the recorded boards have gone stale%s: %s" % (
         stale, fell)
     lost = [name for name in sorted((released - on_file) | set(fell))

@@ -222,8 +222,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> MapsSummary:
 
     phases = parse_phases(fetch_wikitext(pull.session, HYBRID_PAGE, pull.cache_dir))
     # a map in two modes takes its stages from the first
-    codes = {map_name: code for code, _, maps in reversed(modes)
-             for map_name in maps}
+    codes = {map_name: code for code, _, maps in reversed(modes) for map_name in maps}
     # a map whose article will not fetch keeps the stages it had: map_stages
     # is upserted, never deleted
     articles, missing = fetch_articles(pull.session, map_ids, pull.cache_dir, pull.log)

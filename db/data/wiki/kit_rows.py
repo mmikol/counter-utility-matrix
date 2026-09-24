@@ -60,8 +60,10 @@ class HeroKit(NamedTuple):
 
 # Columns that describe the ability rather than measure it.
 NON_STAT_FIELDS = frozenset(
-    {"hero_name", "ability_name", "ability_type", "ability_key", "removed",
-     "official_description", "ability_keywords"}
+    {
+        "hero_name", "ability_name", "ability_type", "ability_key", "removed",
+        "official_description", "ability_keywords"
+    }
 )
 
 STAT_ALIASES = {"range_distance": "range"}

@@ -59,16 +59,18 @@ def test_a_page_with_no_heroes_section_is_refused():
 
 def test_a_patch_without_a_name_or_a_date_is_skipped_and_counted():
     rows = [
-        {"name": "April 1, 2020 Patch", "date": "2020-04-01",
-         "platform": "PC Switch PS4 Xbox One",
-         "source": "https://playoverwatch.com/en-us/news/patch-notes/pc"},
+        {
+            "name": "April 1, 2020 Patch", "date": "2020-04-01",
+            "platform": "PC Switch PS4 Xbox One",
+            "source": "https://playoverwatch.com/en-us/news/patch-notes/pc"},
         {"name": "Undated Patch", "date": "", "platform": "PC", "source": ""},
         {"date": "2021-03-03", "platform": "PC", "source": ""},
         {"name": "Hotfix", "date": "2022-02-02", "platform": "", "source": ""},
     ]
     # an empty platform or source is stored as NULL
     assert dated_patches(rows) == ([
-        ("April 1, 2020 Patch", "2020-04-01", "PC Switch PS4 Xbox One",
-         "https://playoverwatch.com/en-us/news/patch-notes/pc"),
+        (
+            "April 1, 2020 Patch", "2020-04-01", "PC Switch PS4 Xbox One",
+            "https://playoverwatch.com/en-us/news/patch-notes/pc"),
         ("Hotfix", "2022-02-02", None, None),
     ], 2)

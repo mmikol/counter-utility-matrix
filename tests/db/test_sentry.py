@@ -74,8 +74,9 @@ def test_an_audit_line_whose_client_is_not_a_name_is_malformed(tmp_path):
     # the door names a client or none; a list there once failed the whole pass
     audit = tmp_path / "audit.jsonl"
     now = datetime.now(UTC).isoformat(timespec="seconds")
-    lines = [{"t": now, "client": ["http:a"], "tool": "facts", "ok": True},
-             {"t": now, "client": None, "tool": "facts", "ok": True}]
+    lines = [
+        {"t": now, "client": ["http:a"], "tool": "facts", "ok": True},
+        {"t": now, "client": None, "tool": "facts", "ok": True}]
     audit.write_text("".join(json.dumps(line) + "\n" for line in lines))
     door = sentry.check_door(str(audit))
     assert (door.recent, door.malformed) == (1, 1)
@@ -95,8 +96,9 @@ def test_a_line_cut_by_the_seek_or_still_being_written_is_not_malformed(tmp_path
     # inside a character, and the log's last line can be half written
     audit = tmp_path / "audit.jsonl"
     old = datetime.fromtimestamp(time.time() - 3600, UTC).isoformat(timespec="seconds")
-    first = (json.dumps({"t": old, "tool": "tune", "refused": "L\u00facio"}, ensure_ascii=False)
-             + "\n").encode()
+    first = (
+        json.dumps({"t": old, "tool": "tune", "refused": "L\u00facio"}, ensure_ascii=False)
+        + "\n").encode()
     size = first.index("\u00fa".encode()) + 1 + sentry.AUDIT_TAIL_BYTES     # its second byte
     skeleton = len(json.dumps({"t": old, "tool": "facts", "pad": ""})) + 1
     filler = json.dumps({"t": old, "tool": "facts", "pad": "x" * (size - len(first) - skeleton)})

@@ -35,8 +35,9 @@ def test_the_ability_vocabulary_is_one_list():
                             ("Ability", db.KIND_ABILITY),
                             ("", db.KIND_ABILITY)):
         assert ability_kind(base_type) == code
-    assert all(ability_kind(t) in db.ABILITY_KINDS
-               for t in ("weapon", "WEAPON x", "an ultimate", "a passive", "anything"))
+    assert all(
+        ability_kind(t) in db.ABILITY_KINDS
+        for t in ("weapon", "WEAPON x", "an ultimate", "a passive", "anything"))
 
 
 # --- an announced hero, from its article ----------------------------------------------
@@ -75,8 +76,9 @@ KIT_ARTICLE = """{{Ability details
 | heal = 45
 | aoe = 9 meters
 }}
-""" % ('<ref name = "video">2026-02-16,[https://example.org/watch?v=1 How to play].'
-       " ''YouTube''</ref>")
+""" % (
+    '<ref name = "video">2026-02-16,[https://example.org/watch?v=1 How to play].'
+    " ''YouTube''</ref>")
 
 
 def test_an_unfetchable_hero_page_is_reported_rather_than_read_as_empty(tmp_path, instant_wiki):

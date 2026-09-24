@@ -7,14 +7,14 @@ independently, and the wiki types both exactly the same way.
 
 Three signals separate them, applied in order:
 
-1. A shared base name after dropping an "Alt Fire" or "(ADS)" suffix
-   ("Particle Cannon" / "Particle Cannon Alt Fire") is one weapon.
-2. A Hip Fire entry followed by an ADS entry is one weapon, whatever the ADS
-   entry is called ("Biotic Rifle" then "Zoom (ADS)").
-3. A Primary Fire entry followed by a Secondary Fire entry is one weapon
-   UNLESS both names end in the same noun. Two weapons of one class get named
-   "<modifier> <noun>" twice - Incendiary Chaingun, Volatile Chaingun - while
-   a fire mode is named for what it does (Peacekeeper, Fan the Hammer).
+1.  A shared base name after dropping an "Alt Fire" or "(ADS)" suffix
+    ("Particle Cannon" / "Particle Cannon Alt Fire") is one weapon.
+2.  A Hip Fire entry followed by an ADS entry is one weapon, whatever the ADS
+    entry is called ("Biotic Rifle" then "Zoom (ADS)").
+3.  A Primary Fire entry followed by a Secondary Fire entry is one weapon
+    UNLESS both names end in the same noun. Two weapons of one class get named
+    "<modifier> <noun>" twice - Incendiary Chaingun, Volatile Chaingun - while
+    a fire mode is named for what it does (Peacekeeper, Fan the Hammer).
 
 Form-based entries (Mech/Pilot, Recon/Assault, Omnic/Nemesis) never merge:
 those are different loadouts, not modes of one gun.

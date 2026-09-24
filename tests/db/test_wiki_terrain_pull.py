@@ -45,10 +45,8 @@ def test_terrain_pulls_from_the_cache(sandbox):
 
     assert {code for *_, code in rows} == {"wiki"}
     assert {feature for _, feature, *_ in rows} == set(terrain.FEATURES)
-    assert all(mentions >= 0 and per_thousand >= 0
-               for _, _, mentions, per_thousand, _ in rows)
-    assert all((mentions == 0) == (per_thousand == 0)
-               for _, _, mentions, per_thousand, _ in rows)
+    assert all(mentions >= 0 and per_thousand >= 0 for _, _, mentions, per_thousand, _ in rows)
+    assert all((mentions == 0) == (per_thousand == 0) for _, _, mentions, per_thousand, _ in rows)
     by_map = {}
     for map_id, feature, *_ in rows:
         by_map.setdefault(map_id, set()).add(feature)
@@ -102,8 +100,9 @@ def test_stage_terrain_pulls_from_the_cache(sandbox):
     assert 20 <= data["stages"] < total
 
     assert {code for *_, code in rows} == {"wiki"}
-    assert all(mentions >= 0 and (mentions == 0) == (per_thousand == 0)
-               for _, _, mentions, per_thousand, _ in rows)
+    assert all(
+        mentions >= 0 and (mentions == 0) == (per_thousand == 0)
+        for _, _, mentions, per_thousand, _ in rows)
     by_stage = {}
     for stage_id, feature, *_ in rows:
         by_stage.setdefault(stage_id, set()).add(feature)

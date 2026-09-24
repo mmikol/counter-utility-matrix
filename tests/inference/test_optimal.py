@@ -101,8 +101,9 @@ def test_the_recorder_holds_out_banned_and_unproven_rows(tmp_path):
         {"board": banned, "exact": True, "true_six": SIX, "true_score": 3.0},
         {"board": board, "exact": False, "true_six": SIX, "true_score": 2.0},
         {"board": board, "exact": True},
-        {"board": board, "exact": True, "true_six": SIX, "true_score": 1.0,
-         "true_six_outside_pool": True})
+        {
+            "board": board, "exact": True, "true_six": SIX, "true_score": 1.0,
+            "true_six_outside_pool": True})
     proven = {"board": board, "six": SIX, "score": 1.0, "needed_outside": True}
     assert optimal.read_proofs([path], stale_banned=True) == [proven]
     assert optimal.read_proofs([path], stale_banned=False) == [
