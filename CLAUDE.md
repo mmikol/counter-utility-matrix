@@ -191,9 +191,15 @@ db <- facts <- inference <- door <- ui.
   pinning is made on the server, as the seat badge is (`momentum.badges`).
   The math page restates code constants (`SYNERGY_PULL`); change both with
   the test.
-- `tests/fixtures/optimal.json` is the regression gate on the search.
-  Regenerate it only after a deliberate change to the objective: re-run the
-  brute force (it lives outside the repo), then `OPTIMAL_SOURCES=<its .jsonl
+- `test_the_search_reaches_the_enumerated_maximum` in
+  `tests/inference/test_solver.py` is the regression gate on the search:
+  six synthetic boards under the reference playbook and a role queue, each
+  role's pool cut to two, the search against a full enumeration, with no
+  database, so CI runs it. A board it misses is a solver defect: fix the
+  search, never swap the board out.
+- `tests/fixtures/optimal.json` is the real-World gate, dormant. Regenerate
+  it only after a deliberate change to the objective: re-run the brute
+  force (it lives outside the repo), then `OPTIMAL_SOURCES=<its .jsonl
   files> .venv/bin/python -m scripts.optimal`, which records proofs and
   computes none. Say in the commit why every number moved. The fixture
   records its playbook's digest (`catalog.playbook_digest`), so the gate

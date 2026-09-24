@@ -1,11 +1,13 @@
-"""The search on a board: shape limits, a need and its budget, partners that
-only pay together, the scale a ban leaves alone, the ranking order and its
-tie-breaks, a rule scaled by the metric it names and the bounds its slices
-merge into, and the reference sample of a small roster. Every board is the
-synthetic World's: no database."""
+"""The search on a board: the enumerated maximum it must reach, shape
+limits, a need and its budget, partners that only pay together, the scale a
+ban leaves alone, the ranking order and its tie-breaks, a rule scaled by the
+metric it names and the bounds its slices merge into, and the reference
+sample of a small roster. Every board is the synthetic World's: no
+database."""
 
 import copy
 import dataclasses
+import itertools
 import os
 import shutil
 
@@ -17,7 +19,91 @@ from facts.draft import Draft
 from facts.records import StyleScore, Synergy
 from facts.team import team_metrics
 from inference import catalog
+from inference.shapes import legal_shapes
 from tests.inference import FIXTURE_PLAYBOOK
+
+# the reference playbook's shape limit tightened to Role Queue's two-two-two
+ROLE_QUEUE = (
+    "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and team.damage == 2"
+    " and team.supports == 2\n---\nx\n")
+
+
+def shape(six):
+    """A six's (tanks, damage, supports)."""
+    return tuple(sum(1 for h in six if h.role == r) for r in ("tank", "damage", "support"))
+
+
+def legal_sixes(world, playbook, locked=(), banned=()):
+    """Every six of the world's released heroes that holds the locked picks,
+    fields no banned hero and takes a shape the playbook allows."""
+    shapes = set(legal_shapes(playbook))
+    taken = {h.id for h in (*locked, *banned)}
+    free = [h for h in world.heroes.values() if h.released and h.id not in taken]
+    sixes = ([*locked, *rest] for rest in itertools.combinations(free, 6 - len(locked)))
+    return [six for six in sixes if shape(six) in shapes]
+
+
+def test_the_search_reaches_the_enumerated_maximum(synthetic_world, catalog_copy):
+    """The regression gate on the search. On six small boards - no red, red
+    revealed, one lock, two locks, two bans, and a pair that pays only
+    together - every legal six is enumerated and scored, and infer returns
+    the best of them, tie-break included. Each role's pool holds two of its
+    four heroes, so the reach-back steps have to find the rest. The playbook
+    is the reference plus a role queue: a shape the pools cannot seat is
+    never searched, and pools of two cannot seat three of a role. A board
+    this misses is a solver defect: fix the search, never swap the board out."""
+    from inference import engine, scoring
+    from inference import solver as solver_module
+    with open(os.path.join(catalog_copy, "role-queue.md"), "w", encoding="utf-8") as handle:
+        handle.write(ROLE_QUEUE)
+    fix = catalog.load(catalog_copy)
+    assert catalog.has_scoring_terms(fix)
+
+    def searched(world, draft):
+        m, red, locked, banned = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
+        solver = solver_module.Solver(world, m, red=red, locked=locked, banned=banned,
+                                      side=draft.side, catalog=fix, pool_size=2)
+        solver.freeze_bounds()
+        return solver, legal_sixes(world, fix, locked, banned)
+
+    # the pair: two heroes the pools cut on a world with no synergies, made the
+    # one synergy pair of a copy of the world
+    pair_board = Draft("Salt Flats", ("Anvil",))
+    alone = copy.copy(synthetic_world)
+    alone.synergies, alone.partners = {}, {}
+    solver, _ = searched(alone, pair_board)
+    a, b = synthetic_world.hero("Anvil"), synthetic_world.hero("Tansy")
+    assert not {a.id, b.id} & {h.id for pool in solver.pools().values() for h in pool}
+    paired = copy.copy(synthetic_world)
+    synergy = Synergy(1, "scratch")
+    paired.synergies = {frozenset((a.id, b.id)): synergy}
+    paired.partners = {a.id: {b.id: synergy}, b.id: {a.id: synergy}}
+    boards = [
+        (synthetic_world, Draft("Harbor Gate", side="attack")),
+        (synthetic_world, Draft("Ember Ruins", ("Mortar", "Gale"))),
+        (synthetic_world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm",), side="defense")),
+        (synthetic_world, Draft("Salt Flats", ("Anvil",), ("Kite", "Needle"))),
+        (synthetic_world, Draft("Ember Ruins", ("Rook",), (), ("Myrrh", "Flint"))),
+        (paired, pair_board)]
+    missed, reached_back = [], []
+    for world, draft in boards:
+        solver, sixes = searched(world, draft)
+        scored = [solver.score(solver.prepare(scoring.Candidate(six)), detail=False)
+                  for six in sixes]
+        feasible = sorted((c for c in scored if not c.violations), key=solver._rank_key)
+        best = feasible[0]
+        assert best.score > feasible[-1].score, draft          # the playbook tells sixes apart
+        got = engine.infer(world, draft, catalog=fix, pool_size=2, top=1)
+        if sorted(got.blue) != sorted(best.names) or abs(got.score - best.score) > 1e-9:
+            missed.append("%s: %.6f %s, enumerated %.6f %s"
+                          % (draft, got.score, sorted(got.blue), best.score, sorted(best.names)))
+        seated = {h.id for pool in solver.pools().values() for h in pool}
+        seated |= {h.id for h in solver.locked}
+        reached_back += [h.name for h in best.heroes if h.id not in seated]
+        if world is paired:
+            assert {a.name, b.name} <= set(best.names)     # the pair pays, and is fielded
+    assert not missed, "the search misses the enumerated maximum:\n  " + "\n  ".join(missed)
+    assert reached_back                    # some board's best six holds a hero the pools cut
 
 
 def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(synthetic_world, tmp_path):
@@ -35,9 +121,7 @@ def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(synthetic_w
     for name in os.listdir(FIXTURE_PLAYBOOK):
         if name != "open-queue-tanks.md":
             shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
-    (tmp_path / "shape.md").write_text(
-        "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and"
-        " team.damage == 2 and team.supports == 2\n---\nx\n", "utf-8")
+    (tmp_path / "shape.md").write_text(ROLE_QUEUE, "utf-8")
     cat = catalog.load(str(tmp_path))
     r = engine.infer(world, Draft("Harbor Gate", ("Needle",), ("Balm",)), pool_size=4,
                      catalog=cat)
@@ -99,9 +183,7 @@ def test_partners_that_only_pay_together_are_brought_in_together(synthetic_world
             world.heroes[twin.id] = twin
             world.by_key[name_key(twin.name)] = twin.id
             next_id += 1
-    (tmp_path / "shape.md").write_text(
-        "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and"
-        " team.damage == 2 and team.supports == 2\n---\nx\n", "utf-8")
+    (tmp_path / "shape.md").write_text(ROLE_QUEUE, "utf-8")
     rule = "---\nname: %s\nkind: heuristic\ndirection: maximize\nmetric: %s\nweight: %s\n---\nx\n"
     (tmp_path / "winning.md").write_text(rule % ("Winning", "team.win_mean", 1), "utf-8")
     (tmp_path / "together.md").write_text(rule % ("Together", "team.synergy_edges", 0.5), "utf-8")
@@ -328,19 +410,9 @@ def test_a_roster_with_fewer_legal_sixes_than_the_reference_is_sampled_whole(syn
     """Twelve heroes, four a role, hold fewer distinct sixes than REFERENCE_SIZE
     asks for. The reference is then every legal six once, in the seeded order,
     where the draw used to spin forever looking for more."""
-    import itertools
-
     from inference import scale, scoring
-    from inference.shapes import legal_shapes
     playbook = catalog.load(FIXTURE_PLAYBOOK)
-    shapes = set(legal_shapes(playbook))
-
-    def shape(six):
-        return tuple(sum(1 for h in six if h.role == r) for r in ("tank", "damage", "support"))
-    released = [h for h in synthetic_world.heroes.values() if h.released]
-    legal = {
-        frozenset(h.id for h in six)
-        for six in itertools.combinations(released, 6) if shape(six) in shapes}
+    legal = {frozenset(h.id for h in six) for six in legal_sixes(synthetic_world, playbook)}
     objective = scoring.Objective(synthetic_world, None, red=[], catalog=playbook)
     drawn = scale.sample(objective)
     assert len(legal) < scale.REFERENCE_SIZE

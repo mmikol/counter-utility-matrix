@@ -6,11 +6,12 @@ candidates, minutes of CPU - so it is done offline and the answer recorded.
 what it scored, beside the digest of the playbook it was proved under. This
 re-solves each and checks the solver still reaches it.
 
-It is the regression gate on the search: a change that quietly stops finding a
-two-swap, or narrows the pool, or breaks a constraint, shows up here as a board
-that used to be exact and is not. Regenerate with
-`.venv/bin/python -m scripts.optimal` after a deliberate change to the objective,
-and say in the commit why every number moved.
+It is the real-World gate, dormant: the boards were proved under a playbook
+that no longer exists, so it skips until they are re-proven (pm/backlog.md). The
+enumeration that gates the search in CI is
+test_the_search_reaches_the_enumerated_maximum in test_solver.py, on synthetic
+boards. Regenerate with `.venv/bin/python -m scripts.optimal` after a deliberate
+change to the objective, and say in the commit why every number moved.
 The recorder's own choices - which proofs it takes and which it holds out - are
 tested here too, on rows written for the test.
 """

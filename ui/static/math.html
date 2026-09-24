@@ -94,9 +94,10 @@ The <b>pool</b> keeps each role's six highest-standing heroes, a truncation that
 hero who is weak alone and decisive beside one partner. The <b>local search</b> reaches back
 out of the pool: it swaps against the whole released roster, restarts two dozen times inside
 the leading shape, and changes two seats at once, which is how a pair that only pays together
-is found. On 30 boards brute-forced over all 18 shapes the search returned the exact maximum
-every time, and on 13 of those the winning six held a hero the pool had cut. The reaching
-back is what found them.</p>
+is found. The suite checks the reaching back on every run: on small boards of a twelve-hero
+test roster under a two-two-two role queue, each role's pool cut to half, the search returns
+the maximum a full enumeration finds, and on at least one of them the winning six holds a hero
+the pool cut. The tests page has the larger proofs.</p>
 <p id='against-red'><b>What it is optimal against.</b> A comp is optimal <i>against the red
 you can see</i>, not against every red they might pick. Before red reveals anything the board
 answers their most likely starting comp, drawn from the map's pick rates; each pick they show

@@ -48,14 +48,17 @@ keeps it current.
   fight odds split 100 exactly; the local search never lowers the score.
   Cost: (a) three to four days, the kit model most of it; (b) a day for
   the tests, a day for the page.
-- **Re-prove the regression gate's boards, banned boards included.**
-  `tests/fixtures/optimal.json` was proved under the 239 rules 9328429
-  removed, and its digest names that playbook: the gate test skips while
-  the shipped playbook scores nothing and fails at the digest once it
-  scores again. `scripts/optimal.py` also holds out every board with bans
+- **Re-prove the real-World gate's boards, banned boards included.** In
+  CI the search is gated by an enumeration of six synthetic boards
+  (`test_the_search_reaches_the_enumerated_maximum`, two bans on one of
+  them); the real roster's gate is dormant. `tests/fixtures/optimal.json`
+  was proved under the 239 rules 9328429 removed, and its digest names
+  that playbook: the gate test skips while the shipped playbook scores
+  nothing and fails at the digest once it scores again.
+  `scripts/optimal.py` also holds out every board with bans
   (`OPTIMAL_STALE_BANNED`, on by default), since those boards were
-  enumerated before the scale went ban-blind, so the gate proves nothing
-  about the search under bans. The work: enumerate a fresh set, with one
+  enumerated before the scale went ban-blind, so that gate proves nothing
+  about the real roster under bans. The work: enumerate a fresh set, with one
   to five bans among the shapes, under the reference playbook
   `tests/fixtures/playbook` (`COUNTRIX_STRATEGIES` selects it). A tune of
   the live playbook never stales that set; a set proved under the live
