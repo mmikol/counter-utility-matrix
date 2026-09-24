@@ -24,6 +24,7 @@ container runs this loop.
 
 import argparse
 import os
+import statistics
 import time
 import traceback
 from collections.abc import Callable, Iterable
@@ -83,19 +84,19 @@ def seconds_until(at: str, now: datetime | None = None) -> float:
     return (target - now).total_seconds()
 
 
+def _page_ages(cache_dirs: Iterable[str]) -> list[float]:
+    """Seconds since each cached page in `cache_dirs` was written; a directory
+    that does not exist holds none."""
+    now = time.time()
+    return [now - os.path.getmtime(os.path.join(path, name))
+            for path in cache_dirs if os.path.isdir(path) for name in os.listdir(path)]
+
+
 def cache_age_hours(cache_dirs: Iterable[str] | None = None) -> float | None:
     """Hours since the newest cached page across the sources; None if there
     is no cache at all (a first build)."""
-    newest: float | None = None
-    for path in (cache_dirs or CACHE_DIRS.values()):
-        if not os.path.isdir(path):
-            continue
-        for name in os.listdir(path):
-            mtime = os.path.getmtime(os.path.join(path, name))
-            newest = mtime if newest is None else max(newest, mtime)
-    if newest is None:
-        return None
-    return (time.time() - newest) / SECONDS_PER_HOUR
+    ages = _page_ages(cache_dirs or CACHE_DIRS.values())
+    return min(ages) / SECONDS_PER_HOUR if ages else None
 
 
 def full_due(
@@ -103,14 +104,10 @@ def full_due(
     """A full refresh is due when the slow-moving cache (the wiki's) is older
     than `full_days`, or absent. Its age is the median page's: the daily
     refresh refetches a few pages (the Season pages), a full one all of them."""
-    ages: list[float] = []
-    for path in (cache_dirs or [CACHE_DIRS["wiki"]]):
-        if os.path.isdir(path):
-            ages += [time.time() - os.path.getmtime(os.path.join(path, name))
-                     for name in os.listdir(path)]
+    ages = _page_ages(cache_dirs or [CACHE_DIRS["wiki"]])
     if not ages:
         return True
-    return sorted(ages)[len(ages) // 2] > full_days * 24 * SECONDS_PER_HOUR
+    return statistics.median_high(ages) > full_days * 24 * SECONDS_PER_HOUR
 
 
 class Refreshed(NamedTuple):
@@ -128,8 +125,8 @@ def refresh_once(
     Never raises; a failure returns (False, the error)."""
     started = time.time()
     try:
-        # inside the try: full_due() reads the database, so the decision can
-        # fail like the refresh it decides, and the promise above has to hold
+        # inside the try: full_due() lists and stats the page cache, which can
+        # raise OSError like the refresh it decides, and the promise above has to hold
         if full is None:
             full = full_due(full_days)
         log("refresh: starting a %s refresh at %s" % (
