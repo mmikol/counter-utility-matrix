@@ -3,6 +3,7 @@ each half-drafted seat through its fill, and the game plan - the style, the
 terrain and the stages it names, and nothing the board contradicts."""
 
 import copy
+import os
 
 import pytest
 
@@ -144,19 +145,21 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     rules = [
         Ns(
             id="two-supports-hold", name="Two supports hold a six", kind="constraint",
-            category="shape", when=None, pending=False),
+            form="scored", category="shape", when=None, pending=False),
         Ns(
-            id="dive-the-pocket", name="Dive the pocket", kind="constraint",
+            id="dive-the-pocket", name="Dive the pocket", kind="constraint", form="scored",
             category="matchup", when=Expr("enemy.dmg_amp >= 2"), pending=False),
         Ns(
             id="brawl-maps", name="Brawl maps reward durability", kind="heuristic",
-            category="map", when=Expr("map.style_top == 'brawl'"), pending=False),
+            form="heuristic", category="map", when=Expr("map.style_top == 'brawl'"),
+            pending=False),
         Ns(
             id="poke-needs-reach", name="Poke needs reach", kind="heuristic",
-            category="shape", when=Expr("team.style_lean == 'poke'"), pending=False),
+            form="heuristic", category="shape", when=Expr("team.style_lean == 'poke'"),
+            pending=False),
         Ns(
-            id="unmet", name="An unmet need", kind="heuristic", category="general",
-            when=None, pending=False)]
+            id="unmet", name="An unmet need", kind="heuristic", form="heuristic",
+            category="general", when=None, pending=False)]
     terms: list[Contribution] = [
         {
             "id": r.id, "kind": r.kind, "form": "scored" if r.kind == "constraint" else "heuristic",
@@ -198,3 +201,31 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     assert [world.hero(n) for n in tanks[:len(alone)]] == sorted(
         alone, key=lambda h: -(h.map_win(m.id) or h.win or 0.0))[:plan.FAMILY_SIZE]
     assert "Tanks: %s." % ", ".join(plan._family(world, m, "poke", "tank", [])) in said
+
+
+def test_a_playbook_that_scores_nothing_gets_a_plan_that_claims_no_counter(
+        synthetic_world, tmp_path):
+    """With nothing scored the six is only the highest win rates the search
+    found, so the plan says that: no counter to their likely six, nothing
+    built to fit together, and the style worded from the roles the six
+    actually holds - which a support-less six would not be told to lean on."""
+    import shutil
+
+    from inference import engine, plan
+    shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), tmp_path)
+    limit_only = catalog.load(str(tmp_path))
+    assert not catalog.has_scoring_terms(limit_only)
+    for draft in (Draft(), Draft("Harbor Gate", side="attack")):
+        b = engine.board(synthetic_world, draft, catalog=limit_only)
+        assert "the six counters" not in b.plan, draft
+        assert "built to fit together" not in b.plan, draft
+        assert "the six is the highest win-rate six the search found" in b.plan, draft
+        assert "No red pick yet: their likely six is " in b.plan, draft
+        roles = [p["role"] for p in b.blue.picks]
+        for role in ("tank", "damage", "support"):
+            n = roles.count(role)
+            assert ("%d %s" % (n, role) if n else "no %s" % role) in b.plan, (draft, role)
+    lacking = {"tank": 2, "damage": 4, "support": 0}
+    assert plan._shape(lacking) == "2 tanks, 4 damage and no support"
+    assert "supports who can follow" not in plan._advice("dive", lacking)
+    assert "no support can follow" in plan._advice("dive", lacking)
