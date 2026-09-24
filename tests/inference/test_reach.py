@@ -3,12 +3,16 @@ impossible. tests/fixtures/reach.json records, per released hero, the board
 inference.reach.search seated it on (a tool: `reach`), within the five bans a match has,
 beside the digest of the playbook that seated it; `python -m scripts.reach` re-records it.
 Rates move daily and the two databases differ, so a few boards may tip; a hero that falls
-off its board is searched for again, and none may be lost."""
+off its board is searched for again, and none may be lost. The search itself, and the
+recorder, run on the synthetic World."""
+
+import json
 
 import pytest
 
 from db import Refusal
 from inference import catalog, reach
+from scripts import reach as recorder
 from tests.inference import recorded
 from ui.facts.model import World
 
@@ -71,9 +75,64 @@ def test_reach_refuses_a_hero_the_world_does_not_know():
         reach.search(World(), "Nosuchhero")
 
 
-@pytest.mark.invariant
-def test_reach_without_a_map_pool_is_the_servers_fault(world, monkeypatch):
+def test_reach_without_a_map_pool_is_the_servers_fault(synthetic_world, monkeypatch):
     monkeypatch.setattr(reach, "maps", lambda world, hero: [])
     with pytest.raises(RuntimeError, match="no board") as caught:
-        reach.search(world, "Ana")
+        reach.search(synthetic_world, "Anvil")
     assert not isinstance(caught.value, Refusal)
+
+
+def test_a_hero_its_best_map_favours_is_seated_there_with_no_ban(synthetic_world):
+    """Anvil's map rates lift it most on Harbor Gate: the search tries that map
+    first, finds Anvil in the optimal six against red's likely six, and the
+    board it records seats Anvil again when it is solved afresh."""
+    anvil = synthetic_world.hero("Anvil")
+    assert reach.maps(synthetic_world, anvil)[0].name == "Harbor Gate"
+    assert reach.reds(synthetic_world, anvil)[0] == []
+    board = reach.search(synthetic_world, "Anvil")
+    assert (board["bans"], board["map"], board["red"], board["gap"]) == (0, "Harbor Gate", [], 0.0)
+    assert "Anvil" in board["six"] and reach.seated(synthetic_world, board)
+
+
+class _Connected:
+    """psycopg.connect's context manager, connected to nothing."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_the_recorder_writes_every_seated_hero_beside_the_playbook_digest(
+        synthetic_world, monkeypatch, tmp_path, capsys):
+    """scripts.reach searches each released hero in name order, records the
+    boards that seat one beside the playbook's digest, and names the heroes no
+    board seats with the gap each fell short by. The search is stubbed: its
+    own tests are above."""
+    searched = []
+
+    def search(world, name):
+        searched.append(name)
+        if name == "Quarry":
+            return {"hero": name, "bans": None, "map": "Salt Flats", "side": "", "red": [],
+                    "banned": [], "six": [], "gap": 1.235}
+        banned = ["Needle"] if name == "Rook" else []
+        return {"hero": name, "bans": len(banned), "map": "Harbor Gate", "side": "attack",
+                "red": [], "banned": banned, "six": [name], "gap": 0.0}
+    monkeypatch.setattr(recorder.psql, "default_dsn", lambda: "postgresql://nowhere")
+    monkeypatch.setattr(recorder.psycopg, "connect", lambda dsn: _Connected())
+    monkeypatch.setattr(recorder.tables, "load", lambda cx: synthetic_world)
+    monkeypatch.setattr(recorder.reach, "search", search)
+    monkeypatch.setattr(recorder.catalog, "playbook_digest", lambda: "ab" * 32)
+    monkeypatch.setattr(recorder, "OUT", str(tmp_path / "reach.json"))
+    assert recorder.main() == 0
+    released = sorted(h.name for h in synthetic_world.heroes.values() if h.released)
+    assert searched == released and "Wisp" not in searched
+    with open(tmp_path / "reach.json", encoding="utf-8") as handle:
+        written = json.load(handle)
+    assert written["playbook"] == "ab" * 32
+    assert [b["hero"] for b in written["boards"]] == [n for n in released if n != "Quarry"]
+    assert capsys.readouterr().out == (
+        "recorded 11 seated heroes under playbook abababababab, 1 of them after bans;"
+        " unseated: Quarry 1.235\n")
