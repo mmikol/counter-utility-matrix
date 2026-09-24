@@ -581,6 +581,39 @@ BOARD = {
                             " the other); ignored on Control, Push, Flashpoint"},
 }
 
+# A board tool's function: its context, the Draft, then its own arguments.
+BoardFn = Callable[..., Reply]
+
+
+def _names(value: object) -> tuple[str, ...]:
+    """An array of names the schema admitted, as the tuple a Draft holds."""
+    return tuple(str(v) for v in value) if isinstance(value, (list, tuple)) else ()
+
+
+def _draft(arguments: dict[str, object]) -> Draft:
+    """The board BOARD's five arguments name, taken out of the call's
+    arguments: the lists as tuples, and what the call left out empty."""
+    map_name = arguments.pop("map", None)
+    return Draft(map_name=None if map_name is None else str(map_name),
+                 red=_names(arguments.pop("red", ())),
+                 blue=_names(arguments.pop("blue", ())),
+                 bans=_names(arguments.pop("bans", ())),
+                 side=str(arguments.pop("side", "")))
+
+
+def board_tool(
+        name: str, description: str, properties: dict[str, Any] | None = None,
+        required: Sequence[str] = ()) -> Callable[[BoardFn], BoardFn]:
+    """The decorator that registers a board tool: BOARD's five properties
+    first, then its own, and the function called with the one Draft they name
+    and the rest of the arguments. The function is returned as it is."""
+    def decorate(fn: BoardFn) -> BoardFn:
+        def call(ctx: Context, **arguments: object) -> Reply:
+            return fn(ctx, _draft(arguments), **arguments)
+        tool(name, description, dict(BOARD, **(properties or {})), required)(call)
+        return fn
+    return decorate
+
 
 @tool("roster", "Every hero with role, subrole, health pool, portrait and status"
       " (released, or announced with its release day - shown, never picked), plus"
@@ -602,19 +635,17 @@ def roster(ctx: Context) -> Reply:
     return text, {"heroes": heroes, "maps": maps}
 
 
-@tool("facts", "The UI LAYER: every fact the database holds about a board -"
-      " independent facts per named hero and for the map, joint facts per"
-      " team once it has picks (shape, effective HP, damage and healing"
-      " floors, range, tempo, cohesion, coverage...), and matchup facts"
-      " once both teams have picks. Numbered F1.. for citation.",
-      dict(BOARD, format={"type": "string", "enum": ["lines", "json"],
-                          "description": "lines (default) or json"}))
-def facts(
-        ctx: Context, map: str | None = None, red: Sequence[str] = (), blue: Sequence[str] = (),
-        bans: Sequence[str] = (), side: str = "", format: str = "lines") -> Reply:
+@board_tool("facts", "The UI LAYER: every fact the database holds about a board -"
+            " independent facts per named hero and for the map, joint facts per"
+            " team once it has picks (shape, effective HP, damage and healing"
+            " floors, range, tempo, cohesion, coverage...), and matchup facts"
+            " once both teams have picks. Numbered F1.. for citation.",
+            {"format": {"type": "string", "enum": ["lines", "json"],
+                        "description": "lines (default) or json"}})
+def facts(ctx: Context, draft: Draft, format: str = "lines") -> Reply:
     with ctx.connect() as cx:
         world = tables.load(cx)
-    fs = board_facts.generate(world, Draft(map, tuple(red), tuple(blue), tuple(bans), side))
+    fs = board_facts.generate(world, draft)
     payload = fs.to_dict()
     text = fs.rendered() if format == "lines" else json.dumps(payload)
     return text, payload
@@ -623,34 +654,28 @@ def facts(
 COMPACT_TERMS = 15        # the heaviest terms a compact reply carries
 
 
-@tool("infer", "The INFERENCE LAYER: the optimal six for this board under"
-      " the markdown strategies in inference/strategies/ (players assumed"
-      " to play optimally). Locked blue picks are kept; the rest is"
-      " searched. Returns the comp, per-pick reasons with fact citations,"
-      " the strategy score breakdown, and alternatives.",
-      dict(BOARD, top={"type": "integer", "description": "alternatives to"
-                                                         " return (default 5)"},
-           pool={"type": "integer", "description": "candidates per role the"
-                                                   " search keeps (default 6)"},
-           compact={"type": "boolean", "description": "true: a reply small enough"
-                                                      " to carry under a playbook of"
-                                                      " hundreds. The structured payload"
-                                                      " then has its own keys: map, side,"
-                                                      " red, blue, score, strategies,"
-                                                      " idle, silent (applying, metric not"
-                                                      " varying on this board) and largest"
-                                                      " (the %d heaviest terms, each an id"
-                                                      " and its weighted value)"
-                                                      % COMPACT_TERMS}))
-def infer(
-        ctx: Context, map: str | None = None, red: Sequence[str] = (), blue: Sequence[str] = (),
-        bans: Sequence[str] = (), side: str = "", top: int = 5, pool: int = 6,
-        compact: bool = False) -> Reply:
+@board_tool("infer", "The INFERENCE LAYER: the optimal six for this board under"
+            " the markdown strategies in inference/strategies/ (players assumed"
+            " to play optimally). Locked blue picks are kept; the rest is"
+            " searched. Returns the comp, per-pick reasons with fact citations,"
+            " the strategy score breakdown, and alternatives.",
+            {"top": {"type": "integer", "description": "alternatives to return (default 5)"},
+             "pool": {"type": "integer",
+                      "description": "candidates per role the search keeps (default 6)"},
+             "compact": {"type": "boolean",
+                         "description": "true: a reply small enough to carry under a"
+                                        " playbook of hundreds. The structured payload"
+                                        " then has its own keys: map, side, red, blue,"
+                                        " score, strategies, idle, silent (applying,"
+                                        " metric not varying on this board) and largest"
+                                        " (the %d heaviest terms, each an id and its"
+                                        " weighted value)" % COMPACT_TERMS}})
+def infer(ctx: Context, draft: Draft, top: int = 5, pool: int = 6,
+          compact: bool = False) -> Reply:
     with ctx.connect() as cx:
         world = tables.load(cx)
     pool, top = engine.clamp_search(pool, top)
-    result = engine.infer(world, Draft(map, tuple(red), tuple(blue), tuple(bans), side),
-                          pool_size=pool, top=top)
+    result = engine.infer(world, draft, pool_size=pool, top=top)
     if compact:
         return _compact(result)
     return result.rendered(), result.to_dict()
@@ -679,17 +704,15 @@ def _compact(result: Result) -> Reply:
     return "\n".join(lines), payload
 
 
-@tool("evaluate", "Score a FULL blue six against the strategies without"
-      " searching: the breakdown per strategy, constraint violations, and"
-      " how it ranks against the optimum.", BOARD, ["blue"])
-def evaluate(
-        ctx: Context, blue: Sequence[str], map: str | None = None, red: Sequence[str] = (),
-        bans: Sequence[str] = (), side: str = "") -> Reply:
-    # blue has no default: the schema marks it required and the engine takes a
-    # full six, so an empty one was never a call worth reaching the engine
+@board_tool("evaluate", "Score a FULL blue six against the strategies without"
+            " searching: the breakdown per strategy, constraint violations, and"
+            " how it ranks against the optimum.", required=["blue"])
+def evaluate(ctx: Context, draft: Draft) -> Reply:
+    # the schema requires blue: the engine takes a full six, so a call
+    # without one never reaches the engine
     with ctx.connect() as cx:
         world = tables.load(cx)
-    result = engine.evaluate(world, Draft(map, tuple(red), tuple(blue), tuple(bans), side))
+    result = engine.evaluate(world, draft)
     return result.rendered(), result.to_dict()
 
 
@@ -714,34 +737,31 @@ def reach_tool(ctx: Context, hero: str) -> Reply:   # _tool: inference.reach hol
         ", ".join(found["six"]))), found
 
 
-@tool("board", "The whole board at any stage of the draft (no map, a map, a side,"
-      " bans, red's picks as they reveal): blue's optimal six as the best counter"
-      " to red's selection - to their likely six until they reveal a pick"
-      " (blue's own picks never constrain it), red's best"
-      " counter to yours, both current comps scored on those scales, your picks"
-      " against red's best counter, your locked picks with the empty slots filled,"
-      " the fight odds (each seat's share of its own optimal, and the two against"
-      " each other), the game plan in prose, the shapes the queue and the"
-      " playbook's limits allow, and red's likely six"
-      " from the data alone (a two-two-two from the map's pick rates and the"
-      " wiki's synergies, past the bans; static for the board, no strategy read).",
-      dict(BOARD, pool={"type": "integer", "description": "candidates per role the"
-                                                          " search keeps (default 6)"},
-           weights={"type": "object",
-                    "description": "{heuristic id: 0..10} - weights to score this board"
-                                   " under instead of the files' (the playbook tab's"
-                                   " sliders); the files are untouched"}))
-def board(
-        ctx: Context, map: str | None = None, red: Sequence[str] = (), blue: Sequence[str] = (),
-        bans: Sequence[str] = (), side: str = "", pool: int = 6,
-        weights: dict[str, Any] | None = None) -> Reply:
+@board_tool("board", "The whole board at any stage of the draft (no map, a map, a side,"
+            " bans, red's picks as they reveal): blue's optimal six as the best counter"
+            " to red's selection - to their likely six until they reveal a pick"
+            " (blue's own picks never constrain it), red's best"
+            " counter to yours, both current comps scored on those scales, your picks"
+            " against red's best counter, your locked picks with the empty slots filled,"
+            " the fight odds (each seat's share of its own optimal, and the two against"
+            " each other), the game plan in prose, the shapes the queue and the"
+            " playbook's limits allow, and red's likely six"
+            " from the data alone (a two-two-two from the map's pick rates and the"
+            " wiki's synergies, past the bans; static for the board, no strategy read).",
+            {"pool": {"type": "integer",
+                      "description": "candidates per role the search keeps (default 6)"},
+             "weights": {"type": "object",
+                         "description": "{heuristic id: 0..10} - weights to score this"
+                                        " board under instead of the files' (the playbook"
+                                        " tab's sliders); the files are untouched"}})
+def board(ctx: Context, draft: Draft, pool: int = 6,
+          weights: Mapping[str, object] | None = None) -> Reply:
     with ctx.connect() as cx:
         world = tables.load(cx)
     pool, _ = engine.clamp_search(pool)
     brief = engine.Brief(pool_size=pool, weights=catalog.parse_weights(weights or {}))
-    b = engine.board(world, Draft(map, tuple(red), tuple(blue), tuple(bans), side), brief=brief)
+    b = engine.board(world, draft, brief=brief)
     return b.rendered(), b.to_dict()
-
 
 @tool("strategies", "The inference layer's catalog - STRATEGIES = CONSTRAINTS ∪ HEURISTICS"
       " ∪ ASSUMPTIONS: every markdown strategy with its kind (constraint, heuristic or"

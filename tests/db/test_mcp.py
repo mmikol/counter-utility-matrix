@@ -470,6 +470,35 @@ def test_every_playbook_write_mirrors_the_catalog_once(tmp_path, monkeypatch):
     assert data["derived"] == [] and len(mirrored) == 3
 
 
+def test_a_board_tool_hands_its_function_one_draft(tmp_path, monkeypatch):
+    """The board tools share BOARD's five properties, first and in order, and
+    each function gets them as one Draft: tuples, with what the call left out
+    empty."""
+    from ui.facts import board_facts, tables
+    from ui.facts.draft import Draft
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
+    seen = []
+
+    class Stub:
+        def to_dict(self):
+            return {}
+
+        def rendered(self):
+            return ""
+
+    class Offline(tools.Context):
+        def connect(self):
+            return contextlib.nullcontext("cx")
+    monkeypatch.setattr(tables, "load", lambda cx: None)
+    monkeypatch.setattr(board_facts, "generate", lambda world, draft: seen.append(draft) or Stub())
+    tools.run_tool(Offline(dsn="postgresql://nowhere"), "facts", map="Ilios", red=["Ana"],
+                   bans=["Mei"])
+    assert seen == [Draft("Ilios", ("Ana",), (), ("Mei",), "")]
+    for name in ("facts", "infer", "evaluate", "board"):
+        assert list(tools.REGISTRY.get(name).schema["properties"])[:5] == list(tools.BOARD)
+    assert tools.REGISTRY.get("evaluate").schema["required"] == ["blue"]
+
+
 def test_a_registry_refuses_a_tool_name_twice():
     registry = tools.Registry()
 
