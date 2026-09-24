@@ -1,6 +1,6 @@
 """infer(), evaluate() and board(): the solver plus the facts it cites.
 
-    infer(world, "King's Row", red=["Zarya", "Pharah"], blue=["Ana"], side="attack")
+    infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",), side="attack"))
 
 returns the optimal six around the locked picks, each pick with the facts
 that justify it (the board the UI layer would show for map + red + the
@@ -17,7 +17,6 @@ import os
 import pickle
 import threading
 import time
-from collections import namedtuple
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
@@ -188,9 +187,6 @@ class Result:
     rank: int | None = None
     playstyle: str = ""
     best: float | None = None          # the board's best score: what 100 means here
-    # the Solver that produced this result, set by infer(): current() scores a
-    # partial team against the bounds its seat's optimal search froze
-    solver: Solver | None = None
     # the assumptions - nothing to score: what the agent reconciles the facts
     # against beyond the arithmetic
     considerations: list[Consideration] = field(init=False)
@@ -236,7 +232,9 @@ class Result:
             if fact is not None:
                 c["fact"], c["text"] = fact.id, fact.text
 
-    def to_dict(self, include_facts: bool = False) -> Payload:
+    def to_dict(self) -> Payload:
+        """The result as JSON-ready data. The facts it cites ride along as
+        `cited`, id to text; the board's whole FactSet is the facts route's."""
         cited = {}
         if self.facts is not None:
             ids = {fid for p in self.picks for fid in p["evidence"]}
@@ -260,10 +258,11 @@ class Result:
                 "alternatives": self.alternatives, "rank": self.rank,
                 "considered": self.considered, "seconds": round(self.seconds, 2),
                 "strategies": catalog_module.counts(self.catalog), "cited": cited,
-                "considerations": self.considerations, "pending": self.pending,
-                "facts": self.facts.to_dict() if (include_facts and self.facts) else None}
+                "considerations": self.considerations, "pending": self.pending}
 
     def rendered(self) -> str:
+        """The result as text: the heading, the six and its score, and a line
+        each for the picks, the breakdown and the alternatives."""
         head = "%s for %s%s%s vs %s%s%s" % (
             {"infer": "optimal comp", "evaluate": "evaluation",
              "current": "current comp", "countered": "if countered optimally",
@@ -408,62 +407,78 @@ def clamp_search(pool: str | float | None = None,
         raise Refusal("pool and top must be numbers: %s" % error) from error
 
 
-def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
-          blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "", *,
-          catalog: list[Strategy] | None = None, pool_size: int = 6, top: int = 5,
-          seat: str = "blue", solved: Solved | None = None) -> Result:
-    """The optimal six for `seat` around its locked picks (`blue`) against
-    the other seat's revealed picks (`red`), on `side` of a sided map.
+def infer(world: World, draft: Draft, *, catalog: list[Strategy] | None = None,
+          pool_size: int = 6, top: int = 5) -> Result:
+    """Blue's optimal six around its locked picks (`draft.blue`) against red's
+    revealed ones, on the draft's side of a sided map."""
+    return _optimal(world, draft, catalog=catalog or catalog_module.load(),
+                    pool_size=pool_size, top=top, seat="blue", kind="infer",
+                    solved=None).result
+
+
+def evaluate(world: World, draft: Draft, *, catalog: list[Strategy] | None = None,
+             pool_size: int = 6) -> Result:
+    """Blue's full six (`draft.blue`), scored and ranked against the field the
+    solver would have searched."""
+    return _evaluated(world, draft, catalog=catalog or catalog_module.load(),
+                      pool_size=pool_size, seat="blue", kind="evaluate", swept=None)
+
+
+class _Optimal(NamedTuple):
+    """A seat's optimal six and the Solver that found it: the seat's current
+    comp is scored under the bounds that search froze."""
+    result: Result
+    solver: Solver
+
+
+def _optimal(world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int,
+             top: int, seat: str, kind: str, solved: Solved | None) -> _Optimal:
+    """The optimal six for `seat` around its locked picks (`draft.blue`)
+    against the other seat's revealed ones (`draft.red`), labelled `kind`.
     `solved` takes a Solved the caller already has - a board's search, run
-    across the worker pool - instead of searching here."""
+    across the worker pool - in place of searching here."""
     started = time.time()
-    catalog = catalog or catalog_module.load()
-    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
-    side = _side(m, side)
+    m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
+    side = _side(m, draft.side)
     check_team_size(blue_h, seat)
     check_tanks(blue_h, seat)
-    result = Result(kind="infer", map_name=m.name if m else None,
-                    red=[h.name for h in red_h], blue=[], locked=[h.name for h in blue_h],
-                    catalog=catalog, bans=[h.name for h in bans_h], side=side, seat=seat)
+    result = Result(kind=kind, map_name=m.name if m else None, red=[h.name for h in red_h],
+                    blue=[], locked=[h.name for h in blue_h], catalog=catalog,
+                    bans=[h.name for h in bans_h], side=side, seat=seat)
     if solved is None:
         solved = Solver(world, m, red=red_h, locked=blue_h, banned=bans_h, side=side,
                         catalog=catalog, pool_size=pool_size).solve(top=max(top, 1) + 1)
-    solver, ranked = solved.solver, solved.ranked
-    if not ranked:
+    if not solved.ranked:
         raise Refusal("no composition satisfies the limits around the"
                          " locked %s picks - relax a constraint in inference/strategies/"
                          % seat)
-    best = ranked[0]
+    best = solved.ranked[0]
     result.blue = _order(best.heroes)
     fs = _board_facts(world, result, side)
-    result.record_candidate(best, fs, solver.considered)
+    result.record_candidate(best, fs, solved.solver.considered)
     result.alternatives = [Alternative(blue=_order(c.heroes), score=round(c.score, 3),
                                        normalized=None)
-                           for c in ranked[1:top + 1]]
+                           for c in solved.ranked[1:top + 1]]
     result.scale_to(result.score)
     result.seconds = time.time() - started
-    result.solver = solver
-    return result
+    return _Optimal(result, solved.solver)
 
 
-def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
-             blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "", *,
-             catalog: list[Strategy] | None = None, pool_size: int = 6,
-             seat: str = "blue", swept: Swept | None = None) -> Result:
-    """A full six for `seat`, scored and ranked against the field the solver
-    would have searched. `swept` takes that field from a search the caller
-    already ran on this board."""
+def _evaluated(world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int,
+               seat: str, kind: str, swept: Swept | None) -> Result:
+    """`seat`'s full six (`draft.blue`), scored and ranked against the field
+    the solver would have searched, labelled `kind`. `swept` takes that field
+    from a search the caller already ran on this board."""
     started = time.time()
-    catalog = catalog or catalog_module.load()
-    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
-    side = _side(m, side)
+    m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
+    side = _side(m, draft.side)
     if len(blue_h) != TEAM_SIZE:
         raise Refusal("evaluate needs exactly %d %s picks (got %d)"
                          % (TEAM_SIZE, seat, len(blue_h)))
     check_tanks(blue_h, seat)
-    result = Result(kind="evaluate", map_name=m.name if m else None,
-                    red=[h.name for h in red_h], blue=[h.name for h in blue_h], locked=[],
-                    catalog=catalog, bans=[h.name for h in bans_h], side=side, seat=seat)
+    result = Result(kind=kind, map_name=m.name if m else None, red=[h.name for h in red_h],
+                    blue=[h.name for h in blue_h], locked=[], catalog=catalog,
+                    bans=[h.name for h in bans_h], side=side, seat=seat)
     evaluated = evaluate_comp(world, m, blue_h, red=red_h, banned=bans_h, side=side,
                               catalog=catalog, pool_size=pool_size, swept=swept)
     fs = _board_facts(world, result, side)
@@ -479,42 +494,33 @@ def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
     return result
 
 
-def current(world: World, blue_result: Result, map_name: str | None = None,
-            red: Sequence[str] = (), blue: Sequence[str] = (), bans: Sequence[str] = (),
-            side: str = "", *, catalog: list[Strategy] | None = None, pool_size: int = 6,
-            seat: str = "blue", swept: Swept | None = None) -> Result:
-    """`seat`'s current picks (`blue`, from that seat's perspective) as they
-    stand against the other seat's (`red`): a full six is evaluated against
-    the field; a partial team is scored with the bounds of the optimal
-    search it came from, and says so. `blue_result` is that seat's infer()
-    result - the partial branch reads its `.solver`."""
-    if len(blue) == TEAM_SIZE:
-        return evaluate(world, map_name, red, blue, bans, side, catalog=catalog,
-                        pool_size=pool_size, seat=seat, swept=swept)
-    # The partial branch hands the catalog to Result, which iterates it, so the
-    # declared default has to be loaded the way infer() and evaluate() load
-    # theirs. Both callers pass one today, so this never fired.
-    catalog = catalog or catalog_module.load()
-    started = time.time()
-    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
-    side = _side(m, side)
-    result = Result(kind="current", map_name=m.name if m else None,
-                    red=[h.name for h in red_h], blue=[h.name for h in blue_h],
-                    locked=[h.name for h in blue_h], catalog=catalog,
-                    bans=[h.name for h in bans_h], side=side, seat=seat, partial=True)
-    if not blue_h:
-        result.seconds = time.time() - started
+def _current(world: World, draft: Draft, *, solver: Solver, best: float,
+             catalog: list[Strategy], pool_size: int, seat: str, kind: str,
+             swept: Swept | None) -> Result:
+    """`seat`'s picks (`draft.blue`, from that seat's perspective) as they
+    stand against the other seat's (`draft.red`), on the scale of the seat's
+    optimal: `solver` is the Solver its search ran and `best` its score, the
+    100. A full six is evaluated against the field - `swept`, when the caller
+    already has it - and reads "evaluate" where `kind` is "current", any other
+    kind staying as given; a partial team is scored under the bounds `solver`
+    froze, and says so."""
+    if len(draft.blue) == TEAM_SIZE:
+        result = _evaluated(world, draft, catalog=catalog, pool_size=pool_size, seat=seat,
+                            kind="evaluate" if kind == "current" else kind, swept=swept)
+        result.scale_to(best)
         return result
-    solver = blue_result.solver
-    if solver is None:
-        raise TypeError("current() scores a partial team against the bounds of its"
-                         " seat's optimal search: blue_result must be an infer() result,"
-                         " which carries the solver that drew them")
-    result.best = blue_result.score
-    cand = solver.prepare(Candidate(blue_h))
-    solver.score(cand)
-    fs = _board_facts(world, result, side)
-    result.record_candidate(cand, fs, solver.considered)
+    started = time.time()
+    m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
+    side = _side(m, draft.side)
+    result = Result(kind=kind, map_name=m.name if m else None, red=[h.name for h in red_h],
+                    blue=[h.name for h in blue_h], locked=[h.name for h in blue_h],
+                    catalog=catalog, bans=[h.name for h in bans_h], side=side, seat=seat,
+                    partial=True)
+    if blue_h:
+        cand = solver.prepare(Candidate(blue_h))
+        solver.score(cand)
+        result.record_candidate(cand, _board_facts(world, result, side), solver.considered)
+    result.scale_to(best)
     result.seconds = time.time() - started
     return result
 
@@ -995,15 +1001,20 @@ def _revive(world: World, verdict: Verdict) -> Candidate:
     return cand
 
 
-# the board one worker solves, named: it crosses the pool as a plain tuple does
-Spec = namedtuple("Spec", "map_name enemy locked pool_size bans side")
+class Spec(NamedTuple):
+    """The board one worker solves: the seat's draft, from the seat's own
+    perspective and its side normalised by board(), and the candidates per
+    role."""
+    draft: Draft
+    pool_size: int
 
 
 def _solver(world: World, catalog: list[Strategy], spec: Spec) -> Solver:
-    m, red_h, locked_h, bans_h = world.resolve(spec.map_name, spec.enemy, spec.locked,
-                                               spec.bans)
-    return Solver(world, m, red=red_h, locked=locked_h, banned=bans_h,
-                  side=_side(m, spec.side), catalog=catalog, pool_size=spec.pool_size)
+    """The Solver for a spec's board."""
+    seat = spec.draft
+    m, red_h, locked_h, bans_h = world.resolve(seat.map_name, seat.red, seat.blue, seat.bans)
+    return Solver(world, m, red=red_h, locked=locked_h, banned=bans_h, side=seat.side,
+                  catalog=catalog, pool_size=spec.pool_size)
 
 
 def _bounds(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
@@ -1152,28 +1163,24 @@ class _Split:
 
 
 COUNTERED_POOL = 4          # a what-if: a smaller field is enough
+BOARD_TOP = 5               # the alternatives each of a board's seats keeps
 
 
-def _countered(world: World, map_name: str | None, red_optimal: Sequence[str],
-               blue: Sequence[str], bans: Sequence[str] = (), side: str = "", *,
-               catalog: list[Strategy] | None = None, pool_size: int = 6, top: int = 5,
-               solved: Solved | None = None, swept: Swept | None = None) -> Result:
-    """Blue's picks against red's optimal six: how they hold if red answers
-    perfectly."""
+def _countered(world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int,
+               top: int, solved: Solved | None, swept: Swept | None) -> Result:
+    """Blue's picks (`draft.blue`) against red's optimal six (`draft.red`):
+    how they hold if red answers perfectly, on the scale of blue's best
+    counter to that six."""
     hypothetical = min(pool_size, COUNTERED_POOL)
-    against = infer(world, map_name, red_optimal, [], bans, side, catalog=catalog,
-                    pool_size=hypothetical, top=top, solved=solved)
-    result = current(world, against, map_name, red_optimal, blue, bans, side,
-                     catalog=catalog, pool_size=hypothetical, swept=swept)
-    result.kind = "countered"
-    result.scale_to(against.score)
-    return result
+    against = _optimal(world, draft._replace(blue=()), catalog=catalog, pool_size=hypothetical,
+                       top=top, seat="blue", kind="infer", solved=solved)
+    return _current(world, draft, solver=against.solver, best=against.result.score,
+                    catalog=catalog, pool_size=hypothetical, seat="blue", kind="countered",
+                    swept=swept)
 
 
-def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
-          blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "", *,
-          catalog: list[Strategy] | None = None, pool_size: int = 6, top: int = 5,
-          weights: dict[str, float] | None = None) -> Board:
+def board(world: World, draft: Draft, *, catalog: list[Strategy] | None = None,
+          pool_size: int = 6, weights: dict[str, float] | None = None) -> Board:
     """The whole board in one pass, at whatever stage the draft is - no map
     (the meta's best six), a map, a map and a side, bans, red's picks as
     they reveal:
@@ -1211,8 +1218,9 @@ def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
     """
     parallel = parallel_available(catalog)
     catalog = catalog_module.weighted(catalog or catalog_module.load(), weights)
-    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
-    side = _side(m, side)
+    m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
+    draft = draft._replace(side=_side(m, draft.side))
+    side = draft.side
     for team, seat in ((red_h, "red"), (blue_h, "blue")):
         check_team_size(team, seat)
         check_tanks(team, seat)
@@ -1222,13 +1230,18 @@ def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
     likely = compute.expected_picks(world, m, banned=bans_h)
     expected = Result(kind="expected", map_name=m.name if m else None, red=[],
                       blue=[p["hero"] for p in likely], locked=[], catalog=catalog,
-                      bans=list(bans), side=side, seat="red",
+                      bans=list(draft.bans), side=side, seat="red",
                       picks=[Pick(hero=p["hero"], role=p["role"], rate=p["rate"],
                                   locked=p["locked"], why=p["why"], evidence=[])
                              for p in likely])
-    enemy = list(red) if red else expected.blue
-    blue_list, bans_list = list(blue), list(bans)
-    wants_fill = 0 < len(blue_list) < TEAM_SIZE
+    enemy = draft.red or tuple(expected.blue)
+    # each seat's draft, from that seat's perspective: its own picks are `blue`
+    blue_seat = draft._replace(red=enemy, blue=())
+    red_seat = Draft(draft.map_name, draft.blue, (), draft.bans, opposite(side))
+    ours = draft._replace(red=enemy)                   # the current comp and the fill
+    theirs = Draft(draft.map_name, draft.blue, draft.red, draft.bans, opposite(side))
+    wants_fill = 0 < len(draft.blue) < TEAM_SIZE
+    want = BOARD_TOP + 1
     # One orchestration, run once. Across the pool the four searches are split
     # and handed to the same six calls; in this process every split is None and
     # each call searches for itself. A worker dying anywhere in the pooled pass
@@ -1244,78 +1257,73 @@ def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
             if pooled:
                 workers = _workers()
                 pool = workers.executor
-                want = max(top, 1) + 1
                 half = max(1, workers.size // 2)
                 rest = max(1, workers.size - half)
-                blue_split = _Split(pool, world, catalog,
-                                    Spec(map_name, enemy, [], pool_size, bans_list, side),
+                blue_split = _Split(pool, world, catalog, Spec(blue_seat, pool_size),
                                     weights, want, half)
-                red_split = _Split(pool, world, catalog,
-                                   Spec(map_name, blue_list, [], pool_size, bans_list,
-                                        opposite(side)), weights, want, rest)
+                red_split = _Split(pool, world, catalog, Spec(red_seat, pool_size),
+                                   weights, want, rest)
                 blue_split.rank_roster()
                 red_split.rank_roster()
                 blue_split.sweep()
                 red_split.sweep()
                 if wants_fill:
                     # the fill is blue's board, so it takes blue's scale and draws none
-                    fill_split = _Split(pool, world, catalog,
-                                        Spec(map_name, enemy, blue_list, pool_size,
-                                             bans_list, side),
+                    fill_split = _Split(pool, world, catalog, Spec(ours, pool_size),
                                         weights, want, half, blue_split.bounds,
                                         blue_split.standing)
                     fill_split.sweep()
                 blue_split.merge()
                 red_split.merge()
-            blue_r = infer(world, map_name, enemy, [], bans, side, catalog=catalog,
-                           pool_size=pool_size, top=top,
-                           solved=blue_split.solved() if blue_split else None)
-            red_r = infer(world, map_name, blue_list, [], bans, opposite(side),
-                          catalog=catalog, pool_size=pool_size, top=top, seat="red",
-                          solved=red_split.solved() if red_split else None)
-            if pooled and blue_list and red_r.blue:
+            blue = _optimal(world, blue_seat, catalog=catalog, pool_size=pool_size,
+                            top=BOARD_TOP, seat="blue", kind="infer",
+                            solved=blue_split.solved() if blue_split else None)
+            red = _optimal(world, red_seat, catalog=catalog, pool_size=pool_size,
+                           top=BOARD_TOP, seat="red", kind="infer",
+                           solved=red_split.solved() if red_split else None)
+            countered_seat = draft._replace(red=tuple(red.result.blue))
+            if pooled and draft.blue and red.result.blue:
                 countered_split = _Split(
                     pool, world, catalog,
-                    Spec(map_name, red_r.blue, [], min(pool_size, COUNTERED_POOL),
-                         bans_list, side),
+                    Spec(countered_seat._replace(blue=()), min(pool_size, COUNTERED_POOL)),
                     weights, want, rest)
                 countered_split.sweep()
             if fill_split is not None:
                 fill_split.merge()
             if countered_split is not None:
                 countered_split.merge()
-            # a full six is ranked against the field its seat's search just swept
-            cur = current(world, blue_r, map_name, enemy, blue, bans, side,
-                          catalog=catalog, pool_size=pool_size,
-                          swept=blue_split.swept()
-                          if blue_split and len(blue_list) == TEAM_SIZE else None)
-            cur.scale_to(blue_r.score)             # 100 is blue's optimal, whatever you hold
-            red_cur = current(world, red_r, map_name, blue, red, bans, opposite(side),
-                              catalog=catalog, pool_size=pool_size, seat="red",
-                              swept=red_split.swept()
-                              if red_split and len(red) == TEAM_SIZE else None)
-            red_cur.scale_to(red_r.score)
+            # a full six is ranked against the field its seat's search just swept;
+            # 100 is the seat's optimal, whatever it holds
+            cur = _current(world, ours, solver=blue.solver, best=blue.result.score,
+                           catalog=catalog, pool_size=pool_size, seat="blue", kind="current",
+                           swept=blue_split.swept()
+                           if blue_split and len(draft.blue) == TEAM_SIZE else None)
+            red_cur = _current(world, theirs, solver=red.solver, best=red.result.score,
+                               catalog=catalog, pool_size=pool_size, seat="red",
+                               kind="current",
+                               swept=red_split.swept()
+                               if red_split and len(draft.red) == TEAM_SIZE else None)
             if wants_fill:
-                fill = infer(world, map_name, enemy, blue, bans, side, catalog=catalog,
-                             pool_size=pool_size, top=top,
-                             solved=fill_split.solved() if fill_split else None)
-            if blue_list and red_r.blue:
+                fill = _optimal(world, ours, catalog=catalog, pool_size=pool_size,
+                                top=BOARD_TOP, seat="blue", kind="fill",
+                                solved=fill_split.solved() if fill_split else None).result
+            if draft.blue and red.result.blue:
                 countered = _countered(
-                    world, map_name, red_r.blue, blue, bans, side, catalog=catalog,
-                    pool_size=pool_size, top=top,
+                    world, countered_seat, catalog=catalog, pool_size=pool_size,
+                    top=BOARD_TOP,
                     solved=countered_split.solved() if countered_split else None,
                     swept=countered_split.swept()
-                    if countered_split and len(blue_list) == TEAM_SIZE else None)
+                    if countered_split and len(draft.blue) == TEAM_SIZE else None)
             break
         except BrokenProcessPool:
             if not pooled:
                 raise                  # nothing was pooled: the pool is not the fault
             _drop_workers()            # a worker died: this board, in this process
     if fill is not None:
-        fill.kind = "fill"
-        fill.scale_to(blue_r.score)                # how close the best completion comes
-    return Board(map_name=m.name if m else None, side=side, bans=list(bans), blue=blue_r,
-                 red=red_r, current=cur, red_current=red_cur, fill=fill, countered=countered,
-                 momentum=_momentum(cur, red_cur, countered, blue_r, red_r, fill),
-                 plan=_plan(world, m, side, list(bans), red_h, blue_r),
+        fill.scale_to(blue.result.score)           # how close the best completion comes
+    return Board(map_name=m.name if m else None, side=side, bans=list(draft.bans),
+                 blue=blue.result, red=red.result, current=cur, red_current=red_cur,
+                 fill=fill, countered=countered,
+                 momentum=_momentum(cur, red_cur, countered, blue.result, red.result, fill),
+                 plan=_plan(world, m, side, list(draft.bans), red_h, blue.result),
                  shapes=[list(s) for s in legal_shapes(catalog)], expected=expected)

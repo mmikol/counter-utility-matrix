@@ -22,6 +22,7 @@ import pytest
 from inference import catalog, engine
 from scripts import optimal
 from tests.inference import recorded
+from ui.facts.draft import Draft
 
 
 @pytest.mark.invariant
@@ -40,8 +41,8 @@ def test_the_solver_reaches_the_proven_maximum(world):
     missed = []
     for row in proven["boards"]:
         b = row["board"]
-        got = engine.infer(world, b["map"], b["red"], b["locked"],
-                           side=b["side"], bans=b["bans"], top=1)
+        got = engine.infer(world, Draft(b["map"], tuple(b["red"]), tuple(b["locked"]),
+                                        tuple(b["bans"]), b["side"]), top=1)
         if sorted(got.blue) != row["six"] or abs(got.score - row["score"]) > 1e-6:
             missed.append("%s %s red=%d ban=%d lock=%d: %.6f %s, proven %.6f %s"
                           % (b["map"], b["side"] or "-", len(b["red"]), len(b["bans"]),

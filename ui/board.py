@@ -167,7 +167,7 @@ def api_infer(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
             forward["weights"] = ["%s:%g" % kv for kv in sorted(weights.items())]
         return remote("/board", forward)
     world = tables.load(cx)
-    return inference_engine.board(world, *draft, weights=weights).to_dict(), 200
+    return inference_engine.board(world, draft, weights=weights).to_dict(), 200
 
 
 def mcp_call(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any] | None, bool]:

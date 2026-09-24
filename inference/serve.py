@@ -47,29 +47,26 @@ def handle_infer(cx: psycopg.Connection, query: Query) -> Answer:
     Ranking a full six against the field is /evaluate's question, so this door
     infers whatever blue holds and honours the `top` it was given. The MCP tool
     of the same name draws the line in the same place."""
-    map_name, red, blue, bans, side = parse_board(query)
+    draft = parse_board(query)
     world = tables.load(cx)
     pool, top = engine.clamp_search(_first(query, "pool"), _first(query, "top"))
-    result = engine.infer(world, map_name, red, blue, bans=bans, side=side,
-                          pool_size=pool, top=top)
-    return result.to_dict(), 200
+    return engine.infer(world, draft, pool_size=pool, top=top).to_dict(), 200
 
 
 def handle_evaluate(cx: psycopg.Connection, query: Query) -> Answer:
-    map_name, red, blue, bans, side = parse_board(query)
+    """Blue's full six scored and ranked against the field."""
+    draft = parse_board(query)
     world = tables.load(cx)
-    result = engine.evaluate(world, map_name, red, blue, bans=bans, side=side)
-    return result.to_dict(), 200
+    return engine.evaluate(world, draft).to_dict(), 200
 
 
 def handle_board(cx: psycopg.Connection, query: Query) -> Answer:
     """Both seats and the current comp - what the board's two displays show."""
-    map_name, red, blue, bans, side = parse_board(query)
+    draft = parse_board(query)
     world = tables.load(cx)
     weights = catalog_module.parse_weights(query.get("weights", []))
     pool, _ = engine.clamp_search(_first(query, "pool"))
-    b = engine.board(world, map_name, red, blue, bans, side, pool_size=pool, weights=weights)
-    return b.to_dict(), 200
+    return engine.board(world, draft, pool_size=pool, weights=weights).to_dict(), 200
 
 
 def handle_strategies() -> Answer:

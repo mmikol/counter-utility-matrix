@@ -582,8 +582,8 @@ def infer(
     with ctx.connect() as cx:
         world = tables.load(cx)
     pool, top = engine.clamp_search(pool, top)
-    result = engine.infer(world, map, list(red), list(blue), top=top,
-                          pool_size=pool, bans=list(bans), side=side)
+    result = engine.infer(world, Draft(map, tuple(red), tuple(blue), tuple(bans), side),
+                          pool_size=pool, top=top)
     if compact:
         return _compact(result)
     return result.rendered(), result.to_dict()
@@ -622,7 +622,7 @@ def evaluate(
     # full six, so an empty one was never a call worth reaching the engine
     with ctx.connect() as cx:
         world = tables.load(cx)
-    result = engine.evaluate(world, map, list(red), list(blue), bans=list(bans), side=side)
+    result = engine.evaluate(world, Draft(map, tuple(red), tuple(blue), tuple(bans), side))
     return result.rendered(), result.to_dict()
 
 
@@ -671,7 +671,7 @@ def board(
     with ctx.connect() as cx:
         world = tables.load(cx)
     pool, _ = engine.clamp_search(pool)
-    b = engine.board(world, map, list(red), list(blue), list(bans), side,
+    b = engine.board(world, Draft(map, tuple(red), tuple(blue), tuple(bans), side),
                      pool_size=pool, weights=catalog.parse_weights(weights or {}))
     return b.rendered(), b.to_dict()
 

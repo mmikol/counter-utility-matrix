@@ -116,10 +116,10 @@ def _traced_board(monkeypatch, *, parallel, breaks_after=None, blue=("Ana",), re
         def __init__(self, pool, world, catalog, spec, weights, top, slices,
                      bounds=None, standing=None):
             self.spec, self.bounds, self.standing = spec, bounds, standing
-            trace.append(_Call("split", locked=tuple(spec.locked), enemy=tuple(spec.enemy)))
+            trace.append(_Call("split", locked=spec.draft.blue, enemy=spec.draft.red))
 
         def _step(self, name):
-            trace.append(_Call(name, enemy=tuple(self.spec.enemy)))
+            trace.append(_Call(name, enemy=self.spec.draft.red))
             if breaks_after is not None and len(trace) >= breaks_after:
                 raise BrokenProcessPool("a worker died")
 
@@ -150,20 +150,18 @@ def _traced_board(monkeypatch, *, parallel, breaks_after=None, blue=("Ana",), re
         def scale_to(self, best):
             pass
 
-    def infer(world, map_name=None, red=(), blue=(), bans=(), side="", *, solved=None, **kw):
-        trace.append(_Call("infer", enemy=tuple(red), locked=tuple(blue), solved=solved,
-                           seat=kw.get("seat", "blue")))
+    def optimal(world, draft, *, solved, seat, **kw):
+        trace.append(_Call("infer", enemy=draft.red, locked=draft.blue, solved=solved,
+                           seat=seat))
+        return engine._Optimal(Fake(), None)
+
+    def current(world, draft, *, swept, seat, **kw):
+        trace.append(_Call("current", enemy=draft.red, picks=draft.blue, swept=swept,
+                           seat=seat))
         return Fake()
 
-    def current(world, blue_result, map_name=None, red=(), blue=(), bans=(), side="", *,
-                swept=None, **kw):
-        trace.append(_Call("current", enemy=tuple(red), picks=tuple(blue), swept=swept,
-                           seat=kw.get("seat", "blue")))
-        return Fake()
-
-    def countered(world, map_name, red_optimal, blue, bans=(), side="", *, solved=None,
-                  swept=None, **kw):
-        trace.append(_Call("countered", against=tuple(red_optimal), picks=tuple(blue),
+    def countered(world, draft, *, solved, swept, **kw):
+        trace.append(_Call("countered", against=draft.red, picks=draft.blue,
                            solved=solved, swept=swept))
         return Fake()
 
@@ -171,14 +169,15 @@ def _traced_board(monkeypatch, *, parallel, breaks_after=None, blue=("Ana",), re
     monkeypatch.setattr(engine, "_workers", lambda: engine.Workers("pool", 6))
     monkeypatch.setattr(engine, "_drop_workers", lambda: trace.append(_Call("drop_workers")))
     monkeypatch.setattr(engine, "_Split", Split)
-    monkeypatch.setattr(engine, "infer", infer)
-    monkeypatch.setattr(engine, "current", current)
+    monkeypatch.setattr(engine, "_optimal", optimal)
+    monkeypatch.setattr(engine, "_current", current)
     monkeypatch.setattr(engine, "_countered", countered)
     monkeypatch.setattr(engine, "_momentum", lambda *a, **kw: {"verdict": "-"})
     monkeypatch.setattr(engine, "_plan", lambda *a: "-")
     monkeypatch.setattr(engine, "legal_shapes", lambda catalog: [])
     monkeypatch.setattr(engine.compute, "expected_picks", lambda *a, **kw: [])
-    engine.board(Fake(), None, list(red), list(blue), catalog=catalog.load(FIXTURE_PLAYBOOK))
+    engine.board(Fake(), Draft(None, tuple(red), tuple(blue)),
+                 catalog=catalog.load(FIXTURE_PLAYBOOK))
     return trace
 
 
@@ -220,14 +219,14 @@ def kings_row_board(world):
     Reinhardt locked, the reference playbook - solved once per module (a caller's
     catalog keeps the solve in one process)."""
     from inference import engine
-    return engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+    return engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt")),
                         catalog=catalog.load(FIXTURE_PLAYBOOK))
 
 
 @pytest.mark.invariant
 def test_infer_keeps_locked_picks_and_the_open_queue_shape(world):
     from inference import engine
-    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"],
+    r = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",)),
                      catalog=catalog.load(FIXTURE_PLAYBOOK))
     assert len(r.blue) == 6 and "Ana" in r.blue
     roles = [world.hero(n).role for n in r.blue]
@@ -247,7 +246,7 @@ def test_infer_keeps_locked_picks_and_the_open_queue_shape(world):
 @pytest.mark.invariant
 def test_infer_honours_a_hitscan_answer_to_a_flier(world):
     from inference import engine
-    r = engine.infer(world, "Havana", ["Pharah", "Mercy"], [],
+    r = engine.infer(world, Draft("Havana", ("Pharah", "Mercy")),
                      catalog=catalog.load(FIXTURE_PLAYBOOK))
     assert any(world.hero(n).hitscan for n in r.blue)
     anti = next(c for c in r.contributions if c["id"] == "anti-air")
@@ -257,11 +256,11 @@ def test_infer_honours_a_hitscan_answer_to_a_flier(world):
 @pytest.mark.invariant
 def test_evaluate_ranks_a_full_six_against_the_field(world):
     from inference import engine
-    r = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"],
-                        ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"])
+    six = ("Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio")
+    r = engine.evaluate(world, Draft("King's Row", ("Zarya", "Pharah"), six))
     assert r.rank >= 1 and r.kind == "evaluate" and len(r.picks) == 6
     with pytest.raises(Refusal, match="exactly 6"):
-        engine.evaluate(world, None, [], ["Ana"])
+        engine.evaluate(world, Draft(blue=("Ana",)))
 
 
 @pytest.mark.invariant
@@ -274,10 +273,10 @@ def test_a_board_no_six_satisfies_is_refused_by_infer_and_evaluate_alike(world, 
         "---\nname: seven tanks\nkind: constraint\nrequire: team.tanks == 7\n---\nx\n", "utf-8")
     scratch = catalog.load(str(tmp_path))
     with pytest.raises(Refusal, match="relax a constraint"):
-        engine.infer(world, "King's Row", ["Zarya"], [], catalog=scratch)
+        engine.infer(world, Draft("King's Row", ("Zarya",)), catalog=scratch)
     with pytest.raises(Refusal, match="relax a constraint"):
-        engine.evaluate(world, "King's Row", ["Zarya"],
-                        ["Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko"],
+        engine.evaluate(world, Draft("King's Row", ("Zarya",),
+                                     ("Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko")),
                         catalog=scratch)
 
 
@@ -286,12 +285,12 @@ def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(world, tmp_
     from inference import engine
     fix = catalog.load(FIXTURE_PLAYBOOK)
     # two tanks is allowed under the two-tank limit; a third is not, and is the queue's
-    r = engine.infer(world, "King's Row", ["Zarya"], ["Winston", "D.Va"], pool_size=4,
+    r = engine.infer(world, Draft("King's Row", ("Zarya",), ("Winston", "D.Va")), pool_size=4,
                      catalog=fix)
     assert {"Winston", "D.Va"} <= set(r.blue)
     with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
-        engine.infer(world, "King's Row", [], ["Winston", "D.Va", "Reinhardt"], pool_size=4,
-                     catalog=fix)
+        engine.infer(world, Draft("King's Row", (), ("Winston", "D.Va", "Reinhardt")),
+                     pool_size=4, catalog=fix)
     # a stricter authored limit narrows the search the same way
     for name in os.listdir(FIXTURE_PLAYBOOK):
         if name != "open-queue-tanks.md":
@@ -300,7 +299,7 @@ def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(world, tmp_
         "---\nname: role queue\nkind: constraint\nrequire: team.tanks == 2 and"
         " team.damage == 2 and team.supports == 2\n---\nx\n", "utf-8")
     cat = catalog.load(str(tmp_path))
-    r = engine.infer(world, "King's Row", ["Zarya"], ["Ana"], pool_size=4, catalog=cat)
+    r = engine.infer(world, Draft("King's Row", ("Zarya",), ("Ana",)), pool_size=4, catalog=cat)
     roles = sorted(world.hero(n).role for n in r.blue)
     assert roles == ["damage", "damage", "support", "support", "tank", "tank"]
 
@@ -308,30 +307,30 @@ def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(world, tmp_
 @pytest.mark.invariant
 def test_infer_never_drafts_a_banned_hero(world):
     from inference import engine
-    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"],
-                     bans=["Widowmaker", "Bastion", "Reinhardt"])
+    r = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",),
+                                  ("Widowmaker", "Bastion", "Reinhardt")))
     assert not {"Widowmaker", "Bastion", "Reinhardt"} & set(r.blue)
     assert r.bans == ["Widowmaker", "Bastion", "Reinhardt"] and "banned" in r.rendered()
     assert r.facts.draft.bans == tuple(r.bans)
     with pytest.raises(Refusal, match="banned this match"):
-        engine.infer(world, None, ["Zarya"], ["Ana"], bans=["Zarya"])
+        engine.infer(world, Draft(None, ("Zarya",), ("Ana",), ("Zarya",)))
 
 
 @pytest.mark.invariant
 def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world):
     from inference import engine
     fix = catalog.load(FIXTURE_PLAYBOOK)        # the reference playbook has the side rules
-    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack", catalog=fix)
+    b = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",), side="attack"),
+                     catalog=fix)
     blue, red, cur = b.blue, b.red, b.current
     assert blue.seat == "blue" and blue.side == "attack" and blue.locked == []
-    absolute = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], side="attack",
+    absolute = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), (), side="attack"),
                             catalog=fix)
     assert blue.blue == absolute.blue                     # blue's optimal ignores your picks
     assert red.seat == "red" and red.side == "defense" and len(red.blue) == 6
     # red's optimal: their best counter to ours
     assert red.locked == [] and red.red == ["Ana"]
-    theirs = engine.infer(world, "King's Row", ["Ana"], [], side="defense", seat="red",
-                          catalog=fix)
+    theirs = engine.infer(world, Draft("King's Row", ("Ana",), (), side="defense"), catalog=fix)
     assert red.blue == theirs.blue
     assert cur.kind == "current" and cur.partial and cur.blue == ["Ana"]
     assert cur.contributions and cur.score is not None
@@ -349,7 +348,7 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert "Ana" in fill.blue
     assert [p["locked"] for p in fill.picks].count(True) == 1
     assert 0 < fill.to_dict()["normalized"] <= 100
-    around = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], side="attack",
+    around = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",), side="attack"),
                           catalog=fix)
     assert fill.blue == around.blue
     mo = b.momentum
@@ -422,7 +421,7 @@ def test_the_board_scores_under_the_weights_it_is_given(world, kings_row_board):
                   if c["kind"] == "heuristic" and c.get("weighted"))
     heuristic = next(h for h in fix if h.id == moving)
     weights = {heuristic.id: 10.0 if heuristic.weight < 10 else 0.5}
-    tilted = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+    tilted = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt")),
                           catalog=fix, weights=weights)
     assert tilted.current.to_dict()["weights"][heuristic.id] == weights[heuristic.id]
     assert plain.current.to_dict()["weights"][heuristic.id] == heuristic.weight
@@ -444,7 +443,7 @@ def test_fight_odds_pit_the_two_shares_against_each_other(world, kings_row_board
     blue_odds = round(100.0 * n / (n + m))
     assert mo["odds"] == {"blue": blue_odds, "red": 100 - blue_odds}
     assert "fight odds blue %d%%, red %d%%" % (blue_odds, 100 - blue_odds) in mo["verdict"]
-    alone = engine.board(world, "King's Row", ["Zarya", "Pharah"], [],
+    alone = engine.board(world, Draft("King's Row", ("Zarya", "Pharah")),
                          catalog=catalog.load(FIXTURE_PLAYBOOK)).to_dict()
     assert alone["momentum"]["blue"] is None and alone["momentum"]["odds"] is None
 
@@ -458,7 +457,7 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world):
     assert catalog.has_scoring_terms(reference)
     limit_only = [h for h in reference if h.form == "limit" and not h.soft]
     assert limit_only and not catalog.has_scoring_terms(limit_only)
-    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+    b = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt")),
                      catalog=limit_only)
     d = b.to_dict()
     for key in ("blue", "red"):                     # the optimal is the reference: 100, always
@@ -468,8 +467,8 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world):
         assert all(a["normalized"] is None for a in d[key]["alternatives"])
     assert d["momentum"]["verdict"].startswith("unscored") and d["momentum"]["blue"] is None
     assert "(unscored)" in b.current.rendered() and "UNSCORED:" in b.current.rendered()
-    scored = engine.board(world, "King's Row", ["Zarya", "Pharah"],
-                          ["Ana", "Reinhardt"], catalog=reference).to_dict()
+    scored = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt")),
+                          catalog=reference).to_dict()
     assert scored["current"]["scoring"] is True
     assert scored["current"]["normalized"] is None   # two picks of six: no share to give
     assert 0 < scored["fill"]["normalized"] <= 100   # the filled six carries it
@@ -491,8 +490,8 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
         "metric: team.hitscan\nweight: 1\nwhen: matchup.flyers >= 1\n---\nx\n", "utf-8")
     scratch = catalog.load(str(tmp_path))
     assert catalog.has_scoring_terms(scratch)
-    grounded = engine.board(world, "King's Row", ["Zarya", "Ana"],
-                            ["Reinhardt", "Cassidy"], catalog=scratch).to_dict()
+    grounded = engine.board(world, Draft("King's Row", ("Zarya", "Ana"), ("Reinhardt", "Cassidy")),
+                            catalog=scratch).to_dict()
     for key in ("blue", "red"):
         assert grounded[key]["scoring"] is True and grounded[key]["normalized"] == 100
     for key in ("current", "red_current", "fill"):
@@ -507,7 +506,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     assert "waits for matchup.flyers >= 1" in grounded["momentum"]["verdict"]
     # no picks at all: blue's seat counters red's likely six, the optimal is the
     # reference (100), and the verdict is the plain "no picks yet"
-    empty = engine.board(world, None, [], [], catalog=scratch).to_dict()
+    empty = engine.board(world, Draft(), catalog=scratch).to_dict()
     assert empty["blue"]["normalized"] == 100 and empty["blue"]["unscored"] is None
     # matchup.flyers counts fliers tanks aside: a flying tank does not raise the guard
     if any(world.hero(name).flyer and world.hero(name).role != "tank"
@@ -516,8 +515,8 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     else:                         # the likely six fields no such flier: the one rule waits here too
         assert "waits for matchup.flyers >= 1" in empty["momentum"]["verdict"]
     assert empty["blue"]["red"] == empty["expected"]["blue"]           # countering the likely six
-    flying = engine.board(world, "King's Row", ["Zarya", "Pharah"],
-                          ["Reinhardt", "Cassidy"], catalog=scratch).to_dict()
+    flying = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), ("Reinhardt", "Cassidy")),
+                          catalog=scratch).to_dict()
     assert flying["blue"]["scoring"] is True and flying["blue"]["normalized"] == 100
     assert flying["current"]["unscored"] is None
     assert flying["current"]["normalized"] is None   # partial: the fill holds the share
@@ -544,7 +543,7 @@ def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
     assert (3, 2, 1) not in shapes
     seated = legal_shapes(cat, {"tank": 2, "damage": 3, "support": 0})
     assert seated and all(t == 2 and d >= 3 for t, d, _ in seated)
-    b = engine.board(world, "King's Row", ["Zarya"], ["Ana"], catalog=cat)
+    b = engine.board(world, Draft("King's Row", ("Zarya",), ("Ana",)), catalog=cat)
     assert b.shapes == [list(s) for s in shapes]
     d = b.to_dict()
     assert d["shapes"] == b.shapes
@@ -566,7 +565,7 @@ def test_the_queue_caps_tanks_at_two_whatever_the_playbook_holds(world):
     assert not any(h.form == "limit" for h in shipped)       # the cap is the engine's
     for map_name, blue in (("Blizzard World", []), ("Esperança", []),
                            ("King's Row", ["Winston", "D.Va"])):
-        d = engine.board(world, map_name, [], blue, catalog=shipped).to_dict()
+        d = engine.board(world, Draft(map_name, (), tuple(blue)), catalog=shipped).to_dict()
         sixes = [d[seat]["blue"] for seat in ("blue", "red", "fill", "expected") if d[seat]]
         assert len(sixes) == (4 if blue else 3)
         for six in sixes:
@@ -574,10 +573,10 @@ def test_the_queue_caps_tanks_at_two_whatever_the_playbook_holds(world):
         assert max(t for t, _, _ in d["shapes"]) == MAX_TANKS
     for blue in (["Winston", "D.Va", "Reinhardt"], ["Winston", "D.Va", "Reinhardt", "Ana"]):
         with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
-            engine.board(world, "King's Row", [], blue, catalog=shipped)
+            engine.board(world, Draft("King's Row", (), tuple(blue)), catalog=shipped)
     with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
-        engine.evaluate(world, "King's Row", [],
-                        ["Winston", "D.Va", "Reinhardt", "Ana", "Kiriko", "Ashe"],
+        engine.evaluate(world, Draft("King's Row", (),
+                                     ("Winston", "D.Va", "Reinhardt", "Ana", "Kiriko", "Ashe")),
                         catalog=shipped)
 
 
@@ -590,9 +589,9 @@ def test_the_board_refuses_a_team_of_seven(world):
     fix = catalog.load(FIXTURE_PLAYBOOK)
     seven = ["Ana", "Kiriko", "Lúcio", "Tracer", "Genji", "Sojourn", "Ashe"]
     with pytest.raises(Refusal, match="more than 6 red picks"):
-        engine.board(world, "King's Row", seven, [], catalog=fix)
+        engine.board(world, Draft("King's Row", tuple(seven), ()), catalog=fix)
     with pytest.raises(Refusal, match="more than 6 blue picks"):
-        engine.board(world, "King's Row", [], seven, catalog=fix)
+        engine.board(world, Draft("King's Row", (), tuple(seven)), catalog=fix)
 
 
 @pytest.mark.invariant
@@ -604,12 +603,12 @@ def test_blue_counters_the_likely_six_until_red_reveals_a_pick(world, monkeypatc
     monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
     m = world.map("King's Row")
     likely = [p["hero"] for p in compute.expected_picks(world, m)]
-    b = engine.board(world, "King's Row", [], ["Ana"])
+    b = engine.board(world, Draft("King's Row", (), ("Ana",)))
     assert b.blue.red == likely and b.current.red == likely and b.fill.red == likely
     assert b.expected.blue == likely and b.expected.kind == "expected"
     assert [p["hero"] for p in b.expected.picks] == likely
     assert "their likely starting comp" in b.rendered()
-    revealed = engine.board(world, "King's Row", ["Zarya"], ["Ana"])
+    revealed = engine.board(world, Draft("King's Row", ("Zarya",), ("Ana",)))
     assert revealed.blue.red == ["Zarya"] and revealed.current.red == ["Zarya"]
     assert revealed.expected.blue == likely                      # static
 
@@ -619,13 +618,13 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     from inference import engine
     fix = catalog.load(FIXTURE_PLAYBOOK)
     six = ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]
-    b = engine.board(world, "Ilios", ["Pharah"], six, side="attack", catalog=fix)
+    b = engine.board(world, Draft("Ilios", ("Pharah",), tuple(six), side="attack"), catalog=fix)
     assert b.side == "" and b.blue.side == "" and b.red.side == ""
     assert b.current.kind == "evaluate" and b.current.rank >= 1
     assert set(b.current.blue) == set(six)
     assert b.blue.locked == [] and b.blue.to_dict()["normalized"] == 100
     assert 0 <= b.current.to_dict()["normalized"] <= 100      # against the absolute optimal
-    b = engine.board(world, None, [], [], catalog=fix)
+    b = engine.board(world, Draft(), catalog=fix)
     assert not b.current.blue and b.current.partial
     # nothing locked: the optimal is the fill
     assert b.countered is None and b.fill is None
@@ -634,7 +633,7 @@ def test_board_ranks_a_full_six_and_ignores_sides_on_control(world):
     assert b.plan.startswith("No map yet, so this is the meta's best six")
     assert b.plan.endswith("Based on: the rates and counters.")
     assert len(b.blue.blue) == 6                      # the meta's best six, before any map
-    b = engine.board(world, "Ilios", [], [], bans=["Widowmaker"], catalog=fix)
+    b = engine.board(world, Draft("Ilios", (), (), ("Widowmaker",)), catalog=fix)
     assert b.plan.endswith("the map, 1 ban.") and b.plan.count("\n") >= 2
     assert b.plan.startswith("Ilios is a Control map: one point in three arenas")
     assert "The map rewards %s" % world.map("Ilios").style_top in b.plan
@@ -648,26 +647,29 @@ def test_scores_share_one_scale_per_board(world):
     fix = catalog.load(FIXTURE_PLAYBOOK)       # a rich playbook: alternatives fall below the best
     # no lock: evaluate ranks a six against the whole unlocked field, and the best six
     # that keeps a locked pick need not be the best of that field
-    r = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], catalog=fix)
-    e = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"], r.blue, catalog=fix)
+    r = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah")), catalog=fix)
+    e = engine.evaluate(world, Draft("King's Row", ("Zarya", "Pharah"), tuple(r.blue)), catalog=fix)
     assert abs(r.score - e.score) < 1e-9 and e.rank == 1
-    held = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], catalog=fix)
-    again = engine.evaluate(world, "King's Row", ["Zarya", "Pharah"], held.blue, catalog=fix)
+    held = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",)), catalog=fix)
+    again = engine.evaluate(world, Draft("King's Row", ("Zarya", "Pharah"), tuple(held.blue)),
+                            catalog=fix)
     assert "Ana" in held.blue and abs(held.score - again.score) < 1e-9
     assert r.to_dict()["normalized"] == 100 and e.to_dict()["normalized"] == 100
     assert all(0 <= a["normalized"] <= 100 for a in r.alternatives)
     assert r.alternatives[0]["score"] < r.score        # below the optimum, if only by a hair
     assert r.alternatives[0]["normalized"] <= 100
-    best = engine.infer(world, "King's Row", ["Zarya", "Pharah"], [], catalog=fix)
-    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], best.blue, catalog=fix)
+    best = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah")), catalog=fix)
+    b = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), tuple(best.blue)), catalog=fix)
     assert abs(b.current.score - best.score) < 1e-9 and b.blue.blue == best.blue
     assert b.current.to_dict()["normalized"] == 100 and b.red.to_dict()["normalized"] == 100
-    b = engine.board(world, "King's Row", ["Zarya", "Pharah"], r.blue, catalog=fix)  # around Ana
+    # around Ana
+    b = engine.board(world, Draft("King's Row", ("Zarya", "Pharah"), tuple(r.blue)), catalog=fix)
     assert b.blue.blue == best.blue and b.current.to_dict()["normalized"] <= 100
-    again = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"], pool_size=4,
+    again = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",)), pool_size=4,
                          catalog=fix)
-    assert abs(again.score - engine.evaluate(
-        world, "King's Row", ["Zarya", "Pharah"], again.blue, catalog=fix).score) < 1e-9
+    rescored = engine.evaluate(world, Draft("King's Row", ("Zarya", "Pharah"), tuple(again.blue)),
+                               catalog=fix)
+    assert abs(again.score - rescored.score) < 1e-9
 
 
 def test_a_constraint_is_a_limit_or_scored_and_an_assumption_is_prose(tmp_path):
@@ -898,16 +900,16 @@ def test_an_announced_hero_is_described_but_never_picked(world):
     fs = board_facts.generate(world, Draft(blue=(h.name,)))       # the facts may describe it
     assert fs.find("hero.announced", h.name)
     with pytest.raises(Refusal, match="announced, not yet playable"):
-        engine.infer(world, None, [], [h.name])                    # a pick may not
+        engine.infer(world, Draft(blue=(h.name,)))                    # a pick may not
     with pytest.raises(Refusal, match="announced"):
-        engine.board(world, None, [h.name], [])
-    r = engine.infer(world, None, [], [])
+        engine.board(world, Draft(red=(h.name,)))
+    r = engine.infer(world, Draft())
     assert h.name not in r.blue and all(a["blue"] for a in r.alternatives)
     assert not any(h.name in a["blue"] for a in r.alternatives)   # nor does the field hold it
     # and under a playbook that ties most sixes, where the local search swaps freely:
     # the announced hero reached the alternatives through refine once
     limit_only = [s for s in catalog.load(FIXTURE_PLAYBOOK) if s.form == "limit" and not s.soft]
-    r = engine.infer(world, None, [], [], catalog=limit_only)
+    r = engine.infer(world, Draft(), catalog=limit_only)
     assert h.name not in r.blue and not any(h.name in a["blue"] for a in r.alternatives)
 
 
@@ -937,8 +939,8 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
         assert ilios.style_top == "brawl" and ilios.style_margin == 0
     finally:
         ilios.styles = derived
-    once = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
-    twice = engine.infer(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
+    once = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",)))
+    twice = engine.infer(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",)))
     assert once.blue == twice.blue and abs(once.score - twice.score) < 1e-12
 
 
@@ -953,13 +955,12 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     assert engine.warm() == engine.worker_count() >= 6
     weights = {h.id: 10.0 if h.weight < 10 else 0.5
                for h in catalog.load() if h.kind == "heuristic"}
-    split = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
-                         side="attack", weights=weights)
+    draft = Draft("King's Row", ("Zarya", "Pharah"), ("Ana", "Reinhardt"), side="attack")
+    split = engine.board(world, draft, weights=weights)
     assert split.blue.to_dict()["weights"] == weights         # the override reached the worker
     monkeypatch.setenv("COUNTRIX_PARALLEL", "0")
     assert not engine.parallel_available()
-    straight = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
-                            side="attack", weights=weights)
+    straight = engine.board(world, draft, weights=weights)
 
     def timeless(b):
         d = b.to_dict()
@@ -1004,8 +1005,8 @@ def test_a_mirror_pick_cites_its_own_facts_not_the_enemy_copy(world):
     board - never "answers Ana" (our Ana, whom red's Tracer answers) and
     never "partner of Winston" (red's Winston)."""
     from inference import engine
-    r = engine.evaluate(world, "King's Row", ["Winston", "Genji", "Tracer"],
-                        ["D.Va", "Reinhardt", "Tracer", "Brigitte", "Lúcio", "Ana"])
+    r = engine.evaluate(world, Draft("King's Row", ("Winston", "Genji", "Tracer"),
+                                     ("D.Va", "Reinhardt", "Tracer", "Brigitte", "Lúcio", "Ana")))
     ours = next(p for p in r.picks if p["hero"] == "Tracer")
     partners = ours["why"].split(";")[0]          # red's Winston may answer her; he is no partner
     assert "answers Ana" not in ours["why"] and "Winston" not in partners
@@ -1029,16 +1030,16 @@ def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(wor
     (tmp_path / "their-fliers.md").write_text(
         rule % ("Their fliers", "team.hitscan", "matchup.flyers >= 1"), "utf-8")
     scratch = catalog.load(str(tmp_path))
-    solo = engine.evaluate(world, "King's Row", ["Pharah"],
-                           ["Reinhardt", "Cassidy", "Tracer", "Genji", "Mei", "Ana"],
+    solo = engine.evaluate(world, Draft("King's Row", ("Pharah",),
+                                        ("Reinhardt", "Cassidy", "Tracer", "Genji", "Mei", "Ana")),
                            catalog=scratch).to_dict()
     terms = {c["id"]: c for c in solo["contributions"]}
     needs = [terms["solo-%d" % i] for i in range(3)]
     assert all(c["applies"] and c["need"] and c["weighted"] <= 0 for c in needs)
     assert sum(c["weighted"] for c in needs) >= -scoring.NEED_BUDGET - 1e-9
     assert terms["their-fliers"]["need"] is False and terms["their-fliers"]["weighted"] >= 0
-    pair = engine.evaluate(world, "King's Row", ["Pharah"],
-                           ["Reinhardt", "Cassidy", "Tracer", "Genji", "Kiriko", "Ana"],
+    paired = ("Reinhardt", "Cassidy", "Tracer", "Genji", "Kiriko", "Ana")
+    pair = engine.evaluate(world, Draft("King's Row", ("Pharah",), paired),
                            catalog=scratch).to_dict()
     assert all(not c["applies"] and c["weighted"] == 0
                for c in pair["contributions"] if c["id"].startswith("solo-"))
@@ -1111,9 +1112,9 @@ def test_the_fill_is_the_optimal_whenever_the_optimal_holds_every_lock(world):
     from inference import engine
     shipped = catalog.load()
     for map_name in ("King's Row", "Ilios"):
-        best = engine.infer(world, map_name, [], [], catalog=shipped)
+        best = engine.infer(world, Draft(map_name), catalog=shipped)
         for hero in best.blue:
-            fill = engine.infer(world, map_name, [], [hero], catalog=shipped)
+            fill = engine.infer(world, Draft(map_name, blue=(hero,)), catalog=shipped)
             assert fill.blue == best.blue, (map_name, hero, fill.blue)
 
 
@@ -1198,8 +1199,9 @@ def test_a_rule_scales_by_the_metric_it_names(world, tmp_path):
         solver = solver_module.Solver(world, m, red=red, locked=[],
                                       side=engine._side(m, "attack"), catalog=playbook)
         solver.freeze_bounds()
-        best = engine.infer(world, map_name, ["Zarya", "Pharah"], [],
-                            side=engine._side(m, "attack"), top=1, catalog=playbook)
+        best = engine.infer(world, Draft(map_name, ("Zarya", "Pharah"),
+                                         side=engine._side(m, "attack")),
+                            top=1, catalog=playbook)
         cand = solver.prepare(scoring.Candidate([world.hero(n) for n in best.blue]))
         solver.score(cand, detail=True)
         return next(c for c in cand.contributions if c["id"] == strategy_id)
