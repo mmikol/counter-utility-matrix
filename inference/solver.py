@@ -25,7 +25,7 @@ from typing import NamedTuple
 
 from db import Refusal
 from inference import scale
-from inference.scoring import Candidate, Objective
+from inference.scoring import Candidate, Interval, Objective
 from inference.shapes import Shape, legal_shapes
 from inference.strategy import Strategy
 from ui.facts.model import ROLES, Hero, Map, World
@@ -79,7 +79,7 @@ class Solver(Objective):
         each hero's standing in the sample."""
         self.adopt_standing(scale.freeze(self))
 
-    def adopt_bounds(self, bounds: Mapping[str, tuple[float, float]],
+    def adopt_bounds(self, bounds: Mapping[str, Interval],
                      standing: Mapping[int, scale.Standing] | None = None) -> None:
         """Bounds (and standing) frozen elsewhere for this same board: another
         process's slice of the search, or an earlier solver on the same map,

@@ -21,7 +21,7 @@ import random
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
-from inference.scoring import CONFIDENCE_KEY, Bounds, Candidate, MetricKey, Objective
+from inference.scoring import CONFIDENCE_KEY, Bounds, Candidate, Interval, MetricKey, Objective
 from inference.shapes import legal_shapes
 from ui.facts import compute
 from ui.facts.model import ROLES, Hero
@@ -98,7 +98,7 @@ def _prepared(objective: Objective, index: int = 0, count: int = 1) -> list[Cand
 
 
 def _confidence_bounds(objective: Objective, spec: MetricKey, index: int,
-                       prepared: Sequence[Candidate]) -> tuple[float, float]:
+                       prepared: Sequence[Candidate]) -> Interval:
     """The low and high a rule's confidence metric (`spec`, its namespace and
     key) is read against.
 
@@ -113,13 +113,13 @@ def _confidence_bounds(objective: Objective, spec: MetricKey, index: int,
         readings = [compute.map_metrics(m, objective.side, ban_count=ban_count).get(spec.key)
                     for m in objective.world.maps.values()]
         over = [float(number(v)) for v in readings if v is not None]
-        return (min(over), max(over)) if over else (0.0, 0.0)
+        return Interval(min(over), max(over)) if over else Interval(0.0, 0.0)
     seen = [value for c in prepared if (value := c.confidence[index]) is not None]
-    return (min(seen), max(seen)) if seen else (0.0, 0.0)
+    return Interval(min(seen), max(seen)) if seen else Interval(0.0, 0.0)
 
 
 def reference_bounds(objective: Objective, index: int = 0, count: int = 1) -> Bounds:
-    """{heuristic id: (min, max)} over one slice of the sample AND of the
+    """{heuristic id: Interval(low, high)} over one slice of the sample AND of the
     field, leaving out the heuristics the slice never valued. The slices
     partition both, so merging their lows and highs gives what one process
     freezes."""
@@ -128,7 +128,7 @@ def reference_bounds(objective: Objective, index: int = 0, count: int = 1) -> Bo
     for i, g in enumerate(objective.heuristics):
         values = [value for c in prepared if (value := c.raw[i]) is not None]
         if values:
-            out[g.id] = (min(values), max(values))
+            out[g.id] = Interval(min(values), max(values))
         spec = objective.confidence_metrics[i]
         if spec is not None:
             out[g.id + CONFIDENCE_KEY] = _confidence_bounds(objective, spec, i, prepared)
@@ -214,7 +214,7 @@ def freeze(objective: Objective) -> Tally:
     bounds: Bounds = {}
     for i, g in enumerate(objective.heuristics):
         values = [value for c in over if (value := c.raw[i]) is not None]
-        bounds[g.id] = (min(values), max(values)) if values else (0.0, 0.0)
+        bounds[g.id] = Interval(min(values), max(values)) if values else Interval(0.0, 0.0)
         spec = objective.confidence_metrics[i]
         if spec is not None:
             bounds[g.id + CONFIDENCE_KEY] = _confidence_bounds(objective, spec, i, over)

@@ -24,9 +24,17 @@ NEED_BUDGET = 2.0                 # the most one guarded state can cost
 # the namespaces that do not change across the candidates of one board
 STATIC_SECTIONS = BOARD_SECTIONS
 
+
+class Interval(NamedTuple):
+    """The low and high a heuristic's raw value, or its confidence metric, is
+    read against on one board."""
+    low: float
+    high: float
+
+
 # The records the objective passes around. A namespace is the metric bags by
 # section.
-Bounds = dict[str, tuple[float, float]]         # id, or id + CONFIDENCE_KEY -> low, high
+Bounds = dict[str, Interval]                    # id, or id + CONFIDENCE_KEY -> low, high
 Namespace = dict[str, MetricBag]
 
 
@@ -47,7 +55,7 @@ class Norm(NamedTuple):
     weight: float
     minimize: bool
     need: bool
-    scale: tuple[float, float] | None
+    scale: Interval | None
 
 
 _EMPTY: MetricBag = {}
@@ -101,7 +109,7 @@ def _norm(raw: float, lo: float, span: float | None, minimize: bool, need: bool)
     return 1.0 - norm if minimize else norm
 
 
-def _certainty(scale: tuple[float, float], scale_raw: float) -> float:
+def _certainty(scale: Interval, scale_raw: float) -> float:
     """How far a rule's confidence metric sits between its reference low and
     high, in [0, 1]. A rule that names one is worth its weight only where that
     metric is at its high, and nothing where it is at the low: a premise that
@@ -330,7 +338,7 @@ class Objective:
 
     # --- the frozen scale ------------------------------------------------------
 
-    def adopt_bounds(self, bounds: Mapping[str, tuple[float, float]]) -> None:
+    def adopt_bounds(self, bounds: Mapping[str, Interval]) -> None:
         """Each heuristic's low and high on this board, frozen here or
         elsewhere: inference.scale draws them, and a board split across
         processes merges its slices' lows and highs before any scores."""
@@ -342,7 +350,7 @@ class Objective:
         the sample never moved - normalises everything to 0.5."""
         self._norms = []
         for g in self.heuristics:
-            lo, hi = self.bounds.get(g.id, (0.0, 0.0))
+            lo, hi = self.bounds.get(g.id, Interval(0.0, 0.0))
             self._norms.append(Norm(
                 strategy=g, low=lo, span=hi - lo if hi > lo else None,
                 weight=g.weight * self._needs.get(g.id, 1.0),

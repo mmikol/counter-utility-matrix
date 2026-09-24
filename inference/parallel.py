@@ -42,7 +42,7 @@ from typing import Concatenate, NamedTuple
 
 from inference import catalog as catalog_module
 from inference.scale import Standing, Tally, reference_bounds, reference_standing
-from inference.scoring import Bounds, Candidate
+from inference.scoring import Bounds, Candidate, Interval
 from inference.solver import Solved, Solver, Swept
 from inference.strategy import Strategy
 from inference.supersede import Watch
@@ -272,11 +272,11 @@ def _merge_tallies(tally: Tally, part: Mapping[int, Standing]) -> Tally:
     return tally
 
 
-def _widen(bounds: Bounds, part: Mapping[str, tuple[float, float]]) -> Bounds:
-    """Widen each heuristic's (low, high) to cover one slice's, in place."""
-    for key, (lo, hi) in part.items():
+def _widen(bounds: Bounds, part: Mapping[str, Interval]) -> Bounds:
+    """Widen each heuristic's low and high to cover one slice's, in place."""
+    for key, got in part.items():
         seen = bounds.get(key)
-        bounds[key] = (min(lo, seen[0]), max(hi, seen[1])) if seen else (lo, hi)
+        bounds[key] = Interval(min(got.low, seen.low), max(got.high, seen.high)) if seen else got
     return bounds
 
 
