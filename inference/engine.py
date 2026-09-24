@@ -78,15 +78,14 @@ TOP_CEILING = 20            # the most alternatives a caller may ask for
 def clamp_search(pool: str | float | None = None,
                  top: str | float | None = None) -> SearchBounds:
     """Bounds on the search: pool 2..POOL_CEILING candidates per role, top
-    1..TOP_CEILING alternatives. A knob left out (None) takes its default,
-    POOL_DEFAULT or TOP_DEFAULT, and any number - 0 and negatives included -
-    is clamped into its range, so 0 reads as the floor whether it comes as an
-    int from an MCP tool or as the text "0" from a query string. The pool is
-    bounded by the field it would enumerate, not by a round number: pool 12
-    is 1,345,960 legal sixes, which ran the inference container out of
-    memory. Every door that takes the two from a caller - the MCP tools and
-    the HTTP service - passes them through here, so the search is bounded by
-    one definition. Anything else that is not a number, [] included, raises
+    1..TOP_CEILING alternatives. A knob left out (None) takes POOL_DEFAULT or
+    TOP_DEFAULT; any number, 0 and negatives included, is clamped into its
+    range, so an MCP tool's 0 and a query string's "0" both read as the
+    floor. The pool is bounded by the field it would enumerate, not by a
+    round number: pool 12 is 1,345,960 legal sixes, which ran the inference
+    container out of memory. Every door that takes the two from a caller -
+    the MCP tools and the HTTP service - passes them through here, so the
+    search is bounded by one definition. Anything else, [] included, raises
     Refusal, which every door answers as the caller's error."""
     try:
         return SearchBounds(
