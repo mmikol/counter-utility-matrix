@@ -76,6 +76,12 @@ holds, per board, the six a brute force found and what it scored. The suite re-s
 checks the solver still reaches it. The enumerations the fixture is cut from are hours of compute
 and live outside this repository; <code>scripts/optimal.py</code> reads them from the paths in
 <code>OPTIMAL_SOURCES</code> and rewrites the fixture.</p>
+<p>The fixture also records the digest of the playbook its boards were proved under. While the
+shipped playbook scores nothing, every legal six ties, there is no maximum to reach and the gate
+skips; under any other playbook that scores, it fails with <i>recorded under a different
+playbook</i>. Boards with bans are held out until they are enumerated again, so the gate says
+nothing yet about the search under bans, although the three checks above all draw boards with
+bans.</p>
 <p>That is what stops a later change quietly undoing this &mdash; a narrowed pool, a dropped
 two-swap, a broken constraint shows up as a board that used to be exact and is not.</p>
 

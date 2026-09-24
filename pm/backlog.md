@@ -48,6 +48,26 @@ keeps it current.
   fight odds split 100 exactly; the local search never lowers the score.
   Cost: (a) three to four days, the kit model most of it; (b) a day for
   the tests, a day for the page.
+- **Re-prove the regression gate's boards, banned boards included.**
+  `tests/fixtures/optimal.json` was proved under the 239 rules 9328429
+  removed, and its digest names that playbook: the gate test skips while
+  the shipped playbook scores nothing and fails at the digest once it
+  scores again. `scripts/optimal.py` also holds out every board with bans
+  (`OPTIMAL_STALE_BANNED`, on by default), since those boards were
+  enumerated before the scale went ban-blind, so the gate proves nothing
+  about the search under bans. The work: enumerate a fresh set, with one
+  to five bans among the shapes, under the reference playbook
+  `tests/fixtures/playbook` (`COUNTRIX_STRATEGIES` selects it). A tune of
+  the live playbook never stales that set; a set proved under the live
+  playbook holds only until the next tune. Record it with
+  `python -m scripts.optimal`. The gate test then solves with
+  `catalog=catalog.load(FIXTURE_PLAYBOOK)`, compares the fixture's digest
+  with `catalog.playbook_digest(FIXTURE_PLAYBOOK)` and drops its skip;
+  `OPTIMAL_STALE_BANNED` and `read_proofs`' `stale_banned` filter go, and
+  `test_the_proven_boards_cover_every_input` trades its no-bans assert for
+  a bans clause (at least one board with bans) and drops the bans
+  sentences from its docstring. Cost: the enumeration's hours offline and
+  an hour in the repo.
 - **Weights that learn on their own.** The user wants them to, with the
   sliders as the manual override. The weights were fitted once to a
   benchmark of community comps; nothing refits them. No match result is

@@ -143,8 +143,13 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 - `tests/fixtures/optimal.json` is the regression gate on the search.
   Regenerate it only after a deliberate change to the objective: re-run the
   brute force (it lives outside the repo), then `OPTIMAL_SOURCES=<its .jsonl
-  files> .venv/bin/python scripts/optimal.py`, which records proofs and
-  computes none. Say in the commit why every number moved.
+  files> .venv/bin/python -m scripts.optimal`, which records proofs and
+  computes none. Say in the commit why every number moved. The fixture
+  records its playbook's digest (`catalog.playbook_digest`), so the gate
+  skips while the shipped playbook scores nothing and fails under any other
+  playbook that scores; `.venv/bin/python -m scripts.reach` re-records
+  `reach.json` the same way. Boards with bans are held out until they are
+  re-proven (`pm/backlog.md`).
 
 ## House rules
 
