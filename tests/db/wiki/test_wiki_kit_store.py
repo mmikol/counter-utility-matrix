@@ -1,13 +1,13 @@
-"""The store stage of the kits pull, db/data/wiki/kit_store.py, over a
+"""The store stage of the kits pull, db/data/wiki/kits/kit_store.py, over a
 recording cursor: the tables it reloads, the stat keys, the pools a profile
 sets, weapons and their configs, the abilities it classifies and adds, a
 modifier read off an ability's wording, perk stats and the abilities a perk
 alters, and an announced hero's perks. No database."""
 
 from db import KIND_ABILITY, KIND_PASSIVE, KIND_WEAPON
-from db.data.wiki import kit_store
-from db.data.wiki.hero_articles import HeroProfile
-from db.data.wiki.kit_rows import AbilityEntry, HeroKit, PerkEntry, StatValue, WeaponEntry
+from db.data.wiki.kits import kit_store
+from db.data.wiki.kits.hero_articles import HeroProfile
+from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, StatValue, WeaponEntry
 from tests.db.recording import RecordingCursor
 
 SOURCE = 50

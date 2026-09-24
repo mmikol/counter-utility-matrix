@@ -18,7 +18,7 @@ import requests
 
 from db.data.names import ability_key
 from db.data.wiki import fetch_articles, markup
-from db.data.wiki.kit_rows import HeroKit, StatValue
+from db.data.wiki.kits.kit_rows import HeroKit, StatValue
 
 
 class HeroProfile(TypedDict):

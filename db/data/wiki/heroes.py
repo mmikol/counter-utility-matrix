@@ -1,11 +1,11 @@
 """Pull + clean + store: overwatch.fandom.com - hero kit data, via Cargo.
 
 The wiki stores its ability data in a Cargo table with one row per ability;
-kit_rows.py reads the rows into each hero's kit. Each hero's article adds
-what Cargo does not register - the interaction flags, the health pool - and
-hero_articles.py reads it. A hero the Cargo table names that the roster
-lacks gets a row here when its article is marked upcoming, so its kit loads
-ahead of release. kit_store.py writes the kits. Runs after blizzard.heroes,
+kits/kit_rows.py reads the rows into each hero's kit. Each hero's article
+adds what Cargo does not register - the interaction flags, the health pool -
+and kits/hero_articles.py reads it. A hero the Cargo table names that the
+roster lacks gets a row here when its article is marked upcoming, so its kit
+loads ahead of release. kits/kit_store.py writes the kits. Runs after blizzard.heroes,
 which owns the hero, ability and perk rows this fills in.
 """
 
@@ -16,10 +16,11 @@ import psycopg
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
-from db.data.wiki import WIKI, cargo_query, fetch_articles, kit_store
-from db.data.wiki.hero_articles import Supplement, parse_announcement, supplement_kits
-from db.data.wiki.kit_rows import parse_kits
-from db.data.wiki.kit_store import KitCounts
+from db.data.wiki import WIKI, cargo_query, fetch_articles
+from db.data.wiki.kits import kit_store
+from db.data.wiki.kits.hero_articles import Supplement, parse_announcement, supplement_kits
+from db.data.wiki.kits.kit_rows import parse_kits
+from db.data.wiki.kits.kit_store import KitCounts
 
 CARGO_TABLE = "Abilities"
 CARGO_FIELDS = (

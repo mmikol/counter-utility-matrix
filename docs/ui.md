@@ -228,7 +228,7 @@ reload, else one shot times the fire rate. `hits()` and `cast_hit()` are
 the single hits a hero's burst is read from, `ult_hit()` one ultimate
 cast's damage, `reach` how far a weapon fights, `dual_rate` two guns fired
 from one magazine. This is the one place the wiki's prose is read:
-`db/data/wiki/measurements.py` splits a stat into measurements at ingest
+`db/data/wiki/kits/measurements.py` splits a stat into measurements at ingest
 and keeps its text, and the wording rules - a reload in a row's text, a
 figure that is a sum, an overhealth percent worth its cap - live here, so a
 misread stat is fixed in this file and needs no re-pull.

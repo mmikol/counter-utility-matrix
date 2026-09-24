@@ -5,7 +5,7 @@ is a regression in the readers, not in the table. No database."""
 
 import pytest
 
-from db.data.wiki.modifiers import MODIFIER_STATS, affected_quantity, applies_to
+from db.data.wiki.kits.modifiers import MODIFIER_STATS, affected_quantity, applies_to
 
 
 @pytest.mark.parametrize("stat, value, keywords, affects", [

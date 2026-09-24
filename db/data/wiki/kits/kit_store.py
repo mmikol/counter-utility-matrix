@@ -17,11 +17,11 @@ from psycopg.sql import SQL
 
 from db import PERK_TIERS, psql
 from db.data.names import abilities_named_in, ability_key
-from db.data.wiki import modifiers
-from db.data.wiki.hero_articles import HeroProfile
-from db.data.wiki.kit_rows import AbilityEntry, HeroKit, PerkEntry, StatValue, WeaponEntry
-from db.data.wiki.measurements import parse_measurements
-from db.data.wiki.weapons import group_weapons, slot_id
+from db.data.wiki.kits import modifiers
+from db.data.wiki.kits.hero_articles import HeroProfile
+from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, StatValue, WeaponEntry
+from db.data.wiki.kits.measurements import parse_measurements
+from db.data.wiki.kits.weapons import group_weapons, slot_id
 
 # The unit a stat is measured in when its value carries none of its own
 # ("damage = 90" is 90 hp). Stats absent here are categorical or boolean.

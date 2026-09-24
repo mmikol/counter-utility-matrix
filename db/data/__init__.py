@@ -5,8 +5,8 @@ page to table, plus what they share.
                   text), meta (rates as dated snapshots)
     wiki/         the MediaWiki endpoint: heroes (kits, numbers, keywords),
                   maps, terrain, patches, seasons, playstyles, synergies,
-                  matchups (counters) - and the markup, measurement, weapon
-                  and modifier readers the kit data needs
+                  matchups (counters) - the markup reader they share, and
+                  kits/, the heroes pull's kit pipeline
     authored/     the source row of the one input a user writes, the
                   strategies in inference/strategies/
     fetch         the page cache, its freshness policy and the request loop

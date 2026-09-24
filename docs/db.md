@@ -35,6 +35,7 @@ db/
   data/              the sources, page to table
     blizzard/        overwatch.blizzard.com
     wiki/            overwatch.fandom.com
+      kits/          the heroes pull's kit pipeline
     authored/        the `sources` row of the strategies mirror
     fetch.py         the page cache, its freshness policy and the request loop
     names.py         matching hero, map and ability names across sources
@@ -73,10 +74,7 @@ and return a `PullSummary`.
 | --- | --- | --- |
 | `blizzard/` | `heroes.py` | the roster: heroes, roles, subroles, portraits and icons, ability and perk text. Runs first; everything links to heroes. Blizzard publishes prose and no numbers. A hero page that will not fetch is listed under `missing`, and that hero keeps the text it had. |
 | | `meta.py` | win, pick and ban rates as a dated snapshot, sliced by skill tier and by map. Competitive Role Queue (the page offers no Open Queue), console, Americas - all recorded on the snapshot. |
-| `wiki/` | `heroes.py` | hero kits from the Cargo Abilities table: weapons and their firing configs, abilities, perks, keywords, and every stat as a measurement, through the three modules below. Also the announced heroes: a Cargo hero the roster lacks whose article is marked upcoming gets a row (role, subrole, health, release day, status `announced`) so its kit loads ahead of release; Blizzard listing it later flips the status to released. Runs after `blizzard.heroes`. |
-| | `kit_rows.py` | a Cargo Abilities row read into one hero's kit: a weapon's firing mode, an ability or a perk, each a TypedDict holding the keys its kind guarantees; weapons sorted by firing slot. |
-| | `hero_articles.py` | a hero's article: the interaction flags and other stats Cargo does not register, merged into the kit where Cargo left them empty; the health pool from the infobox; the announcement of a hero marked upcoming. |
-| | `kit_store.py` | the kits into the tables: weapons, firing configs, stats, modifiers and perk links reloaded whole, abilities classified and the ones Blizzard omits added, each hero's pools set; a tally of every row written. |
+| `wiki/` | `heroes.py` | hero kits from the Cargo Abilities table: weapons and their firing configs, abilities, perks, keywords, and every stat as a measurement, through `kits/`. Also the announced heroes: a Cargo hero the roster lacks whose article is marked upcoming gets a row (role, subrole, health, release day, status `announced`) so its kit loads ahead of release; Blizzard listing it later flips the status to released. Runs after `blizzard.heroes`. |
 | | `maps.py` | maps, game modes and stages from the Maps article's Standard Play section. |
 | | `terrain.py` | the ground each map's article describes: the sections about play kept, the lore dropped, and the mentions of each terrain feature - chokes, interiors, high ground, flanks, sightlines, open ground, hazards, cover - counted per map and per thousand words (`map_terrain`), and the same per stage over the text the article has about that stage (`stage_terrain`). Reloads both tables. Runs after `wiki.maps`: a stage must exist before its terrain. |
 | | `patches.py` | game versions from the Patches cargo table; snapshots link to the patch current at capture. Runs before the rates pulls. |
@@ -85,6 +83,9 @@ and return a `PullSummary`.
 | | `synergies.py` | which heroes work with which, from the Team Synergy cells in the "Match-Ups and Team Synergy" section of every released hero's article: a pair is stored once, score 2 when both articles claim it, 1 when one does; note is the wiki's advice cut to one clause. Reloads the table. Runs after `blizzard.heroes`. |
 | | `matchups.py` | who answers whom, from the Match-Up cells of the same section, through `synergies.py`'s section and row parsing. Each written cell is a verdict from the article hero's seat: the other hero answers this one, this one answers the other, or neither. The wiki's MATCHUP or VS. rating decides where there is one; otherwise the prose is scored. A verdict either way is one directed edge in `counters`; a pair the two articles contradict on gets none. Reloads the table. Runs after `blizzard.heroes`. |
 | | `markup.py` | reading the wiki's two markups - Cargo's rendered HTML and article wikitext - and the tidying both need; the link pattern; a section's body, cut at the next heading of any depth. |
+| `wiki/kits/` | `kit_rows.py` | a Cargo Abilities row read into one hero's kit: a weapon's firing mode, an ability or a perk, each a TypedDict holding the keys its kind guarantees; weapons sorted by firing slot. |
+| | `hero_articles.py` | a hero's article: the interaction flags and other stats Cargo does not register, merged into the kit where Cargo left them empty; the health pool from the infobox; the announcement of a hero marked upcoming. |
+| | `kit_store.py` | the kits into the tables: weapons, firing configs, stats, modifiers and perk links reloaded whole, abilities classified and the ones Blizzard omits added, each hero's pools set; a tally of every row written. |
 | | `measurements.py` | a stat value ("75 over 0.59 seconds", "10 - 20 meters", a yes/no glyph) into value, unit, window and condition. |
 | | `weapons.py` | the wiki's one-entry-per-firing-mode list grouped into weapons and their configs. |
 | | `modifiers.py` | what a buff scales and who it lands on, recovered from the value's wording and the ability's keywords. |

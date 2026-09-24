@@ -9,13 +9,13 @@ import re
 import requests
 
 import db
-from db.data.wiki.hero_articles import (
+from db.data.wiki.kits.hero_articles import (
     parse_announcement,
     supplement_from_wikitext,
     supplement_kits,
 )
-from db.data.wiki.kit_rows import AbilityEntry, HeroKit, ability_kind
-from db.data.wiki.measurements import parse_measurements
+from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, ability_kind
+from db.data.wiki.kits.measurements import parse_measurements
 
 # --- the ability vocabulary ----------------------------------------------------------
 

@@ -5,8 +5,8 @@ hip-fire + ADS are ONE weapon, primary + secondary usually merge, but two
 weapons of one class (Mauga's chainguns) share a head noun and must NOT."""
 
 from db import KIND_WEAPON
-from db.data.wiki.kit_rows import WeaponEntry
-from db.data.wiki.weapons import (
+from db.data.wiki.kits.kit_rows import WeaponEntry
+from db.data.wiki.kits.weapons import (
     base_name,
     group_weapons,
     head_noun,

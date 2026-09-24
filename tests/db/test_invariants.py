@@ -2,7 +2,7 @@
 
 import pytest
 
-from db.data.wiki.measurements import CANONICAL_UNITS
+from db.data.wiki.kits.measurements import CANONICAL_UNITS
 
 pytestmark = pytest.mark.invariant
 

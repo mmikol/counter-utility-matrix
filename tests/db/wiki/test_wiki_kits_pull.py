@@ -8,7 +8,7 @@ import datetime
 
 from db.data import fetch
 from db.data.wiki import Articles, heroes
-from db.data.wiki.hero_articles import HeroProfile, Supplement
+from db.data.wiki.kits.hero_articles import HeroProfile, Supplement
 from tests.db.recording import RecordingConnection, RecordingCursor
 
 ARTICLE = """{{Upcoming}}

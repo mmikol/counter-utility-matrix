@@ -4,12 +4,7 @@ Page to table, each ends in run(connection, pull):
 
     heroes          hero kits via the Cargo Abilities table: weapons and
                     firing configs, abilities, perks, stats, keywords; the
-                    announced heroes. Its parts:
-        kit_rows        a Cargo Abilities row -> a typed weapon, ability or
-                        perk entry of one hero's kit
-        hero_articles   a hero's article -> the stats Cargo lacks, the
-                        health pool, an announcement
-        kit_store       the kits into the tables
+                    announced heroes. kits/ reads and stores its kits
     maps            maps, game modes and stages from the Maps article
     terrain         the ground each map article describes - chokes,
                     interiors, high ground, flanks, sightlines, open ground,
@@ -23,13 +18,15 @@ Page to table, each ends in run(connection, pull):
     synergies       pairs that work together, from the same section's
                     Synergy column
 
-Readers the loaders share, no run():
+The heroes pull's kit pipeline, no run():
+
+    kits/           each hero's kit: read from its Cargo rows and its
+                    article, its stats, weapons and modifiers parsed, stored
+
+The reader the loaders share, no run():
 
     markup          reading the wiki's two markups - Cargo's rendered HTML
                     and article wikitext - and the tidying both need
-    measurements    a stat value -> value, unit, window, condition
-    weapons         firing modes grouped into weapons
-    modifiers       buff direction and target, off the keywords
 
 The article HTML sits behind a bot challenge; the only open path is the
 MediaWiki endpoint below, which returns JSON (Cargo) and raw wikitext and

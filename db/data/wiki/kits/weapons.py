@@ -23,7 +23,7 @@ those are different loadouts, not modes of one gun.
 import re
 from typing import NamedTuple
 
-from db.data.wiki.kit_rows import WeaponEntry
+from db.data.wiki.kits.kit_rows import WeaponEntry
 
 ALT_SUFFIX_RE = re.compile(r"\s*(?:alt(?:ernate)?\s*fire|\(ads\))\s*$", re.I)
 WORD_RE = re.compile(r"[A-Za-z']+")
