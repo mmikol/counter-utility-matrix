@@ -47,16 +47,25 @@ def sh(*args: str) -> None:
         raise SystemExit("error: %s exited %d" % (" ".join(args), result.returncode))
 
 
-def get_json(url: str, timeout: float = 10) -> Any:
-    """The JSON a URL answers, or None when it does not answer with JSON."""
+def get_json(url: str | urllib.request.Request, timeout: float = 10) -> Any:
+    """The JSON a URL or a request is answered with, an error status's body
+    included, or None when nothing answers with JSON. An error status whose
+    body is not JSON reads as {"status": "error", "error": "HTTP <code>"}."""
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
+        with urllib.request.urlopen(url, timeout=timeout) as response:  # nosec B310  # http literals from the URL table
             return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:        # a URLError, so caught first
+        try:
+            return json.loads(error.read().decode("utf-8"))
+        except ValueError:
+            return {"status": "error", "error": "HTTP %d" % error.code}
     except (urllib.error.URLError, OSError, ValueError):
         return None
 
 
 def wait_for(url: str, seconds: int, what: str) -> Any:
+    """The first JSON the URL answers, an error included, polled until
+    `seconds` pass; then the run stops."""
     started = time.time()
     while time.time() - started < seconds:
         data = get_json(url)
@@ -145,7 +154,8 @@ def verdict(h: Mapping[str, Any]) -> tuple[bool, list[str]]:
     ui = h.get("ui")
     if not ui or "heroes" not in ui:
         ok = False
-        lines.append("board: not answering")
+        lines.append("board: not answering" if not ui else
+                     "board: %s" % ui.get("error", "no roster in the reply"))
     else:
         lines.append("board: %d heroes on the roster, %d maps"
                      % (len(ui["heroes"]), len(ui.get("maps", []))))
@@ -172,7 +182,9 @@ def token() -> str | None:
 
 
 def mcp(name: str, arguments: dict[str, Any] | None = None, timeout: float = 600) -> str:
-    """Call one tool on the stack's MCP endpoint -> its text."""
+    """Call one tool on the stack's MCP endpoint -> its text. A reply that is
+    not the tool's answer raises RuntimeError with its message: the tool's
+    refusal, the door turning the call away, or no server answering."""
     payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                           "params": {"name": name, "arguments": arguments or {}}})
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -181,11 +193,17 @@ def mcp(name: str, arguments: dict[str, Any] | None = None, timeout: float = 600
         headers["Authorization"] = "Bearer " + bearer
     request = urllib.request.Request("http://localhost:8020/mcp", data=payload.encode(),
                                      headers=headers)
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        body = json.loads(response.read().decode())
-    if "error" in body:
-        raise RuntimeError(body["error"].get("message", str(body["error"])))
-    return body["result"]["content"][0]["text"]
+    body = get_json(request, timeout=timeout)
+    if body is None:
+        raise RuntimeError("the MCP server is unreachable at %s" % request.full_url)
+    if "error" in body:                 # JSON-RPC's error object, or the door's string
+        error = body["error"]
+        raise RuntimeError(error.get("message", str(error)) if isinstance(error, dict)
+                           else str(error))
+    text = body["result"]["content"][0]["text"]
+    if body["result"].get("isError"):
+        raise RuntimeError(text)
+    return text
 
 
 def derive_pending(h: Mapping[str, Any]) -> bool:
@@ -197,7 +215,10 @@ def derive_pending(h: Mapping[str, Any]) -> bool:
         return False
     print("%d draft strategy(ies) await frontmatter; deriving on the host..." % pending)
     sh(sys.executable, "-m", "db.mcp", "call", "derive_strategies")
-    mcp("load_authored")
+    try:
+        mcp("load_authored")
+    except RuntimeError as error:
+        raise SystemExit("error: load_authored failed: %s" % error) from error
     return True
 
 
@@ -328,7 +349,10 @@ def report(ok: bool, lines: list[str]) -> int:
 
 def refresh() -> int:
     print("refreshing every source through the data layer (minutes at a polite pace)...")
-    print(mcp("sync_all", {"refresh": True}, timeout=3600))
+    try:
+        print(mcp("sync_all", {"refresh": True}, timeout=3600))
+    except RuntimeError as error:
+        return report(False, ["refresh: sync_all failed - %s" % error])
     return status()
 
 
