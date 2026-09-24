@@ -13,9 +13,9 @@
                         every table's rows carry its source_id
     identifier          a table or column name on its way into SQL text,
                         checked and returned as a psycopg.sql.Identifier
-    lookup_ids          {value: id} over one column, as it is stored: a code
-                        is read as it is, and a name a source writes is
-                        matched through db.data.names.index
+    lookup_ids          {value: id} over one column, each value as stored;
+                        a name a source writes is matched through
+                        db.data.names.index
     scalar              the one value a statement returns: a count, an
                         upsert's RETURNING
     now, current_patch, current_season
@@ -128,10 +128,10 @@ def identifier(name: str) -> Identifier:
 
 def lookup_ids(
         cursor: psycopg.Cursor, table: str, key_column: str, id_column: str) -> dict[str, int]:
-    """{value: id} over key_column, each value as it is stored. A code
-    column is read as it is - ability_kinds' codes are seeded in lower case,
-    as db.ABILITY_KINDS names them; a hero or map name a source writes is
-    matched through db.data.names.index, which rekeys this by name_key."""
+    """{value: id} over key_column, each value as stored. A code needs no
+    fold: ability_kinds is seeded with db.ABILITY_KINDS, in lower case. A
+    hero or map name a source writes is matched through
+    db.data.names.index, which rekeys this by name_key."""
     return {
         row[0]: row[1]
         for row in cursor.execute(
