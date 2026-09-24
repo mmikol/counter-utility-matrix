@@ -1,6 +1,7 @@
 """Every link resolves, every skill names real tools, the root overview names
-what is at the root, and the sections db_docs generates match what the code
-generates today. Pure, except the schema check."""
+what is at the root, every shallow indent sits on a four-column stop, and the
+sections db_docs generates match what the code generates today. Pure, except
+the schema check."""
 
 import ast
 import json
@@ -84,6 +85,26 @@ def test_every_setting_the_code_reads_is_documented():
     missing = sorted(n for n in names - {"COUNTRIX_NO_DATABASE", "COUNTRIX_LOCAL_SERVER"}
                      if n not in documented)
     assert not missing, missing
+
+
+def test_every_shallow_indent_sits_on_a_four_column_stop():
+    """desloppify reads a file's indent unit as the GCD of its indents of 1 to
+    16 columns and counts nesting in that unit: one line off a multiple of 4
+    makes the unit 1 and every column a level. Docstrings and strings count."""
+    paths = [os.path.join(ROOT, "orchestrator.py")]
+    for folder in ("db", "ui", "inference", "tests", "scripts"):
+        for base, dirs, files in os.walk(os.path.join(ROOT, folder)):
+            dirs[:] = [d for d in dirs if d != "__pycache__"]
+            paths += [os.path.join(base, name) for name in files if name.endswith(".py")]
+    off = []
+    for path in sorted(paths):
+        with open(path, encoding="utf-8") as handle:
+            for number, line in enumerate(handle, 1):
+                text = line.lstrip()
+                indent = len(line) - len(text)
+                if text and not text.startswith("#") and 0 < indent <= 16 and indent % 4:
+                    off.append("%s:%d" % (os.path.relpath(path, ROOT), number))
+    assert not off, off
 
 
 def _import_time_reads(tree):

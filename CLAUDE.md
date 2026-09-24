@@ -128,6 +128,11 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   test greps the whole doc for the name.
 - Every quoted `"COUNTRIX_..."` name in `db/`, `ui/`, `inference/` or
   `orchestrator.py` must appear in docs/architecture.md or docs/db.md.
+- A line indented 1 to 16 columns sits on a multiple of 4, docstring maps
+  and SQL in strings included, and a continuation hangs 4 columns in after
+  a bracket that ends its line (8 for a def's parameters). One line off the
+  stop makes desloppify read the indent unit as 1 and count every column
+  as nesting.
 - Text between `<!-- generated:NAME -->` markers is rendered from code and
   compared with a fresh render. Never edit it by hand; change the source
   (a `@tool` description, strategy frontmatter, a migration comment) and
