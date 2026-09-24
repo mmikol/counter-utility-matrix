@@ -1,10 +1,10 @@
 """The board in prose: the momentum verdict read off the two current comps,
-and the game plan - the ground, what to play on it, what red's picks mean,
-the family of heroes to stay in and what the six is built for - worded from
-the facts and strategies the solver scored. Where the playbook scores
-nothing, the six is only the highest win rates the search found, and the
-plan says so: it claims no counter and no fit, and words the style from the
-roles the six holds.
+the badge above each picker, and the game plan - the ground, what to play
+on it, what red's picks mean, the family of heroes to stay in and what the
+six is built for - worded from the facts and strategies the solver scored.
+Where the playbook scores nothing, the six is only the highest win rates
+the search found, and the plan says so: it claims no counter and no fit,
+and words the style from the roles the six holds.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -15,7 +15,7 @@ from facts.factset import FactSet
 from facts.model import ROLES, Hero, Map, World
 from facts.team import team_metrics, text
 from inference import catalog as catalog_module
-from inference.result import Momentum, Odds, Result, rates_queue
+from inference.result import Badge, Badges, Momentum, Odds, Result, rates_queue
 
 
 class Seats(NamedTuple):
@@ -44,20 +44,23 @@ def momentum(seats: Seats) -> Momentum:
     smaller team, so a perfectly played draft would read low and could fall
     when the right pick lands; that measures how many picks are in, not how
     good they are, and a seat read that way against one read through its
-    fill would always trail."""
+    fill would always trail. Each seat's badge is worded here too, so the
+    page shows the engine's words and decides nothing."""
     cur, red_cur = seats.current, seats.red_current
+    badges = Badges(blue=_badge(cur, seats.fill), red=_badge(red_cur, seats.red_fill))
     blue_why = cur.unscored() if cur.blue or seats.blue is None else seats.blue.waiting()
     red_why = red_cur.unscored() if red_cur.blue or seats.red is None else seats.red.waiting()
     if blue_why and red_why:                       # neither seat can be a share of anything
         return Momentum(blue=None, red=None, countered=None, partial=False, odds=None,
-                        verdict=blue_why)
+                        verdict=blue_why, badges=badges)
     n, m, k = _shares(seats, blue_why, red_why)
     odds = _odds(n, m)
     partial = bool((cur.blue and cur.partial) or (red_cur.blue and red_cur.partial))
     verdict = _verdict_line(cur, red_cur, n, m, partial, odds, blue_why, red_why)
     if k is not None:
         verdict += "; if red plays its best counter, your picks hold %d / 100" % k
-    return Momentum(blue=n, red=m, countered=k, partial=partial, odds=odds, verdict=verdict)
+    return Momentum(blue=n, red=m, countered=k, partial=partial, odds=odds, verdict=verdict,
+                    badges=badges)
 
 
 def _shares(
@@ -81,6 +84,27 @@ def _now(current: Result, fill: Result | None) -> Result:
     """A seat as the verdict reads it: its fill while it is half-drafted and
     one was solved, else its current comp."""
     return fill if fill is not None and current.partial and current.blue else current
+
+
+def _badge(current: Result, fill: Result | None) -> Badge:
+    """The badge above a seat's picker: "unscored", with the reason, whenever
+    the seat's current comp cannot be a share of anything - picks or not;
+    before any pick the suggested six's 100, the seat's optimal by
+    definition; else the picks' share of the seat's optimal, a half-drafted
+    seat read through the best six its picks reach, as the verdict reads it.
+    The tip says what the figure is a share of."""
+    why = current.unscored()
+    if why is not None:
+        return Badge(label="unscored", tip=why)
+    if not current.blue:
+        return Badge(label="100 / 100", tip="no %s picks yet: the suggested six is this"
+                                            " seat's optimal, 100" % current.seat)
+    share = _now(current, fill).share()
+    red = current.seat == "red"
+    whose = "their" if red else "your"
+    of = "their best counter to yours" if red else "the best six for this board"
+    reach = ("the best six from %s picks reaches" if current.partial else "%s picks reach") % whose
+    return Badge(label="%d / 100" % share, tip="%s %d%% of %s" % (reach, share, of))
 
 
 def _odds(n: int | None, m: int | None) -> Odds | None:

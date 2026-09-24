@@ -29,6 +29,7 @@ def test_a_playbook_that_scores_nothing_reads_unscored(synthetic_world):
         assert d[key]["scoring"] is False and d[key]["normalized"] is None
         assert all(a["normalized"] is None for a in d[key]["alternatives"])
     assert d["momentum"]["verdict"].startswith("unscored") and d["momentum"]["blue"] is None
+    assert {badge["label"] for badge in d["momentum"]["badges"].values()} == {"unscored"}
     assert "(unscored)" in b.current.rendered() and "UNSCORED:" in b.current.rendered()
     scored = engine.board(world, draft, catalog=reference).to_dict()
     assert scored["current"]["scoring"] is True
@@ -90,6 +91,9 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     assert "red unscored: Fliers need hitscan cover waits for matchup.flyers >= 1" in verdict
     assert flying["momentum"]["blue"] == flying["fill"]["normalized"]
     assert flying["momentum"]["red"] is None and flying["momentum"]["odds"] is None
+    badges = flying["momentum"]["badges"]            # each badge reads its own seat too
+    assert badges["blue"]["label"] == "%d / 100" % flying["fill"]["normalized"]
+    assert badges["red"] == {"label": "unscored", "tip": flying["red_current"]["unscored"]}
 
 
 def test_the_rendered_breakdown_marks_a_need():

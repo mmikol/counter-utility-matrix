@@ -185,9 +185,12 @@ db <- facts <- inference <- door <- ui.
   or `WORLD_METRICS` and the key its function computes (the namespace must
   equal the registry), `TEXT_METRICS` or `VERSUS_KEYS` or `RED_MATCHUP` where
   they apply, then regenerate the catalog vocabulary in docs/inference.md.
-- `tests/ui/test_pages.py` asserts literal source text in `ui/static/*.js`
-  and `math.html`, and that every `board.css` class is used. The math page
-  restates code constants (`SYNERGY_PULL`); change both with the test.
+- `tests/ui/test_pages.py` pins the scripts at their seams (routes, query
+  keys, element ids, the payload keys they read against what the server
+  writes) and holds that every `board.css` class is used; a decision worth
+  pinning is made on the server, as the seat badge is (`momentum.badges`).
+  The math page restates code constants (`SYNERGY_PULL`); change both with
+  the test.
 - `tests/fixtures/optimal.json` is the regression gate on the search.
   Regenerate it only after a deliberate change to the objective: re-run the
   brute force (it lives outside the repo), then `OPTIMAL_SOURCES=<its .jsonl

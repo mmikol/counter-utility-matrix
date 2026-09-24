@@ -3,8 +3,8 @@
 A Result is one seat's six on one board: who is in it and why, each pick
 citing the board facts that justify it, the score and its breakdown per
 strategy, and the runners-up. A Board holds the seven Results board()
-solves, with the verdict and the plan read off them. Both render as
-JSON-ready data (to_dict) and as text (rendered).
+solves, with the verdict, the seat badges and the plan read off them. Both
+render as JSON-ready data (to_dict) and as text (rendered).
 """
 
 from collections.abc import Callable, Iterable
@@ -60,17 +60,30 @@ class Odds(TypedDict):
     red: int
 
 
+class Badge(TypedDict):
+    """The badge above a seat's picker: its label, and what it means on hover."""
+    label: str
+    tip: str
+
+
+class Badges(TypedDict):
+    """The two seats' badges."""
+    blue: Badge
+    red: Badge
+
+
 class Momentum(TypedDict):
     """Who the picks favour: each seat's share of its optimal, blue's share
     against red's best counter, whether either seat is half-drafted, the
-    fight odds and the verdict in words. A share is None where it cannot be
-    read."""
+    fight odds, the verdict in words and the badge above each picker. A
+    share is None where it cannot be read."""
     blue: int | None
     red: int | None
     countered: int | None
     partial: bool
     odds: Odds | None
     verdict: str
+    badges: Badges
 
 
 def _pct(score: float, best: float) -> int:

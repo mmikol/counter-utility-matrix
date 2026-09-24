@@ -123,16 +123,6 @@ function wireBars(root) {
   });
 }
 
-/* what a seat's figure means - the badge's tooltip: its share of its own
-   seat's optimal, `n` of 100 - the picks' own for a full six, the best six
-   they reach for a half-drafted one; the raw sum is never shown */
-function meaning(d, n) {
-  var whose = d.seat === 'red' ? 'their' : 'your';
-  var of = d.seat === 'red' ? 'their best counter to yours' : 'the best six for this board';
-  return (d.partial ? 'the best six from ' + whose + ' picks reaches ' : whose + ' picks reach ') +
-    n + '% of ' + of;
-}
-
 /* the comps panel: the game plan, the fight odds strip above the boxes, the two
    seats side by side and the badge above each picker */
 function renderInf() {
@@ -146,7 +136,7 @@ function renderInf() {
   }
   var text = (d.plan || '').split('\n'), basis = text.length && text[text.length - 1].indexOf('Based on:') === 0 ? text.pop() : '';
   el('plan').innerHTML = "<span class='lbl'>game plan</span><div class='text'>" + text.map(esc).join('<br>') + '</div>' + (basis ? "<div class='basis'>" + esc(basis) + '</div>' : '');
-  var mo = d.momentum || {};
+  var mo = d.momentum;                  /* every board carries it, the badges included */
   /* the strip is two bars, blue's and red's. With both seats scored the bars
      are the odds - each share over the two shares' sum, a split of 100 - and
      the tooltip keeps the share; with one seat scored its bar is its share
@@ -179,21 +169,10 @@ function renderInf() {
            : held >= TEAM ? resultHTML(d.current, 'blue - your six') : '';
   el('inf-blue').innerHTML = ours + resultHTML(d.blue, 'blue - optimal vs red\'s ' + (revealed ? 'picks' : 'likely six') + (d.side ? ', on ' + d.side : ''));
   wireBars(el('inf-blue'));
-  /* the badge above each picker: "unscored", with the engine's reason,
-     whenever the seat's current comp cannot be a share of anything - picks
-     or not; before any pick the suggested six's 100, the seat's optimal by
-     definition; else the picks' share of the seat's optimal, a half-drafted
-     seat read through the best six its picks reach, as the fight odds read it */
-  var badge = function (cur, share, who) {
-    if (!cur) return ['', ''];
-    if (cur.scoring === false) return ['unscored', cur.unscored || ''];
-    if (!(cur.blue && cur.blue.length)) return ['100 / 100', 'no ' + who + ' picks yet: the suggested six is this seat\'s optimal, 100'];
-    var n = typeof share === 'number' ? share : typeof cur.normalized === 'number' ? Math.round(cur.normalized) : null;
-    return n === null ? ['partial', 'no share yet for ' + who + '\'s picks'] : [n + ' / 100', meaning(cur, n)];
-  };
-  var b = badge(d.current, mo.blue, 'blue'), r = badge(d.red_current, mo.red, 'red');
-  el('bluescore').textContent = b[0]; el('bluescore').title = b[1];
-  el('redscore').textContent = r[0]; el('redscore').title = r[1];
+  /* the badge above each picker is the engine's (momentum.badges): its
+     label, and on hover what the figure is a share of */
+  el('bluescore').textContent = mo.badges.blue.label; el('bluescore').title = mo.badges.blue.tip;
+  el('redscore').textContent = mo.badges.red.label; el('redscore').title = mo.badges.red.tip;
   if (d.shapes && d.shapes.length) SHAPES = d.shapes;   /* what the roster dims */
   paint();                    /* the dimmed tiles, the suggestions and each filled slot's reason */
 }

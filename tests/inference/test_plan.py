@@ -1,8 +1,8 @@
 """The board in prose: the momentum verdict read off the two current comps,
-each half-drafted seat through its fill, and the game plan - the six the
-comps tab shows, the style, the terrain and the stages it names, and
-nothing the board contradicts. Every board is the synthetic World's: no
-database."""
+each half-drafted seat through its fill, the badge above each picker, and
+the game plan - the six the comps tab shows, the style, the terrain and the
+stages it names, and nothing the board contradicts. Every board is the
+synthetic World's: no database."""
 
 import copy
 import os
@@ -13,17 +13,21 @@ from facts.records import StyleScore
 from facts.team import team_metrics
 from inference import catalog
 from inference.expr import Expr
+from inference.result import Result
 from tests.inference import FIXTURE_PLAYBOOK
+
+FIX = catalog.load(FIXTURE_PLAYBOOK)
+
+
+def comp(blue, score, best, partial=False, seat="blue"):
+    """A seat's current comp of `blue` under the reference playbook, scoring
+    `score` on a scale whose 100 is `best`."""
+    return Result(kind="current", map_name=None, red=[], blue=blue, locked=blue,
+                  catalog=FIX, score=score, best=best, partial=partial, seat=seat)
 
 
 def test_the_momentum_verdict_reads_the_two_current_comps():
     from inference import plan
-    from inference.result import Result
-    fix = catalog.load(FIXTURE_PLAYBOOK)
-
-    def comp(blue, score, best, partial=False):
-        return Result(kind="current", map_name=None, red=[], blue=blue, locked=blue,
-                      catalog=fix, score=score, best=best, partial=partial)
     even = plan.momentum(plan.Seats(comp(["a"], 8, 10), comp(["b"], 7.8, 10)))
     assert even["verdict"].startswith("even") and even["blue"] == 80 and even["red"] == 78
     blue = plan.momentum(plan.Seats(comp(["a"] * 6, 9, 10), comp(["b"] * 6, 5, 10),
@@ -34,6 +38,37 @@ def test_the_momentum_verdict_reads_the_two_current_comps():
     assert red["verdict"].startswith("red ahead by 70") and "(partial picks)" in red["verdict"]
     only_red = plan.momentum(plan.Seats(comp([], 0, 10), comp(["b"], 5, 10)))
     assert only_red["verdict"].startswith("red has revealed")
+
+
+def test_the_badge_is_worded_on_the_server():
+    """The badge above each picker is the engine's: "unscored", with the
+    reason, whenever the seat's comp cannot be a share of anything - picks
+    or not, never 100 / 100; before any pick the suggested six's 100; else
+    the picks' share of the seat's optimal, a half-drafted seat's through
+    the best six its picks reach, and the tip says what it is a share of."""
+    from inference import plan
+    waiting = plan.momentum(plan.Seats(comp(["a"], 0, 0), comp([], 0, 0, seat="red")))
+    for badge in waiting["badges"].values():                # picks or not
+        assert badge["label"] == "unscored"
+        assert badge["tip"] == "unscored on this board - no scoring strategy applies yet"
+    empty = plan.momentum(plan.Seats(comp([], 0, 10), comp(["b"] * 6, 5, 10, seat="red")))
+    assert empty["badges"]["blue"] == {
+        "label": "100 / 100",
+        "tip": "no blue picks yet: the suggested six is this seat's optimal, 100"}
+    assert empty["badges"]["red"] == {
+        "label": "50 / 100", "tip": "their picks reach 50% of their best counter to yours"}
+    half = plan.momentum(plan.Seats(comp(["a"], 2, 10, partial=True),
+                                    comp(["b"], 3, 10, partial=True, seat="red"),
+                                    fill=comp(["a"] * 6, 8, 10)))
+    assert half["badges"]["blue"] == {
+        "label": "80 / 100",
+        "tip": "the best six from your picks reaches 80% of the best six for this board"}
+    assert half["badges"]["blue"]["label"] == "%d / 100" % half["blue"]   # as the strip reads it
+    assert half["badges"]["red"]["tip"] == (
+        "the best six from their picks reaches 30% of their best counter to yours")
+    full = plan.momentum(plan.Seats(comp(["a"] * 6, 9, 10), comp([], 0, 10, seat="red")))
+    assert full["badges"]["blue"]["tip"] == "your picks reach 90% of the best six for this board"
+    assert full["badges"]["red"]["label"] == "100 / 100"
 
 
 def test_both_seats_are_read_through_their_fills_while_half_drafted(

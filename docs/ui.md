@@ -135,7 +135,9 @@ comp as a share of its own optimal - blue's picks against blue's optimal,
 red's against red's best counter to your picks (solved for that scale,
 not shown); a seat still drafting reads the share the best six from its
 picks reaches, as the strip reads it, and says so in the tooltip; before
-any pick the badge shows the suggested six's 100. The *fight odds* strip
+any pick the badge shows the suggested six's 100. The engine words each
+badge (`momentum.badges`, a label and a tip) and the page only shows
+them. The *fight odds* strip
 above the boxes is two bars stacked on one track, blue's over red's: with
 both seats scored each bar is its side's share - a side still drafting
 read through its fill, on both sides alike - over the two shares' sum, a

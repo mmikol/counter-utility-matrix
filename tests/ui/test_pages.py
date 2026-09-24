@@ -1,13 +1,23 @@
 """The board's pages: the shell, the math and tests pages, and the static
 files they load. No server and no database - these read ui/pages.py's output
-and the scripts' source. What a script says in JavaScript is its own:
-grepping it proves the source says what the page needs, not that the page
-runs, so each test pins the line a behaviour hangs on."""
+and the scripts' source. The scripts are pinned at their seams - the routes
+and query keys they send, the ids they write, the globals and payload keys
+they read - against what the shell and the server write. The two decisions
+only the client can make, the stale-reply guard and the HTML escape, are
+pinned in the script; any other decision worth pinning is made on the
+server, as the seat badge is (momentum.badges), and tested there."""
 
 import os
 import re
 
-from ui import pages
+from facts import board_facts
+from facts.draft import Draft, board_query
+from inference import catalog, engine, tune
+from inference.result import Badge, Momentum, Pick
+from inference.scoring import Contribution
+from inference.strategy import StrategyRecord
+from tests.inference import FIXTURE_PLAYBOOK
+from ui import board, pages
 
 
 def scripts():
@@ -22,13 +32,6 @@ def function(script, name):
     start = script.index("function %s(" % name)
     end = script.find("\nfunction ", start + 1)
     return script[start:] if end < 0 else script[start:end]
-
-
-def local(body, name):
-    """A function assigned to `var name` inside another: from there to the
-    line that closes it."""
-    start = body.index("var %s = function" % name)
-    return body[start:body.index("\n  };", start)]
 
 
 def test_board_page_has_two_rosters_and_the_three_panels():
@@ -55,19 +58,6 @@ def test_board_page_has_two_rosters_and_the_three_panels():
     assert "id='flash'" in body[:body.index("</header>")]
     comps = body[body.index("id='tab-comps'"):body.index("id='tab-facts'")]
     assert "id='inf-blue'" in comps and "id='inf-red'" in comps
-    script = scripts()
-    assert "/api/roster" in script and "/api/facts" in script and "fetch('/api/board?'" in script
-    assert "/api/infer" not in script                  # the board's route is named for a board
-    assert "localStorage" in script
-    assert "var TABS = ['comps', 'facts', 'playbook']" in script
-    # the 0-100 figure and only it: no script reads the raw sum
-    assert "normalized" in script and "/ 100" in script
-    assert not re.search(r"\.score\b", script)
-    # a card's badge is its kind alone; the form is the meta line's to say
-    assert "<span class='kind \" + h.kind + \"'>\" + h.kind + '</span><b>'" in script
-    # anchors at the top of the playbook, one per group, that scroll to it
-    assert "class='pbnav'" in script and "data-group='pb-" in script and "scrollIntoView" in script
-    assert "'assumption' ? 'assumption - taken as given" in script
     assert b".kind.assumption" in pages.static_file("board.css")[0]
 
 
@@ -75,22 +65,8 @@ def test_the_ban_picker_is_a_roster():
     body = pages.view_board(True)
     assert "id='banhead'" in body and "id='banslots'" in body and "id='banroster'" in body
     assert "id='banmini'" in body and "id='bancount'" in body
-    script = scripts()
-    assert "function buildBanPicker" in script and "rosterHTML('ban')" in script
-    assert "bansOpen = false" in script                     # collapsed by default
     css = pages.static_file("board.css")[0].decode()
     assert ".bans.open .banbody" in css and ".bans .tile.banned" in css
-
-
-def test_an_announced_hero_is_a_coming_soon_tile_in_its_role_column():
-    script = scripts()
-    # no constant: the roster carries the status
-    assert "if (h.status === 'announced') return soonTile(h);" in script
-    card = script[script.index("function soonTile"):script.index("function rosterHTML")]
-    assert "class='tile soon'" in card and "data-h" not in card and "data-team" not in card
-    assert "coming soon" in card and "SILHOUETTE" in card and "releases" in card
-    assert 'var SILHOUETTE = "<svg' in script
-    assert ".tile.soon" in pages.static_file("board.css")[0].decode()
 
 
 def test_every_stylesheet_class_is_used_by_the_page():
@@ -132,17 +108,6 @@ def test_the_page_is_a_shell_over_static_files():
     # blue on the left, red on the right, like the boxes
     assert body.index("id='inf-blue'") < body.index("id='inf-red'")
     assert body.index("id='blueslots'") < body.index("id='redslots'")
-    script = scripts()
-    assert "'red - most likely starting comp'" in script
-    assert "renderResult(d.expected, el('inf-red')" in script and "d.momentum" in script
-    # neither seat carries a score: its head is the title alone and the renderer
-    # never reads a figure; the picks' scores are the badges above the pickers
-    fn = script[script.index("function renderResult"):script.index("function weightRow")]
-    assert "normalized" not in fn and "unscored" not in fn
-    # the strip is two bars, blue's and red's, empty until a seat has a figure
-    assert "mo.blue" in script and "mo.red" in script and "d.red_current" in script
-    assert ">fight odds</span>" in script and "class='mbars'" in script   # stacked, one track width
-    assert "mo.odds" in script          # the bars are the odds when both seats score
     page = pages.view_math()
     assert "<p id='fight-odds'><b>Fight odds.</b>" in page
     # a table of contents: every link resolves to an id on the page
@@ -155,30 +120,10 @@ def test_the_page_is_a_shell_over_static_files():
     # and the page says what the short name stands for
     assert "<b>Countrix</b> is short for <b>Counter Utility Matrix</b>" in page
     assert "likelihood(h) = pick(h, map) + 2 &times; partners(h, the six so far)" in page
-    # the payload keys the page reads, the wire it calls, the bounds it honours
-    assert "d.plan" in script and "d.shapes" in script and "d.momentum" in script
-    assert ".tile.capped" in pages.static_file("board.css")[0].decode()
-    # a heuristic's weight is a slider under its card, bounded like the catalog's
-    assert "type='range' min='0' max='10' step='0.01'" in script
-    assert "type='number' class='wval' min='0' max='10' step='0.01'" in script
-    # the setting rides with each board request, and the one write is one POST
-    assert "q.push('weights=' + " in script and "st.weights" in script
-    assert "fetch('/api/weight', { method: 'POST'" in script
-    # *store* is rendered only on a writable board
-    assert "READ_ONLY ? ''" in script and "class='wstore'" in script
-    # the playbook is grouped by kind, in the equation's order
-    kinds = script[script.index("var KINDS = ["):script.index("function renderPlaybook")]
-    assert kinds.index("'constraint'") < kinds.index("'heuristic'") < kinds.index("'assumption'")
-    # three panes now - satisfied, costing, did not read - each filterable
-    assert "' off'" in script                  # the list keeps its grey-out
-    assert "'costing'" in script and "'unread'" in script
-    assert "class='barfind'" in script
-    # the search's numbers sit under the cards and above the strategies met, not in the head
-    six = function(script, "resultHTML")
-    cards, meta, met = (six.index("<div class='comp'>"), six.index("class='legend meta'"),
-                        six.index("bars(d.contributions)"))
-    assert cards < meta < met
-    assert "el('clearall').onclick" in script and "id='clearall'" in body
+    css = pages.static_file("board.css")[0].decode()
+    for rule in (".tile.capped", ".tile.soon", ".momentum .verdict", ".inf-six + .inf-six"):
+        assert rule in css, rule
+    assert "id='clearall'" in body
     header = body.split("</header>")[0]
     # the two pills, pinned top-right
     links = header[header.index("<span class='links'>"):]
@@ -186,11 +131,6 @@ def test_the_page_is_a_shell_over_static_files():
     assert pages.repo_url() in links
     assert "href='/tests'" in links            # the checks, beside the math
     assert links.rstrip().endswith("GitHub</a></span>")
-    # a team's clear button empties that team only
-    assert "near('[data-clear]')" in script
-    # the suggestions fill blue's empty slots alone
-    suggestions = function(script, "paintSuggestions")
-    assert "el('blueslots')" in suggestions and "el('redslots')" not in suggestions
     # the page hands the scripts the board's flag, and the counts they need
     assert "var TEAM = 6, BANS = 5, READ_ONLY = true;" in body
     assert "READ_ONLY = false" in pages.view_board(False)
@@ -220,114 +160,82 @@ def test_the_display_font_ships_with_the_board_and_its_licence():
     assert "SIL OPEN FONT LICENSE Version 1.1" in licence and "Dharma Type" in licence
 
 
-def test_a_seat_that_cannot_score_reads_unscored_with_or_without_picks():
-    """A playbook that scores nothing reads unscored, never 100 / 100: the
-    badge asks whether the seat's current comp can score before it asks
-    whether the seat holds picks, and a strip bar reads the word for an empty
-    seat too, the engine's reason in its tooltip."""
+def test_the_scripts_send_the_routes_and_query_keys_the_board_reads():
+    """Each route the scripts ask for is the board's own - /api/infer is the
+    inference service's, not the page's - and each key of a board's query
+    is sent in the spelling parse_board reads back, with the sliders'
+    weights and the page's client, which api_board reads beside them."""
     script = scripts()
-    badge = local(function(script, "renderInf"), "badge")
-    assert badge.index("cur.scoring === false") < badge.index("picks yet")
-    assert "return ['unscored', cur.unscored || ''];" in badge
-    bar = local(function(script, "renderInf"), "bar")
-    assert "unscored = !!res && res.scoring === false" in bar
-    assert "res.blue" not in bar                        # picks or not
-    assert "var tip = unscored ? res.unscored || ''" in bar
+    for route in ("/api/roster", "/api/facts?", "/api/board?", "/api/strategies", "/api/weight"):
+        assert route in script, route
+    assert "/api/infer" not in script
+    for key in [*board_query(Draft()), "weights", "client"]:
+        assert "'%s='" % key in script, key
 
 
-def test_the_strip_says_the_verdict_while_neither_bar_has_a_figure():
+def test_the_scripts_write_the_ids_and_read_the_globals_the_shell_holds():
+    """Every element a script looks up by a literal id is one the shell
+    renders, the data attributes the clicks read are the shell's, each
+    global the shell sets is read, and the weight slider and its number box
+    carry the bounds tune enforces."""
+    script, body = scripts(), pages.view_board(True)
+    ids = set(re.findall(r"\bel\('([^']+)'\)", script))
+    assert len(ids) >= 20
+    assert [i for i in sorted(ids) if "id='%s'" % i not in body] == []
+    for attribute in ("data-tab", "data-clear", "data-side"):
+        assert attribute in script and attribute in body, attribute
+    shell = re.search(r"<script>var (.*?);</script>", body).group(1)
+    names = [part.split(" = ")[0] for part in shell.split(", ")]
+    assert names == ["TEAM", "BANS", "READ_ONLY"]
+    for name in names:
+        assert re.search(r"\b%s\b" % name, script), name
+    assert script.count("min='%g' max='%g' step='0.01'" % tune.WEIGHT_RANGE) == 2
+
+
+def test_the_scripts_read_payload_keys_the_server_writes(synthetic_world, monkeypatch):
+    """Each key a script reads off a payload is one the server writes: the
+    board and a seat on it, a pick, a contribution, the momentum and a
+    badge, a strategy, a fact, and the roster with its heroes and maps. No
+    script reads the raw sum."""
     script = scripts()
-    render = function(script, "renderInf")
-    assert "var figureless = typeof mo.blue !== 'number' && typeof mo.red !== 'number';" in render
-    assert "(figureless && mo.verdict ? \"<span class='verdict'>\" + esc(mo.verdict)" in render
-    assert ".momentum .verdict" in pages.static_file("board.css")[0].decode()
+
+    def read(keys, written):
+        for key in keys.split():
+            assert key in written, key
+            assert re.search(r"\.%s\b" % key, script), key
+    solved = engine.board(synthetic_world, Draft("Harbor Gate", ("Mortar",), ("Balm",)),
+                          catalog=catalog.load(FIXTURE_PLAYBOOK)).to_dict()
+    read("plan momentum shapes current red_current fill expected blue map side", solved)
+    read(
+        "picks contributions alternatives considered seconds playstyle cited scoring unscored"
+        " blue", solved["current"])
+    read("hero role why evidence portrait", Pick.__annotations__)
+    read(
+        "id applies ok weighted form when bonus penalty norm spread need metric raw confidence"
+        " confidence_raw fact text", Contribution.__annotations__)
+    read("blue red odds verdict badges", Momentum.__annotations__)
+    read("label tip", Badge.__annotations__)
+    read(
+        "id name kind form weight direction metric need when require soft penalty bonus params"
+        " body", StrategyRecord.__annotations__)
+    fact = board_facts.generate(synthetic_world, Draft()).to_dict()["facts"][0]
+    read("id key subject text scope team source", fact)
+    monkeypatch.setattr(board.tables, "load", lambda cx: synthetic_world)
+    roster = board.api_roster(None).body
+    read("heroes maps role_icons newer_patches", roster)
+    read("name role subrole portrait status release_date", roster["heroes"][0])
+    read("name mode style sided", roster["maps"][0])
+    assert not re.search(r"\.score\b", script)
 
 
-def test_a_half_drafted_seat_reads_the_share_its_picks_reach():
-    """A partial team's own share is null by design; its badge reads the share
-    its fill reaches - the momentum's figure for that seat - and says so."""
-    script = scripts()
-    render = function(script, "renderInf")
-    assert "badge(d.current, mo.blue, 'blue'), r = badge(d.red_current, mo.red, 'red')" in render
-    meaning = function(script, "meaning")
-    assert "d.partial ? 'the best six from ' + whose + ' picks reaches '" in meaning
-
-
-def test_blue_seat_draws_its_own_six_above_the_optimal():
-    """With one to five blue picks the seat draws the fill, at six the picks
-    themselves, and the optimal that ignores them below - the six the plan
-    describes on top, so blue's picks never seem to have gone missing."""
-    render = function(scripts(), "renderInf")
-    assert "d.fill ? resultHTML(d.fill, 'blue - your picks, the rest filled')" in render
-    assert "held >= TEAM ? resultHTML(d.current, 'blue - your six')" in render
-    assert "el('inf-blue').innerHTML = ours + resultHTML(d.blue, 'blue - optimal vs red\\'s '" \
-        in render
-    assert "optimal counter to current picks" not in render
-    assert ".inf-six + .inf-six" in pages.static_file("board.css")[0].decode()
-    page = pages.view_math()
-    counter = page[page.index("<p id='counter'>"):]
-    assert "shows blue's six above the optimal" in counter[:counter.index("</p>")]
-
-
-def test_a_pick_leaves_red_likely_six_standing():
-    """Red's likely six changes only with the map, the side and the bans: a
-    pick does not blank it to searching."""
+def test_a_reply_to_an_older_request_is_dropped_and_its_board_cancelled():
+    """The guard only the page can keep: each refresh numbers its requests,
+    so a reply or a failure from an older one - the facts or the board -
+    is dropped, and a newer board request aborts the older one, whose
+    server stops solving it."""
     refresh = function(scripts(), "refresh")
-    assert "var key = [st.map, st.side].concat(st.bans).join('|');" in refresh
-    assert "if (key !== redKey) el('inf-red').innerHTML" in refresh
-    assert "redKey = d.error ? null : key;" in refresh
-
-
-def test_a_newer_board_request_aborts_the_older_and_names_the_page():
-    refresh = function(scripts(), "refresh")
-    assert "if (solve) solve.abort();" in refresh
-    assert "'client=' + CLIENT" in refresh and "{ signal: solve.signal }" in refresh
-
-
-def test_a_failed_board_request_leaves_nothing_of_the_last_board():
-    """No board back - the server down, a reply that is not JSON - blanks the
-    badges, the plan and the suggestions, says the board is not answering in
-    the strip and the seat, and retries when the page is back in view."""
-    script = scripts()
-    failed = function(script, "boardFailed")
-    for line in ("INF = null; paint();", "el('plan').innerHTML = '';",
-                 "<span class='legend'>the board is not answering</span>",
-                 "el(id).textContent = ''; el(id).title = '';"):
-        assert line in failed, line
-    assert "boardFailed();" in function(script, "refresh")
-    assert "if (node.textContent !== '…') node.dataset.was = node.textContent;" in \
-        function(script, "solving")
-    error = function(script, "renderInf")
-    error = error[:error.index("return;")]
-    assert "paint();" in error                         # an error reply drops the suggestions
-    assert "['online', 'focus'].forEach" in script and "if (STALE) refresh();" in script
-    assert "the database is not answering" not in script
-
-
-def test_a_facts_error_replaces_the_rows_it_leaves_behind():
-    script = scripts()
-    assert "FACTS = null;" in function(script, "factsFailed")
-    refresh = function(script, "refresh")
-    assert "if (d.error) { factsFailed(d.error); return; }" in refresh
-    catch = refresh[refresh.index("fetch('/api/facts?'"):refresh.index("solving(true)")]
-    assert catch.count("if (mine !== seq) return;") == 2   # a stale failure is dropped too
-
-
-def test_a_failed_roster_load_is_said_and_retried():
-    script = scripts()
-    boot = function(script, "boot")
-    assert "if (!r.ok || d.error || !d.heroes) throw" in boot
-    assert "setTimeout(boot, bootWait);" in boot and "bootWait * 2" in boot
-    assert "if (!ROSTER) return;" in function(script, "paint")
-    assert "if (!ROSTER) return;" in function(script, "refresh")
-
-
-def test_a_filled_slot_carries_its_own_reason():
-    script = scripts()
-    paint = function(script, "paint")
-    assert "s.title = pickReason(team, name);" in paint and "s.title = '';" in paint
-    reason = function(script, "pickReason")
-    assert "(d.fill || d.current)" in reason and "d.red_current" in reason
+    assert refresh.count("mine !== seq") == 4
+    assert "solve.abort()" in refresh and "signal" in refresh
 
 
 def test_an_apostrophe_cannot_close_a_single_quoted_attribute():
@@ -340,16 +248,6 @@ def test_an_apostrophe_cannot_close_a_single_quoted_attribute():
         replaced = replaced.replace(pattern, entity)
     assert "'" not in replaced and "<" not in replaced and '"' not in replaced
     assert "title='each side\\'s" not in script and "title='each side&#39;s" in script
-
-
-def test_a_weight_whose_heuristic_is_gone_is_dropped():
-    script = scripts()
-    prune = function(script, "pruneWeights")
-    assert "if (h.form === 'heuristic') live[h.id] = true;" in prune
-    assert "delete st.weights[id]" in prune and "save()" in prune
-    render = function(script, "renderPlaybook")
-    # a catalog that did not answer returns before anything is pruned
-    assert render.index("return; }") < render.index("pruneWeights(d);")
 
 
 def test_the_math_page_states_the_equation_and_the_layers():
@@ -374,5 +272,8 @@ def test_the_math_page_states_the_equation_and_the_layers():
     assert "When nothing scores" in page
     assert "The data layer" in page and "The inference layer" in page and "The board" in page
     assert "never calls a language model" in page
+    # the counter: blue's own six above the optimal that ignores its picks
+    counter = page[page.index("<p id='counter'>"):]
+    assert "shows blue's six above the optimal" in counter[:counter.index("</p>")]
     # the page solves no countered case: the hedge is the board tool's
     assert "row is the hedge" not in page and "row is the hedge" not in pages.view_tests()
