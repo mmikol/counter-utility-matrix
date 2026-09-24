@@ -46,10 +46,10 @@ def _announce_heroes(
     hero's id to `hero_ids`, which the kit and ability lookups that follow
     read; the rest stay unknown."""
     stored: list[str] = []
-    articles, missing = fetch_articles(
+    articles = fetch_articles(
         pull.session, sorted(name for name in names if name.lower() not in hero_ids),
         pull.cache_dir, pull.log)
-    for hero_name, text in articles.items():
+    for hero_name, text in articles.found.items():
         found = parse_announcement(text)
         if not found:
             continue
@@ -76,7 +76,7 @@ def _announce_heroes(
         pull.log("announced hero stored: %s (%s, %s%s)" % (
             hero_name, found["role"], found["subrole"],
             ", releases %s" % found["release_date"] if found["release_date"] else ""))
-    return stored, missing
+    return stored, articles.missing
 
 
 class KitsSummary(KitCounts, ArticlePullSummary):

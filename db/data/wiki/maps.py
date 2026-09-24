@@ -225,10 +225,10 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> MapsSummary:
     codes = {map_name: code for code, _, maps in reversed(modes) for map_name in maps}
     # a map whose article will not fetch keeps the stages it had: map_stages
     # is upserted, never deleted
-    articles, missing = fetch_articles(pull.session, map_ids, pull.cache_dir, pull.log)
+    articles = fetch_articles(pull.session, map_ids, pull.cache_dir, pull.log)
     stage_rows = 0
     staged: dict[str, int] = {}
-    for map_name, text in articles.items():
+    for map_name, text in articles.found.items():
         map_id = map_ids[map_name]
         stages = stages_of(codes[map_name], text, phases)
         if stages:
@@ -247,5 +247,5 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> MapsSummary:
     connection.commit()
     return {"modes": len(modes), "maps": len(map_ids),
             "combinations": combinations, "stages": stage_rows,
-            "maps_with_stages": staged, "missing": missing,
+            "maps_with_stages": staged, "missing": articles.missing,
             "tables": ["game_modes", "maps", "map_modes", "map_stages"]}

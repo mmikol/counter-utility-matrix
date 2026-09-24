@@ -42,6 +42,7 @@ will not fetch is recorded by name and the rest are read.
 
 import json
 from collections.abc import Callable, Iterable, Sequence
+from typing import NamedTuple
 
 import requests
 
@@ -154,19 +155,26 @@ def fetch_wikitext(session: requests.Session, title: str, cache_dir: str | None)
         ARTICLE_POLICY, lambda response: _wikitext(response, title)))
 
 
+class Articles(NamedTuple):
+    """What fetch_articles read: {title: wikitext} for each title that
+    fetches, in order, and 'title: error' for each that would not."""
+    found: dict[str, str]
+    missing: list[str]
+
+
 def fetch_articles(
         session: requests.Session, titles: Iterable[str], cache_dir: str | None,
-        log: Callable[[str], None]) -> tuple[dict[str, str], list[str]]:
-    """({title: wikitext} for each title that fetches, in order, ['title:
-    error'] for each that raises FetchError - a WikiError, or a request that
-    failed), each failure logged as it happens. Every per-article loop reads
-    through this one guard."""
-    articles: dict[str, str] = {}
+        log: Callable[[str], None]) -> Articles:
+    """Every title's wikitext -> Articles: the ones that fetch, and the ones
+    that raise FetchError - a WikiError, or a request that failed - each
+    logged as it happens. Every per-article loop reads through this one
+    guard."""
+    found: dict[str, str] = {}
     missing: list[str] = []
     for title in titles:
         try:
-            articles[title] = fetch_wikitext(session, title, cache_dir)
+            found[title] = fetch_wikitext(session, title, cache_dir)
         except FetchError as error:
             missing.append("%s: %s" % (title, error))
             log("  %-22s %s" % (title, error))
-    return articles, missing
+    return Articles(found, missing)

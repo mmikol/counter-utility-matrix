@@ -137,10 +137,10 @@ def supplement_kits(
     """Read every hero's article, merge the stats it adds into the kit in
     place where Cargo left them empty, and keep the hero's pools. A hero whose
     article will not fetch keeps its Cargo kit and is recorded as missing."""
-    articles, missing = fetch_articles(session, sorted(by_hero), cache_dir, log)
+    articles = fetch_articles(session, sorted(by_hero), cache_dir, log)
     profiles: dict[str, HeroProfile] = {}
     stats = 0
-    for hero_name, text in articles.items():
+    for hero_name, text in articles.found.items():
         extra, profile = supplement_from_wikitext(text)
         if profile is not None:
             profiles[hero_name] = profile
@@ -149,4 +149,4 @@ def supplement_kits(
                 if code not in entry["stats"]:
                     entry["stats"][code] = value
                     stats += 1
-    return Supplement(profiles, stats, missing)
+    return Supplement(profiles, stats, articles.missing)

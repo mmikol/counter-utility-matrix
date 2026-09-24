@@ -169,10 +169,10 @@ def test_an_article_that_will_not_fetch_is_recorded_and_the_rest_are_read(tmp_pa
     # the title goes to the cache as it is: its name folds spaces and punctuation
     (tmp_path / "King_s_Row.wikitext").write_text("{{Infobox map}}", encoding="utf-8")
     session, logged = FakeSession(fail=True), []
-    articles, missing = wiki.fetch_articles(session, ["King's Row", "Hanaoka"], str(tmp_path),
-                                            logged.append)
-    assert articles == {"King's Row": "{{Infobox map}}"}
-    [line] = missing
+    articles = wiki.fetch_articles(session, ["King's Row", "Hanaoka"], str(tmp_path),
+                                   logged.append)
+    assert articles.found == {"King's Row": "{{Infobox map}}"}
+    [line] = articles.missing
     assert line.startswith("Hanaoka: ") and "source down" in line
     assert session.calls == 1                       # the uncached one, asked for once
     assert logged == ["  %-22s %s" % ("Hanaoka", line[len("Hanaoka: "):])]

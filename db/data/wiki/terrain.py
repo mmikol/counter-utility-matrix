@@ -346,12 +346,12 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> TerrainSumma
 
     rows, words_read, stage_rows, stages_read = 0, 0, 0, 0
     without_text: list[str] = []
-    articles, missing = fetch_articles(pull.session, [name for _, name in maps],
-                                       pull.cache_dir, pull.log)
+    articles = fetch_articles(pull.session, [name for _, name in maps],
+                              pull.cache_dir, pull.log)
     for map_id, name in maps:
-        if name not in articles:
+        if name not in articles.found:
             continue
-        article = articles[name]
+        article = articles.found[name]
         text = terrain_text(article)
         words = word_count(text)
         if words < MIN_WORDS:
@@ -376,8 +376,8 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> TerrainSumma
             pull.log("    %-30s %4d words  %s" % (stage, words, _counted(counts)))
     connection.commit()
     total_stages = sum(len(stage_ids) for _, stage_ids in stages.values())
-    return {"maps": len(maps) - len(without_text) - len(missing),
-            "without_text": without_text, "missing": missing,
+    return {"maps": len(maps) - len(without_text) - len(articles.missing),
+            "without_text": without_text, "missing": articles.missing,
             "rows": rows, "words": words_read,
             "stages": stages_read, "stages_no_text": total_stages - stages_read,
             "stage_rows": stage_rows, "tables": ["map_terrain", "stage_terrain"]}

@@ -462,9 +462,10 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> CountersSumm
     cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
     released: dict[str, int] = dict(cursor.fetchall())
 
-    articles, missing = fetch_articles(pull.session, released, pull.cache_dir, pull.log)
-    known = {name_key(name): Known(name, pronoun(articles.get(name, ""))) for name in released}
-    readings = {name: parse_matchups(text, name, known) for name, text in articles.items()}
+    articles = fetch_articles(pull.session, released, pull.cache_dir, pull.log)
+    known = {
+        name_key(name): Known(name, pronoun(articles.found.get(name, ""))) for name in released}
+    readings = {name: parse_matchups(text, name, known) for name, text in articles.found.items()}
     edges, contradicted, unmatched = combine(readings, index(released))
     if not edges:
         raise WikiError("no hero article has a match-up verdict")
@@ -494,5 +495,5 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> CountersSumm
             "unwritten": sorted(name for name in released if not readings.get(name)),
             "no_edge": sorted(name for name, hero_id in released.items()
                               if hero_id not in in_an_edge),
-            "unmatched": unmatched, "missing": missing,
+            "unmatched": unmatched, "missing": articles.missing,
             "tables": ["counters"]}
