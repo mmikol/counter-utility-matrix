@@ -1,6 +1,7 @@
 """infer() and evaluate(): locked picks and the queue's shape, an answer to a
 flier, a full six ranked against its field, a board no six satisfies, bans,
-one scale per board, an announced hero, and the fill that keeps a lock."""
+one scale per board, an announced hero, the fill that keeps a lock, and a
+seat's search timed from where it began."""
 
 import pytest
 
@@ -150,3 +151,24 @@ def test_the_fill_is_the_optimal_whenever_the_optimal_holds_every_lock(world):
         for hero in best.blue:
             fill = engine.infer(world, Draft(map_name, blue=(hero,)), catalog=shipped)
             assert fill.blue == best.blue, (map_name, hero, fill.blue)
+
+
+def test_a_seat_solved_across_the_pool_is_timed_from_when_its_search_began(
+        synthetic_world, scratch_playbook):
+    """A board's seat takes its Solved from a split that ran before the seat
+    is written up, so its seconds run from when the split was sent out: the
+    pooled search counts, and a seat reads the time the board took."""
+    import time
+
+    from inference import engine, parallel
+    from inference.solver import Solver
+    draft = Draft("Harbor Gate", ("Anvil",), side="attack")
+    m, red_h, _, _ = synthetic_world.resolve(draft.map_name, draft.red, (), ())
+    solved = Solver(synthetic_world, m, red=red_h, locked=[], side="attack",
+                    catalog=scratch_playbook).solve(top=2)
+    seat = engine._optimal(synthetic_world, draft, catalog=scratch_playbook, pool_size=6, top=1,
+                           seat="blue", kind="infer", solved=solved, began=time.time() - 5)
+    assert seat.result.seconds >= 5 and seat.result.to_dict()["seconds"] >= 5
+    alone = engine._optimal(synthetic_world, draft, catalog=scratch_playbook, pool_size=6,
+                            top=1, seat="blue", kind="infer", solved=None, began=None)
+    assert alone.result.seconds < 5 and parallel.NullSplit.started is None

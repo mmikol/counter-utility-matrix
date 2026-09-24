@@ -119,7 +119,7 @@ def infer(
     revealed ones, on the draft's side of a sided map."""
     return _optimal(world, draft, catalog=catalog or catalog_module.load(),
                     pool_size=pool_size, top=top, seat="blue", kind="infer",
-                    solved=None).result
+                    solved=None, began=None).result
 
 
 def evaluate(
@@ -140,12 +140,15 @@ class _Optimal(NamedTuple):
 
 def _optimal(
         world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int,
-        top: int, seat: str, kind: str, solved: Solved | None) -> _Optimal:
+        top: int, seat: str, kind: str, solved: Solved | None,
+        began: float | None) -> _Optimal:
     """The optimal six for `seat` around its locked picks (`draft.blue`)
     against the other seat's revealed ones (`draft.red`), labelled `kind`.
     `solved` takes a Solved the caller already has - a board's search, run
-    across the worker pool - in place of searching here."""
-    started = time.time()
+    across the worker pool - in place of searching here, and `began` the
+    time that search started, which the result's seconds run from; None
+    times the search this call makes."""
+    started = time.time() if began is None else began
     m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
     side = _side(m, draft.side)
     check_team_size(blue_h, seat)
@@ -237,13 +240,13 @@ def _current(
 
 def _countered(
         world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int,
-        top: int, solved: Solved | None, swept: Swept | None) -> Result:
+        top: int, solved: Solved | None, began: float | None, swept: Swept | None) -> Result:
     """Blue's picks (`draft.blue`) against red's optimal six (`draft.red`):
     how they hold if red answers perfectly, on the scale of blue's best
     counter to that six."""
     hypothetical = min(pool_size, COUNTERED_POOL)
     against = _optimal(world, draft._replace(blue=()), catalog=catalog, pool_size=hypothetical,
-                       top=top, seat="blue", kind="infer", solved=solved)
+                       top=top, seat="blue", kind="infer", solved=solved, began=began)
     return _current(world, draft, solver=against.solver, best=against.result.score,
                     catalog=catalog, pool_size=hypothetical, seat="blue", kind="countered",
                     swept=swept)
@@ -347,9 +350,10 @@ def _board_once(
     blue_split.merge()
     red_split.merge()
     blue = _optimal(world, blue_seat, catalog=catalog, pool_size=pool_size, top=BOARD_TOP,
-                    seat="blue", kind="infer", solved=blue_split.solved())
+                    seat="blue", kind="infer", solved=blue_split.solved(),
+                    began=blue_split.started)
     red = _optimal(world, red_seat, catalog=catalog, pool_size=pool_size, top=BOARD_TOP,
-                   seat="red", kind="infer", solved=red_split.solved())
+                   seat="red", kind="infer", solved=red_split.solved(), began=red_split.started)
     countering = bool(brief.countered and draft.blue and red.result.blue)
     countered_seat = draft._replace(red=tuple(red.result.blue))
     countered_split = (split(countered_seat._replace(blue=()), rest,
@@ -367,10 +371,12 @@ def _board_once(
                        pool_size=pool_size, seat="red", kind="current",
                        swept=red_split.swept() if len(draft.red) == TEAM_SIZE else None)
     fill = (_filled(world, ours, catalog=catalog, pool_size=pool_size, top=BOARD_TOP,
-                    solved=fill_split.solved(), best=blue.result.score)
+                    solved=fill_split.solved(), began=fill_split.started,
+                    best=blue.result.score)
             if wants_fill else None)
     countered = (_countered(world, countered_seat, catalog=catalog, pool_size=pool_size,
                             top=BOARD_TOP, solved=countered_split.solved(),
+                            began=countered_split.started,
                             swept=countered_split.swept() if full else None)
                  if countering else None)
     return Board(map_name=expected.map_name, side=draft.side, bans=list(draft.bans),
@@ -422,12 +428,13 @@ def _expected(
                          for p in likely])
 
 
-def _filled(world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int, top: int,
-            solved: Solved | None, best: float) -> Result:
+def _filled(
+        world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int, top: int,
+        solved: Solved | None, began: float | None, best: float) -> Result:
     """Blue's locked picks (`draft.blue`) with the empty slots filled by the
     solver, on the scale of blue's optimal, whose score is `best`: how close
     the best completion comes."""
     fill = _optimal(world, draft, catalog=catalog, pool_size=pool_size, top=top, seat="blue",
-                    kind="fill", solved=solved).result
+                    kind="fill", solved=solved, began=began).result
     fill.scale_to(best)
     return fill

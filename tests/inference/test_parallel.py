@@ -40,6 +40,8 @@ def _traced_board(
     trace = [] if trace is None else trace
 
     class Split:
+        started = None                  # the seat searches for itself, and times it
+
         def __init__(self, run, spec, slices, bounds=None, standing=None):
             self.run, self.spec, self.bounds, self.standing = run, spec, bounds, standing
 

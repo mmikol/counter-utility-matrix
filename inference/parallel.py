@@ -29,6 +29,7 @@ import os
 import pickle  # nosec B403  # pickles cross only from this process to the workers it spawned
 import sys
 import threading
+import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from typing import Any, NamedTuple
@@ -339,10 +340,12 @@ class Split:
     """One search, split across the pool, a round at a time: the reference
     sample, then the enumeration, then the tail. A caller starts several and
     walks them through the rounds together, so the pool stays full; each
-    round first checks that the board has not been superseded."""
+    round first checks that the board has not been superseded. `started` is
+    when the search was sent out: its seat's seconds run from there."""
 
     def __init__(self, run: Run, spec: Spec, slices: int, bounds: Bounds | None = None,
                  standing: Tally | None = None) -> None:
+        self.started = time.time()
         self.run, self.spec, self.count = run, spec, slices
         self.bounds, self.standing, self.size = bounds, standing, 0
         self.verdicts: list[Verdict] = []
@@ -422,9 +425,10 @@ class Split:
 class NullSplit:
     """A search not split: each round only checks that the board has not
     been superseded, and solved() and swept() are None, so the seat searches
-    for itself in this process."""
+    for itself in this process, timing its own search."""
     bounds: Bounds | None = None
     standing: Tally | None = None
+    started: float | None = None
 
     def __init__(self, watch: Watch) -> None:
         self.watch = watch
