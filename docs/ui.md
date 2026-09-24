@@ -76,8 +76,10 @@ none, so it answers while the database is out of reach.
 ## `static/` - the board's look and behaviour
 
 `board.js`, loaded last because it calls the other two, keeps one piece
-of state - the map, the side, the bans, the red picks, the blue picks -
-in `localStorage`, so a reload mid-game keeps the board. A click on a
+of state - the map, the side, the bans, the red picks, the blue picks, the
+slider weights - in `localStorage`, so a reload mid-game keeps the board;
+a board saved before a field existed loads with that field's default
+(`blank()`, merged once at load). A click on a
 portrait toggles that hero on that team (a banned hero cannot be picked;
 a hero on one team cannot be on the other); a change debounces, then
 fetches facts and the board together. A board request names the page

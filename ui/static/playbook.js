@@ -8,7 +8,7 @@
    request (weights=id:value) and never touches the file. Only heuristics have
    weights to set - a scored constraint's stays its own. */
 function weightRow(h) {
-  var set = st.weights && st.weights.hasOwnProperty(h.id), v = set ? st.weights[h.id] : h.weight;
+  var set = st.weights.hasOwnProperty(h.id), v = set ? st.weights[h.id] : h.weight;
   return "<div class='wrow' data-id='" + esc(h.id) + "' data-inferred='" + h.weight + "'>" +
     "<span class='wlbl'>weight</span><input type='range' min='0' max='10' step='0.01' value='" + v + "' aria-label='weight of " + esc(h.name) + "'>" +
     "<input type='number' class='wval' min='0' max='10' step='0.01' value='" + v + "' aria-label='exact weight of " + esc(h.name) + "'>" +
@@ -29,7 +29,7 @@ function storeWeight(id, value, button) {
     .then(function (d) {
       if (d.error) { flash('not stored: ' + d.error); button.disabled = false; button.textContent = 'store'; return; }
       flash(d.line || ('stored ' + id + ' at ' + value));
-      if (st.weights) delete st.weights[id];
+      delete st.weights[id];
       save();
       loadPlaybook();
       refresh();
@@ -38,7 +38,6 @@ function storeWeight(id, value, button) {
 }
 function clampWeight(x) { x = Math.round(+x * 100) / 100; return isNaN(x) ? null : Math.min(10, Math.max(0, x)); }
 function setWeight(id, value, inferred) {
-  if (!st.weights) st.weights = {};
   if (value === null || value === inferred) delete st.weights[id]; else st.weights[id] = value;
   save(); refresh();
 }
@@ -57,7 +56,7 @@ function loadPlaybook() {
 function pruneWeights(d) {
   var live = {};
   d.strategies.forEach(function (h) { if (h.form === 'heuristic') live[h.id] = true; });
-  var stale = Object.keys(st.weights || {}).filter(function (id) { return !live[id]; });
+  var stale = Object.keys(st.weights).filter(function (id) { return !live[id]; });
   stale.forEach(function (id) { delete st.weights[id]; });
   if (stale.length) save();
 }

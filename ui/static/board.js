@@ -1,12 +1,14 @@
 /* the board: TEAM and BANS are set by the page before this loads */
 var el = function (id) { return document.getElementById(id); };
-var ROSTER = null, st = { map: '', red: [], blue: [], bans: [], side: '', weights: {} };
+/* an empty board, and every field's default: a board saved before a field
+   existed takes it from here. It is a function because Object.assign copies
+   array references, and one shared object would take the next ban pushed */
+function blank() { return { map: '', red: [], blue: [], bans: [], side: '', weights: {} }; }
+var ROSTER = null, st = blank();
 var SHAPES = null;   /* the (tank, damage, support) triples the queue and the playbook allow, from the board */
 var ROLES = ['tank', 'damage', 'support'];
 try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
-      if (saved && saved.red && saved.blue) st = saved; } catch (e) {}
-if (!st.bans) st.bans = [];
-if (!st.side) st.side = '';
+      if (saved && saved.red && saved.blue) st = Object.assign(blank(), saved); } catch (e) {}
 var TABS = ['comps', 'facts', 'playbook'];   /* the panels; the first is the default */
 var bansOpen = false;                        /* the ban picker starts collapsed */
 
@@ -15,7 +17,6 @@ function currentMap() { return ROSTER ? ROSTER.maps.filter(function (x) { return
 /* text for markup and for either kind of quoted attribute: a map named King's
    Row must not close a single-quoted title */
 function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-if (!st.weights || typeof st.weights !== 'object') st.weights = {};   /* a state saved before the sliders */
 function save() { try { localStorage.setItem('owdb-board2', JSON.stringify(st)); } catch (e) {} }
 function hero(name) { return ROSTER.byName[name]; }
 function portrait(h) {
@@ -197,7 +198,7 @@ function qs() {
   st.blue.forEach(function (h) { q.push('blue=' + encodeURIComponent(h)); });
   st.bans.forEach(function (h) { q.push('bans=' + encodeURIComponent(h)); });
   if (st.side) q.push('side=' + st.side);
-  Object.keys(st.weights || {}).sort().forEach(function (id) { q.push('weights=' + encodeURIComponent(id + ':' + st.weights[id])); });
+  Object.keys(st.weights).sort().forEach(function (id) { q.push('weights=' + encodeURIComponent(id + ':' + st.weights[id])); });
   return q.join('&');
 }
 
@@ -359,7 +360,7 @@ function start(d) {
   loadPlaybook();
   showTab((function () { try { return localStorage.getItem('owdb-tab'); } catch (e) { return null; } })());
   el('clearall').onclick = function () {   /* back to nothing: map, side, bans, both teams - the weights stay */
-    st = { map: '', red: [], blue: [], bans: [], side: '', weights: st.weights || {} }; save(); paint(); refresh();
+    st = Object.assign(blank(), { weights: st.weights }); save(); paint(); refresh();
   };
   refresh();
 }
