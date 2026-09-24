@@ -16,14 +16,14 @@ or the user points at, and leave a report.
        .venv/bin/ruff check db ui inference tests orchestrator.py
        .venv/bin/python -m pytest -q -p no:cacheprovider --cov
        COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -p no:cacheprovider \
-           --cov --cov-fail-under=70
+           --cov --cov-fail-under=78
        .venv/bin/python orchestrator.py test        # inside the image, if the stack is up
 
    `--cov` alone: the sources, the bar and the report's shape are
    pyproject.toml's, defined once.
 
    The bar is 75% of the code under test where the database exists (the
-   local run and the image); CI, which builds none, holds 70%. The
+   local run and the image); CI, which builds none, holds 78%. The
    third run is what CI sees - but not exactly: GitHub runs from a fresh
    clone with no `.env`, no caches and no cluster, so after every push
    read the run itself with `gh run list --limit 3` (the repository is
