@@ -97,10 +97,10 @@ def test_drafts_are_derived_on_the_host_then_the_stack_remirrors(monkeypatch):
     monkeypatch.setattr(orchestrator, "sh", lambda *a, **k: calls.append(("sh", a[-1])))
     monkeypatch.setattr(orchestrator, "mcp",
                         lambda name, args=None, **k: calls.append(("mcp", name)))
-    orchestrator.derive_pending({"inference": {"strategies": 38, "pending": 0}})
-    orchestrator.derive_pending({"inference": None})
+    assert orchestrator.derive_pending({"inference": {"strategies": 38, "pending": 0}}) is False
+    assert orchestrator.derive_pending({"inference": None}) is False
     assert calls == []
-    orchestrator.derive_pending({"inference": {"strategies": 39, "pending": 1}})
+    assert orchestrator.derive_pending({"inference": {"strategies": 39, "pending": 1}}) is True
     assert calls == [("sh", "derive_strategies"), ("mcp", "load_authored")]
 
 
@@ -142,13 +142,24 @@ def test_up_recreates_the_containers_when_a_bind_mount_went_stale(stubbed, capsy
     assert "NOT READY" in capsys.readouterr().out
 
 
-def test_status_derives_pending_drafts_on_the_host(stubbed, capsys):
+def test_status_reports_pending_drafts_without_deriving(stubbed, capsys):
     calls, healthy = stubbed
     healthy["inference"]["pending"] = 2
     assert orchestrator.status() == 0
+    assert not any(c[0] in ("sh", "mcp") for c in calls)
+    out = capsys.readouterr().out
+    assert "2 draft(s) awaiting /strategy" in out and "sentry: ok" in out
+
+
+def test_up_reads_the_health_again_after_deriving_drafts(stubbed, monkeypatch):
+    calls, healthy = stubbed
+    healthy["inference"]["pending"] = 2
+    read = []
+    monkeypatch.setattr(orchestrator, "health", lambda: read.append(1) or healthy)
+    assert orchestrator.up() == 0
+    assert len(read) == 2
     assert any(c[0] == "sh" and "derive_strategies" in c for c in calls)
     assert ("mcp", "load_authored") in calls
-    assert "sentry: ok" in capsys.readouterr().out
 
 
 def test_refresh_test_down_and_main_dispatch(stubbed, capsys):

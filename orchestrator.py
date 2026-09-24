@@ -3,7 +3,8 @@
     python orchestrator.py            run: everything below, then leave the app up
     python orchestrator.py up         build the image, start the containers, wait -
                                       the data container builds the database when
-                                      it is empty or stale
+                                      it is empty or stale; drafts pending in the
+                                      playbook are completed on the host
     python orchestrator.py agents     Claude Code, headless, on the /refresh skill:
                                       refresh the data, complete the drafts,
                                       re-infer with restraint, regenerate the docs
@@ -187,15 +188,17 @@ def mcp(name: str, arguments: dict[str, Any] | None = None, timeout: float = 600
     return body["result"]["content"][0]["text"]
 
 
-def derive_pending(h: Mapping[str, Any]) -> None:
+def derive_pending(h: Mapping[str, Any]) -> bool:
     """Drafts in inference/strategies/ are completed on the host (the claude CLI
-    lives here, not in the containers), then the stack's database re-mirrors."""
+    lives here, not in the containers), then the stack's database re-mirrors.
+    True when drafts were pending and the derive ran, so the health is stale."""
     pending = (h.get("inference") or {}).get("pending")
     if not pending:
-        return
+        return False
     print("%d draft strategy(ies) await frontmatter; deriving on the host..." % pending)
     sh(sys.executable, "-m", "db.mcp", "call", "derive_strategies")
     mcp("load_authored")
+    return True
 
 
 def up() -> int:
@@ -207,7 +210,8 @@ def up() -> int:
     wait_for(URLS["inference"], 600, "the inference engine")
     wait_for(URLS["ui"], 300, "the board")
     h = health()
-    derive_pending(h)
+    if derive_pending(h):
+        h = health()
     ok, lines = verdict(h)
     if not ok and h.get("inference") and not h["inference"].get("strategies"):
         print("stale bind mounts detected; recreating the containers...")
@@ -237,9 +241,7 @@ def sentry_line() -> str | None:
 
 
 def status() -> int:
-    h = health()
-    derive_pending(h)
-    ok, lines = verdict(h if not (h.get("inference") or {}).get("pending") else health())
+    ok, lines = verdict(health())
     seen = sentry_line()
     if seen:
         lines.append(seen)
