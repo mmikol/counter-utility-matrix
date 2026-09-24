@@ -8,9 +8,11 @@ python -m db.mcp call NAME [JSON-ARGS]  run one tool and print its text"""
 import json
 import sys
 from collections.abc import Callable
+from typing import cast
 
 from db import Refusal, psql
 from db.mcp import tools
+from db.mcp.lifecycle import DbStatus
 from db.mcp.server import Server, serve_http
 
 
@@ -19,13 +21,14 @@ def _status(ctx: tools.Context) -> Callable[[], dict[str, object]]:
     degraded with the reason when the database is out of reach."""
     def status() -> dict[str, object]:
         try:
-            _, data = tools.run_tool(ctx, "db_status")
-            return {"status": "ok", "state": data["state"],
-                    "table_count": data["table_count"],
-                    "pending_migrations": data["pending_migrations"],
-                    "heroes": data["counts"].get("heroes", 0),
-                    "announced": data["counts"].get("announced", 0),
-                    "newest_capture": data.get("newest_capture")}
+            # the tool is named, so its payload is the one db_status builds
+            found = cast(DbStatus, tools.run_tool(ctx, "db_status").data)
+            return {"status": "ok", "state": found["state"],
+                    "table_count": found["table_count"],
+                    "pending_migrations": found["pending_migrations"],
+                    "heroes": found["counts"].get("heroes", 0),
+                    "announced": found["counts"].get("announced", 0),
+                    "newest_capture": found["newest_capture"]}
         except psql.UNREACHABLE as error:     # the server is up even if the DB is not
             return {"status": "degraded", "error": str(error)}
     return status

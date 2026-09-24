@@ -300,7 +300,7 @@ class Tool:
     call is checked against the schema before the function runs, so a call
     the schema refuses never reaches the tool, whichever door it came in by."""
 
-    def __init__(self, name: str, description: str, schema: Message,
+    def __init__(self, name: str, description: str, schema: Mapping[str, Any],
                  fn: Callable[..., Answer]) -> None:
         self.name, self.description, self.schema, self.fn = (
             name, description, schema, fn)
@@ -310,8 +310,13 @@ class Tool:
                 "inputSchema": self.schema}
 
     def __call__(self, arguments: Mapping[str, object]) -> Answer:
-        """Call the tool once its schema allows the call. An argument it does
-        not declare, one it requires left out, and a value that is not the
+        """Call the tool once its schema allows the call."""
+        self.check(arguments)
+        return self.fn(**arguments)
+
+    def check(self, arguments: Mapping[str, object]) -> None:
+        """Refuse a call the schema does not allow. An argument it does not
+        declare, one it requires left out, and a value that is not the
         declared type or not one of the declared values are each a Refusal."""
         properties = self.schema.get("properties", {})
         unknown = set(arguments) - set(properties)
@@ -325,7 +330,6 @@ class Tool:
             wanted = _misfit(properties[argument], value)
             if wanted is not None:
                 raise Refusal("%s: %r must be %s" % (self.name, argument, wanted))
-        return self.fn(**arguments)
 
 
 # --- the Streamable HTTP transport ------------------------------------------

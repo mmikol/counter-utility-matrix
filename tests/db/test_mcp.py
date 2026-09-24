@@ -15,7 +15,8 @@ import sys
 import pytest
 
 from db import ROOT, Refusal
-from db.mcp import tools
+from db.mcp import layers, lifecycle, playbook, pulls, tools
+from db.mcp.registry import Registry
 from db.mcp.server import Server, Tool
 from inference import catalog, tune
 from tests.inference import FIXTURE_PLAYBOOK
@@ -254,7 +255,7 @@ def test_a_compact_infer_names_the_silent_heuristics_and_fits_a_reply(ctx):
     assert data["silent"] == silent
     assert data["idle"] == sum(1 for c in full["contributions"] if not c["applies"])
     assert data["terms"] == len(full["contributions"]) and "strategies" not in data
-    assert len(data["largest"]) <= tools.COMPACT_TERMS
+    assert len(data["largest"]) <= layers.COMPACT_TERMS
     assert len(text) + len(json.dumps(data)) < 10000
 
 
@@ -503,12 +504,18 @@ def test_a_board_tool_hands_its_function_one_draft(tmp_path, monkeypatch):
                    bans=["Mei"])
     assert seen == [Draft("Ilios", ("Ana",), (), ("Mei",), "")]
     for name in ("facts", "infer", "evaluate", "board"):
-        assert list(tools.REGISTRY.get(name).schema["properties"])[:5] == list(tools.BOARD)
+        assert list(tools.REGISTRY.get(name).schema["properties"])[:5] == list(layers.BOARD)
     assert tools.REGISTRY.get("evaluate").schema["required"] == ["blue"]
 
 
+def test_the_registry_lists_the_families_in_the_stated_order():
+    families = (pulls.TOOLS, lifecycle.TOOLS, layers.TOOLS, playbook.TOOLS)
+    assert tools.REGISTRY.names() == [n for family in families for n in family.names()]
+    assert tools.Context.tools is tools.REGISTRY
+
+
 def test_a_registry_refuses_a_tool_name_twice():
-    registry = tools.Registry()
+    registry = Registry()
 
     @registry.tool("twice", "the first")
     def first(ctx):
@@ -603,8 +610,8 @@ def test_query_refuses_file_and_server_reaching_sql_before_connecting():
                 "COPY heroes TO PROGRAM 'id'", "select pg_sleep(10)"):
         with pytest.raises(Refusal, match=r"refuses|read-only"):
             tools.run_tool(nowhere, "query", sql=sql)
-    long = "select '%s'" % ("x" * (tools.MAX_SQL_CHARS - 8))       # one character over
-    assert len(long) == tools.MAX_SQL_CHARS + 1
+    long = "select '%s'" % ("x" * (lifecycle.MAX_SQL_CHARS - 8))       # one character over
+    assert len(long) == lifecycle.MAX_SQL_CHARS + 1
     with pytest.raises(Refusal, match="too long"):
         tools.run_tool(nowhere, "query", sql=long)
 
@@ -613,26 +620,26 @@ def test_a_query_cell_arrives_as_json():
     """A date as ISO text, an array or JSONB cell as JSON all the way down, and
     anything JSON has no type for as its text."""
     day = datetime.date(2026, 9, 24)
-    assert tools._cell(day) == "2026-09-24"
-    assert tools._cell(datetime.datetime(2026, 9, 24, 5, 0)) == "2026-09-24T05:00:00"
-    assert tools._cell([1, [day, "x"], None]) == [1, ["2026-09-24", "x"], None]
-    assert tools._cell({"when": day, 3: (True, 1.5)}) == {"when": "2026-09-24",
+    assert lifecycle._cell(day) == "2026-09-24"
+    assert lifecycle._cell(datetime.datetime(2026, 9, 24, 5, 0)) == "2026-09-24T05:00:00"
+    assert lifecycle._cell([1, [day, "x"], None]) == [1, ["2026-09-24", "x"], None]
+    assert lifecycle._cell({"when": day, 3: (True, 1.5)}) == {"when": "2026-09-24",
                                                          "3": [True, 1.5]}
-    assert tools._cell(decimal.Decimal("0.515")) == "0.515"
+    assert lifecycle._cell(decimal.Decimal("0.515")) == "0.515"
 
 
 def test_a_query_page_says_truncated_exactly_when_a_row_is_left_out():
     """Past MAX_ROWS rows, or past the byte budget; never at exactly MAX_ROWS."""
-    rows, truncated = tools._page([(n,) for n in range(tools.MAX_ROWS + 1)])
-    assert len(rows) == tools.MAX_ROWS and truncated is True
-    rows, truncated = tools._page([(n,) for n in range(tools.MAX_ROWS)])
-    assert len(rows) == tools.MAX_ROWS and truncated is False
+    rows, truncated = lifecycle._page([(n,) for n in range(lifecycle.MAX_ROWS + 1)])
+    assert len(rows) == lifecycle.MAX_ROWS and truncated is True
+    rows, truncated = lifecycle._page([(n,) for n in range(lifecycle.MAX_ROWS)])
+    assert len(rows) == lifecycle.MAX_ROWS and truncated is False
     # each cell is cut to MAX_CELL characters and an ellipsis before the budget
     # counts it: a row of 300 is about 600 KB, so the second row spends the MiB
     wide = ["x" * 5000] * 300
-    rows, truncated = tools._page([wide, wide, wide])
+    rows, truncated = lifecycle._page([wide, wide, wide])
     assert len(rows) == 1 and truncated is True
-    assert {len(cell) for cell in rows[0]} == {tools.MAX_CELL + 1}
+    assert {len(cell) for cell in rows[0]} == {lifecycle.MAX_CELL + 1}
 
 
 @pytest.mark.invariant

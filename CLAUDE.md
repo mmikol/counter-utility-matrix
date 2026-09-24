@@ -70,7 +70,8 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 `inference/` (STRATEGIES and the argmax).
 
 - **One door for writes.** Every write to Postgres or the playbook is a tool
-  registered with `@tool(...)` in `db/mcp/tools.py`, reached over stdio, HTTP
+  registered with `@tool(...)` in one of the families `db/mcp/tools.py`
+  joins (`pulls`, `lifecycle`, `layers`, `playbook`), reached over stdio, HTTP
   or in-process (`tools.run_tool`), and every call is audited to
   `db/raw/audit.jsonl` - except the sentry, which renames a bad strategy file
   to `.md.quarantined` outside the door. Reads bypass the door: `ui/` and `inference/` connect
@@ -82,7 +83,7 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   them as facts, the solver scores the same functions, and the catalog
   validates a strategy's `metric` against the registry, so the number on the
   board and the number the solver maximises cannot drift. `ui/facts` is a shared library: `inference/` and
-  `db/mcp/tools.py` import it.
+  `db/mcp/layers.py` import it.
 - **Facts are numbered.** `FactSet` numbers facts F1.. and the playbook's
   record S1.. in emission order; a solver contribution cites a fact by metric
   key (`also=` on `FactSet.add`). Adding a fact renumbers every later id.

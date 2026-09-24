@@ -6,7 +6,7 @@ board's facts are derived from. Every row carries a `source_id`, and that
 is the only distinction drawn between what was measured, what was judged
 and what was written by hand. Only the strategies are written by hand.
 
-**One door.** The MCP tools in `mcp/tools.py` are the only way to drive
+**One door.** The MCP tools in `mcp/` are the only way to drive
 the layer, and the only way in for a write. A Claude Code session calls
 them over MCP, the `refresher` container calls them in-process, Docker's
 entrypoint calls them to build the database, and a shell calls them the
@@ -96,7 +96,12 @@ The servers, the transport and the full tool reference are in
 | file | purpose |
 | --- | --- |
 | `server.py` | A dependency-free MCP server: JSON-RPC over stdio, and the same surface over Streamable HTTP (`POST /mcp`, `GET /health`). `initialize`, `tools/list`, `tools/call`, `resources/*`. Dependency-free so the door has nothing to audit but its own few hundred lines. |
-| `tools.py` | The tools. `pull_*` (one source and domain each), `load_authored`, `sync_all`; the database's life (`db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, read-only `query`); and, through the same door, the UI and inference layers' tools (`roster`, `facts`, `infer`, `evaluate`, `board`, `reach`, `strategies`, `metrics`, `add_strategy`, `infer_strategy`, `derive_strategies`, `tune`, `tuning_log`). The strategies are also served as `strategy://` resources. |
+| `registry.py` | What a tool is: `ToolSpec` (name, description, JSON schema, function, and for a pull the source it reads) and `ToolReply` (text, and the same as JSON). `Registry` holds a family's tools in registration order, refuses a name twice and derives the pulls; `joined` assembles the families, `run` is the audited in-process call, `write_docs` the tool reference in [mcp.md](mcp.md). `Context` is where a call lands - the database, the page caches, the log - and carries the joined registry, through which one tool calls another. |
+| `tools.py` | The four families joined in the order the server lists them, the `Context` the servers, the refresher and the board use, and `run_tool`, the in-process call. |
+| `pulls.py` | `list_sources`, the ten `pull_*` tools in dependency order (one source and domain each, each stated once through `pull_tool`), `load_authored`, `sync_all`. |
+| `lifecycle.py` | The database's life: `db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, and read-only `query`, which says when it cut rows. |
+| `layers.py` | The UI and inference layers through the same door: `roster`, the four board tools (`facts`, `infer`, `evaluate`, `board`), each handed one `Draft` through `board_tool`, `reach` and `metrics`. |
+| `playbook.py` | `strategies`, the tools that write the playbook (`tune`, `add_strategy`, `infer_strategy`, `derive_strategies`), each reloading the mirror after the write, and `tuning_log`. The strategies are also served as `strategy://` resources. |
 | `__main__.py` | `python -m db.mcp` serves over stdio (what `.mcp.json` launches); `--http HOST:PORT` serves over HTTP (the `data` container); `list` and `call NAME [JSON]` are the shell. |
 
 ### `psql/` - the database
