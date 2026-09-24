@@ -275,6 +275,17 @@ def test_strategies_table_mirrors_the_files(rows):
     assert table == files
 
 
+def test_the_playbook_column_names_the_setting_the_code_reads(one):
+    # 017 named the setting COUNTER_MATRIX_STRATEGIES; 022 carries the rename
+    import inspect
+
+    from inference import catalog
+    assert 'os.environ.get("COUNTRIX_STRATEGIES"' in inspect.getsource(catalog.strategies_dir)
+    described = one("select col_description('strategies'::regclass, attnum) from pg_attribute"
+                    " where attrelid = 'strategies'::regclass and attname = 'playbook'")
+    assert "COUNTRIX_STRATEGIES" in described
+
+
 def test_the_migration_ledger_matches_the_files(rows):
     from db.psql import schema
     assert [r[0] for r in rows("select filename from schema_migrations order by 1")] == \
