@@ -8,6 +8,7 @@ whole truth about styles.
 
 import re
 from collections.abc import Callable
+from typing import NamedTuple
 
 import psycopg
 import requests
@@ -24,15 +25,22 @@ COMPOSITION_PAGE = "Team Composition"
 HERO_SECTION_RE = re.compile(r"^===\s*(.+?)\s+heroes\s*===\s*$", re.M | re.I)
 
 
-def parse_playstyles(text):
-    """[(code, name, [hero_name])] in page order."""
-    playstyles = []
+class Playstyle(NamedTuple):
+    """A playstyle and the heroes the page lists under it, in page order."""
+    code: str
+    name: str
+    heroes: list[str]
+
+
+def parse_playstyles(text: str) -> list[Playstyle]:
+    """[Playstyle(code, name, [hero_name])] in page order."""
+    playstyles: list[Playstyle] = []
     for match in HERO_SECTION_RE.finditer(text):
         name = match.group(1).strip()
         body = markup.section_body(text, match.end())
         heroes = [link.strip() for link in markup.LINK_RE.findall(body)]
         if heroes:
-            playstyles.append((name.lower(), name, heroes))
+            playstyles.append(Playstyle(name.lower(), name, heroes))
 
     if not playstyles:
         raise WikiError("%s: no '<name> heroes' sections found" % COMPOSITION_PAGE)
@@ -58,7 +66,8 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
     source_id = psql.register_source(cursor, WIKI, psql.now())
     cursor.execute("DELETE FROM playstyle")
     hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
-    links, unmatched = 0, []
+    links = 0
+    unmatched: list[str] = []
     for code, name, heroes in playstyles:
         for hero_name in heroes:
             hero_id = hero_ids.get(hero_name.lower())

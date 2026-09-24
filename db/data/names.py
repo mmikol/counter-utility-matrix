@@ -24,35 +24,36 @@
 
 import re
 import unicodedata
+from collections.abc import Iterable, Mapping
 
 NOT_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 TRAILING_PARENTHETICAL_RE = re.compile(r"\s*\([^)]*\)\s*$")
 
 
-def name_key(name):
+def name_key(name: str) -> str:
     """Key for recognising the same hero or map across sources."""
     decomposed = unicodedata.normalize("NFKD", name)
     stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
     return NOT_ALNUM_RE.sub("", stripped.lower())
 
 
-def index(name_to_id):
+def index(name_to_id: Mapping[str, int]) -> dict[str, int]:
     """Rekey a {name: id} lookup by name_key."""
     return {name_key(name): value for name, value in name_to_id.items()}
 
 
-def ability_key(name):
+def ability_key(name: str) -> str:
     """Key for recognising the same ability across both sources."""
     return TRAILING_PARENTHETICAL_RE.sub("", name).strip().lower()
 
 
-def abilities_named_in(description, ability_names):
+def abilities_named_in(description: str, ability_names: Iterable[str]) -> list[str]:
     """Ability names this text names, longest first so overlaps resolve.
 
     Matching is scoped to one hero's kit, so a bare name cannot collide with a
     different hero's ability.
     """
-    found = []
+    found: list[str] = []
     for name in sorted(ability_names, key=len, reverse=True):
         # Skip a name already covered by a longer one just matched.
         if re.search(r"\b%s\b" % re.escape(name), description) and not any(

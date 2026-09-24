@@ -14,7 +14,7 @@ is restamped with its season.
 """
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date
 
 import psycopg
@@ -41,30 +41,35 @@ DATE = (r"(?:(\d{1,2})\s+(%(m)s)|(%(m)s)\s+(\d{1,2}))(?:,?\s*(\d{4}))?"
 RUN_RE = re.compile(r"\(\s*%s\s*[-–—]\s*%s\s*\)" % (DATE, DATE), re.I)
 
 
-def _date(day_first, month_first, month_second, day_second, year):
-    month = MONTHS.index((month_first or month_second).lower()) + 1
-    return date(int(year), month, int(day_first or day_second))
+def _date(groups: Sequence[str | None], year: str) -> date:
+    """A date from a DATE match's first four groups - the day and the month in
+    either order, one pair matched and the other None - and a year."""
+    day_first, month_first, month_second, day_second = groups[:4]
+    day, month = day_first or day_second, month_first or month_second
+    if day is None or month is None:
+        raise ValueError("not a DATE match: %r" % (groups,))
+    return date(int(year), MONTHS.index(month.lower()) + 1, int(day))
 
 
-def parse_run(text):
+def parse_run(text: str) -> date | None:
     """'(February 18 - 22 April 2025)' -> the start date; None without one."""
     match = RUN_RE.search(text)
     if not match:
         return None
     start, end = match.groups()[:5], match.groups()[5:]
     if start[4]:
-        return _date(*start)
+        return _date(start, start[4])
     if not end[4]:
         return None
-    started = _date(*start[:4], end[4])
-    if started > _date(*end):                        # "(December 9 - February 10, 2026)"
+    started = _date(start, end[4])
+    if started > _date(end, end[4]):                  # "(December 9 - February 10, 2026)"
         started = started.replace(year=started.year - 1)
     return started
 
 
-def parse_subpages(text):
+def parse_subpages(text: str) -> list[str]:
     """The era subpages the Season article points at, in page order."""
-    pages = []
+    pages: list[str] = []
     for title in SUBPAGE_RE.findall(text):
         if title not in pages:
             pages.append(title)
@@ -73,10 +78,10 @@ def parse_subpages(text):
     return pages
 
 
-def parse_seasons(text):
+def parse_seasons(text: str) -> list[tuple[str, date | None]]:
     """[(name, start date or None)] for one era subpage, in page order."""
     arc = ARC_RE.search(markup.FILE_LINK_RE.sub("", text))
-    seasons = []
+    seasons: list[tuple[str, date | None]] = []
     for match in HEADING_RE.finditer(text):
         name = markup.wikitext_to_text(match.group(1))
         if arc:

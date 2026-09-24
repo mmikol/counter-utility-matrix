@@ -15,6 +15,7 @@ under 120 characters. The table is reloaded wholesale.
 
 import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
 
 import psycopg
 import requests
@@ -97,12 +98,19 @@ def _row_hero(cell: str) -> str | None:
     return match.group(1).strip() if match else None
 
 
-# A column of the section's tables: the word its wikitable heading holds and
-# its position when a table has no heading row; its template parameter and
-# that parameter's rating parameters.
-Column = tuple[str, int, str, tuple[str, ...]]
-SYNERGY: Column = ("synergy", 2, "synergy", ("synergy_rating",))
-MATCHUP: Column = ("match", 1, "matchup", ("rating", "risk"))
+@dataclass(frozen=True)
+class Column:
+    """A column of the section's tables: the word its wikitable heading holds
+    and its position when a table has no heading row; its template parameter
+    and that parameter's rating parameters."""
+    heading: str
+    position: int
+    parameter: str
+    ratings: tuple[str, ...]
+
+
+SYNERGY = Column("synergy", 2, "synergy", ("synergy_rating",))
+MATCHUP = Column("match", 1, "matchup", ("rating", "risk"))
 
 
 def _table_rows(table: str, heading: str, position: int) -> Iterator[tuple[str, str]]:
@@ -138,11 +146,10 @@ def _template_rows(section: str, parameter: str,
 def section_rows(text: str, column: Column = SYNERGY) -> list[tuple[str, str]]:
     """[(hero, cell)] - one column of the section's tables, in either markup.
     A template's ratings lead its cell in bold, as a wikitable writes them."""
-    heading, position, parameter, ratings = column
     section = synergy_section(text)
-    rows = list(_template_rows(section, parameter, ratings))
+    rows = list(_template_rows(section, column.parameter, column.ratings))
     for table in TABLE_RE.findall(section):
-        rows.extend(_table_rows(table, heading, position))
+        rows.extend(_table_rows(table, column.heading, column.position))
     return rows
 
 

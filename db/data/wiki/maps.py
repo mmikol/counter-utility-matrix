@@ -7,7 +7,8 @@ Hybrid article supplies the two phases every Hybrid map plays.
 """
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from typing import NamedTuple
 
 import psycopg
 import requests
@@ -38,7 +39,7 @@ MODE_NAMES = {
 }
 
 
-def standard_play_section(text):
+def standard_play_section(text: str) -> str:
     """Just the Standard Play part of the article."""
     try:
         start = text.index(SECTION_START)
@@ -48,22 +49,29 @@ def standard_play_section(text):
     return text[start:end if end != -1 else len(text)]
 
 
-def parse_modes_and_maps(text):
-    """[(mode_code, mode_name, [map_name])] in page order."""
+class Mode(NamedTuple):
+    """A game mode of the Standard Play rotation and its maps, in page order."""
+    code: str
+    name: str
+    maps: list[str]
+
+
+def parse_modes_and_maps(text: str) -> list[Mode]:
+    """[Mode(mode_code, mode_name, [map_name])] in page order."""
     section = standard_play_section(text)
-    modes = []
+    modes: list[Mode] = []
     for match in GALLERY_RE.finditer(section):
         code = match.group(1).lower()
         if code not in MODE_NAMES:
             continue
 
-        maps = []
+        maps: list[str] = []
         for line in MAP_LINE_RE.findall(match.group(2)):
             link = markup.LINK_RE.search(line)
             if link:
                 maps.append(link.group(1).strip())
 
-        modes.append((code, MODE_NAMES[code], maps))
+        modes.append(Mode(code, MODE_NAMES[code], maps))
 
     if not modes:
         raise WikiError("Maps: no mode galleries found in Standard Play")
@@ -92,7 +100,7 @@ PHASES_RE = re.compile(
     r'(?:the\s+)?(\[\[[^\]]+\]\])', re.I)
 
 
-def parse_stages(text):
+def parse_stages(text: str) -> list[str]:
     """[stage name, ...] in article order, or [] when the map has none.
 
     Control and Flashpoint maps list their submaps as the top-level bullets
@@ -106,7 +114,7 @@ def parse_stages(text):
     if not section:
         return []
     body = section.group(1)
-    stages = []
+    stages: list[str] = []
     for line in body.splitlines():
         if not line.startswith('*') or line.startswith('**'):
             continue
@@ -117,7 +125,7 @@ def parse_stages(text):
     return stages if len(stages) >= 2 else []
 
 
-def parse_stretches(text):
+def parse_stretches(text: str) -> list[str]:
     """[stretch name, ...] in route order, or [] when the article names none.
 
     An article that names its route opens the Gameplay section with the list
@@ -134,7 +142,7 @@ def parse_stretches(text):
     if not first:
         return []
     opening = markup.wikitext_to_text(body[:first.start()]).casefold()
-    stretches = []
+    stretches: list[str] = []
     for heading in SUBHEADING_RE.findall(body):
         name = markup.wikitext_to_text(heading)
         if LEADING_ARTICLE_RE.sub("", name).casefold() in opening:
@@ -142,7 +150,7 @@ def parse_stretches(text):
     return stretches if len(stretches) >= 2 else []
 
 
-def parse_phases(text):
+def parse_phases(text: str) -> list[str]:
     """The Hybrid article's two phases in play order: ["Assault", "Escort"].
     A Hybrid map's first section is a capture point, the rest a payload."""
     match = PHASES_RE.search(text)
@@ -151,7 +159,7 @@ def parse_phases(text):
     return [markup.tidy(link) for link in match.groups()]
 
 
-def stages_of(code, text, phases):
+def stages_of(code: str, text: str, phases: Sequence[str]) -> list[str]:
     """A map's stages by its mode; `phases` is parse_phases' result."""
     if code in ("control", "flashpoint"):
         return parse_stages(text)

@@ -16,6 +16,7 @@ section at the next heading of any depth.
 """
 
 import re
+from collections.abc import Iterator
 
 from bs4 import BeautifulSoup
 
@@ -32,7 +33,7 @@ URL_RE = re.compile(r"https?://\S+")
 WHITESPACE_RE = re.compile(r"\s+")
 
 
-def tidy(text):
+def tidy(text: str) -> str:
     """Strip links, stray markup and URLs; collapse whitespace."""
     text = LINK_LABELLED_RE.sub(r"\1", text)
     text = LINK_PLAIN_RE.sub(r"\1", text)
@@ -42,7 +43,7 @@ def tidy(text):
 
 # --- Cargo's rendered HTML ---------------------------------------------
 
-def html_to_text(value):
+def html_to_text(value: str | None) -> str:
     """A Cargo field value -> plain gameplay text."""
     if not value:
         return ""
@@ -58,7 +59,7 @@ def html_to_text(value):
 TYPE_SPLIT_RE = re.compile(r"^(.*?)\s*(?:;;\s*(.+)|\(([^)]*)\))\s*$")
 
 
-def split_type(ability_type):
+def split_type(ability_type: str | None) -> tuple[str, str | None]:
     """'Weapon;;Hip Fire' -> ('Weapon', 'Hip Fire'). No suffix -> (type, None)."""
     text = (ability_type or "").strip()
     match = TYPE_SPLIT_RE.match(text)
@@ -80,7 +81,7 @@ def section_body(text: str, start: int) -> str:
     return body[: following.start()] if following else body
 
 
-def find_templates(text, name_pattern):
+def find_templates(text: str, name_pattern: str) -> Iterator[str]:
     """Yield the source of each top-level {{Name ...}} template."""
     for match in re.finditer(r"\{\{\s*" + name_pattern, text, re.I):
         depth, index = 0, match.start()
@@ -98,10 +99,12 @@ def find_templates(text, name_pattern):
                 index += 1
 
 
-def split_params(block):
+def split_params(block: str) -> list[str]:
     """Split a template body on its top-level pipes."""
     body = block[2:-2]
-    parts, depth, current, index = [], 0, [], 0
+    parts: list[str] = []
+    current: list[str] = []
+    depth, index = 0, 0
     while index < len(body):
         if body.startswith("{{", index) or body.startswith("[[", index):
             depth += 1
@@ -122,9 +125,9 @@ def split_params(block):
     return parts
 
 
-def parse_params(block):
+def parse_params(block: str) -> dict[str, str]:
     """Named parameters of a template, as {lowercased key: raw value}."""
-    params = {}
+    params: dict[str, str] = {}
     for part in split_params(block)[1:]:
         if "=" not in part:
             continue
@@ -135,7 +138,7 @@ def parse_params(block):
     return params
 
 
-def _reduce(template):
+def _reduce(template: str) -> str:
     """Reduce one innermost {{...}} to text."""
     parts = split_params(template)
     head = parts[0].strip().lower()
@@ -146,7 +149,7 @@ def _reduce(template):
     return " ".join(args)
 
 
-def wikitext_to_text(value):
+def wikitext_to_text(value: str | None) -> str:
     """A wikitext parameter value -> plain text."""
     if not value:
         return ""
