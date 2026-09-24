@@ -7,13 +7,12 @@ shared by every source.
     request          one page asked for under a RequestPolicy and handed to
                      a reader; a failure is retried while attempts remain
     RequestPolicy    a source's attempts, backoff, timeout and pace
-    max_age          the policy for a block, restored after it - what a pull
-                     wraps its run in; set_max_age sets it outright
-    set_max_age      the policy: None keeps a page forever (a build from
-                     the caches), 0 refetches every page (the refresh); a
-                     page that fails to refetch keeps its cached copy, so
-                     a flaky source degrades to yesterday's numbers rather
-                     than an empty table
+    max_age          the freshness policy for a block, restored after it -
+                     what a pull wraps its run in. None keeps a page forever
+                     (a build from the caches), 0 refetches every page (the
+                     refresh); a page that fails to refetch keeps its cached
+                     copy, so a flaky source degrades to yesterday's numbers,
+                     never to an empty table
     session          a requests session that identifies this project
     prepare_cache    the cache directory a tool hands a pull
 
@@ -35,15 +34,16 @@ from collections.abc import Callable, Iterator, Mapping
 import requests
 
 MAX_BACKOFF = 60.0
+SECONDS_PER_HOUR = 3600.0
 
 # Seconds a cached page stays fresh; None means forever. The policy is per
 # thread because the door serves calls on threads: one caller's refresh must
 # not decide another caller's pull.
-_policy = threading.local()
+_freshness = threading.local()
 
 
 def _max_age() -> float | None:
-    return getattr(_policy, "seconds", None)
+    return getattr(_freshness, "seconds", None)
 
 
 class FetchError(Exception):
@@ -78,21 +78,20 @@ class RequestPolicy:
 DEFAULT_POLICY = RequestPolicy()
 
 
-def set_max_age(seconds):
-    """The freshness policy for every fetch that follows on this thread
-    (None = forever)."""
-    _policy.seconds = seconds
-
-
 @contextlib.contextmanager
 def max_age(seconds: float | None) -> Iterator[None]:
     """The policy for one block, whatever it was before restored after it."""
     held = _max_age()
-    _policy.seconds = seconds
+    _freshness.seconds = seconds
     try:
         yield
     finally:
-        _policy.seconds = held
+        _freshness.seconds = held
+
+
+def _age(path: str) -> float:
+    """Seconds since a cached page was written."""
+    return time.time() - os.path.getmtime(path)
 
 
 def is_stale(path: str) -> bool:
@@ -100,7 +99,7 @@ def is_stale(path: str) -> bool:
     seconds = _max_age()
     if seconds is None or not os.path.exists(path):
         return False
-    return time.time() - os.path.getmtime(path) > seconds
+    return _age(path) > seconds
 
 
 def read_cache(path: str) -> str:
@@ -115,7 +114,7 @@ def write_cache(path: str, text: str) -> None:
 
 def keep_stale(path: str, error: Exception) -> str:
     """A refetch failed: fall back to the cached copy, saying so."""
-    age = (time.time() - os.path.getmtime(path)) / 3600.0
+    age = _age(path) / SECONDS_PER_HOUR
     sys.stderr.write("warning: %s; keeping the cached copy from %.0fh ago (%s)\n"
                      % (error, age, os.path.basename(path)))
     return read_cache(path)

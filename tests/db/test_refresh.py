@@ -48,12 +48,6 @@ class FakeSession:
         pass
 
 
-@pytest.fixture(autouse=True)
-def forever_after():
-    yield
-    fetch.set_max_age(None)          # never leak a policy into other tests
-
-
 def _old_file(path, text, hours=48):
     path.write_text(text, encoding="utf-8")
     stamp = time.time() - hours * 3600
@@ -64,17 +58,18 @@ def test_the_freshness_policy_is_per_thread_and_a_block_restores_it():
     """The door serves calls on threads, so one caller's refresh must not decide
     another caller's pull; and max_age() puts back whatever it found."""
     seen = {}
-    fetch.set_max_age(0)
-    thread = threading.Thread(target=lambda: seen.setdefault("age", fetch._max_age()))
-    thread.start()
-    thread.join()
-    assert seen["age"] is None and fetch._max_age() == 0
-    with fetch.max_age(3600):
-        assert fetch._max_age() == 3600
-    assert fetch._max_age() == 0
-    with pytest.raises(RuntimeError), fetch.max_age(7):
-        raise RuntimeError("the block leaves by the other door")
-    assert fetch._max_age() == 0
+    with fetch.max_age(0):
+        thread = threading.Thread(target=lambda: seen.setdefault("age", fetch._max_age()))
+        thread.start()
+        thread.join()
+        assert seen["age"] is None and fetch._max_age() == 0
+        with fetch.max_age(3600):
+            assert fetch._max_age() == 3600
+        assert fetch._max_age() == 0
+        with pytest.raises(RuntimeError), fetch.max_age(7):
+            raise RuntimeError("the block leaves by the other door")
+        assert fetch._max_age() == 0
+    assert fetch._max_age() is None
 
 
 def test_a_fresh_cache_is_read_without_fetching(tmp_path):
@@ -86,27 +81,27 @@ def test_a_fresh_cache_is_read_without_fetching(tmp_path):
 
 def test_refresh_refetches_a_stale_page_and_rewrites_the_cache(tmp_path):
     _old_file(tmp_path / "k.html", "cached")
-    fetch.set_max_age(0)
     session = FakeSession("new page")
-    assert fetch.cached_get(session, "u", str(tmp_path), "k", policy=INSTANT) == "new page"
-    assert session.calls == 1
-    assert (tmp_path / "k.html").read_text(encoding="utf-8") == "new page"
+    with fetch.max_age(0):
+        assert fetch.cached_get(session, "u", str(tmp_path), "k", policy=INSTANT) == "new page"
+        assert session.calls == 1
+        assert (tmp_path / "k.html").read_text(encoding="utf-8") == "new page"
     # the rewritten page is fresh under any finite policy but the refresh one
-    fetch.set_max_age(3600)
-    assert not fetch.is_stale(str(tmp_path / "k.html"))
-    fetch.set_max_age(None)
+    with fetch.max_age(3600):
+        assert not fetch.is_stale(str(tmp_path / "k.html"))
     assert not fetch.is_stale(str(tmp_path / "k.html"))
 
 
 def test_a_failed_refetch_keeps_the_cached_copy(tmp_path, capsys):
     _old_file(tmp_path / "k.html", "yesterday")
-    fetch.set_max_age(0)
     session = FakeSession(fail=True)
     twice = fetch.RequestPolicy(attempts=2, backoff=0, delay=0)
-    assert fetch.cached_get(session, "u", str(tmp_path), "k", policy=twice) == "yesterday"
-    assert "keeping the cached copy" in capsys.readouterr().err
-    with pytest.raises(fetch.FetchError):     # nothing cached: the failure surfaces
-        fetch.cached_get(FakeSession(fail=True), "u", str(tmp_path), "other", policy=INSTANT)
+    with fetch.max_age(0):
+        assert fetch.cached_get(session, "u", str(tmp_path), "k", policy=twice) == "yesterday"
+        assert "keeping the cached copy" in capsys.readouterr().err
+        with pytest.raises(fetch.FetchError):     # nothing cached: the failure surfaces
+            fetch.cached_get(FakeSession(fail=True), "u", str(tmp_path), "other",
+                             policy=INSTANT)
 
 
 def test_attempts_count_every_request_the_first_included():
@@ -120,12 +115,12 @@ def test_attempts_count_every_request_the_first_included():
 def test_wiki_cargo_and_wikitext_keep_stale_copies_too(tmp_path, instant_wiki):
     _old_file(tmp_path / "cargo_abilities.json", '[{"a": "1"}]')
     _old_file(tmp_path / "Ana.wikitext", "{{Infobox}}")
-    fetch.set_max_age(0)
     down = FakeSession(fail=True)
-    assert wiki.cargo_query(down, "Abilities", ("a",), str(tmp_path)) == [{"a": "1"}]
-    assert wiki.fetch_wikitext(down, "Ana", str(tmp_path)) == "{{Infobox}}"
     up = FakeSession(payload={"cargoquery": [{"title": {"a": "2"}}]})
-    assert wiki.cargo_query(up, "Abilities", ("a",), str(tmp_path)) == [{"a": "2"}]
+    with fetch.max_age(0):
+        assert wiki.cargo_query(down, "Abilities", ("a",), str(tmp_path)) == [{"a": "1"}]
+        assert wiki.fetch_wikitext(down, "Ana", str(tmp_path)) == "{{Infobox}}"
+        assert wiki.cargo_query(up, "Abilities", ("a",), str(tmp_path)) == [{"a": "2"}]
 
 
 def test_a_changed_wiki_response_shape_keeps_the_stale_copy(tmp_path, instant_wiki):
