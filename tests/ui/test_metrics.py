@@ -205,11 +205,11 @@ def test_expected_picks_read_the_map_and_the_meta_and_no_strategy(synthetic_worl
     # deterministic
     assert six == compute.expected_picks(w, harbor, revealed=[kite], banned=[needle])
     anywhere = compute.expected_picks(w, None)
-    assert [(p["hero"], p["rate"]) for p in anywhere] == [
-        ("Anvil", 11.0), ("Kite", 9.0), ("Needle", 10.0), ("Rook", 8.0), ("Balm", 9.5),
-        ("Tansy", 7.5)]
+    meta = [("Anvil", 11.0), ("Kite", 9.0), ("Needle", 10.0), ("Rook", 8.0), ("Balm", 9.5),
+            ("Tansy", 7.5)]
+    assert [(p["hero"], p["rate"]) for p in anywhere] == meta
     assert all(
-        p["why"].startswith("picked in %.1f%% of matches overall (no map set)" % p["rate"])
-        for p in anywhere)
+        p["why"].startswith("picked in %.1f%% of matches overall (no map set)" % rate)
+        for p, (_, rate) in zip(anywhere, meta, strict=True))
     # no strategy is read: nothing here takes a catalog
     assert "catalog" not in inspect.signature(compute.expected_picks).parameters
