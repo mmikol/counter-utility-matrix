@@ -70,6 +70,15 @@ def test_the_door_is_tallied_from_the_audit_log(tmp_path):
     assert sentry.check_door(str(tmp_path / "missing.jsonl")) == sentry.DoorTally()
 
 
+def test_the_sentry_reads_the_log_the_door_writes(tmp_path, monkeypatch):
+    # one definition of the path, the door's, read when each of them runs
+    from db.mcp import server
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    server.audit({"t": now, "client": "http:a", "tool": "facts", "ok": True})
+    assert sentry.check_door().recent == 1
+
+
 def test_a_line_cut_by_the_seek_or_still_being_written_is_not_malformed(tmp_path):
     # the door writes UTF-8 unescaped: a seek into the re-read tail can land
     # inside a character, and the log's last line can be half written

@@ -388,9 +388,8 @@ def test_health_is_degraded_when_the_database_is_out_of_reach_and_crashes_otherw
         tmp_path, monkeypatch):
     """The data container's /health answers degraded for every way the database
     can be out of reach, and nothing else: a bug in the tool still surfaces."""
-    from db.mcp import server
     from db.mcp.__main__ import _status
-    monkeypatch.setattr(server, "AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
     status = _status(tools.Context(dsn="postgresql://nobody@127.0.0.1:9/nowhere"))
     reply = status()
     assert reply["status"] == "degraded" and reply["error"]
@@ -511,9 +510,8 @@ def test_query_runs_as_the_reader_role(ctx):
 def test_the_entry_point_lists_tools_and_refuses_nonsense(capsys, tmp_path, monkeypatch):
     """Usage is 2, a refused call 1 with the reason on stderr; the strategies
     call reaches the wrapper, so its audit line lands in tmp_path."""
-    from db.mcp import server
     from db.mcp.__main__ import main
-    monkeypatch.setattr(server, "AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
     assert main(["list"]) == 0
     out = capsys.readouterr().out
     assert "db_status" in out and "infer" in out
@@ -539,9 +537,8 @@ def test_an_in_process_call_is_validated_against_the_tools_schema(tmp_path, monk
     """The shell, the refresher and the board call through the same wrapper
     as either door, so a call the schema refuses never reaches the tool and
     is audited as refused, not as a crash."""
-    from db.mcp import server
     path = tmp_path / "audit.jsonl"
-    monkeypatch.setattr(server, "AUDIT_PATH", str(path))
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(path))
     ctx = tools.Context(dsn="postgresql://nowhere")
     with pytest.raises(Refusal, match="strategies: unknown argument"):
         tools.run_tool(ctx, "strategies", bogus=1)
@@ -555,9 +552,8 @@ def test_an_in_process_call_is_validated_against_the_tools_schema(tmp_path, monk
 def test_an_in_process_tool_call_leaves_one_audit_line(tmp_path, monkeypatch):
     """The sentry's window is the audit log, so the refresher's and the shell's
     path has to appear in it like a call through either door."""
-    from db.mcp import server
     path = tmp_path / "audit.jsonl"
-    monkeypatch.setattr(server, "AUDIT_PATH", str(path))
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(path))
     ctx = tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x")
     tools.run_tool(ctx, "list_sources")
     with pytest.raises(tools.NoSuchToolError):

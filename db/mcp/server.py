@@ -26,12 +26,6 @@ from db import RAW_DIR, Refusal
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "countrix", "version": "2.1.0"}
 
-# Every tool call is one JSON line here - through either transport, and
-# in-process where the refresher and the shell call one directly: when, over
-# which transport, from whom, which tool, the shape of its arguments (names and
-# sizes, never the values), whether it succeeded, and how long it took. The
-# sentry reads it.
-AUDIT_PATH = os.environ.get("COUNTRIX_AUDIT", os.path.join(RAW_DIR, "audit.jsonl"))
 _client = threading.local()
 
 # A JSON-RPC message, request or response, as json.loads reads it: arbitrary JSON.
@@ -41,10 +35,19 @@ Message = dict[str, Any]
 Answer = tuple[str, Mapping[str, Any] | None]
 
 
+# Every tool call is one JSON line here - through either transport, and
+# in-process where the refresher and the shell call one directly: when, over
+# which transport, from whom, which tool, the shape of its arguments (names and
+# sizes, never the values), whether it succeeded, and how long it took. The
+# sentry reads it. COUNTRIX_AUDIT moves it, read on every call.
+def default_audit_path() -> str:
+    return os.environ.get("COUNTRIX_AUDIT", os.path.join(RAW_DIR, "audit.jsonl"))
+
+
 def audit(entry: Mapping[str, object], path: str | None = None) -> None:
     """Append one audit line; never raise - the door stays open if the log fails."""
     try:
-        path = path or AUDIT_PATH
+        path = path or default_audit_path()
         directory = os.path.dirname(path)
         if directory and not os.path.isdir(directory):
             os.makedirs(directory)
