@@ -48,8 +48,9 @@ coverage figure assumes. The suite targets `db/psql/cluster` whenever that
 folder exists; `DATABASE_URL` or `./docker-db <command>` points at another
 Postgres. CI sets no variable: it has no cluster and no pgserver.
 
-The solver spawns `max(6, min(cores, 12))` worker processes (12 here) in any
-process that calls `engine.board()` without a catalog of its own: `ui.board`
+The solver's pool (`inference/parallel.py`) spawns `max(6, min(cores, 12))`
+worker processes (12 here) in any process that calls `engine.board()`
+without a catalog of its own: `ui.board`
 and `inference.serve` at launch, the stdio MCP server and `db.mcp call board`
 on the first board, pytest on the first board test. `COUNTRIX_WORKERS=6` is
 the lowest cap that keeps that test green; `COUNTRIX_PARALLEL=0` solves
@@ -70,14 +71,21 @@ playbook in force, relative to the repo root, and is read on every call.
 Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 `inference/` (STRATEGIES and the argmax).
 
-- **One door for writes.** Every write to Postgres or the playbook is a tool
-  registered with `@tool(...)` in one of the families `db/mcp/tools.py`
-  joins (`pulls`, `lifecycle`, `layers`, `playbook`), reached over stdio, HTTP
-  or in-process (`tools.run_tool`), and every call is audited to
-  `db/raw/audit.jsonl` - except the sentry, which renames a bad strategy file
-  to `.md.quarantined` outside the door. Reads bypass the door: `ui/` and `inference/` connect
-  through `db.psql.default_dsn()` - `DATABASE_URL`, else the embedded
-  pgserver cluster, which starts on first touch.
+- **One door for writes.** Every write to Postgres or the playbook runs
+  under a tool. Each family module (`pulls`, `lifecycle`, `layers`,
+  `playbook` in `db/mcp/`) registers its own tools with `@tool(...)`, the
+  decorator of its `Registry` (`db/mcp/registry.py`), and `db/mcp/tools.py`
+  joins them. A call arrives over stdio, HTTP or in-process
+  (`tools.run_tool`), is checked against the tool's schema by the same
+  `Tool` wrapper on every path, and is audited to `db/raw/audit.jsonl` -
+  except the sentry, which renames a bad strategy file to
+  `.md.quarantined` outside the door. The code that writes lives with what
+  it writes - the pulls in `db/data`, the strategies table in
+  `inference.catalog.mirror`, the playbook's files in `inference.tune` -
+  and only the tools call it. Reads bypass the door: `ui/`
+  and `inference/` connect through `db.psql.default_dsn()` -
+  `DATABASE_URL`, else the embedded pgserver cluster, which starts on
+  first touch.
 - **One definition per metric.** `ui/facts/team.py` defines every team
   metric and `ui/facts/compute.py` the matchup, map and world ones, each in a
   registry, and `compute.registry()` gathers them. The facts engine words
@@ -126,8 +134,22 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 - A new tracked file or folder at the root must be named in
   `docs/architecture.md` - a file in The files, a folder in The folders. The
   test greps the whole doc for the name.
+- A new module, folder or file inside a package gets a line in the map of
+  its package's `__init__.py` docstring: indented, the name, then two
+  spaces or more before what it is (`.py` optional, a folder's slash too).
+  A name that only opens a wrapped line of prose does not count.
 - Every quoted `"COUNTRIX_..."` name in `db/`, `ui/`, `inference/` or
-  `orchestrator.py` must appear in docs/architecture.md or docs/db.md.
+  `orchestrator.py` must appear in docs/architecture.md or docs/db.md, and
+  is read where it is used or by `main()` at start: an `os.environ` or
+  `os.getenv` that runs at import fails
+  `test_no_module_reads_the_environment_at_import`.
+- A new migration is named by its number in docs/db.md's `migrations/`
+  row, the one inventory of the schema's steps.
+- Only a door tool in `db/mcp/` calls the playbook's writers -
+  `catalog.mirror`, `tune.tune`/`add`/`complete`, `derive.derive` - and
+  `inference/derive.py`, which completes drafts inside a run the door
+  started. A new call site elsewhere fails the test; route it through a
+  tool.
 - A line indented 1 to 16 columns sits on a multiple of 4, docstring maps
   and SQL in strings included, and a continuation hangs 4 columns in after
   a bracket that ends its line (8 for a def's parameters). One line off the
@@ -143,6 +165,9 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   `MUST_NAME` (tests/test_docs.py) lists; tests/db/test_mcp.py holds the tool
   set too.
 - A new strategy file is cited as a ``- `id` `` line in `inference/README.md`.
+  A house skill or a doc names a strategy only by an id the playbook
+  holds: a backticked id the record cites and `inference/strategies/`
+  lacks is a dropped rule, and fails.
 - A new table carries `source_id` and `cao`, has rows, is exported to
   `db/raw` (`export_csv`) and is named in `ui/facts/tables.py` (a test greps
   its source); regenerate the schema sections of docs/db.md. Its migration
@@ -190,10 +215,11 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   values are always parameters.
 - Pulls read only Blizzard's site and the wiki, through the page caches and
   the one request loop in `db/data/fetch.py`, each at the pace of its own
-  `RequestPolicy`: 5 s a page for the rates (`db/data/blizzard/meta.py`);
-  for the wiki (`db/data/wiki/__init__.py`), 2 s a Cargo page with six
-  attempts to wait out a rate limit, and 0.5 s an article, asked for once.
-  No third source, no API keys.
+  `RequestPolicy`: 5 s a page for the rates (`RATES_POLICY` in
+  `db/data/blizzard/meta.py`); for the wiki (`db/data/wiki/__init__.py`),
+  2 s a Cargo page with six attempts to wait out a rate limit
+  (`CARGO_POLICY`), and 0.5 s an article, asked for once
+  (`ARTICLE_POLICY`). No third source, no API keys.
 - `.venv/bin/python -m db.sentry --once` is not read-only: it renames a
   suspect strategy file to `.md.quarantined`.
 - Never `docker compose down -v`: it deletes the database volume.

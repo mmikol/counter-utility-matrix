@@ -197,12 +197,14 @@ rows. Hero kits, weapons, maps and modes have no such dimensions: a
 cooldown is a cooldown in every region, on every platform, at every rank.
 
 **A rebuild drops the database and reapplies the migrations from
-scratch,** and the migrations ledger makes the Docker entrypoint do the
-same the moment the files change. Adding a dimension is never a data
-migration - there is no data to migrate. It is an edit to
-`psql/migrations/004_meta.sql`, an edit to `pull_rates`, and a refetch.
-The schema is not the constraint; the request count is, and it is
-multiplicative.
+scratch,** and the Docker entrypoint does the same the moment the image
+carries a migration the ledger lacks. Adding a dimension is never a data
+migration - there is no data to migrate. Every dimension below already
+has its column, so widening one is an edit to `pull_rates` and a
+refetch; a dimension without one is a new migration that adds it, never
+an edit to `psql/migrations/004_meta.sql`, which the ledger has already
+applied. The schema is not the constraint; the request count is, and it
+is multiplicative.
 
 | dimension | column exists? | populated today | to widen it |
 | --- | --- | --- | --- |

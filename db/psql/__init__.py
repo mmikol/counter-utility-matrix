@@ -79,8 +79,8 @@ IDENTIFIER_RE = re.compile(r"[a-z_][a-z0-9_]*\Z")
 
 def identifier(name: str) -> Identifier:
     """A table or column name on its way into SQL text: checked against the
-    lowercase allowlist IDENTIFIER_RE, then quoted by psycopg. psycopg
-    parameterises values and never identifiers, so every writer that names a
+    lowercase allowlist IDENTIFIER_RE, then quoted by psycopg. A query
+    parameter carries a value, never a name, so every writer that names a
     table in the statement itself composes it with psycopg.sql through here.
     The names all come from a literal or from the catalog today, and this is
     what keeps it so."""

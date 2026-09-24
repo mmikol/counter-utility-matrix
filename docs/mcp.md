@@ -43,7 +43,9 @@ servers. The whole threat model is in [security.md](security.md).
 the SDK, so the door has nothing to audit: JSON-RPC 2.0, one message per
 line over stdio, and the same surface over HTTP with a `Mcp-Session-Id`
 per client, the Host-and-Origin guard all three servers share
-(`db/web.py`), `GET /health` for the containers' healthchecks, and `405`
+(`db/web.py`), `GET /health` for the containers' healthchecks - the
+database's state (`db.psql.schema.state`: empty, stale, unfilled or
+current) and its counts, or degraded when it is out of reach - and `405`
 on a bare `GET /mcp`. The methods:
 `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`,
 `resources/read`, `resources/templates/list`, and an empty

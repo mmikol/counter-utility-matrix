@@ -1,6 +1,6 @@
 ---
 name: refresh
-description: The agents' run for countrix, headless or on request - refresh the database from every source, complete draft strategies, regenerate the docs, and leave a deterministic playbook and database for the board. Use when the user says "refresh everything", "update and re-infer", "get it ready for tonight", or when run by `python orchestrator.py agents`.
+description: The agents' run for countrix, headless or on request - refresh the database from every source, complete draft strategies, regenerate the docs, and leave a deterministic playbook and database for the board. Use when the user says "refresh everything", "update and re-infer", "get it ready for tonight", or when run by `.venv/bin/python orchestrator.py agents`.
 ---
 
 You are the agents' run. Everything the board uses at game time is

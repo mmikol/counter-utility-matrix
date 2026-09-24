@@ -146,8 +146,10 @@ is a lesson the next run relearns.
   `db/psql/migrations/` actually hold.
 - **A migration's comment feeds the data dictionary.** The `strategies`
   table's comment named two kinds after a third existed. Now: a change
-  to a vocabulary updates the comment in the migration that created the
-  table, and `db_docs` carries it into `docs/db.md`.
+  to a vocabulary updates the `--` prose above the table's `CREATE
+  TABLE`, or, where the text is a `COMMENT ON` statement an applied
+  migration ran, adds the next migration with the new comment (as `022`
+  does); `db_docs` carries it into `docs/db.md`.
 - **The image bakes the tests in.** `orchestrator.py test` ran the old
   tests until the image was rebuilt. Now: `orchestrator.py up` (which
   rebuilds) before `orchestrator.py test`, always.

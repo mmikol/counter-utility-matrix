@@ -13,7 +13,7 @@ reachable from this machine only ([deploy.md](deploy.md)).
 | threat | how it would arrive |
 | --- | --- |
 | **prompt injection** | text from a source page (an ability description, a wiki note) or a strategy file that reads like an instruction, shown to a session by a tool - or to the headless agents' run, which has tools and no person watching |
-| **the door** | the MCP server over HTTP: any process on this machine can call every tool, including the ones that write, refresh or rebuild; a browser page could try the same through DNS rebinding, and read the board, the playbook and the solver behind it that way too |
+| **the door and the other servers** | the three HTTP servers - the MCP door, the inference service and the board: any process on this machine can call every tool on the door, including the ones that write, refresh or rebuild; a browser page could try the same through DNS rebinding, and read the board, the playbook and the solver's answers from any of the three that way too |
 | **SQL** | the `query` tool: the project's database users are superusers, and a superuser's `SELECT` can read files off the disk it runs on |
 | **files** | tools that write into the playbook: a path that escapes the folder, a file the catalog would refuse, an oversized body |
 | **the containers** | a compromised process inside one reaching the internet, escalating, or filling the host |
@@ -105,8 +105,8 @@ text as SQL or change settings are withdrawn from `PUBLIC`. The statement
 runs read-only under a ten-second timeout; the first 200 rows come back,
 a result is capped at a megabyte, cells at two thousand characters.
 
-**A table name in the statement is checked and quoted.** psycopg
-parameterises values and never identifiers, so the writers that name a
+**A table name in the statement is checked and quoted.** A query
+parameter carries a value, never a name, so the writers that name a
 table or column in the SQL text itself - the exports, the stat inserts,
 the terrain store, the lookups, the sentry's scan, `db_status`'s counts -
 pass the name through `psql.identifier()`, which refuses anything but
