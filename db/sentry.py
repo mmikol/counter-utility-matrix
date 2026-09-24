@@ -163,15 +163,13 @@ def scan(cx: psycopg.Connection) -> list[str]:
 
 
 def check_database(dsn: str | None = None) -> list[str]:
-    """Instruction-like free text in the database -> flags."""
+    """Instruction-like free text in the database -> flags. A database out of
+    reach is a flag carrying its reason."""
     try:
-        import psycopg
-
-        from db import psql
         with psycopg.connect(dsn or psql.default_dsn()) as cx:
             return scan(cx)
-    except Exception as error:      # a scan failure is a flag, not a crash
-        return ["database not scanned: %s" % type(error).__name__]
+    except psql.UNREACHABLE as error:       # a scan failure is a flag, not a crash
+        return ["database not scanned: %s: %s" % (type(error).__name__, error)]
 
 
 class DoorTally(NamedTuple):

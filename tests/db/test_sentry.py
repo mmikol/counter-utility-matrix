@@ -111,6 +111,18 @@ def test_a_column_the_scan_cannot_read_is_a_flag_and_a_missing_one_is_not():
     assert all("not scanned: InsufficientPrivilege" in f for f in flags)
 
 
+def test_a_database_the_sentry_cannot_reach_is_a_flag_with_the_reason(monkeypatch):
+    flags = sentry.check_database("postgresql://nobody@127.0.0.1:9/nowhere")
+    prefix = "database not scanned: OperationalError: "
+    assert len(flags) == 1 and flags[0].startswith(prefix) and flags[0][len(prefix):].strip()
+
+    def broken():
+        raise RuntimeError("not a way the database is out of reach")
+    monkeypatch.setattr(sentry.psql, "default_dsn", broken)
+    with pytest.raises(RuntimeError, match="not a way"):
+        sentry.check_database()
+
+
 @pytest.mark.invariant
 def test_the_database_scan_flags_a_hostile_note_and_names_its_column(db, dsn):
     import psycopg
