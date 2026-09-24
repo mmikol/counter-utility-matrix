@@ -212,7 +212,12 @@ class Context:
             self._dsn = psql.default_dsn()
         return self._dsn
 
-    def connect(self) -> psycopg.Connection:
+    def connect(self, boot: bool = False) -> psycopg.Connection:
+        """A connection to the database; `boot`, passed only by db_init and
+        db_rebuild, creates the embedded cluster first when the Context was
+        given no dsn."""
+        if boot and self._dsn is None:
+            self._dsn = psql.boot()
         return psycopg.connect(self.dsn)
 
     def cache(self, source: str) -> str | None:

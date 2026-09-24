@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from db import Refusal
+from db import Refusal, psql
 from door.mcp import tools
 from door.mcp.__main__ import _status, main
 
@@ -44,6 +44,12 @@ def test_health_is_degraded_when_the_database_is_out_of_reach_and_crashes_otherw
     status = _status(tools.Context(dsn="postgresql://nobody@127.0.0.1:9/nowhere"))
     reply = status()
     assert reply["status"] == "degraded" and reply["error"]
+
+    def no_database():
+        raise psql.NoDatabaseError("no DATABASE_URL and no embedded cluster")
+    monkeypatch.setattr(psql, "default_dsn", no_database)
+    reply = _status(tools.Context())()
+    assert reply["status"] == "degraded" and "no embedded cluster" in reply["error"]
 
     def broken(ctx, name, /, **arguments):
         raise RuntimeError("a bug in db_status")

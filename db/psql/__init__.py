@@ -1,8 +1,13 @@
 """The database: where it is, and the small things every writer needs.
 
-    default_dsn         $DATABASE_URL, or the embedded cluster at
-                        db/psql/cluster (pgserver, first touch); a host
-                        without pgserver must set DATABASE_URL
+    default_dsn         where to read and write: $DATABASE_URL, or the
+                        embedded cluster at db/psql/cluster once one is
+                        built (pgserver starts it on first touch); it never
+                        creates a cluster
+    boot                the same for db_init and db_rebuild alone, creating
+                        the embedded cluster when none is built
+    NoDatabaseError     no DATABASE_URL and no embedded cluster to use; a
+                        host without pgserver must set DATABASE_URL
     UNREACHABLE         the errors that mean the database is out of reach
     register_source     the `sources` row a page or a file becomes, upserted;
                         every table's rows carry its source_id
@@ -42,27 +47,52 @@ except ImportError:     # the image and CI filter it out of requirements.txt
     # unused in CI, where it is not
     pgserver = None     # type: ignore[assignment, unused-ignore]
 
+
+class NoDatabaseError(Exception):
+    """DATABASE_URL is unset and there is no embedded cluster to use: none is
+    built at db/psql/cluster, or there is no pgserver to run one. Readers
+    report it as the database out of reach; db_init and db_rebuild create
+    the cluster through boot."""
+
+
 # Every way the database can be out of reach, which a health endpoint reports
-# as degraded: the connection and its queries (psycopg.Error); no pgserver
-# and no DATABASE_URL (ImportError, from default_dsn); the embedded cluster's
-# files and socket (OSError); and pgserver's .handle_pids.json, which
-# default_dsn rewrites once and which another process starting at the same
-# moment can empty again before the retry reads it (JSONDecodeError).
-UNREACHABLE = (psycopg.Error, ImportError, OSError, json.JSONDecodeError)
+# as degraded: the connection and its queries (psycopg.Error); no DATABASE_URL
+# and no cluster to use (NoDatabaseError, from default_dsn); the embedded
+# cluster's files and socket (OSError); and pgserver's .handle_pids.json,
+# which _embedded rewrites once and which another process starting at the
+# same moment can empty again before the retry reads it (JSONDecodeError).
+UNREACHABLE = (psycopg.Error, NoDatabaseError, OSError, json.JSONDecodeError)
 
 
 def default_dsn() -> str:
     """Where to read and write: $DATABASE_URL, or the embedded cluster at
-    db/psql/cluster (pgserver runs initdb on first touch). A host without
-    pgserver and without DATABASE_URL has no database: ImportError, which
+    db/psql/cluster once one is built, started on first touch when it is not
+    running. It never creates a cluster: with neither, NoDatabaseError, which
     the readers report as the database out of reach."""
     explicit = os.environ.get("DATABASE_URL")
     if explicit:
         return explicit
+    if not os.path.isfile(os.path.join(DEFAULT_DB_DIR, "PG_VERSION")):     # initdb's mark
+        raise NoDatabaseError("no DATABASE_URL and no embedded cluster at db/psql/cluster:"
+                              " set DATABASE_URL, or build one with db_rebuild")
+    return _embedded()
+
+
+def boot() -> str:
+    """Where db_init and db_rebuild write: $DATABASE_URL, or the embedded
+    cluster, created at db/psql/cluster when none is built. Only those two
+    tools call it; every reader resolves through default_dsn."""
+    return os.environ.get("DATABASE_URL") or _embedded()
+
+
+def _embedded() -> str:
+    """The embedded cluster's URI: pgserver starts the cluster when it is not
+    running and runs initdb when it is not built. A host without pgserver
+    has none to run: NoDatabaseError, naming DATABASE_URL."""
     if pgserver is None:
-        raise ImportError("no DATABASE_URL and no embedded cluster: pgserver is not"
-                          " installed here (the image and CI filter it out; linux/arm64"
-                          " has no wheel) - set DATABASE_URL")
+        raise NoDatabaseError("no DATABASE_URL and no embedded cluster: pgserver is not"
+                              " installed here (the image and CI filter it out; linux/arm64"
+                              " has no wheel) - set DATABASE_URL")
     try:
         return pgserver.get_server(DEFAULT_DB_DIR).get_uri()
     except json.JSONDecodeError:

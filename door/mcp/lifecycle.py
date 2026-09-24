@@ -102,9 +102,10 @@ def _snapshots(cx: psycopg.Connection) -> list[Snapshot]:
 
 @tool(
     "db_init", "Apply the migrations to an EMPTY database (schema only;"
-    " sync_all fills it). Refuses a database that already has tables.")
+    " sync_all fills it). Refuses a database that already has tables. Creates"
+    " the embedded cluster first when DATABASE_URL is unset and none is built.")
 def db_init(ctx: Context) -> ToolReply:
-    with ctx.connect() as cx:
+    with ctx.connect(boot=True) as cx:
         if schema.table_count(cx):
             raise Refusal("the database already has tables; db_rebuild"
                           " starts over")
@@ -129,9 +130,10 @@ def db_migrate(ctx: Context) -> ToolReply:
 
 @tool(
     "db_rebuild", "Drop everything, reapply the migrations and run"
-    " sync_all.", REFRESH)
+    " sync_all. Creates the embedded cluster first when DATABASE_URL is unset"
+    " and none is built.", REFRESH)
 def db_rebuild(ctx: Context, refresh: bool = False) -> ToolReply:
-    with ctx.connect() as cx:
+    with ctx.connect(boot=True) as cx:
         dropped = schema.rebuild(cx, quiet=True)
     results = ctx.call("sync_all", refresh=refresh).data
     return ToolReply("db_rebuild: dropped %d tables, rebuilt" % len(dropped),

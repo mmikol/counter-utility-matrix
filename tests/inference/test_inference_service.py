@@ -89,16 +89,42 @@ def test_health_reports_the_catalog_and_the_database():
     assert data["status"] in ("ok", "degraded")
 
 
-def test_a_host_without_pgserver_is_told_to_set_database_url(monkeypatch):
+def test_a_host_without_pgserver_is_told_to_set_database_url(monkeypatch, tmp_path):
     """The image and CI carry no pgserver. With no DATABASE_URL either there is
-    no database, and the one useful answer names the variable to set: an
-    ImportError, which /health reports as degraded."""
+    no database, even beside a built cluster, and the one useful answer names
+    the variable to set: a NoDatabaseError, which /health reports as
+    degraded. The cluster here is a PG_VERSION file, so the test reaches the
+    missing pgserver on every host."""
+    (tmp_path / "PG_VERSION").write_text("16\n")
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(serve.psql, "DEFAULT_DB_DIR", str(tmp_path))
     monkeypatch.setattr(serve.psql, "pgserver", None)
-    with pytest.raises(ImportError, match="DATABASE_URL"):
+    with pytest.raises(serve.psql.NoDatabaseError,
+                       match=r"pgserver is not installed.*DATABASE_URL"):
         serve.psql.default_dsn()
     data, code = serve.handle_health()
     assert code == 200 and data["status"] == "degraded" and "DATABASE_URL" in data["error"]
+
+
+def test_a_probe_with_no_cluster_is_degraded_and_creates_none(monkeypatch, tmp_path):
+    """default_dsn resolves and never creates: with no DATABASE_URL and no
+    cluster built it raises NoDatabaseError before pgserver is asked, and
+    /health answers degraded with the variable to set. Only db_init and
+    db_rebuild create a cluster, through psql.boot."""
+    cluster = tmp_path / "cluster"
+
+    class NoServer:
+        @staticmethod
+        def get_server(pgdata):
+            raise AssertionError("the resolver asked pgserver for %s" % pgdata)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(serve.psql, "DEFAULT_DB_DIR", str(cluster))
+    monkeypatch.setattr(serve.psql, "pgserver", NoServer)
+    with pytest.raises(serve.psql.NoDatabaseError, match="db_rebuild"):
+        serve.psql.default_dsn()
+    data, code = serve.handle_health()
+    assert code == 200 and data["status"] == "degraded" and "DATABASE_URL" in data["error"]
+    assert not cluster.exists()
 
 
 def test_a_pid_file_race_degrades_health(monkeypatch):

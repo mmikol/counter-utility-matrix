@@ -12,9 +12,10 @@ import json
 import os
 import shutil
 
+import psycopg
 import pytest
 
-from db import Refusal
+from db import Refusal, psql
 from db.psql import schema
 from door.mcp import boards, lifecycle, solver, tools
 from facts import board_facts, tables
@@ -111,6 +112,27 @@ def test_query_refuses_file_and_server_reaching_sql_before_connecting():
     assert len(long) == lifecycle.MAX_SQL_CHARS + 1
     with pytest.raises(Refusal, match="too long"):
         nowhere.call("query", sql=long)
+
+
+def test_only_db_init_and_db_rebuild_create_the_cluster(tmp_path, monkeypatch):
+    """The two tools that build the database reach psql.boot, which may
+    create the embedded cluster; every other tool resolves through
+    default_dsn, which never does. A dsn given to the Context is used as it
+    is, and neither is asked."""
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
+
+    def refuse(said):
+        def stub():
+            raise psql.NoDatabaseError(said)
+        return stub
+    monkeypatch.setattr(psql, "boot", refuse("boot asked"))
+    monkeypatch.setattr(psql, "default_dsn", refuse("resolver asked"))
+    for name, asked in (("db_init", "boot asked"), ("db_rebuild", "boot asked"),
+                        ("db_status", "resolver asked"), ("db_migrate", "resolver asked")):
+        with pytest.raises(psql.NoDatabaseError, match=asked):
+            tools.Context().call(name)
+    with pytest.raises(psycopg.OperationalError):
+        tools.Context(dsn="postgresql://nobody@127.0.0.1:9/nowhere").call("db_init")
 
 
 def test_metrics_tool_serves_the_vocabulary():
@@ -224,6 +246,18 @@ def test_the_probe_exits_one_when_the_database_never_answers(monkeypatch, capsys
     captured = capsys.readouterr()
     assert captured.out == "" and "never became reachable" in captured.err
     assert "port 9" in captured.err                    # the last try's own error
+
+
+def test_the_probe_exits_one_when_there_is_no_database(monkeypatch, capsys):
+    """No DATABASE_URL and no cluster is no database to wait for: one line
+    on stderr and exit 1 at once, which ends the container under set -e."""
+    def nothing():
+        raise psql.NoDatabaseError("nothing to point at")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(schema.psql, "default_dsn", nothing)
+    assert schema.main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and "no database: nothing to point at" in captured.err
 
 
 def test_a_query_cell_arrives_as_json():

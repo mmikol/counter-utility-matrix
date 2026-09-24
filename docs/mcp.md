@@ -147,9 +147,9 @@ The servers and the transports are above, the tool reference below.
 | `load_authored` | Store the one input a user writes: the mirror of the strategies in inference/strategies/. A whole-truth reload. | none |
 | `sync_all` | Every pull_* tool in dependency order, then the strategies mirror, then the CSV mirror. On a populated database this is an update: entities refresh in place, rates append a snapshot. | `refresh` (boolean): fetch every page again instead of reading the cache; a page that fails to fetch keeps its cached copy |
 | `db_status` | Which database the tools are pointed at, its state (empty, stale, unfilled or current - what the containers wait on), its table and row counts, and the rates snapshots it holds. | none |
-| `db_init` | Apply the migrations to an EMPTY database (schema only; sync_all fills it). Refuses a database that already has tables. | none |
+| `db_init` | Apply the migrations to an EMPTY database (schema only; sync_all fills it). Refuses a database that already has tables. Creates the embedded cluster first when DATABASE_URL is unset and none is built. | none |
 | `db_migrate` | Apply the migrations the ledger has not recorded, in place: a populated database catching up with the files without a rebuild. Nothing pending is not an error. | none |
-| `db_rebuild` | Drop everything, reapply the migrations and run sync_all. | `refresh` (boolean): fetch every page again instead of reading the cache; a page that fails to fetch keeps its cached copy |
+| `db_rebuild` | Drop everything, reapply the migrations and run sync_all. Creates the embedded cluster first when DATABASE_URL is unset and none is built. | `refresh` (boolean): fetch every page again instead of reading the cache; a page that fails to fetch keeps its cached copy |
 | `export_csv` | Refresh db/raw/*.csv: one CSV per table. | none |
 | `db_docs` | Regenerate the generated sections of the docs: the ERD and data dictionary in docs/db.md from the live schema, the catalog and vocabulary in docs/inference.md from the strategies files, the tool reference in docs/mcp.md. | none |
 | `query` | Run read-only SQL against the database (one SELECT, WITH, EXPLAIN, SHOW, TABLE or VALUES statement, first 200 rows). Every table is documented in the data dictionary in docs/db.md. | `sql` *required* (string): the statement |

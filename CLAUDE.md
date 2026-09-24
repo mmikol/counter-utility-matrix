@@ -39,12 +39,7 @@ agents, which refetch the sources and may tune the playbook. Pulls and
 true}'` refetches everything from the network, minutes at the polite pace.
 
 Tests marked `invariant` need the database and skip without one, through
-the `db` fixture. Two paths reach `default_dsn()` even under
-`COUNTRIX_NO_DATABASE=1` - `test_health_reports_the_catalog_and_the_database`
-and the `/health` of the MCP server the HTTP tests start - and boot the
-cluster, a new empty one where `db/psql/cluster` is absent;
-`DATABASE_URL=postgresql://127.0.0.1:1/none` keeps both off it, as CI's
-coverage figure assumes. The suite targets `db/psql/cluster` when that
+the `db` fixture. The suite targets `db/psql/cluster` when that
 folder exists and `DATABASE_URL` is unset; `DATABASE_URL` or
 `./docker-db <command>` points it at another Postgres. CI sets no
 variable: it has no cluster and no pgserver.
@@ -87,7 +82,9 @@ db <- facts <- inference <- door <- ui.
   `inference.catalog.mirror`, the playbook's files in `inference.tune` - and
   only the tools call it. Reads bypass the door: the board, `facts/` and
   `inference/` read through `db.psql.default_dsn()` - `DATABASE_URL`, else
-  the embedded pgserver cluster, which starts on first touch.
+  the embedded pgserver cluster at `db/psql/cluster`, started on first
+  touch; only db_init and db_rebuild create it (`psql.boot`), and a read
+  with neither raises `psql.NoDatabaseError`.
 - **One definition per metric.** `facts/team.py` defines every team
   metric and `facts/compute.py` the matchup, map and world ones, each in a
   registry, and `compute.registry()` gathers them. The facts engine words

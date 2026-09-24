@@ -195,7 +195,7 @@ clock and the sentry interval, which are read once at start:
 | `COUNTRIX_CLAUDE` | the `claude` on `PATH` | the CLI the agents and `derive` run |
 | `COUNTRIX_MCP_URL` | unset | the MCP server the board's one write goes to; in-process through the same registry when unset. http or https, like the inference URL |
 | `COUNTRIX_REPO_URL` | `https://github.com/mmikol/countrix` | the repository the board's header links to |
-| `DATABASE_URL` | unset | the PostgreSQL to use; the embedded cluster at `db/psql/cluster` when unset |
+| `DATABASE_URL` | unset | the PostgreSQL to use; the embedded cluster at `db/psql/cluster` when unset, built by `db_rebuild`; with neither, `NoDatabaseError` |
 
 Local-only works identically: without `DATABASE_URL`, everything runs in
 one process against the embedded pgserver cluster at `db/psql/cluster` -

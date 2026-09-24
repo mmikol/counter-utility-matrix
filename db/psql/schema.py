@@ -14,6 +14,7 @@ and the generated documentation.
 
     python -m db.psql.schema     print the state (the container entrypoint's
                                  probe); exit 1 when the database never answers
+                                 or there is none to point at
 """
 
 import glob
@@ -361,11 +362,17 @@ def main() -> int:
     """Print the state for docker-entrypoint.sh, and the pending migrations
     on stderr when it is stale. A database that never answers is a line on
     stderr with the last try's error and exit 1, which ends the container
-    under `set -e`."""
+    under `set -e`; no database to point at is the same, one line on stderr
+    and exit 1."""
+    try:
+        dsn = psql.default_dsn()
+    except psql.NoDatabaseError as error:
+        sys.stderr.write("no database: %s\n" % error)
+        return 1
     last: psycopg.OperationalError | None = None
     for _ in range(CONNECT_TRIES):
         try:
-            cx = psycopg.connect(psql.default_dsn())
+            cx = psycopg.connect(dsn)
             break
         except psycopg.OperationalError as error:
             last = error
