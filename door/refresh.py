@@ -1,12 +1,12 @@
 """The daily refresh: the database and the strategies mirror brought up to
 date on a schedule.
 
-    python -m db.refresh              run daily at COUNTRIX_REFRESH_AT
+    python -m door.refresh              run daily at COUNTRIX_REFRESH_AT
                                         (05:00 by default, container time);
                                         refresh right away first if the
                                         cached pages are older than
                                         COUNTRIX_REFRESH_MAX_AGE_HOURS (20)
-    python -m db.refresh --now        one refresh, then exit 0, or 1 if it fails
+    python -m door.refresh --now        one refresh, then exit 0, or 1 if it fails
 
 A refresh comes in two sizes. The DAILY one refetches what moves day to
 day - the wiki's seasons (a snapshot is stamped with the season live that
@@ -31,7 +31,7 @@ from typing import NamedTuple, NoReturn
 
 from db import CACHE_DIRS
 from db.data.fetch import SECONDS_PER_HOUR
-from db.mcp import tools
+from door.mcp import tools
 
 # The clock when the environment names none: COUNTRIX_REFRESH_AT,
 # COUNTRIX_REFRESH_MAX_AGE_HOURS and COUNTRIX_REFRESH_FULL_DAYS, read by main()

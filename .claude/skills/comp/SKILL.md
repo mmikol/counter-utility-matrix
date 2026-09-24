@@ -32,7 +32,7 @@ shows). Prefer whichever is connected; they expose the same tools.
    playing, or for the plan in a few lines. It answers at any stage: no
    map yet, a map, a side, bans, red's picks as they show.
    If the tools are unavailable, the shell equivalent is
-   `.venv/bin/python -m db.mcp call infer '{"map": "King's Row", "red": ["Zarya"]}'`
+   `.venv/bin/python -m door.mcp call infer '{"map": "King's Row", "red": ["Zarya"]}'`
    (prefix `./docker-db` to read the Docker database).
 3. Read the `facts` tool for the same board when you want the evidence
    behind a number (`{"map": ..., "red": [...], "blue": [<the six>]}`) -

@@ -15,15 +15,15 @@ import sys
 import pytest
 
 from db import ROOT, Refusal
-from db.mcp import tools
-from db.mcp.audit import audit
-from db.mcp.schema import Tool
-from db.mcp.server import Server
+from door.mcp import tools
+from door.mcp.audit import audit
+from door.mcp.schema import Tool
+from door.mcp.server import Server
 from inference import catalog, tune
 
 
 def _talk(messages):
-    proc = subprocess.Popen([sys.executable, "-m", "db.mcp"], cwd=ROOT,
+    proc = subprocess.Popen([sys.executable, "-m", "door.mcp"], cwd=ROOT,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True)
     out, err = proc.communicate("\n".join(json.dumps(m) for m in messages) + "\n",
@@ -75,7 +75,7 @@ def test_tools_call_without_a_database_and_unknown_method():
 
 
 def test_bad_json_is_a_parse_error_not_a_crash():
-    proc = subprocess.Popen([sys.executable, "-m", "db.mcp"], cwd=ROOT,
+    proc = subprocess.Popen([sys.executable, "-m", "door.mcp"], cwd=ROOT,
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True)
     out, err = proc.communicate("{not json\n" + json.dumps(

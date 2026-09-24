@@ -7,8 +7,8 @@ the solver family's infer, evaluate and board are declared through it.
 import functools
 from collections.abc import Callable, Sequence
 
-from db.mcp.registry import Context, tool
-from db.mcp.schema import Properties, ToolReply
+from door.mcp.registry import Context, tool
+from door.mcp.schema import Properties, ToolReply
 from facts.draft import Draft
 
 BOARD: Properties = {

@@ -17,7 +17,7 @@ a fetch.PullContext: the page cache, the session and the log - that returns
 a PullSummary: the tables it wrote, and for a pull that reads one article
 or page per entity, the ones that would not fetch (ArticlePullSummary).
 authored/ has no run - the strategies mirror is inference.catalog.mirror.
-The MCP pull tools (db/mcp) import and call them. Nothing here is an entry
+The MCP pull tools (door/mcp) import and call them. Nothing here is an entry
 point of its own.
 """
 

@@ -35,7 +35,7 @@ import psycopg
 from psycopg.rows import TupleRow
 
 from db import psql, web
-from db.mcp import tools
+from door.mcp import tools
 from facts import board_facts, tables
 from facts.draft import Draft, board_query, is_sided, parse_board
 from inference import catalog as catalog_module

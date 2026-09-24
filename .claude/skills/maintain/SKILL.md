@@ -13,8 +13,8 @@ or the user points at, and leave a report.
 
 1. **Lint, types and tests, three ways.** From the repo root:
 
-       .venv/bin/ruff check db facts ui inference tests scripts orchestrator.py
-       .venv/bin/python -m mypy db facts ui inference orchestrator.py scripts
+       .venv/bin/ruff check db facts inference door ui tests scripts orchestrator.py
+       .venv/bin/python -m mypy db facts inference door ui orchestrator.py scripts
        .venv/bin/python -m pytest -q -p no:cacheprovider --cov
        COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -p no:cacheprovider \
            --cov --cov-fail-under=78
@@ -38,7 +38,7 @@ or the user points at, and leave a report.
 
 2. **The documentation is current.** `tests/test_docs.py` fails when the
    generated sections of `docs/` are behind the code; the fix is the
-   `db_docs` tool (`.venv/bin/python -m db.mcp call db_docs`, or the tool
+   `db_docs` tool (`.venv/bin/python -m door.mcp call db_docs`, or the tool
    on the MCP server), which rewrites the ER diagrams and data dictionary
    in `docs/db.md`, the catalog in `docs/inference.md` and the tool
    reference in `docs/mcp.md`. The hand-written parts are yours: after a
@@ -59,13 +59,13 @@ or the user points at, and leave a report.
    match them.
 
 4. **Nothing dead, nothing twice.** Every top-level function, class and
-   constant in `db/`, `facts/`, `ui/`, `inference/` should be referenced outside
-   its own module or be private to it on purpose; a constant defined in
-   two modules is defined once; a helper that exists only to serve
-   something deleted goes with it; so does a stylesheet class or script
-   function nothing names, and a test that pins the absence of a name no
-   file defines. `ruff check` catches unused imports; the rest is a grep
-   per name. Prefer deleting to documenting.
+   constant in `db/`, `facts/`, `inference/`, `door/`, `ui/` should be
+   referenced outside its own module or be private to it on purpose; a
+   constant defined in two modules is defined once; a helper that exists
+   only to serve something deleted goes with it; so does a stylesheet class
+   or script function nothing names, and a test that pins the absence of a
+   name no file defines. `ruff check` catches unused imports; the rest is a
+   grep per name. Prefer deleting to documenting.
 
 5. **Simplicity and organisation.** The layout is the three layers at the
    root (`db/`, `ui/`, `inference/`), tests mirroring them, docs in
@@ -83,9 +83,9 @@ or the user points at, and leave a report.
 
 6. **Security posture.** `docs/security.md` lists the measures; check
    that what it describes is still what the code does (the allowlist in
-   `orchestrator.py`, the guards in `db/web.py` and `db/mcp/http.py`,
+   `orchestrator.py`, the guards in `db/web.py` and `door/mcp/http.py`,
    the `query` tool, the sentry's patterns, the compose hardening).
-   `.venv/bin/python -m db.sentry --once` must exit 0 on a clean tree.
+   `.venv/bin/python -m door.sentry --once` must exit 0 on a clean tree.
 
 7. **The backlog is current.** `pm/backlog.md` is the list of what is
    worth doing next, ordered by payoff over blast radius. A run moves an

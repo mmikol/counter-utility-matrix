@@ -1,9 +1,9 @@
-"""python -m db.mcp                       serve the tools over stdio
-python -m db.mcp --http [HOST:]PORT [NAME ...]
-                                        serve them over Streamable HTTP (/mcp, /health),
-                                        answering to the local names and each NAME
-python -m db.mcp list                   list the tools
-python -m db.mcp call NAME [JSON-ARGS]  run one tool and print its text"""
+"""python -m door.mcp                        serve the tools over stdio
+python -m door.mcp --http [HOST:]PORT [NAME ...]
+                                          serve them over Streamable HTTP (/mcp, /health),
+                                          answering to the local names and each NAME
+python -m door.mcp list                   list the tools
+python -m door.mcp call NAME [JSON-ARGS]  run one tool and print its text"""
 
 import json
 import sys
@@ -11,9 +11,9 @@ from collections.abc import Callable
 from typing import cast
 
 from db import Refusal, psql
-from db.mcp import http, stdio, tools
-from db.mcp.lifecycle import DbStatus
-from db.mcp.server import Server
+from door.mcp import http, stdio, tools
+from door.mcp.lifecycle import DbStatus
+from door.mcp.server import Server
 
 
 def _status(ctx: tools.Context) -> Callable[[], dict[str, object]]:

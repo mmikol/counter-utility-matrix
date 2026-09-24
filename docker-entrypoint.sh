@@ -8,12 +8,12 @@
 #   inference   INFERENCE ENGINE: wait for the database, serve on 8019
 #   ui          UI LAYER: wait for the database, serve the board on 8017
 #   refresh     DATA LAYER's clock: wait for the database, then refresh it
-#               daily (db/refresh.py)
+#               daily (door/refresh.py)
 #   sentry      the guard: the playbook, the database's text and the door, every
-#               COUNTRIX_SENTRY_EVERY seconds (db/sentry.py)
+#               COUNTRIX_SENTRY_EVERY seconds (door/sentry.py)
 #
 # Anything else is run as a command in the image:
-#   docker compose run data python -m db.mcp call sync_all
+#   docker compose run data python -m door.mcp call sync_all
 #   docker compose run data pytest -q
 set -e
 role="${1:-ui}"
@@ -30,20 +30,20 @@ db_state() {
 
 case "$role" in
     sentry)
-        exec python -m db.sentry ;;
+        exec python -m door.sentry ;;
     data)
         state=$(db_state)
         case "$state" in
             empty|unfilled)
                 echo "data: $state database - running the first build (scrapes the sources once)"
-                python -m db.mcp call db_rebuild ;;
+                python -m door.mcp call db_rebuild ;;
             stale)
                 echo "data: schema behind the migrations - rebuilding from the caches"
-                python -m db.mcp call db_rebuild ;;
+                python -m door.mcp call db_rebuild ;;
             *)
                 echo "data: database current" ;;
         esac
-        exec python -m db.mcp --http 0.0.0.0:8020 data ;;
+        exec python -m door.mcp --http 0.0.0.0:8020 data ;;
     inference|ui|refresh)
         # as long as the data healthcheck's start_period: 90 waits of 10 s. The
         # probe runs as its own command, so set -e ends the container when it fails
@@ -62,7 +62,7 @@ case "$role" in
         case "$role" in
             # the board calls the service as http://inference:8019 (compose.yaml)
             inference) exec python -m inference.serve --host 0.0.0.0 --port 8019 --allow-host inference ;;
-            refresh)   exec python -m db.refresh ;;
+            refresh)   exec python -m door.refresh ;;
             *)         exec python -m ui.board --host 0.0.0.0 --port 8017 ;;
         esac ;;
 esac

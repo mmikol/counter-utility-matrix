@@ -11,8 +11,8 @@ import sys
 import pytest
 
 from db import ROOT
-from db.mcp import registry, tools
-from db.mcp.registry import Registry
+from door.mcp import registry, tools
+from door.mcp.registry import Registry
 
 
 def test_the_registry_lists_the_families_in_the_stated_order():
@@ -22,8 +22,8 @@ def test_the_registry_lists_the_families_in_the_stated_order():
     families = [spec.family for spec in tools.REGISTRY]
     assert families == sorted(families, key=registry.FAMILIES.index)
     assert set(families) == set(registry.FAMILIES)
-    assert tools.REGISTRY.get("facts").family == "db.mcp.facts"
-    assert tools.REGISTRY.get("pull_heroes").family == "db.mcp.pulls"
+    assert tools.REGISTRY.get("facts").family == "door.mcp.facts"
+    assert tools.REGISTRY.get("pull_heroes").family == "door.mcp.pulls"
     for family in registry.FAMILIES:
         lines = [inspect.unwrap(spec.fn).__code__.co_firstlineno
                  for spec in tools.REGISTRY if spec.family == family]
@@ -35,8 +35,8 @@ def test_the_order_holds_whichever_family_imports_first():
     """A process that imports a later family before the rest lists the same
     tools in the same order."""
     script = "\n".join((
-        "from db.mcp import playbook, solver",
-        "from db.mcp import tools",
+        "from door.mcp import playbook, solver",
+        "from door.mcp import tools",
         "print(' '.join(tools.REGISTRY.names()))"))
     listed = subprocess.run([sys.executable, "-c", script], cwd=ROOT, capture_output=True,
                             text=True, timeout=60)

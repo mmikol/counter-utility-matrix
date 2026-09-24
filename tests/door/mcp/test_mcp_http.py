@@ -17,9 +17,9 @@ from urllib.parse import urlparse
 import pytest
 
 from db import ROOT
-from db.mcp import tools
-from db.mcp.http import HttpServer
-from db.mcp.server import Server
+from door.mcp import tools
+from door.mcp.http import HttpServer
+from door.mcp.server import Server
 
 
 @pytest.fixture(scope="module")
@@ -35,7 +35,7 @@ def http_server(tmp_path_factory):
     log = tmp_path_factory.mktemp("mcp_http") / "stderr.log"
     with log.open("wb") as err:
         proc = subprocess.Popen(
-            [sys.executable, "-m", "db.mcp", "--http", "127.0.0.1:%d" % port],
+            [sys.executable, "-m", "door.mcp", "--http", "127.0.0.1:%d" % port],
             cwd=ROOT, stdout=subprocess.DEVNULL, stderr=err)
         try:
             # a cold pgserver boots behind /health

@@ -26,10 +26,10 @@ it.
 from db.data.fetch import Log
 
 # each family declares its tools into REGISTRY as it imports
-from db.mcp import facts, lifecycle, playbook, pulls, solver  # noqa: F401
-from db.mcp.playbook import StrategyResources
-from db.mcp.registry import REGISTRY, Context, NoSuchToolError
-from db.mcp.schema import Tool, ToolReply
+from door.mcp import facts, lifecycle, playbook, pulls, solver  # noqa: F401
+from door.mcp.playbook import StrategyResources
+from door.mcp.registry import REGISTRY, Context, NoSuchToolError
+from door.mcp.schema import Tool, ToolReply
 
 __all__ = [
     "REGISTRY", "Context", "Log", "NoSuchToolError", "StrategyResources", "build", "run_tool",

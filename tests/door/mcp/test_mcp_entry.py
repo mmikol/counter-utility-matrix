@@ -1,4 +1,4 @@
-"""The door's entry point and in-process call: `python -m db.mcp list` and
+"""The door's entry point and in-process call: `python -m door.mcp list` and
 `call`, the data container's /health, and run_tool - the refresher's, the
 shell's and the board's path - validated and audited like a call through
 either door."""
@@ -8,8 +8,8 @@ import json
 import pytest
 
 from db import Refusal
-from db.mcp import tools
-from db.mcp.__main__ import _status, main
+from door.mcp import tools
+from door.mcp.__main__ import _status, main
 
 
 def test_the_entry_point_lists_tools_and_refuses_nonsense(capsys, tmp_path, monkeypatch):
@@ -26,7 +26,7 @@ def test_the_entry_point_lists_tools_and_refuses_nonsense(capsys, tmp_path, monk
     assert "unknown argument(s) bogus" in capsys.readouterr().err
     assert main(["call", "metrics", "{not json"]) == 2
     assert main(["call", "metrics", "[1]"]) == 2
-    assert "python -m db.mcp call" in capsys.readouterr().err
+    assert "python -m door.mcp call" in capsys.readouterr().err
 
 
 @pytest.mark.invariant

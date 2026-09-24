@@ -258,7 +258,7 @@ def derive_pending(h: Health) -> bool:
     if not pending:
         return False
     print("%d draft strategy(ies) await frontmatter; deriving on the host..." % pending)
-    sh(sys.executable, "-m", "db.mcp", "call", "derive_strategies", timeout=DERIVE_TIMEOUT)
+    sh(sys.executable, "-m", "door.mcp", "call", "derive_strategies", timeout=DERIVE_TIMEOUT)
     try:
         mcp("load_authored")
     except RuntimeError as error:
@@ -291,7 +291,7 @@ def up() -> int:
 
 def sentry_line() -> str | None:
     """What the sentry last saw, from the report it leaves in db/raw
-    (db.sentry.Report); None without one, or when it is not a JSON object."""
+    (door.sentry.Report); None without one, or when it is not a JSON object."""
     path = os.path.join(ROOT, "db", "raw", "sentry.json")
     try:
         with open(path, "rb") as handle:

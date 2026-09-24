@@ -1,14 +1,9 @@
-"""The DATA LAYER, and the door and the guard that stand over all three layers.
+"""The DATA LAYER, and the base every layer stands on.
 
-`data/`, `psql/` and `refresh` are the layer itself: pull, clean, store. `mcp/`
-and `sentry` sit above it and are the only code here that imports upward - the
-door serves the UI layer's facts and the inference layer's solver through the
-same tools, and the guard watches the playbook beside the database. The door
-gates every write to Postgres and the playbook, the sentry's quarantine rename
-aside; the code that writes lives with what it writes, above this layer too:
-inference.catalog.mirror reloads the strategies table and inference.tune edits
-the playbook's files, each called only from a door tool or from
-inference.derive inside a run the door started.
+`data/` and `psql/` are the layer itself: pull, clean, store. db/ is the
+bottom of the import graph and imports nothing above it: the door (door/)
+drives the pulls through its tools, and the facts and inference layers read
+the tables over db.psql.default_dsn().
 
     data/         the sources, one package each (blizzard, wiki; authored
                   names the playbook's source row), and what they
@@ -18,13 +13,6 @@ inference.derive inside a run the door started.
                   needs (psql), the schema, the ledger, rebuild and the
                   generated docs (psql.schema), the migrations, and the
                   embedded cluster a local build creates (gitignored)
-    mcp/          the MCP server and its tools - the one door to all three
-                  layers, for a session, the refresher, Docker's entrypoint
-                  and the shell (`.venv/bin/python -m db.mcp call <tool>`)
-                  alike. It gates every write and every pull; a read goes
-                  straight to Postgres over db.psql.default_dsn()
-    refresh       the daily refresh
-    sentry        the guard: the playbook, the free text in the database, the door
     web           what the three HTTP servers share: the Host-and-Origin
                   guard, the handler that sends and logs, the reply to a
                   request that raised (a Refusal 400, anything else 500 with

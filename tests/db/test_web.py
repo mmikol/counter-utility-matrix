@@ -11,9 +11,9 @@ import threading
 import pytest
 
 from db import Refusal, web
-from db.mcp.http import HttpServer
-from db.mcp.schema import Tool
-from db.mcp.server import Server
+from door.mcp.http import HttpServer
+from door.mcp.schema import Tool
+from door.mcp.server import Server
 
 
 def test_a_refusal_is_400_and_anything_else_500_without_a_traceback(capsys):

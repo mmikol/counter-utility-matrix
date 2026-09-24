@@ -9,7 +9,7 @@ import pytest
 
 import db
 from db.data import authored
-from db.mcp import tools
+from door.mcp import tools
 
 GONE = ("seasons.csv", "synergies.csv", "archetypes.csv", "map_playstyle.csv")
 
@@ -115,10 +115,11 @@ def test_counterpick_is_gone_from_the_data_layer():
     assert not os.path.exists(os.path.join(db.ROOT, "db", "data", "counterpick"))
 
 
-def test_the_dropped_tables_are_named_nowhere_in_the_data_layer():
-    from db import sentry
+def test_the_dropped_tables_are_named_nowhere_in_the_data_layer_or_the_door():
+    from door import sentry
     gone = ("map_playstyle", "comp_archetypes", "map_strategy", "counterpick")
-    for folder, _, names in os.walk(os.path.join(db.ROOT, "db")):
+    walked = [*os.walk(os.path.join(db.ROOT, "db")), *os.walk(os.path.join(db.ROOT, "door"))]
+    for folder, _, names in walked:
         if os.sep + "cluster" in folder:
             continue
         for name in names:

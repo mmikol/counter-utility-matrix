@@ -7,9 +7,9 @@ points at, and none of these tools writes.
 from collections.abc import Mapping
 from typing import TypedDict
 
-from db.mcp.boards import board_tool
-from db.mcp.registry import Context, tool
-from db.mcp.schema import ToolReply
+from door.mcp.boards import board_tool
+from door.mcp.registry import Context, tool
+from door.mcp.schema import ToolReply
 from facts import tables
 from facts.draft import Draft
 from inference import catalog, engine, reach

@@ -2,7 +2,7 @@
   "mcpServers": {
     "countrix": {
       "command": ".venv/bin/python",
-      "args": ["-m", "db.mcp"]
+      "args": ["-m", "door.mcp"]
     },
     "countrix-docker": {
       "type": "http",

@@ -430,6 +430,6 @@ functions the board calls:
 | the pool and reach (`inference/parallel.py`, `inference/reach.py`) | `model`, `draft` |
 | the catalog's checks and the deriver (`inference/strategy.py`, `inference/catalog.py`, `inference/derive.py`) | `compute` - the metric vocabulary |
 | the inference service (`inference/serve.py`) | `tables`, `draft` |
-| the door's `roster`, `facts`, `infer`, `evaluate`, `reach` and `board` tools (`db/mcp/facts.py`, `db/mcp/solver.py`, `db/mcp/boards.py`) | `tables`, `board_facts`, `draft` |
-| the door's `metrics` tool (`db/mcp/playbook.py`) | `compute` - the metric vocabulary |
+| the door's `roster`, `facts`, `infer`, `evaluate`, `reach` and `board` tools (`door/mcp/facts.py`, `door/mcp/solver.py`, `door/mcp/boards.py`) | `tables`, `board_facts`, `draft` |
+| the door's `metrics` tool (`door/mcp/playbook.py`) | `compute` - the metric vocabulary |
 | the reach recorder (`scripts/reach.py`) | `tables` |

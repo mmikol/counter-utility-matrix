@@ -16,8 +16,8 @@ doc per layer. This file is what a session needs before it changes code.
 ```bash
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
-.venv/bin/ruff check db facts ui inference tests scripts orchestrator.py        # the paths CI lints
-.venv/bin/python -m mypy db facts ui inference orchestrator.py scripts          # the types CI checks
+.venv/bin/ruff check db facts inference door ui tests scripts orchestrator.py   # the paths CI lints
+.venv/bin/python -m mypy db facts inference door ui orchestrator.py scripts     # the types CI checks
 
 .venv/bin/python -m pytest -q -p no:cacheprovider --cov                         # full suite, 75% bar, needs the built database
 COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=78   # as CI runs it
@@ -25,11 +25,11 @@ COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -rs -p no:cacheprovider --c
 .venv/bin/python -m pytest -q 'tests/test_docs.py::test_the_overview_names_everything_at_the_root'   # one test
 .venv/bin/python -m pytest -q -m 'not invariant'                                # everything that needs no database
 
-.venv/bin/python -m db.mcp call db_rebuild      # build the database: the embedded cluster at db/psql/cluster
-.venv/bin/python -m db.mcp call db_migrate      # apply new migrations in place, keeping the data
-.venv/bin/python -m db.mcp list                 # the MCP tools; `call <tool> '<json>'` runs one in-process
-.venv/bin/python -m db.mcp call db_docs         # regenerate every generated doc section (needs the database)
-.venv/bin/python -m ui.board --port 8018        # the board, engine in-process (8017 is the compose board)
+.venv/bin/python -m door.mcp call db_rebuild      # build the database: the embedded cluster at db/psql/cluster
+.venv/bin/python -m door.mcp call db_migrate      # apply new migrations in place, keeping the data
+.venv/bin/python -m door.mcp list                 # the MCP tools; `call <tool> '<json>'` runs one in-process
+.venv/bin/python -m door.mcp call db_docs         # regenerate every generated doc section (needs the database)
+.venv/bin/python -m ui.board --port 8018          # the board, engine in-process (8017 is the compose board)
 .venv/bin/python orchestrator.py up|test|status|down   # the Docker stack; `up` rebuilds the image `test` runs in
 ```
 
@@ -52,7 +52,7 @@ variable: it has no cluster and no pgserver.
 The solver's pool (`inference/parallel.py`) spawns `max(6, min(cores, 12))`
 worker processes (12 here) in any process that calls `engine.board()`
 without a catalog of its own: `ui.board`
-and `inference.serve` at launch, the stdio MCP server and `db.mcp call board`
+and `inference.serve` at launch, the stdio MCP server and `door.mcp call board`
 on the first board, pytest on the first board test. `COUNTRIX_WORKERS=6` is
 the lowest cap that keeps that test green; `COUNTRIX_PARALLEL=0` solves
 in-process. `COUNTRIX_PARALLEL` is read on every board, `COUNTRIX_WORKERS`
@@ -60,7 +60,7 @@ when the pool starts. The pool is spawn-context: killing the parent leaves
 `spawn_main` workers orphaned under launchd, so stop them too.
 
 Without the database, two generated sections regenerate on their own:
-`.venv/bin/python -c "from db.mcp import tools; tools.write_tool_docs()"`
+`.venv/bin/python -c "from door.mcp import tools; tools.write_tool_docs()"`
 (docs/mcp.md) and
 `.venv/bin/python -c "from inference import catalog; catalog.write_docs(catalog.load())"`
 (the catalog in docs/inference.md). The second writes nothing while
@@ -74,9 +74,9 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 
 - **One door for writes.** Every write to Postgres or the playbook runs
   under a tool. Each family module (`pulls`, `lifecycle`, `facts`, `solver`,
-  `playbook` in `db/mcp/`) declares its tools with `@tool(...)` into the one
-  `REGISTRY` (`db/mcp/registry.py`), which lists them in `FAMILIES`' order,
-  and `db/mcp/tools.py` imports every family. A call arrives over stdio, HTTP or in-process
+  `playbook` in `door/mcp/`) declares its tools with `@tool(...)` into the one
+  `REGISTRY` (`door/mcp/registry.py`), which lists them in `FAMILIES`' order,
+  and `door/mcp/tools.py` imports every family. A call arrives over stdio, HTTP or in-process
   (`tools.run_tool`), is checked against the tool's schema by the same
   `Tool` wrapper on every path, and is audited to `db/raw/audit.jsonl` -
   except the sentry, which renames a bad strategy file to
@@ -140,14 +140,14 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   its package's `__init__.py` docstring: indented, the name, then two
   spaces or more before what it is (`.py` optional, a folder's slash too).
   A name that only opens a wrapped line of prose does not count.
-- Every quoted `"COUNTRIX_..."` name in `db/`, `facts/`, `ui/`,
-  `inference/` or `orchestrator.py` must appear in docs/architecture.md or
-  docs/db.md, and is read where it is used or by `main()` at start: an
+- Every quoted `"COUNTRIX_..."` name in `db/`, `facts/`, `inference/`,
+  `door/`, `ui/` or `orchestrator.py` must appear in docs/architecture.md
+  or docs/db.md, and is read where it is used or by `main()` at start: an
   `os.environ` or `os.getenv` that runs at import fails
   `test_no_module_reads_the_environment_at_import`.
 - A new migration is named by its number in docs/db.md's `migrations/`
   row, the one inventory of the schema's steps.
-- Only a door tool in `db/mcp/` calls the playbook's writers -
+- Only a door tool in `door/mcp/` calls the playbook's writers -
   `catalog.mirror`, `tune.tune`/`add`/`complete`, `derive.derive` - and
   `inference/derive.py`, which completes drafts inside a run the door
   started. A new call site elsewhere fails the test; route it through a
@@ -164,7 +164,7 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 - Adding or renaming an MCP tool: regenerate docs/mcp.md; the backticked tool
   names in `.claude/skills/refresh/SKILL.md` must equal
   `orchestrator.AGENT_TOOL_NAMES`; each house skill must still name the tools
-  `MUST_NAME` (tests/test_docs.py) lists; tests/db/mcp/test_mcp.py holds the
+  `MUST_NAME` (tests/test_docs.py) lists; tests/door/mcp/test_mcp.py holds the
   tool set too.
 - A new strategy file is cited as a ``- `id` `` line in `inference/README.md`.
   A house skill or a doc names a strategy only by an id the playbook
@@ -222,7 +222,7 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   2 s a Cargo page with six attempts to wait out a rate limit
   (`CARGO_POLICY`), and 0.5 s an article, asked for once
   (`ARTICLE_POLICY`). No third source, no API keys.
-- `.venv/bin/python -m db.sentry --once` is not read-only: it renames a
+- `.venv/bin/python -m door.sentry --once` is not read-only: it renames a
   suspect strategy file to `.md.quarantined`.
 - Never `docker compose down -v`: it deletes the database volume.
 

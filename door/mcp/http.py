@@ -21,7 +21,7 @@ from collections.abc import Callable, Iterable, Mapping
 from urllib.parse import urlsplit
 
 from db import web
-from db.mcp.server import PARSE_ERROR, Server, error_response
+from door.mcp.server import PARSE_ERROR, Server, error_response
 
 MAX_BODY = 1 << 20            # one request is a tool call, not an upload
 DRAIN_CHUNK = 1 << 16         # bytes read at a time from an oversize body

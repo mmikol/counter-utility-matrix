@@ -308,7 +308,7 @@ def _dictionary(
     for fk in fks:
         references.setdefault((fk.child, fk.column), (fk.parent, fk.parent_column))
     dd = [
-        "Generated from the live schema (`.venv/bin/python -m db.mcp call db_docs`).",
+        "Generated from the live schema (`.venv/bin/python -m door.mcp call db_docs`).",
         "",
         "Two columns are omitted from the lists below: `source_id` (which source the",
         "row came from, see `sources`) and `cao` - \"current as of\", when that row",

@@ -5,7 +5,7 @@ Every pull_* tool is pull -> clean -> store for one source and domain: that
 domain's run() in its source package under db/data/, handed a PullContext
 over the source's page cache. The pulls are registered in dependency order,
 and sync_all runs them in it. A session, the refresher or a shell
-(`.venv/bin/python -m db.mcp call`) decides what to pull and when, and reads
+(`.venv/bin/python -m door.mcp call`) decides what to pull and when, and reads
 the summary back.
 """
 
@@ -29,8 +29,8 @@ from db.data.wiki import playstyles as wiki_playstyles
 from db.data.wiki import seasons as wiki_seasons
 from db.data.wiki import synergies as wiki_synergies
 from db.data.wiki import terrain as wiki_terrain
-from db.mcp.registry import REFRESH, Context, tool
-from db.mcp.schema import Properties, ToolReply
+from door.mcp.registry import REFRESH, Context, tool
+from door.mcp.schema import Properties, ToolReply
 from inference import catalog, derive
 
 # A pull's own function: the source module's run(connection, pull, **options).

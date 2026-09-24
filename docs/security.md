@@ -141,7 +141,7 @@ board serves loads nothing from another host either: its display font
 ships in `ui/static` with its licence. Every published port binds to
 127.0.0.1.
 
-**The sentry watches.** The `sentry` container (`db/sentry.py`) checks, every
+**The sentry watches.** The `sentry` container (`door/sentry.py`) checks, every
 thirty seconds: that every file in `inference/strategies/` loads through
 the catalog - one that does not is quarantined (renamed to
 `.md.quarantined`, which the catalog ignores) and named in the report;
@@ -155,7 +155,7 @@ client past the rate limit, and any line that is not an audit entry. The
 scan folds Unicode to one shape and strips zero-width characters first,
 so a word broken by an invisible character still reads as the word. Its
 report is `db/raw/sentry.json`, and `.venv/bin/python orchestrator.py
-status` prints it. `.venv/bin/python -m db.sentry --once` runs one pass
+status` prints it. `.venv/bin/python -m door.sentry --once` runs one pass
 from a shell and exits non-zero when something is wrong.
 
 ## What remains yours

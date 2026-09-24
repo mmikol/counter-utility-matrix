@@ -12,9 +12,9 @@ half of the write, and the one step this module adds.
 import os
 
 from db import ROOT
-from db.mcp.registry import Context, tool
-from db.mcp.schema import Properties, ToolReply
-from db.mcp.server import Resource, ResourceText
+from door.mcp.registry import Context, tool
+from door.mcp.schema import Properties, ToolReply
+from door.mcp.server import Resource, ResourceText
 from facts import compute
 from inference import catalog, derive, tune
 

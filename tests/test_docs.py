@@ -83,7 +83,7 @@ ENV_DOCS = ("architecture.md", "db.md")
 def test_every_setting_the_code_reads_is_documented():
     assert ENV_RE.findall('CLI = "COUNTRIX_X"') == ["COUNTRIX_X"]   # a name kept in a constant
     names = set()
-    for path in _python_files("db", "facts", "ui", "inference"):
+    for path in _python_files("db", "facts", "inference", "door", "ui"):
         with open(path, encoding="utf-8") as handle:
             names |= set(ENV_RE.findall(handle.read()))
     documented = "".join(_read("docs", doc) for doc in ENV_DOCS)
@@ -107,11 +107,11 @@ def test_only_the_door_calls_the_playbook_writers():
     assert WRITER_RE.search("        catalog.mirror(cx, cat)")
     assert not WRITER_RE.search('tools.run_tool(ctx, "tune", **arguments)')
     outside = []
-    for path in _python_files("db", "facts", "ui", "inference", "scripts"):
+    for path in _python_files("db", "facts", "inference", "door", "ui", "scripts"):
         relative = os.path.relpath(path, ROOT)
         with open(path, encoding="utf-8") as handle:
             calls = WRITER_RE.search(handle.read())
-        if calls and not relative.startswith("db/mcp/") and relative != "inference/derive.py":
+        if calls and not relative.startswith("door/mcp/") and relative != "inference/derive.py":
             outside.append(relative)
     assert not outside, outside
 
@@ -121,7 +121,7 @@ def test_every_shallow_indent_sits_on_a_four_column_stop():
     16 columns and counts nesting in that unit: one line off a multiple of 4
     makes the unit 1 and every column a level. Docstrings and strings count."""
     off = []
-    for path in _python_files("db", "facts", "ui", "inference", "tests", "scripts"):
+    for path in _python_files("db", "facts", "inference", "door", "ui", "tests", "scripts"):
         with open(path, encoding="utf-8") as handle:
             for number, line in enumerate(handle, 1):
                 text = line.lstrip()
@@ -164,7 +164,7 @@ def test_no_module_reads_the_environment_at_import():
                                         "def f(y=os.getenv('B')):\n"
                                         "    return os.environ['C']\n")) == [2, 3]
     frozen = []
-    for path in _python_files("db", "facts", "ui", "inference", "scripts"):
+    for path in _python_files("db", "facts", "inference", "door", "ui", "scripts"):
         with open(path, encoding="utf-8") as handle:
             tree = ast.parse(handle.read(), path)
         frozen += ["%s:%d" % (os.path.relpath(path, ROOT), line)
@@ -227,7 +227,7 @@ def test_every_package_map_names_what_the_package_holds():
 def test_mcp_json_registers_the_two_servers():
     servers = json.loads(_read(".mcp.json"))["mcpServers"]
     assert set(servers) == {"countrix", "countrix-docker"}
-    assert servers["countrix"]["args"] == ["-m", "db.mcp"]
+    assert servers["countrix"]["args"] == ["-m", "door.mcp"]
     assert servers["countrix-docker"]["url"].endswith(":8020/mcp")
     docker = servers["countrix-docker"]
     assert docker["headers"]["Authorization"].startswith("Bearer ${")
@@ -259,7 +259,7 @@ def _skills():
 def test_every_skill_has_frontmatter_and_names_its_tools():
     """Coverage, not identity: a coding tool may install its own playbook
     beside ours, and a skill this repo does not own does not decide the run."""
-    from db.mcp import tools
+    from door.mcp import tools
     registered = set(tools.REGISTRY.names())
     skills = _skills()
     assert set(MUST_NAME) <= set(skills)
@@ -315,7 +315,7 @@ def test_the_skills_name_only_strategies_the_playbook_holds():
 
 
 def test_the_tool_reference_is_current(copy_of):
-    from db.mcp import tools
+    from door.mcp import tools
     committed = _read("docs", "mcp.md")
     listed = set(re.findall(r"^\| `([a-z_]+)` \|", _section(committed, "tools"), re.M))
     assert listed == set(tools.REGISTRY.names())
@@ -323,7 +323,7 @@ def test_the_tool_reference_is_current(copy_of):
     tools.write_tool_docs(fresh)
     with open(fresh, encoding="utf-8") as handle:
         assert _section(handle.read(), "tools") == _section(committed, "tools"), \
-            "docs/mcp.md is behind the tools: run `.venv/bin/python -m db.mcp call db_docs`"
+            "docs/mcp.md is behind the tools: run `.venv/bin/python -m door.mcp call db_docs`"
 
 
 # --- the generated sections ------------------------------------------------------------------
@@ -336,7 +336,7 @@ def test_the_catalog_document_matches_the_strategy_files(copy_of):
     with open(fresh, encoding="utf-8") as handle:
         assert _section(handle.read(), "catalog") == _section(committed, "catalog"), (
             "docs/inference.md is behind inference/strategies/: run"
-            " `.venv/bin/python -m db.mcp call db_docs`")
+            " `.venv/bin/python -m door.mcp call db_docs`")
 
 
 @pytest.mark.invariant
@@ -349,10 +349,10 @@ def test_the_schema_sections_match_the_live_database(db, copy_of):
         text = handle.read()
     assert _section(text, "erd") == _section(committed, "erd"), (
         "docs/db.md's ER diagrams are behind the schema: run"
-        " `.venv/bin/python -m db.mcp call db_docs`")
+        " `.venv/bin/python -m door.mcp call db_docs`")
     assert _section(text, "dictionary") == _section(committed, "dictionary"), (
         "docs/db.md's data dictionary is behind the database: run"
-        " `.venv/bin/python -m db.mcp call db_docs`")
+        " `.venv/bin/python -m door.mcp call db_docs`")
 
 
 def test_a_tables_prose_is_the_comment_block_directly_above_it():

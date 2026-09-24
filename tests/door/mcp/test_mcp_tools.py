@@ -15,8 +15,8 @@ import shutil
 import pytest
 
 from db import Refusal
-from db.mcp import boards, lifecycle, solver, tools
 from db.psql import schema
+from door.mcp import boards, lifecycle, solver, tools
 from facts import board_facts, tables
 from facts.draft import Draft
 from inference import catalog

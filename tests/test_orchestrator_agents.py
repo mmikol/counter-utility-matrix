@@ -32,7 +32,7 @@ def test_the_agents_run_is_headless_claude_on_the_refresh_skill(monkeypatch):
 
 @pytest.mark.skipif(not os.path.exists(REFRESH_SKILL), reason="the skills are not in the image")
 def test_the_allowlist_is_exactly_the_tools_the_refresh_skill_names():
-    from db.mcp import tools
+    from door.mcp import tools
     with open(REFRESH_SKILL, encoding="utf-8") as handle:
         named = set(re.findall(r"`([a-z_]+)`", handle.read()))
     registered = set(tools.REGISTRY.names())

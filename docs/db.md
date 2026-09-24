@@ -15,10 +15,10 @@ connection through `db.psql.default_dsn()`, which is what lets the board
 load a World per request:
 
 ```bash
-.venv/bin/python -m db.mcp list                        # the tools
-.venv/bin/python -m db.mcp call db_rebuild             # build from scratch
-.venv/bin/python -m db.mcp call sync_all               # update everything
-.venv/bin/python -m db.mcp call pull_rates '{"refresh": true}'
+.venv/bin/python -m door.mcp list                        # the tools
+.venv/bin/python -m door.mcp call db_rebuild             # build from scratch
+.venv/bin/python -m door.mcp call sync_all               # update everything
+.venv/bin/python -m door.mcp call pull_rates '{"refresh": true}'
 ```
 
 The root's `orchestrator.py` drives the same tools for the whole stack.
@@ -52,7 +52,7 @@ db/
 | `data/__init__.py` | `PullSummary`, what every source's `run()` returns: the tables it wrote, beside its own counts. `ArticlePullSummary` adds `missing`, the articles or pages that would not fetch, for a pull that reads one per entity. |
 | `data/fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `cached`: the cache sequence every source reads through - the fresh copy, else a new one written, else the stale copy. `request`: one page under a `RequestPolicy` - its attempts, backoff, timeout and the pause after a page - retried while attempts remain. `max_age`: the freshness policy for a block - a build keeps every cached page, a refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `PullContext`: what a pull's `run()` takes beside its connection - the page cache, the session and the log, stderr unless the caller names another, since over stdio stdout is the MCP wire. `prepare_cache`: the cache directory a tool hands a pull. |
 | `data/names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. |
-| `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `.venv/bin/python -m db.sentry --once` is one pass from a shell. |
+| `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `.venv/bin/python -m door.sentry --once` is one pass from a shell. |
 | `refresh.py` | The clock: the daily refresh below, and the full one once the wiki cache is a week old. |
 | `web.py` | What the three HTTP servers - the MCP door, the inference service and the board - share. `LocalServer` answers to the local names (`LOCAL_HOSTS`) and any host it is started with (`--allow-host`); `Handler` checks every request's `Host` and `Origin` against them before any route runs (`request_allowed`) and answers 403 otherwise, so a page rebound to the address by DNS is refused on every method, reads included. It sends JSON and static bytes, and logs one line on stderr for a request that failed and for each of its `timed` routes, the solves, with the seconds it took. Every route of the board and the inference service answers a `Reply`, a JSON object and its status; `failure` is the one to a request that raised: a `Refusal` is 400 with its message; anything else is 500 with the error's type and message, and its traceback goes to stderr, never to the caller. The MCP door draws the same line in JSON-RPC's words. `call_tool` is one `tools/call` over the door's HTTP transport, read into a `CallReply` - the text, the structured payload and whether it is an error: the tool's refusal, the door turning the call away, or no server answering - for the board's one write and `orchestrator.py`. Stdlib only, besides `Refusal`, so the MCP server that stands on it stays dependency-free. |
 
@@ -109,7 +109,7 @@ The servers, the transport and the full tool reference are in
 | `facts.py` | The UI layer through the door: `roster` and the board tool `facts`. |
 | `solver.py` | The inference layer through the door: the board tools `infer`, `evaluate` and `board`, and `reach`. |
 | `playbook.py` | `metrics`, the vocabulary a strategy may reference, `strategies`, the tools that write the playbook (`tune`, `add_strategy`, `infer_strategy`, `derive_strategies`), each reloading the mirror after the write, and `tuning_log`. The strategies are also served as `strategy://` resources. |
-| `__main__.py` | `.venv/bin/python -m db.mcp` serves over stdio (what `.mcp.json` launches); `--http HOST:PORT` serves over HTTP (the `data` container); `list` and `call NAME [JSON]` are the shell. |
+| `__main__.py` | `.venv/bin/python -m door.mcp` serves over stdio (what `.mcp.json` launches); `--http HOST:PORT` serves over HTTP (the `data` container); `list` and `call NAME [JSON]` are the shell. |
 
 ### `psql/` - the database
 
@@ -191,9 +191,9 @@ loop reads them once, when it starts. The same refresh from a shell,
 against whichever database `DATABASE_URL` names:
 
 ```bash
-.venv/bin/python -m db.refresh --now        # once, now (the daily set; --full for every source)
-.venv/bin/python -m db.refresh              # the daily loop
-.venv/bin/python -m db.mcp call sync_all '{"refresh": true}'
+.venv/bin/python -m door.refresh --now         # once, now (the daily set; --full for every source)
+.venv/bin/python -m door.refresh               # the daily loop
+.venv/bin/python -m door.mcp call sync_all '{"refresh": true}'
 ```
 
 ## Widening the meta's granularity
@@ -272,9 +272,10 @@ restoring rank granularity there needs no migration.
 
 ## The schema
 
-Generated from the live database by `.venv/bin/python -m db.mcp call db_docs`; the
-two sections between the markers are rewritten in place, the rest of this
-document is written by hand.
+Generated from the live database by
+`.venv/bin/python -m door.mcp call db_docs`; the two sections between the
+markers are rewritten in place, the rest of this document is written by
+hand.
 
 ### Entity relationship diagrams
 
@@ -430,7 +431,7 @@ erDiagram
 ### Data dictionary
 
 <!-- generated:dictionary -->
-Generated from the live schema (`.venv/bin/python -m db.mcp call db_docs`).
+Generated from the live schema (`.venv/bin/python -m door.mcp call db_docs`).
 
 Two columns are omitted from the lists below: `source_id` (which source the
 row came from, see `sources`) and `cao` - "current as of", when that row

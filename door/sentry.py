@@ -21,10 +21,10 @@ Every COUNTRIX_SENTRY_EVERY seconds (30):
     the report     db/raw/sentry.json - ok or not, what was quarantined, the
                    flags, the counts - which `orchestrator.py status` prints
 
-    python -m db.sentry            the loop (the sentry container)
-    python -m db.sentry --once     one pass, exit 0 when nothing is wrong and
-                                   1 when something is; any other argument
-                                   prints this text and exits 2
+    python -m door.sentry            the loop (the sentry container)
+    python -m door.sentry --once     one pass, exit 0 when nothing is wrong and
+                                     1 when something is; any other argument
+                                     prints this text and exits 2
 """
 
 import json
@@ -43,8 +43,8 @@ import psycopg
 from psycopg.sql import SQL
 
 from db import RAW_DIR, psql
-from db.mcp.audit import default_audit_path  # the door's own, one definition
-from db.mcp.http import RATE_LIMIT  # the door's own, one definition
+from door.mcp.audit import default_audit_path  # the door's own, one definition
+from door.mcp.http import RATE_LIMIT  # the door's own, one definition
 from inference import catalog as catalog_module
 from inference.strategy import CatalogError, Strategy
 

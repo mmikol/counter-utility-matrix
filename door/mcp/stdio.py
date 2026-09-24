@@ -9,7 +9,7 @@ import sys
 from collections.abc import Iterable
 from typing import TextIO
 
-from db.mcp.server import PARSE_ERROR, Response, Server, error_response
+from door.mcp.server import PARSE_ERROR, Response, Server, error_response
 
 
 def serve(mcp: Server, stdin: Iterable[str] | None = None, stdout: TextIO | None = None) -> None:

@@ -11,7 +11,7 @@ import pytest
 import requests
 
 from db import CACHE_DIRS
-from db.mcp import tools
+from door.mcp import tools
 
 pytestmark = pytest.mark.invariant
 

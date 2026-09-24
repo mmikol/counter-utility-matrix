@@ -12,7 +12,7 @@ the error's type and message, and the traceback goes to stderr, never to the
 caller. call_tool() is a tools/call over the MCP door's HTTP transport.
 
 Stdlib only, besides db.Refusal, so the MCP door's HTTP transport that
-stands on it (db/mcp/http.py) stays dependency-free.
+stands on it (door/mcp/http.py) stays dependency-free.
 """
 
 import json
@@ -182,7 +182,7 @@ def _answer(reply: object) -> CallReply:
 
 
 def _tool_result(result: object) -> CallReply:
-    """A tools/call result as the door sends it (db.mcp.server.ToolResult),
+    """A tools/call result as the door sends it (door.mcp.server.ToolResult),
     read off the wire into the record a caller gets: the text items of its
     content joined by newlines, its structured payload, and whether it is an
     error. A result that is not an object says nothing and is no error, and

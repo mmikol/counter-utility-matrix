@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from db import sentry
+from door import sentry
 from inference import catalog
 
 
@@ -87,7 +87,7 @@ def test_an_audit_line_whose_client_is_not_a_name_is_malformed(tmp_path):
 
 def test_the_sentry_reads_the_log_the_door_writes(tmp_path, monkeypatch):
     # one definition of the path, the door's, read when each of them runs
-    from db.mcp import audit
+    from door.mcp import audit
     monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
     now = datetime.now(UTC).isoformat(timespec="seconds")
     audit.audit({"t": now, "client": "http:a", "tool": "facts", "ok": True})
@@ -156,7 +156,7 @@ def test_a_failed_pass_leaves_a_report_that_is_not_ok(tmp_path, monkeypatch):
 
 def test_a_usage_error_exits_2_and_one_pass_exits_with_its_verdict(monkeypatch, capsys):
     assert sentry.main(["--bogus"]) == 2
-    assert "python -m db.sentry" in capsys.readouterr().err
+    assert "python -m door.sentry" in capsys.readouterr().err
     verdicts = iter([{"ok": True}, {"ok": False}])
     monkeypatch.setattr(sentry, "run_once", lambda: next(verdicts))
     assert sentry.main(["--once"]) == 0

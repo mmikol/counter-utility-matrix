@@ -16,8 +16,8 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import NotRequired, Protocol, TypedDict
 
 from db import Refusal
-from db.mcp.audit import audited
-from db.mcp.schema import Tool
+from door.mcp.audit import audited
+from door.mcp.schema import Tool
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "countrix", "version": "2.1.0"}
