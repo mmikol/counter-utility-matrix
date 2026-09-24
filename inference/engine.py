@@ -638,7 +638,7 @@ def _plan(world: World, m: Map | None, side: str, bans: Sequence[str],
         read = ["No map yet, so this is the meta's best six: what is winning right now, built"
                 " to fit together."]
     else:
-        ground = MODE_GROUND.get(m.mode, "the fight follows the objective")
+        ground = MODE_GROUND.get(m.mode or "", "the fight follows the objective")
         read = ["%s is a %s map: %s." % (m.name, m.mode, ground)]
         # the ground the wiki's article stresses: the map.terrain facts above the ordinary map
         facts = blue_r.facts

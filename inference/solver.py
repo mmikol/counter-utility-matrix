@@ -369,8 +369,8 @@ class Solver:
         when ranking a pool to search and wrong when choosing the field that
         fixes the scale - that field has to be the same for every seat and
         every set of locks on this board."""
-        base = h.map_win(self.m.id) if self.m is not None and h.map_win(self.m.id) \
-            is not None else (h.win if h.win is not None else 50.0)
+        here = h.map_win(self.m.id) if self.m is not None else None
+        base = here if here is not None else (h.win if h.win is not None else 50.0)
         answers = sum(1 for e in self.red if self.world.counters_of(e.id, h.id))
         exposed = sum(1 for e in self.red if self.world.counters_of(h.id, e.id))
         style = 1 if (self.m is not None and self.m.style_top in h.styles) else 0
@@ -603,8 +603,8 @@ class Solver:
     def prior(self, h: Hero) -> float:
         """The ranking that cut the pools before the playbook ranked them
         itself: still the tie-break, and the whole ranking when nothing scores."""
-        base = h.map_win(self.m.id) if self.m is not None and h.map_win(self.m.id) \
-            is not None else (h.win if h.win is not None else 50.0)
+        here = h.map_win(self.m.id) if self.m is not None else None
+        base = here if here is not None else (h.win if h.win is not None else 50.0)
         answers = sum(1 for e in self.red if self.world.counters_of(e.id, h.id))
         exposed = sum(1 for e in self.red if self.world.counters_of(h.id, e.id))
         partners = sum(1 for a in self.locked if self.world.synergy(a.id, h.id))
