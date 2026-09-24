@@ -1,196 +1,39 @@
-"""The solver: the optimal six under the catalog, players playing optimally.
+"""The search: the optimal six under the catalog, players playing optimally.
+A Solver is the board's Objective (inference.scoring) on the board's scale
+(inference.scale), searched around the locked picks.
 
-    sample              the REFERENCE: a seeded set of random legal sixes for this
-                        map and side. Heuristics are normalised against it, so infer,
-                        evaluate and the current comp share one scale and a score
-                        means the same thing across calls. The seed is a string, so
-                        every process draws the same list and any of them can prepare
-                        a slice of it.
-    reference_standing  each hero's mean score across the reference sixes it is in:
-                        the playbook's own ranking of the roster on this board
-    legal_sixes         every shape the hard limits allow, filled around the locked
-                        picks from a per-role pool ranked by standing (six per role
-                        by default)
-    sweep               a slice of the enumeration prepared, scored and slimmed. The
-                        slices partition the field, so the search splits across
-                        processes.
-    score               STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS: limits
-                        prune (soft ones charge), heuristics normalise and weigh,
-                        scored constraints add; assumptions are the agent's. A `when`
-                        reading only the enemy, the map and the world is settled once
-                        per board, not once per candidate. A heuristic guarded on the
-                        six's own state is a need: see score().
-    rank                sorted by score, then tie-break, then names - a total order, so
-                        the answer does not depend on how the sweep was split
-    refine              local search from the best six sixes and the best of every
-                        shape: swap any slot for any same-role hero on the roster, keep
-                        improvements; bring each of the wiki's synergy pairs into the
-                        best sixes two slots at once; then climb from random sixes of
-                        the leader's shape and change two seats at once
+    legal_sixes     every shape the hard limits allow, filled around the locked
+                    picks from a per-role pool ranked by standing (six per role
+                    by default)
+    sweep           a slice of the enumeration prepared, scored and slimmed. The
+                    slices partition the field, so the search splits across
+                    processes.
+    rank            sorted by score, then tie-break, then names - a total order, so
+                    the answer does not depend on how the sweep was split
+    refine          local search from the best six sixes and the best of every
+                    shape: swap any slot for any same-role hero on the roster, keep
+                    improvements; bring each of the wiki's synergy pairs into the
+                    best sixes two slots at once; then climb from random sixes of
+                    the leader's shape and change two seats at once
 """
 
 import heapq
 import itertools
 import random
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import Literal, NamedTuple, NotRequired, TypedDict
+from collections.abc import Iterator, Mapping, Sequence
+from typing import NamedTuple
 
 from db import Refusal
-from inference.catalog import BOARD_SECTIONS, Strategy
-from inference.expr import Expr, Scope, Value, scope
-from ui.facts import compute
-from ui.facts.draft import TEAM_SIZE
+from inference import scale
+from inference.catalog import Strategy
+from inference.scoring import Candidate, Objective, Shape, legal_shapes
 from ui.facts.model import ROLES, Hero, Map, World
-from ui.facts.team import NUMBER_TYPES, MetricBag, MetricValue, number, team_metrics
 
-REFERENCE_SIZE = 1200
 PARTNER_POINTS = 0.5              # a locked partner's worth when ranking a pool
 SEEDS = 6                         # the local search's starts, whatever `top` asks for
 RESTARTS = 24                     # in-shape random starts: the SEEDS are near-duplicates
-SCALE_POOL = 6                    # the field that fixes a board's scale, whatever pool is searched
 SHAPE_REACH = 4.0                 # a shape starts too when its best six is this close
 PAIR_TRIES = 800                  # the most new sixes one refine scores bringing pairs in
-CONFIDENCE_KEY = "\x00confidence"   # a rule's scale bounds, beside its own
-NEED_BUDGET = 2.0                 # the most one guarded state can cost
-REFERENCE_SEED = 20260913
-
-SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size", "team.open_slots"}
-
-# the namespaces that do not change across the candidates of one board
-STATIC_SECTIONS = BOARD_SECTIONS
-
-# The shapes the search passes around. A namespace is the metric bags by
-# section.
-Shape = tuple[int, int, int]                    # tanks, damage, supports
-Bounds = dict[str, tuple[float, float]]         # id, or id + CONFIDENCE_KEY -> low, high
-Tally = dict[int, list[int]]                    # hero id -> [summed millionths, sixes]
-Namespace = dict[str, MetricBag]
-# one heuristic's frozen scale for the scoring loop: the strategy, its low and
-# spread, weight, minimise, need, and its confidence metric's bounds
-Norm = tuple[Strategy, float, float | None, float, bool, bool, tuple[float, float] | None]
-
-_EMPTY: MetricBag = {}
-
-
-def _split_key(key: str | None) -> tuple[str, str]:
-    """A dotted metric key -> (namespace, key)."""
-    section, _, name = (key or "").partition(".")
-    return section, name
-
-
-def _not_a_number(value: MetricValue | None) -> float:
-    """A metric read as a number that holds none: 0 when it is unset or empty,
-    as the score has always read one. A name or a list is refused - the
-    catalog keeps text metrics out of every place the solver reads a number,
-    and a number itself never reaches here, so the loop pays no call for it."""
-    if value:
-        raise TypeError("a metric read as a number holds %r" % (value,))
-    return 0.0
-
-
-def _amount(value: Value) -> float:
-    """A bonus or penalty expression's value, as the score adds it."""
-    if isinstance(value, (int, float, str)):          # a bool is an int
-        return float(value)
-    raise TypeError("a bonus or penalty reads a number, got %r" % (value,))
-
-
-def _slot_gate(held: list[bool | None], slot: int, h: Strategy, sc: Scope) -> bool:
-    """A gate the candidate decides, read once per slot: the answer a strategy
-    guarded the same way already left in `held`, else h's `when` evaluated on
-    this scope with h's params and kept there."""
-    gate = held[slot]
-    if gate is None:
-        sc["params"] = h.params_section
-        when = h.when                  # set: a gate the candidate decides has one
-        gate = held[slot] = when is None or bool(when.evaluate(sc))
-    return gate
-
-
-def _norm(raw: float, lo: float, span: float | None, minimize: bool, need: bool) -> float:
-    """A heuristic's raw value on its reference scale, clamped to [0, 1] and
-    flipped where it minimises; with no spread, the middle."""
-    if span is None:
-        return 1.0 if need else 0.5    # a need nothing here can miss costs nothing
-    norm = (raw - lo) / span
-    if norm > 1.0:                     # the candidate sits outside the sample
-        norm = 1.0
-    elif norm < 0.0:
-        norm = 0.0
-    return 1.0 - norm if minimize else norm
-
-
-def _certainty(scale: tuple[float, float], scale_raw: float) -> float:
-    """How far a rule's confidence metric sits between its reference low and
-    high, in [0, 1]. A rule that names one is worth its weight only where that
-    metric is at its high, and nothing where it is at the low: a premise that
-    barely holds barely counts."""
-    scale_lo, scale_hi = scale
-    # anchor at zero where the metric never goes below it: the least certain
-    # board seen is not the same as no certainty at all, and taking it as the
-    # floor would pay that board nothing
-    if scale_lo >= 0.0:
-        scale_lo = 0.0
-    width = scale_hi - scale_lo
-    sure = 1.0 if width <= 0 else (scale_raw - scale_lo) / width
-    return 0.0 if sure < 0.0 else 1.0 if sure > 1.0 else sure
-
-
-class Contribution(TypedDict):
-    """One strategy's term in a six's score: the `contributions` array of the
-    public payload. Every term carries the required keys; the rest belong to
-    the form that has them, and no term is padded with the others."""
-    id: str
-    kind: Literal["constraint", "heuristic"]
-    form: Literal["limit", "heuristic", "scored"]
-    applies: bool
-    weighted: float
-    metric: str | None                 # a heuristic's metric, a constraint's expressions
-    ok: NotRequired[bool]              # a limit: whether its require holds
-    raw: NotRequired[float | None]     # a heuristic
-    norm: NotRequired[float]
-    when: NotRequired[str | None]      # a heuristic, and a scored constraint
-    spread: NotRequired[bool]          # an applying heuristic
-    need: NotRequired[bool]
-    confidence: NotRequired[str | None]
-    confidence_raw: NotRequired[float | None]
-    bonus: NotRequired[float]          # a scored constraint
-    penalty: NotRequired[float]
-    fact: NotRequired[str]             # engine._fill, where a board fact states the metric
-    text: NotRequired[str]
-
-
-class Candidate:
-    __slots__ = (
-        "confidence",
-        "contributions",
-        "heroes",
-        "key",
-        "ns",
-        "raw",
-        "scope",
-        "score",
-        "tiebreak",
-        "violations",
-    )
-
-    def __init__(self, heroes: Iterable[Hero]) -> None:
-        self.heroes = tuple(heroes)
-        self.key = frozenset(h.id for h in self.heroes)
-        self.ns: Namespace | None = None
-        self.scope: Scope | None = None
-        self.score = 0.0
-        self.tiebreak = 0.0
-        self.contributions: list[Contribution] = []
-        self.violations: list[str] = []
-        # one metric value per heuristic, in catalog order, and its confidence
-        # metric where it names one, else None; empty on a slim candidate
-        self.raw: Sequence[float | None] = []
-        self.confidence: Sequence[float | None] = []
-
-    @property
-    def names(self) -> list[str]:
-        return [h.name for h in self.heroes]
 
 
 class Solved(NamedTuple):
@@ -214,323 +57,26 @@ class Evaluated(NamedTuple):
     solver: "Solver"
 
 
-class Solver:
+class Solver(Objective):
     """One board's search: the playbook's objective on this board, the scale
     it is normalised on, and the local search around the locked picks."""
 
     def __init__(self, world: World, m: Map | None, *, red: Sequence[Hero],
                  locked: Sequence[Hero], banned: Sequence[Hero] = (), side: str = "",
                  catalog: list[Strategy], pool_size: int = 6) -> None:
-        self.world, self.m, self.red = world, m, list(red)
+        super().__init__(world, m, red=red, banned=banned, side=side, catalog=catalog)
         self.locked = list(locked)
         self._locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLES}
-        self.banned = {h.id for h in banned}
-        self.side = side
-        self.catalog = catalog
         self.pool_size = pool_size
-        self.limits = [h for h in catalog if h.form == "limit"]
-        self.heuristics = [h for h in catalog if h.form == "heuristic"]
-        self.scored_constraints = [h for h in catalog if h.form == "scored"]
-        # the red side's metrics do not change across candidates
-        self.red_t = team_metrics(world, self.red, m, ())
-        self.static: Namespace = {"enemy": self.red_t,
-                                  "map": compute.map_metrics(m, side,
-                                                             ban_count=len(self.banned)),
-                                  "world": compute.world_metrics(world)}
-        self.bounds: Bounds = {}             # heuristic id -> (min, max)
         self.considered = 0
-        self._reference: list[Candidate] | None = None      # the sample, once drawn
         self._standing: dict[int, float] = {}   # hero id -> mean reference score, once read
-        self._norms: list[Norm] = []
-        # each strategy paired with its gate - True or False where `when` is
-        # settled for the whole board, None where the candidate decides it -
-        # and with the slot it shares with every strategy guarded the same way;
-        # a limit with its require:, which every limit has
-        gates, slots, self.gate_slots = self._gates()
-        self._limits: list[tuple[Strategy, Expr, bool | None, int]] = [
-            (h, h.require, gates[h.id], slots.get(h.id, 0)) for h in self.limits
-            if h.require is not None]
-        self._scored = [(r, gates[r.id], slots.get(r.id, 0))
-                        for r in self.scored_constraints]
-        self._heuristics = [(g, gates[g.id], slots.get(g.id, 0), *_split_key(g.metric))
-                            for g in self.heuristics]
-        # the same, for whatever metric a rule scales itself by; None where none
-        self._confidence = [_split_key(g.confidence) if g.confidence else None
-                            for g in self.heuristics]
-        # a heuristic guarded on the six's own state is a need: see score().
-        # Needs that share a guard share NEED_BUDGET: the state costs at most
-        # that much however many rules the playbook writes about it
-        guards = {g.id: g.when.source for g in self.heuristics
-                  if gates[g.id] is None and g.when is not None}
-        written: dict[str, float] = {}
-        for g in self.heuristics:
-            if g.id in guards:
-                written[guards[g.id]] = written.get(guards[g.id], 0.0) + g.weight
-        self._needs = {hid: min(1.0, NEED_BUDGET / written[source])
-                       if written[source] else 1.0 for hid, source in guards.items()}
-        self._freeze_norms()
 
-    def _gates(self) -> tuple[dict[str, bool | None], dict[str, int], int]:
-        """Every strategy's `when`, read once per board: True where there is
-        none, True or False where it touches only the static sections, None
-        where the candidate decides it. -> (gate per id, slot per undecided
-        id, how many slots). Strategies whose `when` and params are the same
-        answer together, so they share a slot: a guard a dozen strategies
-        write is evaluated once per candidate."""
-        sc = scope(dict(self.static, matchup=compute.red_matchup(self.red_t)))
-        gates: dict[str, bool | None] = {}
-        slots: dict[str, int] = {}
-        groups: dict[object, int] = {}
-        for h in self.catalog:
-            if h.when is None:
-                gates[h.id] = True
-            elif all(n.split(".", 1)[0] in STATIC_SECTIONS or n in compute.RED_MATCHUP
-                     for n in h.when.names):
-                sc["params"] = h.params_section
-                gates[h.id] = bool(h.when.evaluate(sc))
-            else:
-                gates[h.id] = None
-                key: object
-                try:
-                    key = (h.when.source, tuple(sorted(h.params.items())))
-                    hash(key)
-                except TypeError:          # a param the dialect read as a list
-                    key = h.id
-                slots[h.id] = groups.setdefault(key, len(groups))
-        return gates, slots, len(groups)
-
-    # --- namespace and scoring -----------------------------------------------
-
-    def namespace(self, heroes: Sequence[Hero]) -> Namespace:
-        team = team_metrics(self.world, heroes, self.m, self.red, lean=True)
-        ns = dict(self.static)
-        ns["team"] = team
-        ns["matchup"] = compute.matchup_metrics(team, self.red_t)
-        return ns
-
-    def prepare(self, cand: Candidate) -> Candidate:
-        """Namespace, hard-limit check, raw heuristic values."""
-        ns = cand.ns = self.namespace(cand.heroes)
-        sc = cand.scope = scope(ns)
-        held: list[bool | None] = [None] * self.gate_slots
-        violations = []
-        for h, require, gate, slot in self._limits:
-            if gate is None:
-                gate = _slot_gate(held, slot, h, sc)
-            if gate:
-                sc["params"] = h.params_section
-                if not bool(require.evaluate(sc)) and not h.soft:
-                    violations.append(h.id)
-        cand.violations = violations
-        raw: list[float | None] = []
-        keep = raw.append
-        for g, gate, slot, section, key in self._heuristics:
-            if gate is None:
-                gate = _slot_gate(held, slot, g, sc)
-            if gate:
-                value = ns.get(section, _EMPTY).get(key)
-                keep(float(value) if isinstance(value, NUMBER_TYPES) else _not_a_number(value))
-            else:
-                keep(None)
-        cand.raw = raw
-        cand.confidence = self._confidence_values(ns, raw)
-        cand.tiebreak = number(ns["team"]["map_win_mean"])
-        return cand
-
-    def _confidence_values(self, ns: Namespace,
-                           raw: Sequence[float | None]) -> list[float | None]:
-        """Each heuristic's confidence metric on this six, where it names one
-        and applies; None elsewhere."""
-        confidence: list[float | None] = []
-        for i, spec in enumerate(self._confidence):
-            if spec is None or raw[i] is None:
-                confidence.append(None)
-                continue
-            value = ns.get(spec[0], _EMPTY).get(spec[1])
-            confidence.append(float(value) if isinstance(value, NUMBER_TYPES)
-                              else _not_a_number(value))
-        return confidence
-
-    @staticmethod
-    def slim(cand: Candidate) -> Candidate:
-        """Keep the verdict, drop the working: the namespace, the scope, the raw
-        values and the breakdown. A search holds thousands of candidates at
-        once and reads only their score, tie-break and picks; the winners are
-        hydrated again before they are shown."""
-        cand.ns = cand.scope = None
-        cand.raw = cand.confidence = ()
-        cand.contributions = []
-        return cand
-
-    def hydrate(self, cand: Candidate) -> Candidate:
-        """A slim candidate prepared and scored again, with its breakdown."""
-        if cand.ns is None:
-            self.prepare(cand)
-        return self.score(cand)
-
-    # --- the reference: one scale per board -------------------------------------
-
-    def sample(self, size: int = REFERENCE_SIZE) -> list[Candidate]:
-        """A seeded sample of random legal sixes for this board, unprepared.
-        Deterministic for a given map and side, and independent of the locked
-        picks, the pool, the enemies and the bans, so every call on one board
-        shares a scale - and any process draws the same list and can take a
-        slice.
-
-        It must not depend on red or the bans. The sample fixes every
-        heuristic's [lo, hi], so drawing it differently rescales the whole
-        objective: a hero banned out of neither team would move the score of
-        an unchanged six, banning could raise the reported maximum over a
-        smaller feasible set, and `the optimal comp for this board` would
-        stop being a function of the composition. Bans still screen the
-        candidate field, in pools(), refine() and _pairs() - it is only the
-        measuring stick that has to hold still."""
-        rng = random.Random("%d|%s|%s" % (  # nosec B311  # a str seed, stable across processes
-            REFERENCE_SEED, self.m.id if self.m else 0, self.side))
-        by_role = {r: sorted((h for h in self.world.heroes.values()    # by id: the draw must
-                              if h.role == r and h.released),          # not hang on a
-                             key=lambda h: h.id)                       # query's row order
-                   for r in ROLES}
-        shapes = legal_shapes(self.catalog)
-        # bans can empty a role past what a shape needs; drawing one then raises
-        shapes = [(t, d, s) for t, d, s in shapes
-                  if t <= len(by_role["tank"]) and d <= len(by_role["damage"])
-                  and s <= len(by_role["support"])]
-        out: list[Candidate] = []
-        seen: set[frozenset[int]] = set()
-        if shapes:
-            while len(out) < size:
-                t, d, s = rng.choice(shapes)
-                heroes = (rng.sample(by_role["tank"], t) + rng.sample(by_role["damage"], d)
-                          + rng.sample(by_role["support"], s))
-                cand = Candidate(heroes)
-                if cand.key in seen:
-                    continue
-                seen.add(cand.key)
-                out.append(cand)
-        return out
-
-    def _confidence_bounds(self, spec: tuple[str, str], index: int,
-                           prepared: Sequence[Candidate]) -> tuple[float, float]:
-        """The low and high a rule's confidence metric (`spec`, its namespace and
-        key) is read against.
-
-        A metric of the six varies across the reference sixes, so the reference
-        is its population. A metric of the board - the map, the world - is one
-        number here however the six changes, and normalising it against a sample
-        that cannot move it would call every board equally certain. Its
-        population is the other boards: the same metric over every map.
-        """
-        section, key = spec
-        if section == "map":
-            readings = [compute.map_metrics(m, self.side, ban_count=len(self.banned)).get(key)
-                        for m in self.world.maps.values()]
-            over = [float(number(v)) for v in readings if v is not None]
-            return (min(over), max(over)) if over else (0.0, 0.0)
-        seen = [value for c in prepared if (value := c.confidence[index]) is not None]
-        return (min(seen), max(seen)) if seen else (0.0, 0.0)
-
-    def reference(self, size: int = REFERENCE_SIZE) -> list[Candidate]:
-        """The sample prepared, minus what the hard limits refuse: what every
-        heuristic is normalised against."""
-        if self._reference is None:
-            self._reference = [c for c in (self.prepare(c) for c in self.sample(size))
-                               if not c.violations]
-        return self._reference
-
-    def reference_bounds(self, index: int = 0, count: int = 1) -> Bounds:
-        """{heuristic id: (min, max)} over one slice of the sample AND of the
-        field, leaving out the heuristics the slice never valued. The slices
-        partition both, so merging their lows and highs gives what one process
-        freezes."""
-        prepared = [c for c in (self.prepare(c) for c in self.sample()[index::count])
-                    if not c.violations]
-        prepared += self._field_sample(index, count)
-        out: Bounds = {}
-        for i, g in enumerate(self.heuristics):
-            values = [value for c in prepared if (value := c.raw[i]) is not None]
-            if values:
-                out[g.id] = (min(values), max(values))
-            spec = self._confidence[i]
-            if spec is not None:
-                out[g.id + CONFIDENCE_KEY] = self._confidence_bounds(spec, i, prepared)
-        return out
-
-    def _board_prior(self, h: Hero) -> float:
-        """`prior` without the locked-partner points: the board's own ranking.
-
-        prior() pays a hero for each locked pick it partners, which is right
-        when ranking a pool to search and wrong when choosing the field that
-        fixes the scale - that field has to be the same for every seat and
-        every set of locks on this board."""
-        here = h.map_win(self.m.id) if self.m is not None else None
-        base = here if here is not None else (h.win if h.win is not None else 50.0)
-        answers = sum(1 for e in self.red if self.world.counters_of(e.id, h.id))
-        exposed = sum(1 for e in self.red if self.world.counters_of(h.id, e.id))
-        style = 1 if (self.m is not None and self.m.style_top in h.styles) else 0
-        best = 1 if (self.m is not None and self.m.id in h.best_maps) else 0
-        return base + 3.0 * answers - 3.0 * exposed + style + best
-
-    def _board_pool(self, role: str) -> list[Hero]:
-        """One role's top SCALE_POOL released heroes by the board's own prior."""
-        # not filtered by the bans, on purpose, exactly as sample() is not:
-        # this field is half the population that fixes the scale, and a ban
-        # that moved it would move the score of an unchanged six. Bans keep
-        # banned heroes out of the CANDIDATE field in pools(); the measuring
-        # stick has to hold still
-        heroes = [h for h in self.world.heroes.values() if h.role == role and h.released]
-        heroes.sort(key=lambda h: (-self._board_prior(h), h.name))
-        return heroes[:SCALE_POOL]
-
-    def _board_field(self) -> Iterator[list[Hero]]:
-        """The field this board would search with nothing locked: each role's
-        top SCALE_POOL by the board's own prior, over every legal shape.
-
-        It must not read the locked picks, and it takes SCALE_POOL rather than
-        the pool this search happens to use. The bounds it feeds are the
-        board's one scale: `infer`, `evaluate`, `current` and the countered
-        what-if run with different locks and different pool sizes on the same
-        board, and a scale that moved with either would make a current comp and
-        the optimal it is a share of two different numbers."""
-        tanks, damage, supports = (self._board_pool("tank"), self._board_pool("damage"),
-                                   self._board_pool("support"))
-        for t, d, s in legal_shapes(self.catalog):
-            if t > len(tanks) or d > len(damage) or s > len(supports):
-                continue
-            for a in itertools.combinations(tanks, t):
-                for b in itertools.combinations(damage, d):
-                    for c in itertools.combinations(supports, s):
-                        yield list(a) + list(b) + list(c)
-
-    def _field_sample(self, index: int = 0, count: int = 1) -> list[Candidate]:
-        """The board's field, prepared but unscored.
-
-        The sample alone is 1,200 random legal sixes, and the search picks from
-        comps far better than random, so a good six sat above the sample's high
-        on most metrics and every one of them normalised to the same 1.0: the
-        rule stopped telling them apart, and a weight raised past that bought
-        nothing. The field belongs in the population that sets the scale."""
-        out = []
-        for size, heroes in enumerate(self._board_field()):
-            if size % count == index:
-                cand = self.prepare(Candidate(heroes))
-                if not cand.violations:
-                    out.append(cand)
-        return out
+    # --- the scale and the standing ---------------------------------------------
 
     def freeze_bounds(self) -> None:
         """Bounds per heuristic from the reference sample and the field, then
         each hero's standing in the sample."""
-        reference = self.reference()
-        over = reference + self._field_sample()
-        for i, g in enumerate(self.heuristics):
-            values = [value for c in over if (value := c.raw[i]) is not None]
-            self.bounds[g.id] = (min(values), max(values)) if values else (0.0, 0.0)
-            spec = self._confidence[i]
-            if spec is not None:
-                self.bounds[g.id + CONFIDENCE_KEY] = self._confidence_bounds(spec, i, over)
-        self._freeze_norms()
-        self.adopt_standing(self._tally(reference))
+        self.adopt_standing(scale.freeze(self))
 
     def adopt_bounds(self, bounds: Mapping[str, tuple[float, float]],
                      standing: Mapping[int, Sequence[int]] | None = None) -> None:
@@ -538,29 +84,9 @@ class Solver:
         process's slice of the search, or an earlier solver on the same map,
         side, enemies and bans. The sample is seeded, so it draws the same
         numbers wherever it runs; taking them saves drawing it again."""
-        self.bounds = dict(bounds)
-        self._freeze_norms()
+        super().adopt_bounds(bounds)
         if standing is not None:
             self.adopt_standing(standing)
-
-    # --- standing: the playbook's own ranking of the roster --------------------
-
-    def _tally(self, prepared: Iterable[Candidate]) -> Tally:
-        """{hero id: [summed score in millionths, sixes]} over prepared reference
-        sixes. Whole numbers, so slices add up the same in any order."""
-        tally: Tally = {}
-        for cand in prepared:
-            points = round(self.score(cand, detail=False).score * 1e6)
-            for h in cand.heroes:
-                seen = tally.setdefault(h.id, [0, 0])
-                seen[0] += points
-                seen[1] += 1
-        return tally
-
-    def reference_standing(self, index: int = 0, count: int = 1) -> Tally:
-        """One slice of the sample scored under the frozen bounds -> its tally."""
-        return self._tally([c for c in (self.prepare(c) for c in self.sample()[index::count])
-                            if not c.violations])
 
     def adopt_standing(self, tally: Mapping[int, Sequence[int]]) -> None:
         """A hero's standing: the mean score of the reference sixes it is in -
@@ -569,136 +95,20 @@ class Solver:
         are the ones the strategies favour, not the ones a side formula does."""
         self._standing = {hid: total / n for hid, (total, n) in tally.items() if n}
 
-    def _freeze_norms(self) -> None:
-        """One tuple per heuristic for the scoring loop: the strategy, the
-        reference low, the reference spread (None where the sample never
-        moved: everything then normalises to 0.5), its weight, whether it
-        minimises and whether it is a need."""
-        self._norms = []
-        for g in self.heuristics:
-            lo, hi = self.bounds.get(g.id, (0.0, 0.0))
-            scale = self.bounds.get(g.id + CONFIDENCE_KEY) if g.confidence else None
-            self._norms.append((g, lo, hi - lo if hi > lo else None,
-                               g.weight * self._needs.get(g.id, 1.0),
-                               g.direction == "minimize", g.id in self._needs, scale))
-
-    def score(self, cand: Candidate, detail: bool = True) -> Candidate:
-        """Score with the frozen bounds; with detail, fill the breakdown too.
-
-        A heuristic with no guard, or a guard on the board (enemy, map), adds
-        weight x norm. A heuristic guarded on the six's own state (team.*,
-        matchup.*) is a need - "a solo healer needs an escape" - and adds
-        weight x (norm - 1): met in full it costs nothing, unmet it costs the
-        weight, and entering the guarded state never pays. Needs written on
-        one guard are scaled to sum to NEED_BUDGET at most.
-
-        With `detail`, every term is a Contribution: its optional keys belong
-        to the form that has them, so a reader asks for those with .get()."""
-        sc = cand.scope
-        if sc is None:
-            raise RuntimeError("score() takes a prepared candidate: hydrate() a slim one")
-        held: list[bool | None] = [None] * self.gate_slots
-        contributions: list[Contribution] = []
-        out = contributions if detail else None
-        total = self._score_limits(sc, held, 0.0, out)
-        total = self._score_heuristics(cand, total, out)
-        total = self._score_scored(sc, held, total, out)
-        cand.score = total
-        cand.contributions = contributions
-        return cand
-
-    # Each form's terms take the running total and return it: subtotals summed
-    # at the end would reassociate the additions and move a score in its last bit.
-
-    def _score_limits(self, sc: Scope, held: list[bool | None], total: float,
-                      out: list[Contribution] | None) -> float:
-        """The limits' terms: a hard limit costs nothing here (prepare() has
-        pruned what breaks it), a soft one charges its penalty where it fails."""
-        for h, require, applies, slot in self._limits:
-            if applies is None:
-                applies = _slot_gate(held, slot, h, sc)
-            ok, penalty = True, 0.0
-            if applies:
-                sc["params"] = h.params_section
-                ok = bool(require.evaluate(sc))
-                if h.soft and not ok and h.penalty is not None:     # a soft limit has one
-                    penalty = _amount(h.penalty.evaluate(sc))
-            total -= penalty
-            if out is not None:
-                out.append({"id": h.id, "kind": "constraint", "form": "limit",
-                            "applies": applies, "ok": ok, "weighted": -penalty,
-                            "metric": require.source})
-        return total
-
-    def _score_heuristics(self, cand: Candidate, total: float,
-                          out: list[Contribution] | None) -> float:
-        """The heuristics' terms: weight x norm, a need weight x (norm - 1),
-        each scaled by its confidence metric where it names one."""
-        for raw, scale_raw, (g, lo, span, weight, minimize, need, scale) in zip(
-                cand.raw, cand.confidence, self._norms, strict=True):
-            if raw is None:
-                if out is not None:
-                    out.append({"id": g.id, "kind": "heuristic", "form": "heuristic",
-                                "applies": False, "raw": None, "norm": 0.0, "weighted": 0.0,
-                                "metric": g.metric,
-                                "when": g.when.source if g.when else None})
-                continue
-            norm = _norm(raw, lo, span, minimize, need)
-            if scale is not None and scale_raw is not None:
-                weight = weight * _certainty(scale, scale_raw)
-            weighted = weight * (norm - 1.0) if need else weight * norm
-            total += weighted
-            if out is not None:
-                out.append({"id": g.id, "kind": "heuristic", "form": "heuristic",
-                            "applies": True, "raw": raw, "norm": norm,
-                            "weighted": weighted, "metric": g.metric,
-                            "when": g.when.source if g.when else None,
-                            "spread": span is not None, "need": need,
-                            "confidence": g.confidence, "confidence_raw": scale_raw})
-        return total
-
-    def _score_scored(self, sc: Scope, held: list[bool | None], total: float,
-                      out: list[Contribution] | None) -> float:
-        """The scored constraints' terms: weight x (bonus - penalty) while
-        `when` holds."""
-        for r, applies, slot in self._scored:
-            if applies is None:
-                applies = _slot_gate(held, slot, r, sc)
-            bonus = penalty = 0.0
-            if applies:
-                sc["params"] = r.params_section
-                if r.bonus is not None:
-                    bonus = _amount(r.bonus.evaluate(sc))
-                if r.penalty is not None:
-                    penalty = _amount(r.penalty.evaluate(sc))
-            weighted = r.weight * (bonus - penalty)
-            total += weighted
-            if out is not None:
-                out.append({"id": r.id, "kind": "constraint", "form": "scored",
-                            "applies": applies, "bonus": bonus, "penalty": penalty,
-                            "weighted": weighted, "metric": r.expressions,
-                            "when": r.when.source if r.when else None})
-        return total
-
     # --- enumeration ---------------------------------------------------------------
 
     def shapes(self) -> list[Shape]:
         """(tanks, damage, supports) triples the shape-only hard limits
         allow, that can still seat the locked picks."""
-        return legal_shapes(self.catalog,
-                            {r: len(v) for r, v in self._locked_by_role.items()})
+        counts = {r: len(v) for r, v in self._locked_by_role.items()}
+        return legal_shapes(self.catalog, counts)
 
     def prior(self, h: Hero) -> float:
         """The ranking that cut the pools before the playbook ranked them
-        itself: still the tie-break, and the whole ranking when nothing scores."""
-        here = h.map_win(self.m.id) if self.m is not None else None
-        base = here if here is not None else (h.win if h.win is not None else 50.0)
-        answers = sum(1 for e in self.red if self.world.counters_of(e.id, h.id))
-        exposed = sum(1 for e in self.red if self.world.counters_of(h.id, e.id))
+        itself: still the tie-break, and the whole ranking when nothing scores.
+        The board's prior, with a hero's partners among the locked picks."""
         partners = sum(1 for a in self.locked if self.world.synergy(a.id, h.id))
-        style = 1 if (self.m is not None and self.m.style_top in h.styles) else 0
-        best = 1 if (self.m is not None and self.m.id in h.best_maps) else 0
-        return base + 3.0 * answers - 3.0 * exposed + 2.0 * partners + style + best
+        return scale.board_prior(self, h, partners)
 
     def pools(self) -> dict[str, list[Hero]]:
         locked_ids = {h.id for h in self.locked} | self.banned
@@ -754,7 +164,7 @@ class Solver:
         return Swept(self, size, feasible)
 
     def rank(self, feasible: list[Candidate], top: int = 5,
-             refine: bool = True) -> list[Candidate]:
+                refine: bool = True) -> list[Candidate]:
         """The best sixes of a swept field, refined and hydrated. The order is
         the _rank_key's alone, so it does not depend on how the sweep was
         split."""
@@ -827,7 +237,7 @@ class Solver:
         return out
 
     def _try(self, heroes: Sequence[Hero],
-             known: dict[frozenset[int], Candidate]) -> Candidate | None:
+                known: dict[frozenset[int], Candidate]) -> Candidate | None:
         """The six prepared, scored and slimmed once; None where a hard limit
         refuses it."""
         cand = Candidate(heroes)
@@ -841,7 +251,7 @@ class Solver:
         return cand
 
     def _climb(self, seed: Candidate, roster: Sequence[Hero],
-               known: dict[frozenset[int], Candidate]) -> Candidate:
+                known: dict[frozenset[int], Candidate]) -> Candidate:
         """Single-slot swaps from one six until none improves it."""
         locked_ids = {h.id for h in self.locked}
         current = seed
@@ -914,8 +324,8 @@ class Solver:
         """The wiki's synergy pairs this board can field, in id order."""
         heroes = self.world.heroes
         out = []
-        for a_id, b_id in sorted(tuple(sorted(pair)) for pair in self.world.synergies
-                                 if len(pair) == 2):
+        ids = sorted(tuple(sorted(pair)) for pair in self.world.synergies if len(pair) == 2)
+        for a_id, b_id in ids:
             a, b = heroes.get(a_id), heroes.get(b_id)
             if (a is not None and b is not None and a.released and b.released
                     and a.id not in self.banned and b.id not in self.banned):
@@ -948,7 +358,7 @@ class Solver:
 
 
 def _two_swaps(current: Candidate, roster: Sequence[Hero],
-               locked_ids: set[int]) -> Iterator[list[Hero]]:
+                locked_ids: set[int]) -> Iterator[list[Hero]]:
     """Every six two open seats from `current`: each pair of open seats, in
     seat order, refilled with two other heroes of their roles."""
     open_seats = [i for i, h in enumerate(current.heroes) if h.id not in locked_ids]
@@ -966,7 +376,7 @@ def _two_swaps(current: Candidate, roster: Sequence[Hero],
 
 
 def _seatings(open_slots: Mapping[str, Sequence[int]], a: Hero,
-              b: Hero) -> Iterator[tuple[int, int]]:
+                b: Hero) -> Iterator[tuple[int, int]]:
     """The seats a pair can take: a in an open slot of its role, b in another
     of its own."""
     for i in open_slots.get(a.role, ()):
@@ -974,48 +384,6 @@ def _seatings(open_slots: Mapping[str, Sequence[int]], a: Hero,
             # the same six, seated the other way round, is met once
             if i != j and not (a.role == b.role and i > j):
                 yield i, j
-
-
-def legal_shapes(catalog: Iterable[Strategy],
-                 locked_counts: Mapping[str, int] | None = None) -> list[Shape]:
-    """(tanks, damage, supports) triples the catalog's shape-only hard limits
-    allow - the playbook's rule of the game's form (at most two tanks; or
-    2-2-2) - optionally only those that can still seat the picks counted per
-    role. The board carries the full list so the roster can refuse a pick no
-    legal six could seat."""
-    locked_counts = locked_counts or dict.fromkeys(ROLES, 0)
-    limits = _shape_limits(catalog)
-    out: list[Shape] = []
-    for t in range(TEAM_SIZE + 1):
-        for d in range(TEAM_SIZE + 1 - t):
-            s = TEAM_SIZE - t - d
-            if (t < locked_counts["tank"] or d < locked_counts["damage"]
-                    or s < locked_counts["support"]):
-                continue
-            if _shape_allowed(t, d, s, limits):
-                out.append((t, d, s))
-    return out
-
-
-def _shape_limits(catalog: Iterable[Strategy]) -> list[tuple[Strategy, Expr]]:
-    """The catalog's hard limits that read only a six's shape, each with its
-    require."""
-    return [(h, h.require) for h in catalog
-            if h.form == "limit" and not h.soft and h.require
-            and set(h.require.names) <= SHAPE_KEYS
-            and (h.when is None or set(h.when.names) <= SHAPE_KEYS)]
-
-
-def _shape_allowed(t: int, d: int, s: int, limits: Sequence[tuple[Strategy, Expr]]) -> bool:
-    """Whether a (tanks, damage, supports) triple meets every shape limit whose
-    `when` holds on it."""
-    stub = scope({"team": {"tanks": t, "damage": d, "supports": s,
-                           "size": TEAM_SIZE, "open_slots": 0}})
-    for h, require in limits:
-        stub["params"] = h.params_section
-        if (h.when is None or bool(h.when.evaluate(stub))) and not bool(require.evaluate(stub)):
-            return False
-    return True
 
 
 def evaluate_comp(world: World, m: Map | None, heroes: Sequence[Hero], *,

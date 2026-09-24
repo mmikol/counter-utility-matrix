@@ -3,8 +3,8 @@ name: strategy
 description: Add a strategy to Countrix's playbook from three things a colleague gives, however roughly - a name, a kind (constraint, heuristic or assumption) and a prose description - then clean them into the playbook's standard form and grammar, derive the insight and the mathematics (a heuristic's metric, direction and weight; a constraint's limit or its when/bonus/penalty and dials; nothing for an assumption), validate and store it, and show what it changes on a board. Use when the user wants to add a rule, a constraint, a heuristic or a strategy, says "the solver should ...", "add a strategy", "make it prefer/avoid ...", pastes a note about the game, or asks to finish a draft strategy file.
 ---
 
-The solver in `inference/solver.py` is deterministic arithmetic: it
-scores only what a strategy file's frontmatter states. A colleague brings
+The solver is deterministic arithmetic: `inference/scoring.py` scores
+only what a strategy file's frontmatter states. A colleague brings
 a name, a kind and some prose about the game, as rough as they like; you
 produce those three in the playbook's standard form plus the frontmatter
 that makes the solver act on them. Everything goes through the

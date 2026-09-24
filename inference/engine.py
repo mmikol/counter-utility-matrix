@@ -26,17 +26,9 @@ from typing import Any
 from db import Refusal
 from inference import catalog as catalog_module
 from inference.catalog import Strategy
-from inference.solver import (
-    Bounds,
-    Candidate,
-    Contribution,
-    Solved,
-    Solver,
-    Swept,
-    Tally,
-    evaluate_comp,
-    legal_shapes,
-)
+from inference.scale import Tally, reference_bounds, reference_standing
+from inference.scoring import Bounds, Candidate, Contribution, legal_shapes
+from inference.solver import Solved, Solver, Swept, evaluate_comp
 from ui.facts import board_facts, compute
 from ui.facts.draft import TEAM_SIZE, Draft, is_sided, opposite
 from ui.facts.factset import Fact, FactSet
@@ -933,7 +925,7 @@ def _bounds(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | 
     sees for each heuristic."""
     world = _world(token, data)
     solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
-    return solver.reference_bounds(index, count)
+    return reference_bounds(solver, index, count)
 
 
 def _standing(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
@@ -943,7 +935,7 @@ def _standing(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] 
     world = _world(token, data)
     solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
     solver.adopt_bounds(bounds)
-    return solver.reference_standing(index, count)
+    return reference_standing(solver, index, count)
 
 
 def _add(tally: Tally, part: Mapping[int, Sequence[int]]) -> Tally:

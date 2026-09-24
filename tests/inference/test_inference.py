@@ -534,7 +534,7 @@ def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
     means no triple the solver would search seats a third tank, and the
     board says so in a form the script can read."""
     from inference import engine
-    from inference.solver import legal_shapes
+    from inference.scoring import legal_shapes
     cat = catalog.load(FIXTURE_PLAYBOOK)
     shapes = legal_shapes(cat)
     assert shapes and all(t + d + s == 6 for t, d, s in shapes)
@@ -971,8 +971,7 @@ def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(wor
     support: met in full it costs nothing, unmet it costs the weight, and the
     needs written on one guard cost NEED_BUDGET together at most. A guard on
     the board (red, the map) stays a reward."""
-    from inference import engine
-    from inference import solver as solver_module
+    from inference import engine, scoring
     shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), tmp_path)
     rule = ("---\nname: %s\nkind: heuristic\ndirection: maximize\nmetric: %s\nweight: 2\n"
             "when: %s\n---\nx\n")
@@ -988,7 +987,7 @@ def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(wor
     terms = {c["id"]: c for c in solo["contributions"]}
     needs = [terms["solo-%d" % i] for i in range(3)]
     assert all(c["applies"] and c["need"] and c["weighted"] <= 0 for c in needs)
-    assert sum(c["weighted"] for c in needs) >= -solver_module.NEED_BUDGET - 1e-9
+    assert sum(c["weighted"] for c in needs) >= -scoring.NEED_BUDGET - 1e-9
     assert terms["their-fliers"]["need"] is False and terms["their-fliers"]["weighted"] >= 0
     pair = engine.evaluate(world, "King's Row", ["Pharah"],
                            ["Reinhardt", "Cassidy", "Tracer", "Genji", "Kiriko", "Ana"],
@@ -1061,6 +1060,7 @@ def test_a_ban_does_not_rescale_the_board(world):
     score of an unchanged six, and `the best six here` would stop being a
     function of the six. Bans screen the candidate field, not the scale."""
     from inference import catalog as catalog_module
+    from inference import scoring
     from inference import solver as solver_module
     catalog = catalog_module.load()
     red = ["Zarya", "Pharah"]
@@ -1073,7 +1073,7 @@ def test_a_ban_does_not_rescale_the_board(world):
         solver = solver_module.Solver(world, m, red=red_h, locked=[], banned=bans_h,
                                       side="attack", catalog=catalog)
         solver.freeze_bounds()
-        cand = solver.prepare(solver_module.Candidate([world.hero(n) for n in six]))
+        cand = solver.prepare(scoring.Candidate([world.hero(n) for n in six]))
         return solver.score(cand, detail=False).score
 
     # the same six, the same number of bans, a different hero banned
@@ -1086,10 +1086,11 @@ def test_a_ban_does_not_rescale_the_board(world):
 def test_the_order_of_a_six_does_not_decide_the_ranking(world):
     """_rank_key's third element breaks ties, so it has to be a property of the
     hero set - in seat order one set keys 720 ways."""
+    from inference import scoring
     from inference import solver as solver_module
     heroes = [world.hero(n) for n in ("Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko")]
-    one = solver_module.Candidate(heroes)
-    other = solver_module.Candidate(list(reversed(heroes)))
+    one = scoring.Candidate(heroes)
+    other = scoring.Candidate(list(reversed(heroes)))
     one.score = other.score = 1.0
     one.tiebreak = other.tiebreak = 0.5
     assert solver_module.Solver._rank_key(one) == solver_module.Solver._rank_key(other)
@@ -1115,7 +1116,7 @@ def test_a_rule_scales_by_the_metric_it_names(world, tmp_path):
     whatever population the metric actually varies over. Nothing in the code knows
     which metric any rule names. The rule is written here, beside the reference
     playbook, so the test holds whatever the shipped playbook carries."""
-    from inference import engine
+    from inference import engine, scoring
     from inference import solver as solver_module
     shutil.copytree(FIXTURE_PLAYBOOK, tmp_path, dirs_exist_ok=True)
     (tmp_path / "fit-the-map-style.md").write_text(
@@ -1135,7 +1136,7 @@ def test_a_rule_scales_by_the_metric_it_names(world, tmp_path):
         solver.freeze_bounds()
         best = engine.infer(world, map_name, ["Zarya", "Pharah"], [],
                             side=engine._side(m, "attack"), top=1, catalog=playbook)
-        cand = solver.prepare(solver_module.Candidate([world.hero(n) for n in best.blue]))
+        cand = solver.prepare(scoring.Candidate([world.hero(n) for n in best.blue]))
         solver.score(cand, detail=True)
         return next(c for c in cand.contributions if c["id"] == strategy_id)
 
@@ -1152,6 +1153,7 @@ def test_a_board_confidence_reads_the_boards_own_ban_count(world, tmp_path):
     """A confidence metric of the board is read over every map, and every map
     reads it with this board's bans: map.bans is the count made in this match,
     whatever map the population is drawn from."""
+    from inference import scoring
     from inference import solver as solver_module
     shutil.copytree(FIXTURE_PLAYBOOK, tmp_path, dirs_exist_ok=True)
     (tmp_path / "scale-by-the-bans.md").write_text(
@@ -1167,4 +1169,4 @@ def test_a_board_confidence_reads_the_boards_own_ban_count(world, tmp_path):
     solver = solver_module.Solver(world, m, red=red, locked=[], banned=banned, side="attack",
                                   catalog=playbook)
     solver.freeze_bounds()
-    assert solver.bounds["scale-by-the-bans" + solver_module.CONFIDENCE_KEY] == (2.0, 2.0)
+    assert solver.bounds["scale-by-the-bans" + scoring.CONFIDENCE_KEY] == (2.0, 2.0)

@@ -8,6 +8,10 @@
                   a comp to
     catalog       reads, validates and mirrors the strategies
     expr          the safe expression language the frontmatter uses
+    scoring       the objective: what one six scores on one board, and the legal
+                  shapes
+    scale         the board's one scale: the seeded reference sample and field
+                  every heuristic is normalised against, and each hero's standing
     solver        searches compositions under the constraints and heuristics;
                   players are assumed to play optimally
     engine        infer(), evaluate() and board(): the solver plus citations
