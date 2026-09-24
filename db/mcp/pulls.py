@@ -28,12 +28,9 @@ from db.data.wiki import playstyles as wiki_playstyles
 from db.data.wiki import seasons as wiki_seasons
 from db.data.wiki import synergies as wiki_synergies
 from db.data.wiki import terrain as wiki_terrain
-from db.mcp.registry import REFRESH, Context, Registry
+from db.mcp.registry import REFRESH, Context, tool
 from db.mcp.schema import Properties, ToolReply
 from inference import catalog, derive
-
-TOOLS = Registry()
-tool = TOOLS.tool
 
 # A pull's own function: the source module's run(connection, pull, **options).
 type PullFn = Callable[..., PullSummary]
@@ -100,11 +97,12 @@ def pull_tool(
         properties: Properties = REFRESH) -> Callable[[PullFn], PullFn]:
     """The decorator that registers a pull as a tool: the tool runs the
     function against `source`'s page cache, refreshing every page when asked,
-    and replies under the headline "<name>: <stored>". The function is
+    and replies under the headline "<name>: <stored>". The call wears the
+    function's name and module, which is its family; the function is
     returned as it is."""
     def decorate(fn: PullFn) -> PullFn:
-        tool(name, description, properties, source=source)(
-            functools.partial(_pull_call, "%s: %s" % (name, stored), source, fn))
+        call = functools.partial(_pull_call, "%s: %s" % (name, stored), source, fn)
+        tool(name, description, properties, source=source)(functools.update_wrapper(call, fn))
         return fn
     return decorate
 

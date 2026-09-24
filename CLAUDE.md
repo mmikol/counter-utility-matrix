@@ -72,10 +72,10 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 `inference/` (STRATEGIES and the argmax).
 
 - **One door for writes.** Every write to Postgres or the playbook runs
-  under a tool. Each family module (`pulls`, `lifecycle`, `layers`,
-  `playbook` in `db/mcp/`) registers its own tools with `@tool(...)`, the
-  decorator of its `Registry` (`db/mcp/registry.py`), and `db/mcp/tools.py`
-  joins them. A call arrives over stdio, HTTP or in-process
+  under a tool. Each family module (`pulls`, `lifecycle`, `facts`, `solver`,
+  `playbook` in `db/mcp/`) declares its tools with `@tool(...)` into the one
+  `REGISTRY` (`db/mcp/registry.py`), which lists them in `FAMILIES`' order,
+  and `db/mcp/tools.py` imports every family. A call arrives over stdio, HTTP or in-process
   (`tools.run_tool`), is checked against the tool's schema by the same
   `Tool` wrapper on every path, and is audited to `db/raw/audit.jsonl` -
   except the sentry, which renames a bad strategy file to
@@ -92,7 +92,7 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   them as facts, the solver scores the same functions, and the catalog
   validates a strategy's `metric` against the registry, so the number on the
   board and the number the solver maximises cannot drift. `ui/facts` is a shared library: `inference/` and
-  `db/mcp/layers.py` import it.
+  the door's `facts`, `solver`, `boards` and `playbook` modules import it.
 - **Facts are numbered.** `FactSet` numbers facts F1.. and the playbook's
   record S1.. in emission order; a solver contribution cites a fact by metric
   key (`also=` on `FactSet.add`). Adding a fact renumbers every later id.

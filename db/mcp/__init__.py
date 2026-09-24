@@ -17,17 +17,20 @@ one of them, the sentry's quarantine rename aside.
     schema       a tool as the protocol serves it: its arguments as JSON
                  Schema, its reply, and the Tool that checks every call
     audit        the audit line every call leaves, through any door
-    registry     the Registry a family of tools is declared into, and the
-                 Context a call lands in
-    tools        the families joined in the order the server lists them, and
-                 the Context the servers, the refresher and the board use
+    registry     the one Registry every family declares its tools into, the
+                 order it lists the families in, and the Context a call
+                 lands in
+    tools        every family imported, so the registry is whole, and the
+                 Context the servers, the refresher and the board use
     pulls        pull, clean, store: the pull_* tools, load_authored, sync_all
     lifecycle    the database's life: status, init, migrate, rebuild, the CSV
                  mirror, the generated docs, read-only query
-    layers       the UI and inference layers: roster, facts, infer, evaluate,
-                 reach, board, metrics
-    playbook     the strategies and the tools that write them, the tuning
-                 log, the strategy:// resources
+    boards       the five properties a board tool takes, and board_tool,
+                 which hands its function the one Draft they name
+    facts        the UI layer: roster and a board's facts
+    solver       the inference layer: infer, evaluate, reach and board
+    playbook     the metric vocabulary, the strategies and the tools that
+                 write them, the tuning log, the strategy:// resources
     __main__     the command line above
 
 The protocol and its transports are dependency-free (server, stdio, http,

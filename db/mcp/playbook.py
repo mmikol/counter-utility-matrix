@@ -1,6 +1,7 @@
-"""The playbook through the door: the catalog, the tools that write a
-strategy file - tune, add_strategy, infer_strategy, derive_strategies - the
-tuning log, and the strategy files served as MCP resources.
+"""The playbook through the door: the metric vocabulary a strategy may
+reference, the catalog, the tools that write a strategy file - tune,
+add_strategy, infer_strategy, derive_strategies - the tuning log, and the
+strategy files served as MCP resources.
 
 Every write validates through the catalog, rewrites the docs catalog for the
 shipped playbook and logs a reasoned line (inference.tune does all three),
@@ -11,13 +12,26 @@ half of the write, and the one step this module adds.
 import os
 
 from db import ROOT
-from db.mcp.registry import Context, Registry
+from db.mcp.registry import Context, tool
 from db.mcp.schema import Properties, ToolReply
 from db.mcp.server import Resource, ResourceText
 from inference import catalog, derive, tune
+from ui.facts import compute
 
-TOOLS = Registry()
-tool = TOOLS.tool
+
+@tool(
+    "metrics", "The vocabulary a strategy may reference: every metric key with its"
+    " meaning - team.*, enemy.* (the same for the red side), matchup.*, map.*,"
+    " world.* - and which are text. What /strategy reads to infer a heuristic's"
+    " metric or a constraint's expression from prose.")
+def metrics(ctx: Context) -> ToolReply:
+    reg = compute.registry()
+    numeric = {k: v for k, v in reg.items() if k not in compute.TEXT_METRICS}
+    lines = [
+        "%-32s %s%s" % (k, v, "  (text)" if k in compute.TEXT_METRICS else "")
+        for k, v in reg.items() if not k.startswith("enemy.")]
+    return ToolReply("\n".join(lines), {"metrics": reg, "numeric": sorted(numeric),
+                                        "text": sorted(compute.TEXT_METRICS)})
 
 
 @tool(

@@ -1,23 +1,28 @@
-"""The registry a family of tools is declared into, and the context a call
-lands in.
+"""The one registry every family declares its tools into, and the context a
+call lands in.
 
     ToolSpec         a tool as registered: its name, description, schema (a
-                     schema.ToolSchema) and function, and for a pull the
-                     source whose cache it reads
-    Registry         tools in registration order, each name once: joined()
-                     assembles the families, bind() hands a server its Tools,
-                     run() is the audited in-process call, write_docs() the
-                     tool reference in docs/mcp.md
+                     schema.ToolSchema), function and family, and for a pull
+                     the source whose cache it reads
+    Registry         tools family by family, each name once: bind() hands a
+                     server its Tools, run() is the audited in-process call,
+                     write_docs() the tool reference in docs/mcp.md
+    FAMILIES         the family modules, in the order the registry lists them
+    REGISTRY, tool   the one registry, and the decorator a family declares
+                     each of its tools with
     Context          where a call lands: the database, the page caches, the
-                     log, and the joined registry one tool calls another
-                     through (call)
+                     log, and the registry one tool calls another through
+                     (call)
     REFRESH          the refresh argument of every pull and of the rebuild
 
-Each family module - pulls, lifecycle, layers, playbook - declares its tools
-into a Registry of its own and imports no other family. tools.py joins them
-and gives the Context its registry. A tool declares its arguments in
-schema.py's JSON Schema vocabulary (Properties), the one every call is
-checked against, and answers a schema.ToolReply.
+A family module - pulls, lifecycle, facts, solver, playbook - declares its
+tools with @tool and imports no other family. A tool's family is the module
+its function is defined in, so the registry lists the same order whichever
+family imports first; a decorator that registers a wrapper gives it its
+function's module with functools.update_wrapper. tools.py imports every
+family. A tool declares its arguments in schema.py's JSON Schema vocabulary
+(Properties), the one every call is checked against, and answers a
+schema.ToolReply.
 """
 
 import functools
@@ -40,12 +45,14 @@ type ToolFn = Callable[..., ToolReply]
 
 @dataclass(frozen=True)
 class ToolSpec:
-    """A tool as registered: its name, description, JSON schema and function,
-    and for a pull, the source whose page cache it reads."""
+    """A tool as registered: its name, description, JSON schema, function and
+    family - the module the function is defined in - and for a pull, the
+    source whose page cache it reads."""
     name: str
     description: str
     schema: ToolSchema
     fn: ToolFn
+    family: str
     source: str | None = None
 
 
@@ -64,27 +71,30 @@ REFRESH: Properties = {
 
 
 class Registry:
-    """Tools in the order they were registered, each name once. The pulls are
-    the tools that name a source, in the same order."""
+    """Tools listed family by family, in the order `families` names their
+    modules, and each family's in the order it declared them - the same
+    whichever family imports first. Each name is registered once. The pulls
+    are the tools that name a source, in the same order."""
 
-    def __init__(self) -> None:
+    def __init__(self, families: Sequence[str]) -> None:
+        self.families = tuple(families)
         self._specs: dict[str, ToolSpec] = {}
 
-    @classmethod
-    def joined(cls, *families: "Registry") -> "Registry":
-        """One registry of every family's tools, family by family in the order
-        given; a name two families register raises, at import."""
-        joined = cls()
-        for family in families:
-            for spec in family:
-                joined.register(spec)
-        return joined
-
     def register(self, spec: ToolSpec) -> None:
-        # a name registered twice is a programmer's error, raised at import
+        """Add a tool in its family's place. A name registered twice, or a
+        tool defined outside the families, is a programmer's error, raised at
+        import."""
         if spec.name in self._specs:
             raise ValueError("tool %r is registered twice" % spec.name)
-        self._specs[spec.name] = spec
+        if spec.family not in self.families:
+            raise ValueError("tool %r is defined in %s, which is not a family: %s" % (
+                spec.name, spec.family, ", ".join(self.families)))
+        specs = sorted([*self._specs.values(), spec], key=self._rank)
+        self._specs = {s.name: s for s in specs}
+
+    def _rank(self, spec: ToolSpec) -> int:
+        """Where a tool's family lists: its place in `families`."""
+        return self.families.index(spec.family)
 
     def tool(
             self, name: str, description: str, properties: Properties | None = None,
@@ -98,7 +108,7 @@ class Registry:
 
         def decorate(fn: ToolFn) -> ToolFn:
             self.register(ToolSpec(name=name, description=description, schema=schema, fn=fn,
-                                   source=source))
+                                   family=fn.__module__, source=source))
             return fn
         return decorate
 
@@ -180,12 +190,20 @@ def _argument(name: str, prop: Property, required: bool) -> str:
     return "`%s`%s (%s)%s" % (name, " *required*" if required else "", kind, meaning)
 
 
+# The family modules, in the order the server lists their tools.
+FAMILIES = ("db.mcp.pulls", "db.mcp.lifecycle", "db.mcp.facts", "db.mcp.solver",
+            "db.mcp.playbook")
+
+REGISTRY = Registry(FAMILIES)
+tool = REGISTRY.tool
+
+
 class Context:
     """Where a tool call lands: the database, the page caches and the log, and
-    the registry of every tool, which one tool reaches another through. A
-    subclass names the registry: tools.Context holds the joined one."""
+    the registry of every tool, which one tool reaches another through. It is
+    whole once tools.py has imported every family."""
 
-    tools: ClassVar[Registry]
+    tools: ClassVar[Registry] = REGISTRY
 
     def __init__(
             self, dsn: str | None = None, caches: Mapping[str, str] | None = None,
