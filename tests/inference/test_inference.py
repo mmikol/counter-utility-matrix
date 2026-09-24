@@ -806,6 +806,7 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     from types import SimpleNamespace as Ns
 
     from inference import engine
+    from inference.scoring import Contribution
     m = copy.copy(world.map("King's Row"))
     m.styles = {"brawl": (1.0, None), "dive": (-0.5, None), "poke": (0.0, None)}   # a brawl map
     rules = [Ns(id="two-supports-hold", name="Two supports hold a six", kind="constraint",
@@ -818,8 +819,11 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
                 category="shape", when=Expr("team.style_lean == 'poke'"), pending=False),
              Ns(id="unmet", name="An unmet need", kind="heuristic", category="general",
                 when=None, pending=False)]
-    terms = [{"id": r.id, "applies": True, "weighted": 2.0} for r in rules[:4]]
-    terms.append({"id": "unmet", "applies": True, "weighted": -0.5, "need": True})
+    terms: list[Contribution] = [
+        {"id": r.id, "kind": r.kind, "form": "scored" if r.kind == "constraint" else "heuristic",
+         "applies": True, "weighted": 2.0, "metric": None} for r in rules[:4]]
+    terms.append({"id": "unmet", "kind": "heuristic", "form": "heuristic", "applies": True,
+                  "weighted": -0.5, "metric": None, "need": True})
     red_h = [world.hero("Reinhardt"), world.hero("Zarya")]
     theirs = team_metrics(world, red_h, m, [])
     red_lean = theirs["style_lean"] or theirs["style_top"]
@@ -861,8 +865,10 @@ def test_the_rendered_breakdown_marks_a_need():
     terms are needs; the flag rides to_dict() on each contribution."""
     from inference import engine
     r = engine.Result("evaluate", None, [], [], [], [])
-    r.contributions = [{"id": "a-reward", "applies": True, "weighted": 0.25, "need": False},
-                       {"id": "a-need", "applies": True, "weighted": -0.11, "need": True}]
+    r.contributions = [{"id": "a-reward", "kind": "heuristic", "form": "heuristic",
+                        "applies": True, "weighted": 0.25, "metric": None, "need": False},
+                       {"id": "a-need", "kind": "heuristic", "form": "heuristic",
+                        "applies": True, "weighted": -0.11, "metric": None, "need": True}]
     assert "breakdown: a-reward +0.25 · a-need -0.11 (need)" in r.rendered()
     assert [c["need"] for c in r.to_dict()["contributions"]] == [False, True]
 
