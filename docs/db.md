@@ -48,6 +48,7 @@ db/
 | file | purpose |
 | --- | --- |
 | `__init__.py` | What the whole layer agrees on, declared once: where the repo, the caches and the mirror live, the shape of a `sources` row (`Source`: code, name, url), and the scope every rates snapshot is pinned to - console, controller, Americas. `embed` rewrites one generated section of a markdown file, for every layer that generates docs. |
+| `data/__init__.py` | The package map, and `returned_int`: the int in the one row a writer's statement returned - an id from RETURNING, a count - and LookupError when it returned none. |
 | `data/fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `cached`: the cache sequence every source reads through - the fresh copy, else a new one written, else the stale copy. `request`: one page under a `RequestPolicy` - its attempts, backoff, timeout and the pause after a page - retried while attempts remain. `max_age`: the freshness policy for a block - a build keeps every cached page, a refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `prepare_cache`: the cache directory a tool hands a pull. |
 | `data/names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. |
 | `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `python -m db.sentry --once` is one pass from a shell. |
@@ -56,11 +57,12 @@ db/
 ### `data/` - one package per source
 
 Each source package owns the whole path from page to table. Its
-`__init__.py` names the endpoints, the `sources` row its pages become and,
-for the wiki, the client that talks to the MediaWiki endpoint. Each domain
-module is one `run(connection, cache_dir, session, log)` the tools call:
-fetch (cached), extract the values from the markup, normalise them, store
-them.
+`__init__.py` names the endpoints, the `sources` row its pages become and
+what its modules share: for the wiki, the client that talks to the
+MediaWiki endpoint; for Blizzard, `attr`, a tag's attribute as text. Each
+domain module is one `run(connection, cache_dir, session, log)` the tools
+call: fetch (cached), extract the values from the markup, normalise them,
+store them.
 
 | package | module | stores |
 | --- | --- | --- |
