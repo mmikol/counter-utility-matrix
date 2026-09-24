@@ -13,6 +13,7 @@ import psycopg
 
 from db import psql
 from db.data import PullSummary, fetch
+from db.data.names import index, name_key
 from db.data.wiki import WIKI, WikiError, fetch_wikitext, markup
 
 # --- extract: markup -> Python ---------------------------------------------
@@ -61,12 +62,12 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> PlaystylesSu
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())
     cursor.execute("DELETE FROM playstyle")
-    hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
+    hero_ids = index(psql.lookup_ids(cursor, "heroes", "name", "hero_id"))
     links = 0
     unmatched: list[str] = []
     for code, name, heroes in playstyles:
         for hero_name in heroes:
-            hero_id = hero_ids.get(hero_name.lower())
+            hero_id = hero_ids.get(name_key(hero_name))
             if hero_id is None:
                 unmatched.append("%s: %s" % (name, hero_name))
                 continue

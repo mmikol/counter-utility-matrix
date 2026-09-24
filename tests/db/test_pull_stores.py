@@ -89,23 +89,25 @@ def _rates_page(rows, *filters):
 RATES_PAGES = {
     # the names tests/db/blizzard/test_blizzard_rates.py pins
     "rates_queue_vocabulary_input_Console_region_Americas.html": _rates_page(
-        [("Ana", 1, 1, 1)],
+        [("Lucio", 1, 1, 1)],
         ("filter-rq-select", [("0", "Quick Play - Role Queue"),
                               ("2", "Competitive - Role Queue")])),
     "rates_input_Console_region_Americas_rq_2.html": _rates_page(
-        [("Ana", 48.7, 23.0, 8.2), ("Tracer", 50.1, 12.4, 1.0)],
+        [("Lucio", 48.7, 23.0, 8.2), ("Tracer", 50.1, 12.4, 1.0)],
         ("filter-tier-select", [("All", "All Tiers"), ("Gold", "Gold")]),
-        ("filter-map-select", [("all-maps", "All Maps"), ("kings-row", "King's Row"),
+        ("filter-map-select", [("all-maps", "All Maps"), ("kings-row", "Kings Row"),
                                ("busan", "Busan")])),
     "rates_input_Console_region_Americas_rq_2_tier_Gold.html": _rates_page(
-        [("Ana", 51.0, 20.1, 7.0), ("Tracer", 49.0, 11.0, 0.5)]),
+        [("Lucio", 51.0, 20.1, 7.0), ("Tracer", 49.0, 11.0, 0.5)]),
     "rates_input_Console_map_kings_row_region_Americas_rq_2.html": _rates_page(
-        [("Ana", 49.5, 18.0, 6.0), ("Tracer", 47.5, 13.0, 0.9)]),
+        [("Lucio", 49.5, 18.0, 6.0), ("Tracer", 47.5, 13.0, 0.9)]),
 }
 
+# The pages write Lucio and Kings Row where the database holds Lúcio and
+# King's Row: both match through name_key.
 RATES_READS = [
     ('SELECT "name", "map_id" FROM "maps"', [("King's Row", 7)]),
-    ('SELECT "name", "hero_id" FROM "heroes"', [("Ana", 1)]),
+    ('SELECT "name", "hero_id" FROM "heroes"', [("Lúcio", 1)]),
     ("SELECT patch_id FROM patches", []),
     ("SELECT season_id FROM seasons", []),
     ("SELECT count(*) FROM meta_snapshots", [(3,)]),
@@ -113,8 +115,9 @@ RATES_READS = [
 
 
 def test_the_rates_pull_stores_one_snapshot_of_every_tier_and_map_it_read(tmp_path):
-    """Ana is on the roster and Tracer is not; King's Row is in the map pool
-    and Busan is not, so Busan's slice is never asked for."""
+    """Lucio is on the roster, as Lúcio, and Tracer is not; Kings Row is in
+    the map pool, as King's Row, and Busan is not, so Busan's slice is never
+    asked for."""
     _cache(tmp_path, RATES_PAGES)
     connection, lines = RecordingConnection(RATES_READS), []
     pull = _pull(tmp_path, lines)
@@ -359,6 +362,19 @@ def test_the_playstyles_pull_reloads_each_style_s_heroes_and_names_the_unmatched
     assert summary == {"playstyles": ["Dive", "Brawl"], "links": 3,
                        "unmatched": ["Brawl: Reinhardt"], "tables": ["playstyle"]}
     assert connection.commits == 1 and pull.session.calls == 0
+
+
+def test_a_listed_hero_matches_the_roster_whatever_its_spelling(tmp_path):
+    """The page links Lucio and DVa where the roster reads Lúcio and D.Va;
+    a name that matches no roster hero is reported."""
+    _cache(tmp_path, {cache_key(playstyles.COMPOSITION_PAGE) + ".wikitext":
+                      "=== Dive heroes ===\n[[Lucio]], [[DVa]], [[Nobody]]"})
+    connection = RecordingConnection([
+        ('SELECT "name", "hero_id" FROM "heroes"', [("Lúcio", 1), ("D.Va", 2)])])
+    summary = playstyles.run(connection, _pull(tmp_path, []))
+    [cursor] = connection.cursors
+    assert [params[0] for params in cursor.written("INSERT INTO playstyle")] == [1, 2]
+    assert summary["links"] == 2 and summary["unmatched"] == ["Dive: Nobody"]
 
 
 def test_the_patches_pull_upserts_every_dated_patch_and_names_the_latest(tmp_path):

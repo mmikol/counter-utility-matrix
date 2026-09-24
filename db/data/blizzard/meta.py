@@ -26,6 +26,7 @@ from db import INPUT_DEVICE, PLATFORM, REGION, psql
 from db.data import PullSummary, fetch
 from db.data.blizzard import BLIZZARD, RATES_URL, BlizzardError, attr
 from db.data.fetch import cache_key, cached_get
+from db.data.names import index, name_key
 from db.psql import current_patch, current_season
 
 # --- extract: markup -> Python ---------------------------------------------
@@ -147,10 +148,11 @@ TABLES = ("regions", "competitive_tiers", "meta_snapshots", "hero_meta", "map_me
 def _hero_rows(
         rows: list[RateRow], hero_ids: Mapping[str, int],
         unmatched: set[str]) -> Iterator[tuple[int, float | None, float | None, float | None]]:
-    """(hero_id, win, pick, ban) for each row whose hero the roster holds; a
-    name it lacks is added to `unmatched`."""
+    """(hero_id, win, pick, ban) for each row whose hero the roster holds
+    (hero_ids is {name_key: hero_id}); a name it lacks is added to
+    `unmatched`."""
     for name, win, pick, ban in rows:
-        hero_id = hero_ids.get(name.lower())
+        hero_id = hero_ids.get(name_key(name))
         if hero_id is None:
             unmatched.add(name)
             continue
@@ -193,7 +195,7 @@ def _store(
     )
     snapshot_id = psql.scalar(cursor)
 
-    hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
+    hero_ids = index(psql.lookup_ids(cursor, "heroes", "name", "hero_id"))
     unmatched: set[str] = set()
     hero_rows = 0
     for tier_code, rows in rows_by_tier.items():
@@ -235,7 +237,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary
     cursor = connection.cursor()
     # a map the database lacks is never fetched; the read's transaction ends
     # here, so none stays open across the ~40 fetches
-    map_ids = psql.lookup_ids(cursor, "maps", "name", "map_id")
+    map_ids = index(psql.lookup_ids(cursor, "maps", "name", "map_id"))
     connection.commit()
 
     rq = competitive_rq(pull)
@@ -255,7 +257,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary
     rows_by_map: dict[int, list[RateRow]] = {}
     skipped_maps: list[str] = []
     for slug, label in maps:
-        map_id = map_ids.get(label.lower())
+        map_id = map_ids.get(name_key(label))
         if map_id is None:
             skipped_maps.append(label)
             continue

@@ -16,7 +16,7 @@ import psycopg
 from psycopg.sql import SQL
 
 from db import PERK_TIERS, psql
-from db.data.names import abilities_named_in, ability_key
+from db.data.names import abilities_named_in, ability_key, name_key
 from db.data.wiki.kits import modifiers
 from db.data.wiki.kits.hero_articles import HeroProfile
 from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, StatValue, WeaponEntry
@@ -345,8 +345,8 @@ def store(
         profiles: Mapping[str, HeroProfile], hero_ids: Mapping[str, int],
         source_id: int) -> Stored:
     """Reload the kit tables from `by_hero` and set each profiled hero's
-    pools. hero_ids is {lowercased name: hero_id}; a hero it lacks is
-    skipped and named in the result."""
+    pools. hero_ids is {name_key: hero_id}, as names.index builds it; a
+    hero it lacks is skipped and named in the result."""
     for table in RELOADED:
         cursor.execute(SQL("DELETE FROM {}").format(psql.identifier(table)))
     all_codes: set[str] = set()
@@ -358,7 +358,7 @@ def store(
 
     tally = KitTally()
     for hero_name, profile in profiles.items():
-        hero_id = hero_ids.get(hero_name.lower())
+        hero_id = hero_ids.get(name_key(hero_name))
         if hero_id is None:
             continue
         cursor.execute(
@@ -370,7 +370,7 @@ def store(
 
     unknown_heroes: list[str] = []
     for hero_name, kit in sorted(by_hero.items()):
-        hero_id = hero_ids.get(hero_name.lower())
+        hero_id = hero_ids.get(name_key(hero_name))
         if hero_id is None:
             unknown_heroes.append(hero_name)
             continue

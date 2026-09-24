@@ -15,7 +15,7 @@ import psycopg
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
-from db.data.names import slug
+from db.data.names import index, name_key, slug
 from db.data.wiki import WIKI, cargo_query, fetch_articles
 from db.data.wiki.kits import kit_store
 from db.data.wiki.kits.hero_articles import Supplement, parse_announcement, supplement_kits
@@ -44,8 +44,9 @@ def _announce_heroes(
     upcoming get a row - role, subrole, health, release day, status
     announced - so their kit loads and the board can show them; Blizzard
     listing them later flips the status to released. Returns the names
-    stored, and adds each stored hero's id to `hero_ids`, which the kit and
-    ability lookups that follow read; the rest stay unknown."""
+    stored, and adds each stored hero's id to `hero_ids` ({name_key:
+    hero_id}), which the kit and ability lookups that follow read; the rest
+    stay unknown."""
     stored: list[str] = []
     for hero_name, text in found.items():
         upcoming = parse_announcement(text)
@@ -68,7 +69,7 @@ def _announce_heroes(
             (
                 slug(hero_name), hero_name, role_id, subrole_id, upcoming.health,
                 upcoming.release_date, source_id))
-        hero_ids[hero_name.lower()] = psql.scalar(cursor)
+        hero_ids[name_key(hero_name)] = psql.scalar(cursor)
         stored.append(hero_name)
         pull.log("announced hero stored: %s (%s, %s%s)" % (
             hero_name, upcoming.role, upcoming.subrole,
@@ -101,10 +102,10 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext, *,
         pull.log("supplemented stats: %d  (fields Cargo does not expose)" % articles.stats)
 
     cursor = connection.cursor()
-    hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
+    hero_ids = index(psql.lookup_ids(cursor, "heroes", "name", "hero_id"))
     # the articles of the heroes the roster lacks, read before the first write
     unlisted = fetch_articles(
-        pull, sorted(name for name in by_hero if name.lower() not in hero_ids))
+        pull, sorted(name for name in by_hero if name_key(name) not in hero_ids))
     source_id = psql.register_source(cursor, WIKI, psql.now())
     announced = _announce_heroes(cursor, pull, unlisted.found, hero_ids, source_id)
     stored = kit_store.store(cursor, by_hero, articles.profiles, hero_ids, source_id)

@@ -243,6 +243,9 @@ db <- facts <- inference <- door <- ui.
   2 s a Cargo page with six attempts to wait out a rate limit
   (`CARGO_POLICY`), and 0.5 s an article, asked for once
   (`ARTICLE_POLICY`). No third source, no API keys.
+- A pull matches a hero or map name against the database through
+  `db.data.names` - `index` and `name_key`, or `hero_key` where a former
+  name can appear - never by `.lower()`.
 - `.venv/bin/python -m door.sentry --once` is not read-only: it renames a
   suspect strategy file to `.md.quarantined`.
 - Never `docker compose down -v`: it deletes the database volume.

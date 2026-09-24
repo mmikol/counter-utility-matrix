@@ -2,7 +2,8 @@
 stubbed fetches: an announced hero the Cargo table names is stored from its
 article before its kit, a page that will not fetch or names a subrole the
 roster lacks is reported and skipped, and run() stores every kit in one
-transaction and counts what it read. No database, no network."""
+transaction, each hero matched to the roster by name_key, and counts what
+it read. No database, no network."""
 
 import datetime
 
@@ -112,6 +113,32 @@ def test_the_pull_stores_every_kit_in_one_transaction_and_counts_what_it_read(mo
     (cursor,) = connection.cursors
     assert cursor.written("INSERT INTO sources")[0][0] == "wiki"
     assert [params[1] for params in cursor.written("INSERT INTO heroes")] == ["Doctrine"]
+
+
+def test_a_hero_the_roster_spells_another_way_is_matched_by_its_name_key(monkeypatch):
+    """The Cargo table writes Lucio and Soldier 76 where the roster reads
+    Lúcio and Soldier: 76: neither article is asked for as an unlisted
+    hero's, and both kits and Lucio's pools land on the roster's rows."""
+    asked = []
+
+    def articles(pull, titles):
+        asked.append(list(titles))
+        return Articles({}, [])
+    rows = [_cargo("Soldier 76", "Helix Rockets", "Ability", damage="120"),
+            _cargo("Lucio", "Crossfade", "Ability", heal="16")]
+    monkeypatch.setattr(heroes, "cargo_query", lambda pull, table, fields: rows)
+    monkeypatch.setattr(heroes, "fetch_articles", articles)
+    monkeypatch.setattr(heroes, "supplement_kits", lambda pull, by_hero: Supplement(
+        {"Lucio": HeroProfile(health=225, shield=0, armor=0)}, 0, []))
+    connection = RecordingConnection(reads=[
+        ('SELECT "name", "hero_id" FROM "heroes"', [("Soldier: 76", 2), ("Lúcio", 3)]),
+        ('SELECT "code", "kind_id" FROM "ability_kinds"', [("weapon", 1), ("ability", 2)])])
+    summary = heroes.run(connection, _pull([]))
+    assert asked == [[]]
+    assert summary["unknown_heroes"] == [] and summary["announced"] == []
+    (cursor,) = connection.cursors
+    assert cursor.written("UPDATE heroes") == [(225, 0, 0, 3)]
+    assert [params[0] for params in cursor.written("INSERT INTO abilities")] == [3, 2]
 
 
 def test_the_pull_without_the_articles_reads_the_cargo_table_alone(monkeypatch):
