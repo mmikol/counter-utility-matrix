@@ -95,7 +95,7 @@ def remote(
     except urllib.error.HTTPError as error:
         try:
             return json.loads(error.read().decode("utf-8")), error.code
-        except ValueError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return {"error": "inference service returned %d" % error.code}, error.code
     except (urllib.error.URLError, OSError) as error:
         return {"error": "inference service unreachable: %s" % error}, 502
@@ -156,7 +156,7 @@ def mcp_call(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any] 
             reply = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         return "the MCP server answered %d" % error.code, None, True
-    except (urllib.error.URLError, OSError, ValueError) as error:
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, UnicodeDecodeError) as error:
         return "the MCP server is unreachable: %s" % error, None, True
     if "error" in reply:
         return str(reply["error"].get("message", reply["error"])), None, True

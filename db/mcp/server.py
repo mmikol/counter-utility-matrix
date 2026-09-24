@@ -239,7 +239,7 @@ class Server:
                 continue
             try:
                 message = json.loads(line)
-            except ValueError:
+            except json.JSONDecodeError:
                 self._write(stdout, self._error(None, PARSE_ERROR, "bad JSON"))
                 continue
             messages = message if isinstance(message, list) else [message]

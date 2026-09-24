@@ -76,6 +76,19 @@ def test_a_host_without_pgserver_is_told_to_set_database_url(monkeypatch):
     assert code == 200 and data["status"] == "degraded" and "DATABASE_URL" in data["error"]
 
 
+def test_a_pid_file_race_degrades_health(monkeypatch):
+    """default_dsn's second look at pgserver's pid file can meet it emptied
+    again by another process: a JSONDecodeError, one of the ways the database
+    is out of reach, so /health answers 200 and degraded."""
+    import json
+
+    def raced():
+        raise json.JSONDecodeError("Expecting value", "", 0)
+    monkeypatch.setattr(serve.psql, "default_dsn", raced)
+    data, code = serve.handle_health()
+    assert code == 200 and data["status"] == "degraded" and "Expecting value" in data["error"]
+
+
 def test_board_forwards_to_a_named_inference_service(monkeypatch):
     calls = []
 
