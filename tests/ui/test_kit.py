@@ -215,6 +215,14 @@ def test_a_cast_of_several_pieces_hits_with_all_of_them():
     assert one.cast_hit() is None and summed.cast_hit() is None and gun.cast_hit() is None
 
 
+def test_a_cast_whose_only_damage_is_on_the_hero_itself_hits_nothing():
+    recoil = _kit(
+        KIND_ABILITY,
+        ("damage", 10, "hp", None, None, "explosion, self", "10"),
+        ("pellets", 6, None, None, None, None, "6"))
+    assert recoil.cast_hit() is None
+
+
 def test_a_heal_rate_is_the_weapons_else_the_per_second_heal_for_its_uptime():
     staff = _kit(KIND_WEAPON, ("hps", 60, "hp", "seconds", 1, None, "60 per second"))
     assert staff.heal_rate() == 60

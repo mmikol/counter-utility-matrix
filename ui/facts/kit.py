@@ -335,16 +335,17 @@ class Kit:
     def cast_hit(self) -> float | None:
         """A cast that throws several pieces and publishes only the one piece
         (Sticky Bombs: "25, explosion, enemy", six of them): the pieces together.
-        None for any other piece."""
+        None for any other piece, and for one that hits only the hero itself."""
         rows = self.flat("damage")
         pieces = self.max_stat("pellets") or 1
         # every row a piece's own: under a condition, and not a sum
         apiece = all(
             s.condition and not SUMMED_RE.search("%s %s" % (s.condition, s.text or ""))
             for s in rows)
-        if self.kind != KIND_ABILITY or pieces < 2 or not rows or not apiece:
+        hits = [s.value for s in rows if "self" not in (s.condition or "")]
+        if self.kind != KIND_ABILITY or pieces < 2 or not hits or not apiece:
             return None
-        return pieces * max(s.value for s in rows if "self" not in (s.condition or ""))
+        return pieces * max(hits)
 
     def ult_hit(self) -> float:
         """One cast's damage: a flat figure times the cast's published charges, a
