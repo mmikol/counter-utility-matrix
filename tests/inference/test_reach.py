@@ -9,6 +9,7 @@ import pytest
 
 from inference import catalog, reach
 from tests.inference import recorded
+from ui.facts.model import World
 
 UNSEATED = {"Freja", "Shion"}       # named, not waived - see the test
 
@@ -59,3 +60,10 @@ def test_the_reach_fixture_names_the_playbook_it_was_recorded_under():
     heroes = [b["hero"] for b in boards]
     assert len(set(heroes)) == len(heroes), "a hero is recorded twice"
     assert all(b["bans"] is not None for b in boards), "an unseated board is on file"
+
+
+def test_reach_refuses_a_hero_the_world_does_not_know():
+    """A name the World does not hold is the caller's to fix, answered the way
+    World.resolve answers one, not a crash inside the search."""
+    with pytest.raises(ValueError, match="unknown heroes: Nosuchhero"):
+        reach.search(World(), "Nosuchhero")

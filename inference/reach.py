@@ -70,10 +70,18 @@ def reds(world: World, hero: Hero) -> list[list[str]]:
     return out
 
 
+def _role(world: World, name: str) -> str | None:
+    """The role of a hero the engine named, which the World always holds."""
+    found = world.hero(name)
+    return found.role if found else None
+
+
 def search(world: World, name: str) -> Reach:
     """The first board that seats the hero, bans 0..MAX_BANS; with none, bans
     None and the closest it came."""
     hero = world.hero(name)
+    if hero is None:
+        raise ValueError("unknown heroes: %s" % name)
     near: list[tuple[float, str, list[str], str]] = []
     for m in maps(world, hero):
         for red in reds(world, hero):
@@ -98,7 +106,7 @@ def search(world: World, name: str) -> Reach:
                 break
             held = engine.infer(world, map_name, red, [hero.name], side=side, bans=banned,
                                 top=1)
-            rivals = [h for h in top.blue if world.hero(h).role == hero.role
+            rivals = [h for h in top.blue if _role(world, h) == hero.role
                       and h not in held.blue and h not in red]
             if not rivals:
                 break

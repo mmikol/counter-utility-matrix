@@ -34,4 +34,4 @@ def recorded(name: str) -> Recorded:
         pytest.fail("tests/fixtures/%s.json names no playbook digest: re-record it" % name)
     if not fixture.get("boards"):
         pytest.fail("tests/fixtures/%s.json records no boards" % name)
-    return fixture
+    return Recorded(playbook=fixture["playbook"], boards=fixture["boards"])
