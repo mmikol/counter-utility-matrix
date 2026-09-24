@@ -166,8 +166,8 @@ def _traced_board(monkeypatch, *, parallel, breaks_after=None, blue=("Ana",), re
         return Fake()
 
     monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: parallel)
-    monkeypatch.setattr(engine, "_workers", lambda: engine.Workers("pool", 6))
-    monkeypatch.setattr(engine, "_drop_workers", lambda: trace.append(_Call("drop_workers")))
+    monkeypatch.setattr(engine._POOL, "executor", lambda: engine.Workers("pool", 6))
+    monkeypatch.setattr(engine._POOL, "drop", lambda: trace.append(_Call("drop_workers")))
     monkeypatch.setattr(engine, "_Split", Split)
     monkeypatch.setattr(engine, "_optimal", optimal)
     monkeypatch.setattr(engine, "_current", current)
@@ -972,6 +972,48 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     first_line = lambda b: b.rendered().split("\n")[0]   # noqa: E731
     assert first_line(split) == first_line(straight)
     assert engine.parallel_available(catalog=[]) is False   # a caller's catalog stays in-process
+
+
+def _priming_pool(monkeypatch, outcome):
+    """warm() against a stand-in pool of six whose every priming task ends in
+    `outcome` - a result, or an exception raised in the worker. Returns what
+    the pool was asked to drop."""
+    from concurrent.futures import Future
+
+    from inference import engine
+    dropped = []
+
+    class Executor:
+        def submit(self, fn, *args):
+            future = Future()
+            if isinstance(outcome, Exception):
+                future.set_exception(outcome)
+            else:
+                future.set_result(outcome)
+            return future
+    monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: True)
+    monkeypatch.setattr(engine._POOL, "executor", lambda: engine.Workers(Executor(), 6))
+    monkeypatch.setattr(engine._POOL, "drop", lambda: dropped.append("drop"))
+    return dropped
+
+
+def test_warm_reports_a_worker_that_cannot_start_and_falls_back_to_one_process(monkeypatch,
+                                                                                capsys):
+    """A worker that cannot read the playbook fails its priming task. warm()
+    says so on stderr, drops the pool and reports no workers, so the server
+    boots and its boards solve in its own process."""
+    from inference import engine
+    dropped = _priming_pool(monkeypatch, catalog.CatalogError("no strategy files in x/"))
+    assert engine.warm() == 0
+    assert ("the solver workers did not start (CatalogError: no strategy files in x/);"
+            " boards solve in this process") in capsys.readouterr().err
+    assert dropped == ["drop"]
+
+
+def test_warm_returns_the_worker_count_when_every_worker_starts(monkeypatch):
+    from inference import engine
+    dropped = _priming_pool(monkeypatch, 4242)
+    assert engine.warm() == 6 and dropped == []
 
 
 def test_countrix_workers_sets_the_worker_count(monkeypatch):

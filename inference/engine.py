@@ -14,7 +14,8 @@ import concurrent.futures
 import hashlib
 import multiprocessing
 import os
-import pickle
+import pickle  # nosec B403  # pickles cross only from this process to the workers it spawned
+import sys
 import threading
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -969,38 +970,61 @@ def worker_count() -> int:
     return max(6, min(os.cpu_count() or 1, WORKER_CEILING))
 
 
-_pool: ProcessPoolExecutor | None = None
-_pool_workers = 0            # the worker count the live pool was created with
-_pool_lock = threading.Lock()
+class _Pool:
+    """The parent's side of the process pool: the executor, created on first
+    use and spawned, not forked, with the worker count it was created with,
+    under one lock; and the world pickled once for a run of tasks, under its
+    own."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._executor: ProcessPoolExecutor | None = None
+        self._size = 0
+        self._blob_lock = threading.Lock()
+        # the world, its token, its bytes
+        self._blob: tuple[World | None, str | None, bytes | None] = (None, None, None)
+
+    def executor(self) -> Workers:
+        """The pool and its worker count, created on first use, when it reads
+        COUNTRIX_WORKERS."""
+        with self._lock:
+            if self._executor is None:
+                self._size = worker_count()
+                self._executor = concurrent.futures.ProcessPoolExecutor(
+                    max_workers=self._size, mp_context=multiprocessing.get_context("spawn"))
+            return Workers(self._executor, self._size)
+
+    def drop(self) -> None:
+        """Shut the pool down; the next board builds a new one, which reads
+        COUNTRIX_WORKERS again."""
+        with self._lock:
+            executor, self._executor, self._size = self._executor, None, 0
+        if executor is not None:
+            executor.shutdown(wait=False, cancel_futures=True)
+
+    def world_blob(self, world: World) -> tuple[str, bytes]:
+        """The world pickled once for a run of tasks: the bytes, and their
+        digest as the token the workers cache it under - a server loads a
+        fresh world per request, and the same rows keep the workers' copy. The
+        world is held here too, so the identity check cannot be fooled by a
+        later object at the same address."""
+        with self._blob_lock:
+            held, token, data = self._blob
+            if held is not world or token is None or data is None:
+                data = pickle.dumps(world, pickle.HIGHEST_PROTOCOL)
+                token = hashlib.sha1(data, usedforsecurity=False).hexdigest()
+                self._blob = (world, token, data)
+            return token, data
 
 
-def _workers() -> Workers:
-    """The pool and its worker count, created on first use. Spawned, not
-    forked."""
-    global _pool, _pool_workers
-    with _pool_lock:
-        if _pool is None:
-            _pool_workers = worker_count()
-            _pool = concurrent.futures.ProcessPoolExecutor(
-                max_workers=_pool_workers, mp_context=multiprocessing.get_context("spawn"))
-        return Workers(_pool, _pool_workers)
-
-
-def _drop_workers() -> None:
-    """Shut the pool down; the next board builds a new one, which reads
-    COUNTRIX_WORKERS again."""
-    global _pool, _pool_workers
-    with _pool_lock:
-        pool, _pool, _pool_workers = _pool, None, 0
-    if pool is not None:
-        pool.shutdown(wait=False, cancel_futures=True)
+_POOL = _Pool()
 
 
 def parallel_available(catalog: list[Strategy] | None = None) -> bool:
     """Whether board() splits its search across workers here. A caller's own
     catalog keeps the solve in this process: a strategy carries compiled
     expressions, which do not pickle, so a worker can only rebuild the playbook
-    by reading the files (_playbook) and applying the weights on top."""
+    by reading the files (_Held.playbook) and applying the weights on top."""
     parallel = os.environ.get("COUNTRIX_PARALLEL", "1").lower() not in ("0", "no", "false")
     return parallel and catalog is None and (os.cpu_count() or 1) > 1
 
@@ -1008,76 +1032,71 @@ def parallel_available(catalog: list[Strategy] | None = None) -> bool:
 def warm(world: World | None = None) -> int:
     """Start the workers now, so the first board does not pay for it: they
     read the playbook, and take a copy of the world when one is given.
-    Returns the number started, 0 when the board runs sequentially here."""
+    Returns the number started, 0 when the board runs sequentially here - no
+    pool, or a worker that could not start, which is written to stderr and
+    drops the pool, so boards solve in this process."""
     if not parallel_available():
         return 0
-    workers = _workers()                       # more tasks than workers, so each gets one
-    args = _world_blob(world) if world is not None else (None, None)
+    workers = _POOL.executor()                 # more tasks than workers, so each gets one
+    args = _POOL.world_blob(world) if world is not None else (None, None)
     futures = [workers.executor.submit(_prime, *args) for _ in range(workers.size * 3)]
-    concurrent.futures.wait(futures)
+    try:
+        for future in futures:
+            future.result()
+    except Exception as error:  # noqa: BLE001  # any worker failure at startup means solving in this process
+        sys.stderr.write("countrix: the solver workers did not start (%s: %s); boards solve in"
+                         " this process\n" % (type(error).__name__, error))
+        _POOL.drop()
+        return 0
     return workers.size
 
 
 def _prime(token: str | None = None, data: bytes | None = None) -> int:
     """In a worker: read the playbook and hold the world, so the first slice
     does not."""
-    _playbook()
+    _HELD.playbook()
     if token is not None and data is not None:
-        _world(token, data)
+        _HELD.world(token, data)
     return os.getpid()
 
 
 # --- what crosses the boundary ---------------------------------------------
 
-_blob_lock = threading.Lock()
-# the world, its token, its bytes
-_blob: tuple[World | None, str | None, bytes | None] = (None, None, None)
-
-
-def _world_blob(world: World) -> tuple[str, bytes]:
-    """The world pickled once for a run of tasks: the bytes, and their digest
-    as the token the workers cache it under - a server loads a fresh world per
-    request, and the same rows keep the workers' copy. The world is held here
-    too, so the identity check cannot be fooled by a later object at the same
-    address."""
-    global _blob
-    with _blob_lock:
-        held, token, data = _blob
-        if held is not world or token is None or data is None:
-            data = pickle.dumps(world, pickle.HIGHEST_PROTOCOL)
-            token = hashlib.sha1(data, usedforsecurity=False).hexdigest()
-            _blob = (world, token, data)
-        return token, data
-
-
 # a playbook folder's stamp: each file's name, modification time and size
 Stamp = list[tuple[str, int, int]]
-# in a worker: the token and the world, and the files' stamp and the catalog
-_held_world: tuple[str | None, World | None] = (None, None)
-_held_playbook: tuple[Stamp | None, list[Strategy] | None] = (None, None)
 
 
-def _world(token: str, data: bytes) -> World:
-    global _held_world
-    held, world = _held_world
-    if held != token or world is None:
-        world = pickle.loads(data)
-        _held_world = (token, world)
-    return world
+class _Held:
+    """A worker's side of the pool: the world it holds between tasks, under
+    the token it came with, and the playbook, under its files' stamp. Only
+    worker processes read it."""
+
+    def __init__(self) -> None:
+        self._world: tuple[str | None, World | None] = (None, None)
+        self._playbook: tuple[Stamp | None, list[Strategy] | None] = (None, None)
+
+    def world(self, token: str, data: bytes) -> World:
+        """The world these bytes pickle, unpickled once per token."""
+        held, world = self._world
+        if held != token or world is None:
+            world = pickle.loads(data)  # nosec B301  # bytes this process pickled for its own workers, never outside input
+            self._world = (token, world)
+        return world
+
+    def playbook(self) -> list[Strategy]:
+        """The playbook, read once per worker and again whenever a file changes."""
+        directory = catalog_module.strategies_dir()
+        stamp = sorted((e.name, e.stat().st_mtime_ns, e.stat().st_size)
+                       for e in os.scandir(directory)
+                       if e.name.endswith(".md")) if os.path.isdir(directory) else None
+        held, playbook = self._playbook
+        if stamp is None or held != stamp or playbook is None:
+            playbook = catalog_module.load(directory)
+            self._playbook = (stamp, playbook)
+        return playbook
 
 
-def _playbook() -> list[Strategy]:
-    """The playbook, read once per worker and again whenever a file changes."""
-    global _held_playbook
-    directory = catalog_module.strategies_dir()
-    stamp = sorted((e.name, e.stat().st_mtime_ns, e.stat().st_size)
-                   for e in os.scandir(directory)
-                   if e.name.endswith(".md")) if os.path.isdir(directory) else None
-    held, playbook = _held_playbook
-    if stamp is None or held != stamp or playbook is None:
-        playbook = catalog_module.load(directory)
-        _held_playbook = (stamp, playbook)
-    return playbook
+_HELD = _Held()
 
 
 def _verdict(cand: Candidate) -> Verdict:
@@ -1114,7 +1133,8 @@ def _worker_solver(token: str, data: bytes, spec: Spec, weights: Mapping[str, fl
     """In a worker: the Solver for a spec's board, on the world the worker
     holds and the playbook under the board's weights - on the scale the
     merged slices froze, when `bounds` is given."""
-    solver = _solver(_world(token, data), catalog_module.weighted(_playbook(), weights), spec)
+    solver = _solver(_HELD.world(token, data),
+                     catalog_module.weighted(_HELD.playbook(), weights), spec)
     if bounds is not None:
         solver.adopt_bounds(bounds, standing)
     return solver
@@ -1184,7 +1204,7 @@ class _Split:
         self.verdicts: list[Verdict] = []
         self.standing = standing
         self.tallies: list[Future[Tally]] | None = None
-        self.token, self.data = _world_blob(world)
+        self.token, self.data = _POOL.world_blob(world)
         self.count = slices
         self.scale: list[Future[Bounds]] | None = None if bounds is not None else [
             pool.submit(_bounds, self.token, self.data, spec, weights, i, slices)
@@ -1346,9 +1366,9 @@ def board(world: World, draft: Draft, *, catalog: list[Strategy] | None = None,
                            workers=None)
     try:
         return _board_once(world, draft, catalog=catalog, pool_size=pool_size, weights=weights,
-                           workers=_workers())
+                           workers=_POOL.executor())
     except BrokenProcessPool:
-        _drop_workers()                # a worker died: this board, in this process
+        _POOL.drop()                   # a worker died: this board, in this process
     return _board_once(world, draft, catalog=catalog, pool_size=pool_size, weights=weights,
                        workers=None)
 
