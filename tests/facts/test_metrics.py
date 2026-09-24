@@ -37,9 +37,12 @@ def test_metrics_cover_the_registry_exactly(synthetic_world):
     assert ns["team"]["coverage"] == 1                    # Anvil answers Mortar
     # the benches are the builder's inputs; the roster counts the announced hero
     assert ns["world"] == {"heal_bench": 145.0, "hps_bench": 130.0, "roster_size": 13}
-    for key in compute.TEXT_METRICS:
-        prefix, name = key.split(".")
-        assert name in ns[prefix if prefix != "enemy" else "team"]
+    # a text metric is exactly a registry key whose value is not a number
+    values = {
+        "%s.%s" % (section, key): value
+        for section, bag in ns.items() for key, value in bag.items()}
+    assert {k for k in compute.registry()
+            if not isinstance(values[k], (int, float))} == compute.TEXT_METRICS
     # the solver builds its bag lean: every key a strategy can name reads the same there
     full = team_metrics(w, blue, m, red)
     lean = team_metrics(w, blue, m, red, lean=True)
@@ -48,6 +51,19 @@ def test_metrics_cover_the_registry_exactly(synthetic_world):
             name = key.split(".", 1)[1]
             assert lean[name] == full[name], key
     assert full["_answered"] == {"Mortar": ["Anvil"], "Gale": []} and lean["_answered"] == {}
+
+
+def test_the_versus_keys_are_the_team_metrics_that_read_the_other_side(synthetic_world):
+    """The one section of TEAM_METRICS that moves when the other team does,
+    and so the keys enemy.* leaves out: the solver builds red's bag facing
+    no one."""
+    w = synthetic_world
+    m = w.map("Harbor Gate")
+    blue = [w.hero(n) for n in ("Anvil", "Kite", "Flint", "Needle", "Balm", "Myrrh")]
+    red = [w.hero(n) for n in ("Mortar", "Quarry", "Gale", "Rook", "Sorrel", "Tansy")]
+    faced = team_metrics(w, blue, m, red)
+    alone = team_metrics(w, blue, m, ())
+    assert {k for k in TEAM_METRICS if faced[k] != alone[k]} == compute.VERSUS_KEYS
 
 
 def test_metrics_without_a_map_fall_back_honestly(synthetic_world):

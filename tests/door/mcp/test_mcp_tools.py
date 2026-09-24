@@ -138,6 +138,7 @@ def test_metrics_tool_serves_the_vocabulary():
     text, data = tools.Context(dsn="postgresql://nowhere", client="test").call("metrics")
     assert "team.coverage_share" in data["metrics"] and "team.coverage_share" in data["numeric"]
     assert "map.side" in data["text"] and "map.side" not in data["numeric"]
+    assert set(data["text"]) <= set(data["metrics"])
     assert text.splitlines()[0].startswith("team.")
 
 

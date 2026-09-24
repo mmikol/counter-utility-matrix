@@ -20,7 +20,7 @@ from typing import NamedTuple, TypedDict
 
 from facts.draft import EXPECTED_SHAPE, is_sided
 from facts.model import ROLES, TERRAIN_FEATURES, Hero, Map, World
-from facts.team import TEAM_METRICS, MetricBag, number, team_metrics
+from facts.team import TEAM_METRICS, VERSUS_METRICS, MetricBag, number, team_metrics
 
 TREND_POINTS = 1.5
 TERRAIN_STANDOUT = 0.75   # sd from the ordinary map at which a terrain feature is a fact
@@ -233,22 +233,21 @@ def namespace(
             "map": map_metrics(m, side, ban_count=ban_count), "world": world_metrics(world)}
 
 
+# team metrics that read the other side. The solver builds red's metrics once,
+# facing no one, so as enemy.* these would all read zero: not offered
+VERSUS_KEYS = frozenset(VERSUS_METRICS)
+
 # Metrics whose value is a name or a list, not a number: a heuristic may not
 # maximize them, but a constraint may compare them ("team.style_lean == 'dive'").
+# Registry keys only: tests/facts/test_metrics.py reads every key's kind against it
 TEXT_METRICS = {
     "team.subroles", "team.shape_flags", "team.style_counts", "team.style_top",
     "team.style_lean", "team.weakest", "team.squishies", "team.burst_hero",
     "team.isolated", "team.pairs", "team.max_ban_hero", "team.unanswered", "team.exposed",
     "map.style_top", "map.mode", "map.side",
 }
-TEXT_METRICS |= {n.replace("team.", "enemy.", 1) for n in TEXT_METRICS if n.startswith("team.")}
-
-# team metrics that read the other side. The solver builds red's metrics once,
-# facing no one, so as enemy.* these would all read zero: not offered
-VERSUS_KEYS = frozenset((
-    "coverage", "coverage_share", "unanswered", "answer_edges", "exposure_edges",
-    "exposed_count", "exposed", "safe_count", "net_edges", "double_covered",
-    "banproof_coverage"))
+TEXT_METRICS |= {n.replace("team.", "enemy.", 1) for n in TEXT_METRICS
+                 if n.startswith("team.") and n.split(".", 1)[1] not in VERSUS_KEYS}
 
 
 def registry() -> dict[str, str]:

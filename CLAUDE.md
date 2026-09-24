@@ -187,10 +187,12 @@ db <- facts <- inference <- door <- ui.
   its source); regenerate the schema sections of docs/db.md. Its migration
   also wants a `schema.DOC_DOMAIN` entry keyed by filename, or docs/db.md
   files it under foundation - no test catches that one.
-- A new metric: an entry in `TEAM_METRICS`, `MATCHUP_METRICS`, `MAP_METRICS`
-  or `WORLD_METRICS` and the key its function computes (the namespace must
-  equal the registry), `TEXT_METRICS` or `VERSUS_KEYS` where they apply,
-  then regenerate the catalog vocabulary in docs/inference.md.
+- A new metric: an entry in `TEAM_METRICS` (`VERSUS_METRICS` for one that
+  reads the other side), `MATCHUP_METRICS`, `MAP_METRICS` or
+  `WORLD_METRICS` and the key its function computes (the namespace must
+  equal the registry), and in `TEXT_METRICS` when its value is a name or a
+  list - `tests/facts/test_metrics.py` checks every registry key's kind
+  against it - then regenerate the catalog vocabulary in docs/inference.md.
 - `tests/ui/test_pages.py` pins the scripts at their seams (routes, query
   keys, element ids, the payload keys they read against what the server
   writes) and holds that every `board.css` class is used; a decision worth

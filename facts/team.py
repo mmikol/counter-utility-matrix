@@ -22,6 +22,22 @@ SPECIALIST_DELTA = 2.5
 RANK_SENSITIVE = 6.0
 FLIER_REACH = 30.0        # metres a hitscan weapon must publish to answer a flier
 
+# versus the other team (all 0 when the other team is empty): the last section
+# of TEAM_METRICS, and the keys compute keeps off the enemy.* vocabulary
+VERSUS_METRICS = OrderedDict([
+    ("coverage", "enemies answered by at least one pick"),
+    ("coverage_share", "coverage / enemies revealed"),
+    ("unanswered", "enemies no pick answers"),
+    ("answer_edges", "(enemy, pick) counter edges: picks answering enemies"),
+    ("exposure_edges", "(pick, enemy) counter edges: enemies answering picks"),
+    ("exposed_count", "picks answered by at least one enemy"),
+    ("exposed", "the exposed picks"),
+    ("safe_count", "picks no enemy answers"),
+    ("net_edges", "answer edges minus exposure edges"),
+    ("double_covered", "enemies answered by two or more picks"),
+    ("banproof_coverage", "coverage recomputed without the highest-ban answerer"),
+])
+
 TEAM_METRICS = OrderedDict([
     # shape
     ("size", "picks locked on this team"),
@@ -120,18 +136,8 @@ TEAM_METRICS = OrderedDict([
     ("map_specialists", "picks running %g+ points over their own baseline here" % SPECIALIST_DELTA),
     ("map_offmap", "picks running %g+ points under their own baseline here" % SPECIALIST_DELTA),
     ("map_strategy_hits", "picks whose three best maps by rate include this map"),
-    # versus the other team (all 0 when the other team is empty)
-    ("coverage", "enemies answered by at least one pick"),
-    ("coverage_share", "coverage / enemies revealed"),
-    ("unanswered", "enemies no pick answers"),
-    ("answer_edges", "(enemy, pick) counter edges: picks answering enemies"),
-    ("exposure_edges", "(pick, enemy) counter edges: enemies answering picks"),
-    ("exposed_count", "picks answered by at least one enemy"),
-    ("exposed", "the exposed picks"),
-    ("safe_count", "picks no enemy answers"),
-    ("net_edges", "answer edges minus exposure edges"),
-    ("double_covered", "enemies answered by two or more picks"),
-    ("banproof_coverage", "coverage recomputed without the highest-ban answerer"),
+    # versus the other team
+    *VERSUS_METRICS.items(),
 ])
 
 
