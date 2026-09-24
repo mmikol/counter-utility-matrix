@@ -164,7 +164,7 @@ def _traced_board(monkeypatch, *, parallel, breaks_after=None, blue=("Ana",), re
         return Fake()
 
     monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: parallel)
-    monkeypatch.setattr(engine, "_workers", lambda: "pool")
+    monkeypatch.setattr(engine, "_workers", lambda: ("pool", 6))
     monkeypatch.setattr(engine, "_drop_workers", lambda: trace.append(_Call("drop_workers")))
     monkeypatch.setattr(engine, "_Split", Split)
     monkeypatch.setattr(engine, "infer", infer)
@@ -887,13 +887,13 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     from inference import engine
     if not engine.parallel_available():
         pytest.skip("one core, or COUNTRIX_PARALLEL=0")
-    assert engine.warm() == engine.WORKERS >= 6
+    assert engine.warm() == engine.worker_count() >= 6
     weights = {h.id: 10.0 if h.weight < 10 else 0.5
                for h in catalog.load() if h.kind == "heuristic"}
     split = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                          side="attack", weights=weights)
     assert split.blue.to_dict()["weights"] == weights         # the override reached the worker
-    monkeypatch.setattr(engine, "PARALLEL", False)
+    monkeypatch.setenv("COUNTRIX_PARALLEL", "0")
     assert not engine.parallel_available()
     straight = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                             side="attack", weights=weights)
@@ -908,6 +908,31 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
     first_line = lambda b: b.rendered().split("\n")[0]   # noqa: E731
     assert first_line(split) == first_line(straight)
     assert engine.parallel_available(catalog=[]) is False   # a caller's catalog stays in-process
+
+
+def test_countrix_workers_sets_the_worker_count(monkeypatch):
+    # read when the pool starts, so no pool is spawned to read it here
+    from inference import engine
+    monkeypatch.setenv("COUNTRIX_WORKERS", "3")
+    assert engine.worker_count() == 3
+    for cores, count in ((16, engine.WORKER_CEILING), (2, 6)):
+        monkeypatch.setattr(engine.os, "cpu_count", lambda cores=cores: cores)
+        for junk in ("0", "x"):
+            monkeypatch.setenv("COUNTRIX_WORKERS", junk)
+            assert engine.worker_count() == count, (cores, junk)
+        monkeypatch.delenv("COUNTRIX_WORKERS")
+        assert engine.worker_count() == count, cores
+
+
+def test_countrix_parallel_off_keeps_the_board_in_one_process(monkeypatch):
+    # read on every board: the switch holds from the next call
+    from inference import engine
+    monkeypatch.setattr(engine.os, "cpu_count", lambda: 4)
+    monkeypatch.setenv("COUNTRIX_PARALLEL", "1")
+    assert engine.parallel_available() is True
+    for off in ("0", "no", "False"):
+        monkeypatch.setenv("COUNTRIX_PARALLEL", off)
+        assert engine.parallel_available() is False, off
 
 
 @pytest.mark.invariant

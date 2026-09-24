@@ -776,43 +776,47 @@ def _plan(world: World, m: Map | None, side: str, bans: Sequence[str],
 # six is ranked against the field its seat's search already swept.
 #
 # The world crosses as bytes pickled once and cached per worker; so is the
-# playbook, reread when a file changes. Off with COUNTRIX_PARALLEL=0,
-# on one core, or with a catalog the caller supplied (a worker loads the
-# playbook from its files).
+# playbook, reread when a file changes. Off with COUNTRIX_PARALLEL=0 (read on
+# every board), on one core, or with a catalog the caller supplied (a worker
+# loads the playbook from its files).
 
-PARALLEL = os.environ.get("COUNTRIX_PARALLEL", "1").lower() not in ("0", "no", "false")
 WORKER_CEILING = 12          # a worker holds about 70 MB, and past a dozen slices the
                              # rounds' own overhead eats what a finer slice saves
 
 
-def _worker_count() -> int:
+def worker_count() -> int:
     """Six workers, or one per core where there are more, capped at
-    WORKER_CEILING. COUNTRIX_WORKERS overrides."""
+    WORKER_CEILING. COUNTRIX_WORKERS overrides; the pool reads it when it
+    starts."""
     override = os.environ.get("COUNTRIX_WORKERS", "").strip()
     if override.isdigit() and int(override) > 0:
         return int(override)
     return max(6, min(os.cpu_count() or 1, WORKER_CEILING))
 
 
-WORKERS = _worker_count()
 _pool: ProcessPoolExecutor | None = None
+_pool_workers = 0            # the worker count the live pool was created with
 _pool_lock = threading.Lock()
 
 
-def _workers() -> ProcessPoolExecutor:
-    """The pool, created on first use. Spawned, not forked."""
-    global _pool
+def _workers() -> tuple[ProcessPoolExecutor, int]:
+    """The pool and its worker count, created on first use. Spawned, not
+    forked."""
+    global _pool, _pool_workers
     with _pool_lock:
         if _pool is None:
+            _pool_workers = worker_count()
             _pool = concurrent.futures.ProcessPoolExecutor(
-                max_workers=WORKERS, mp_context=multiprocessing.get_context("spawn"))
-        return _pool
+                max_workers=_pool_workers, mp_context=multiprocessing.get_context("spawn"))
+        return _pool, _pool_workers
 
 
 def _drop_workers() -> None:
-    global _pool
+    """Shut the pool down; the next board builds a new one, which reads
+    COUNTRIX_WORKERS again."""
+    global _pool, _pool_workers
     with _pool_lock:
-        pool, _pool = _pool, None
+        pool, _pool, _pool_workers = _pool, None, 0
     if pool is not None:
         pool.shutdown(wait=False, cancel_futures=True)
 
@@ -822,7 +826,8 @@ def parallel_available(catalog: list[Strategy] | None = None) -> bool:
     catalog keeps the solve in this process: a strategy carries compiled
     expressions, which do not pickle, so a worker can only rebuild the playbook
     by reading the files (_playbook) and applying the weights on top."""
-    return PARALLEL and catalog is None and (os.cpu_count() or 1) > 1
+    parallel = os.environ.get("COUNTRIX_PARALLEL", "1").lower() not in ("0", "no", "false")
+    return parallel and catalog is None and (os.cpu_count() or 1) > 1
 
 
 def warm(world: World | None = None) -> int:
@@ -831,11 +836,11 @@ def warm(world: World | None = None) -> int:
     Returns the number started, 0 when the board runs sequentially here."""
     if not parallel_available():
         return 0
-    pool = _workers()                          # more tasks than workers, so each gets one
+    pool, workers = _workers()                 # more tasks than workers, so each gets one
     args = _world_blob(world) if world is not None else (None, None)
-    futures = [pool.submit(_prime, *args) for _ in range(WORKERS * 3)]
+    futures = [pool.submit(_prime, *args) for _ in range(workers * 3)]
     concurrent.futures.wait(futures)
-    return WORKERS
+    return workers
 
 
 def _prime(token: str | None = None, data: bytes | None = None) -> int:
@@ -1150,10 +1155,10 @@ def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
             fill_split: _Split | None = None
             countered_split: _Split | None = None
             if pooled:
-                pool = _workers()
+                pool, workers = _workers()
                 want = max(top, 1) + 1
-                half = max(1, WORKERS // 2)
-                rest = max(1, WORKERS - half)
+                half = max(1, workers // 2)
+                rest = max(1, workers - half)
                 blue_split = _Split(pool, world, catalog,
                                     Spec(map_name, enemy, [], pool_size, bans_list, side),
                                     weights, want, half)

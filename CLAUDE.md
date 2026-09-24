@@ -47,10 +47,11 @@ Postgres. CI sets no variable: it has no cluster and no pgserver.
 The solver spawns `max(6, min(cores, 12))` worker processes (12 here) in any
 process that calls `engine.board()` without a catalog of its own: `ui.board`
 and `inference.serve` at launch, the stdio MCP server and `db.mcp call board`
-on the first board, pytest on the first board test. `COUNTRIX_WORKERS=6` is the lowest cap that keeps that test green;
-`COUNTRIX_PARALLEL=0` solves in-process. Both are read at import. The pool
-is spawn-context: killing the parent leaves `spawn_main` workers orphaned
-under launchd, so stop them too.
+on the first board, pytest on the first board test. `COUNTRIX_WORKERS=6` is
+the lowest cap that keeps that test green; `COUNTRIX_PARALLEL=0` solves
+in-process. `COUNTRIX_PARALLEL` is read on every board, `COUNTRIX_WORKERS`
+when the pool starts. The pool is spawn-context: killing the parent leaves
+`spawn_main` workers orphaned under launchd, so stop them too.
 
 Without the database, two generated sections regenerate on their own:
 `.venv/bin/python -c "from db.mcp import tools; tools.write_tool_docs()"`
