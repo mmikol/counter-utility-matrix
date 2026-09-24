@@ -163,6 +163,9 @@ def db_docs(ctx: Context) -> ToolReply:
 # --- read-only SQL ----------------------------------------------------------
 
 READ_ONLY_STARTS = ("select", "with", "explain", "show", "table", "values")
+# The same starts as the description and the refusal name them.
+READ_ONLY_NAMES = "%s or %s" % (", ".join(s.upper() for s in READ_ONLY_STARTS[:-1]),
+                                READ_ONLY_STARTS[-1].upper())
 # Names that reach the file system or the network from inside SQL, refused
 # before the database sees them. The reader role below is the second guard.
 SQL_DENIED = re.compile(r"\b(pg_read_file|pg_read_binary_file|pg_ls_dir|pg_stat_file|"
@@ -195,9 +198,9 @@ def reader_dsn(dsn: str) -> str:
 
 
 @tool(
-    "query", "Run read-only SQL against the database (SELECT/WITH only,"
-    " one statement, first %d rows). Every table is documented in"
-    " the data dictionary in docs/db.md." % MAX_ROWS,
+    "query", "Run read-only SQL against the database (one %s statement,"
+    " first %d rows). Every table is documented in the data dictionary"
+    " in docs/db.md." % (READ_ONLY_NAMES, MAX_ROWS),
     {"sql": {"type": "string", "description": "the statement"}}, ["sql"])
 def query(ctx: Context, sql: str) -> ToolReply:
     columns, rows = _read_only(ctx.dsn, _checked_sql(sql))
@@ -216,7 +219,7 @@ def _checked_sql(sql: str) -> str:
     a connection is opened."""
     body = sql.strip().rstrip(";").strip()
     if ";" in body or not body.lower().startswith(READ_ONLY_STARTS):
-        raise Refusal("query is read-only: one SELECT/WITH statement")
+        raise Refusal("query is read-only: one %s statement" % READ_ONLY_NAMES)
     if len(body) > MAX_SQL_CHARS:
         raise Refusal("query too long")
     denied = SQL_DENIED.search(body)

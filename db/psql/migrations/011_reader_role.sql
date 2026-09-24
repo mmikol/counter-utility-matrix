@@ -1,7 +1,8 @@
 -- 011: a role for the query tool - SELECT on every table, nothing else.
 --
--- The tool already refuses anything but one SELECT; this makes the database
--- refuse the rest too. Both database users the project uses are superusers
+-- The tool already refuses anything but one statement that starts SELECT,
+-- WITH, EXPLAIN, SHOW, TABLE or VALUES; this makes the database refuse the
+-- rest too. Both database users the project uses are superusers
 -- (the embedded cluster's owner, the compose image's POSTGRES_USER), and a
 -- superuser's SELECT can read files off the disk it runs on. Here `SET LOCAL
 -- ROLE matrix_reader` inside the query's transaction dropped to a role that
