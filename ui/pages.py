@@ -11,7 +11,7 @@ import html
 import os
 from typing import NamedTuple
 
-from ui.facts.draft import MAX_BANS, TEAM_SIZE
+from facts.draft import MAX_BANS, TEAM_SIZE
 
 GITHUB_MARK = (
     "<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='true'><path fill='currentColor' d='M8 0C3.58 0 0 3.58 0 8"  # noqa: E501

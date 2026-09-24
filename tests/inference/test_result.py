@@ -5,10 +5,10 @@ Every board is the synthetic World's: no database."""
 import os
 import shutil
 
+from facts import board_facts
+from facts.draft import Draft
 from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
-from ui.facts import board_facts
-from ui.facts.draft import Draft
 
 
 def test_a_playbook_that_scores_nothing_reads_unscored(synthetic_world):

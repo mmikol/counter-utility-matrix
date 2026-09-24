@@ -1,11 +1,11 @@
-"""The derivations ui/facts/tables.py runs after its reads, on the synthetic
+"""The derivations facts/tables.py runs after its reads, on the synthetic
 World: the terrain's z-scores and lean, the rates' lift, the styles they sum
 to, the stages' z-scores and each hero's best maps, every expected value
 worked by hand from tests/synthetic.py. No database."""
 
-from ui.facts import tables
-from ui.facts.model import TERRAIN_FEATURES, Map
-from ui.facts.records import MapRate
+from facts import tables
+from facts.model import TERRAIN_FEATURES, Map
+from facts.records import MapRate
 
 
 def _maps(w):

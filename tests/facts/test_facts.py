@@ -10,10 +10,10 @@ import statistics
 
 import pytest
 
+from facts import board_facts, compute, model
+from facts.compute import STAGE_FEATURES, STAGE_MENTIONS, TERRAIN_STANDOUT
+from facts.draft import Draft
 from inference.result import _cited_fact
-from ui.facts import board_facts, compute, model
-from ui.facts.compute import STAGE_FEATURES, STAGE_MENTIONS, TERRAIN_STANDOUT
-from ui.facts.draft import Draft
 
 pytestmark = pytest.mark.invariant
 

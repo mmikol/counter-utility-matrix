@@ -7,11 +7,11 @@ no database."""
 import pytest
 
 from db import Refusal
+from facts import compute
+from facts.draft import MAX_TANKS, Draft
+from facts.records import MapRate
 from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
-from ui.facts import compute
-from ui.facts.draft import MAX_TANKS, Draft
-from ui.facts.records import MapRate
 
 
 def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(synthetic_world):

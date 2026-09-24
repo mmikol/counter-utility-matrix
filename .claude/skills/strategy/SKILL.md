@@ -85,8 +85,8 @@ question is allowed.
      `team.heal_peak_total maximize`; "fewer one-dive targets" is
      `team.squish_count minimize`. If no single metric captures it, say
      which comes closest and why, or say that no metric exists yet - that
-     is a code change in `ui/facts/team.py` (a team metric) or
-     `ui/facts/compute.py` (matchup, map, world), whose `registry()` gathers
+     is a code change in `facts/team.py` (a team metric) or
+     `facts/compute.py` (matchup, map, world), whose `registry()` gathers
      both, not a frontmatter trick.
      A `when` on the six's own state (`team.*`, or a `matchup.*` key blue
      decides) makes the heuristic a need: met it costs nothing, unmet its

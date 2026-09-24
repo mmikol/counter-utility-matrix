@@ -15,8 +15,8 @@ from collections import Counter, OrderedDict
 from collections.abc import Iterable
 from typing import NamedTuple
 
-from ui.facts.draft import EXPECTED_SHAPE, TEAM_SIZE
-from ui.facts.model import SQUISHY_POOL, Hero, Map, World
+from facts.draft import EXPECTED_SHAPE, TEAM_SIZE
+from facts.model import SQUISHY_POOL, Hero, Map, World
 
 SPECIALIST_DELTA = 2.5
 RANK_SENSITIVE = 6.0

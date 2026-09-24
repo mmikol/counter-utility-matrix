@@ -18,9 +18,9 @@ import psycopg
 from db import ROOT, Refusal, embed
 from db.data.authored import AUTHORED
 from db.psql import now, register_source
+from facts import compute
 from inference.frontmatter import FrontmatterError, parse_frontmatter
 from inference.strategy import FORMS, KINDS, CatalogError, Strategy
-from ui.facts import compute
 
 SHIPPED_DIR = os.path.join(ROOT, "inference", "strategies")
 # the id is the filename, so no id may name a path (docs/security.md)

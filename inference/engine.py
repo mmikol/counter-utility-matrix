@@ -20,16 +20,8 @@ from math import comb
 from typing import NamedTuple
 
 from db import Refusal
-from inference import catalog as catalog_module
-from inference import parallel, supersede
-from inference.plan import Seats, momentum, plan
-from inference.result import Alternative, Board, Pick, Result, ResultKind, Seat
-from inference.scoring import Candidate
-from inference.shapes import legal_shapes
-from inference.solver import Solved, Solver, Swept, evaluate_comp
-from inference.strategy import Strategy
-from ui.facts import board_facts, compute
-from ui.facts.draft import (
+from facts import board_facts, compute
+from facts.draft import (
     MAX_TANKS,
     TEAM_SIZE,
     Draft,
@@ -38,8 +30,16 @@ from ui.facts.draft import (
     is_sided,
     opposite,
 )
-from ui.facts.factset import FactSet
-from ui.facts.model import ROLES, Hero, Map, World
+from facts.factset import FactSet
+from facts.model import ROLES, Hero, Map, World
+from inference import catalog as catalog_module
+from inference import parallel, supersede
+from inference.plan import Seats, momentum, plan
+from inference.result import Alternative, Board, Pick, Result, ResultKind, Seat
+from inference.scoring import Candidate
+from inference.shapes import legal_shapes
+from inference.solver import Solved, Solver, Swept, evaluate_comp
+from inference.strategy import Strategy
 
 
 class SearchBounds(NamedTuple):

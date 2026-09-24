@@ -1,7 +1,7 @@
 """The metrics: pure functions over a World.
 
 Every number the board shows as a joint fact and every number a strategy
-can reference is computed here or in ui.facts.team, once - the facts
+can reference is computed here or in facts.team, once - the facts
 engine renders these into sentences and the inference layer's solver
 scores candidate compositions with the same functions. The registries
 (TEAM_METRICS in team; MATCHUP_METRICS, MAP_METRICS and WORLD_METRICS
@@ -18,9 +18,9 @@ from collections import OrderedDict
 from collections.abc import Iterable, Sequence
 from typing import NamedTuple, TypedDict
 
-from ui.facts.draft import EXPECTED_SHAPE, is_sided
-from ui.facts.model import ROLES, TERRAIN_FEATURES, Hero, Map, World
-from ui.facts.team import TEAM_METRICS, MetricBag, number, team_metrics
+from facts.draft import EXPECTED_SHAPE, is_sided
+from facts.model import ROLES, TERRAIN_FEATURES, Hero, Map, World
+from facts.team import TEAM_METRICS, MetricBag, number, team_metrics
 
 TREND_POINTS = 1.5
 TERRAIN_STANDOUT = 0.75   # sd from the ordinary map at which a terrain feature is a fact

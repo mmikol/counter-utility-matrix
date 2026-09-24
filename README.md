@@ -57,8 +57,8 @@ Without Docker:
 ```bash
 .venv/bin/python -m db.mcp call db_rebuild   # build the database (the embedded cluster)
 .venv/bin/python -m ui.board                 # the board, http://localhost:8017
-.venv/bin/ruff check db ui inference tests scripts orchestrator.py   # the linter
-.venv/bin/python -m mypy db ui inference orchestrator.py scripts    # the types
+.venv/bin/ruff check db facts ui inference tests scripts orchestrator.py   # the linter
+.venv/bin/python -m mypy db facts ui inference orchestrator.py scripts    # the types
 .venv/bin/python -m pytest -q --cov   # the tests, under the 75% coverage bar
 ```
 

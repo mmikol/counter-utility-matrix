@@ -9,7 +9,7 @@ from collections.abc import Callable, Sequence
 
 from db.mcp.registry import Context, tool
 from db.mcp.schema import Properties, ToolReply
-from ui.facts.draft import Draft
+from facts.draft import Draft
 
 BOARD: Properties = {
     "map": {"type": "string", "description": "map name (any spelling)"},

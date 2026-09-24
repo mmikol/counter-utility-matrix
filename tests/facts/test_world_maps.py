@@ -2,13 +2,13 @@
 maps with text, the style as the rates' lift plus the terrain's lean, the
 same on every load, the stages per mode and each stage's terrain. The wiki's
 own maps are the point; the arithmetic on hand-built maps is
-tests/ui/test_tables.py's."""
+tests/facts/test_tables.py's."""
 
 import statistics
 
 import pytest
 
-from ui.facts import compute, model, tables
+from facts import compute, model, tables
 
 pytestmark = pytest.mark.invariant
 

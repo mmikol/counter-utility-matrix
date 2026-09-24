@@ -24,10 +24,10 @@ Code on your subscription, before a game, never during one.
 
 | folder | what it is | read |
 | --- | --- | --- |
-| `db/` | **DATA LAYER** - `data/` and `psql/` pull every source, clean it and store it, with the schema, its migrations and the embedded cluster. A wiki stat is stored as measurements beside its original text (`data/wiki/measurements.py`); the UI layer's `ui/facts/kit.py` reads a kit's combat numbers off both at read time, so a misread wording is fixed there and needs no re-pull. `mcp/` and `sentry` stand over all three layers rather than inside this one: the door serves the UI layer's facts and the inference layer's solver through the same tools, and the guard watches the playbook beside the database. The door gates every write, the sentry's quarantine rename aside; the other two layers read Postgres directly, over `db.psql.default_dsn()` | [db.md](db.md) |
-| `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet. `ui/facts` is the FACTS kernel the other two layers import - the solver, the deriver and the door read the numbers the board shows - and `board.py`, `pages.py` and `static/` are the only presentation code | [ui.md](ui.md) |
+| `db/` | **DATA LAYER** - `data/` and `psql/` pull every source, clean it and store it, with the schema, its migrations and the embedded cluster. A wiki stat is stored as measurements beside its original text (`data/wiki/measurements.py`); the UI layer's `facts/kit.py` reads a kit's combat numbers off both at read time, so a misread wording is fixed there and needs no re-pull. `mcp/` and `sentry` stand over all three layers rather than inside this one: the door serves the UI layer's facts and the inference layer's solver through the same tools, and the guard watches the playbook beside the database. The door gates every write, the sentry's quarantine rename aside; the other two layers read Postgres directly, over `db.psql.default_dsn()` | [db.md](db.md) |
+| `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet. `facts/` is the FACTS kernel the other two layers import - the solver, the deriver and the door read the numbers the board shows - and `board.py`, `pages.py` and `static/` are the only presentation code | [ui.md](ui.md) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints, heuristics and assumptions in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
-| `tests/` | one folder per layer (`tests/db`, `tests/ui`, `tests/inference`; `tests/db` holds the Blizzard, wiki and door tests in `blizzard/`, `wiki/` and `mcp/`), the root files' tests beside them (`test_docs.py`, and `test_orchestrator.py` with its `_verdict`, `_agents` and `_http` siblings), `synthetic.py`, a World of twelve invented heroes and three maps built by hand and served fresh to each test by the `synthetic_world` fixture in `tests/conftest.py`, which the metric, derivation, facts, solver and board tests work their expected values from with no database, and `tests/fixtures/playbook/`, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the user's assumptions (its rules were emptied on purpose and are being rebuilt by hand; `inference/README.md` is the record). `.venv/bin/python -m pytest -q` runs them, skipping what needs a built database when there is none | |
+| `tests/` | one folder per layer (`tests/db`, `tests/facts`, `tests/inference`, and `tests/ui` for the board; `tests/db` holds the Blizzard, wiki and door tests in `blizzard/`, `wiki/` and `mcp/`), the root files' tests beside them (`test_docs.py`, and `test_orchestrator.py` with its `_verdict`, `_agents` and `_http` siblings), `synthetic.py`, a World of twelve invented heroes and three maps built by hand and served fresh to each test by the `synthetic_world` fixture in `tests/conftest.py`, which the metric, derivation, facts, solver and board tests work their expected values from with no database, and `tests/fixtures/playbook/`, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the user's assumptions (its rules were emptied on purpose and are being rebuilt by hand; `inference/README.md` is the record). `.venv/bin/python -m pytest -q` runs them, skipping what needs a built database when there is none | |
 | `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain`; and `/desloppify`, the cleanup harness's own skill, as `update-skill` writes it (CLAUDE.md) | [skills.md](skills.md) |
 | `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
 | `scripts/` | the recorders of the proven fixtures, run from the repo root as modules. `optimal` (`.venv/bin/python -m scripts.optimal`) records the true maximum of proven boards into `tests/fixtures/optimal.json`, which `tests/inference/test_optimal.py` re-solves on every run - the regression gate on the search. It reads the brute force's `.jsonl` output from the paths in `OPTIMAL_SOURCES`, which live outside the repo. `reach` (`.venv/bin/python -m scripts.reach`) records a board per released hero into `tests/fixtures/reach.json`. Each fixture records the digest of the playbook it was proved under. The gate skips while the shipped playbook scores nothing, fails with "recorded under a different playbook" under any other playbook that scores, and holds out banned boards (`OPTIMAL_STALE_BANNED`) until the backlog's re-prove lands. Run after a deliberate change to the objective, and say in the commit why every number moved | |
@@ -57,7 +57,7 @@ flowchart LR
         INF["INFERENCE<br/>the strategies mirror"]
     end
 
-    subgraph USER["UI LAYER - ui/facts/ + ui/board.py"]
+    subgraph USER["UI LAYER - facts/ + ui/board.py"]
         WORLD["World<br/>the database in memory,<br/>per request"]
         FACTS["FactSet<br/>F1.. hero · map · meta ·<br/>team · matchup<br/>S1.. the playbook's record"]
         BOARD["the board<br/>map + red/blue rosters"]
@@ -87,13 +87,13 @@ code that writes lives with what it writes - the pulls in `db/data`, the
 `inference.tune` (`tune`, `add`, `complete`), which `inference/derive.py`
 also calls inside a `derive_strategies` or `load_authored` run the door
 started. The UI layer reads, turns every table into facts, and defines
-every metric once (`ui/facts/team.py` the team's, `ui/facts/compute.py`
+every metric once (`facts/team.py` the team's, `facts/compute.py`
 the rest, and `compute.registry()` gathers them), so the number on the
 board and the number the solver scores are the same function; its one
 write, a heuristic's weight stored from the board, is off by default
 (`COUNTRIX_READ_ONLY`) and, when turned on, is a `tune` call through the
 door. The inference layer reads the tables through the World
-(`ui.facts.tables.load`, once per request on the service's `/board`,
+(`facts.tables.load`, once per request on the service's `/board`,
 `/infer` and `/evaluate`), and its health check counts the heroes
 directly.
 
@@ -123,7 +123,7 @@ mistaken for the other.
 | `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'` |
 | `.mcp.json` | registers the two MCP servers a Claude Code session sees: `countrix` (stdio, the local cluster) and `countrix-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
 | `requirements.txt` | psycopg, requests, beautifulsoup4 and pgserver pinned (pgserver is the embedded PostgreSQL a host build uses; the image and CI filter it out, since neither starts a cluster), then pytest and pytest-cov, and ruff and mypy pinned, since a new release of either finds new errors in unchanged code |
-| `pyproject.toml` | ruff's rules (line length 100; outside the tests, an import sits in the module's import block); mypy's, which hold every function in `db`, `ui`, `inference`, `scripts` and `orchestrator.py` to full annotations; the coverage bar, 75% where a database exists |
+| `pyproject.toml` | ruff's rules (line length 100; outside the tests, an import sits in the module's import block); mypy's, which hold every function in `db`, `facts`, `ui`, `inference`, `scripts` and `orchestrator.py` to full annotations; the coverage bar, 75% where a database exists |
 | `pytest.ini` | the `invariant` marker for tests that need a built database |
 | `CLAUDE.md` | what a Claude Code session reads before it changes code: the commands, the layers in brief, what the tests hold a change to, the house rules and style |
 | `SECURITY.md` | the terms - you run it at your own risk, no security commitment from the author - and how to report a vulnerability privately; the measures themselves are in [security.md](security.md) |

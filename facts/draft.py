@@ -9,7 +9,7 @@ from collections.abc import Iterable, Mapping, Sequence, Sized
 from typing import NamedTuple
 
 from db import Refusal
-from ui.facts.model import Hero, Map
+from facts.model import Hero, Map
 
 TEAM_SIZE = 6             # 6v6 Open Queue
 MAX_TANKS = 2             # the queue's own limit, whatever the playbook holds

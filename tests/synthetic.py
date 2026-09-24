@@ -30,10 +30,10 @@ import datetime
 from typing import TypedDict
 
 from db.data.names import name_key
-from ui.facts import tables
-from ui.facts.compute import STAGE_MENTIONS
-from ui.facts.model import Hero, Map, World
-from ui.facts.records import MapRate, Rates, Snapshot, StageTerrain, Synergy
+from facts import tables
+from facts.compute import STAGE_MENTIONS
+from facts.model import Hero, Map, World
+from facts.records import MapRate, Rates, Snapshot, StageTerrain, Synergy
 
 HARBOR, EMBER, SALT = 1, 2, 3           # the map ids, in the order a hero's lifts are given
 MAP_IDS = (HARBOR, EMBER, SALT)

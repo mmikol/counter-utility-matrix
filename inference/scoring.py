@@ -12,11 +12,11 @@ Objective.score(). The legal shapes live in inference.shapes.
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal, NamedTuple, NotRequired, TypedDict
 
+from facts import compute
+from facts.model import Hero, Map, World
+from facts.team import NUMBER_TYPES, MetricBag, MetricValue, number, team_metrics
 from inference.expr import Expr, Scope, Value, scope
 from inference.strategy import BOARD_SECTIONS, Strategy
-from ui.facts import compute
-from ui.facts.model import Hero, Map, World
-from ui.facts.team import NUMBER_TYPES, MetricBag, MetricValue, number, team_metrics
 
 CONFIDENCE_KEY = "\x00confidence"   # a rule's scale bounds, beside its own
 NEED_BUDGET = 2.0                 # the most one guarded state can cost

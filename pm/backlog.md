@@ -88,7 +88,7 @@ keeps it current.
   days.
 - **Facts no metric reads.** `ability_modifiers` holds speed, damage-taken
   and healing-received buffs; no metric in
-  `ui/facts/team.py` or `ui/facts/compute.py` reads `hero.modifiers`. Knockbacks as their own
+  `facts/team.py` or `facts/compute.py` reads `hero.modifiers`. Knockbacks as their own
   count (Control's edges), damage beams apart from healing beams, area
   healing apart from area damage. Cost: a day each.
 - **Off-shapes never win.** 2-1-3 and 2-3-1 land within 2-8 percent of the
@@ -150,7 +150,7 @@ yield, best first:
   against an engage tool, an invulnerability against a damage ultimate, a
   cleanse against a debuff. The team-level "wars" exist; the per-pair
   version names who answers whom and with what, from the kit keywords
-  plus a constant in `ui/facts/compute.py` of which tool beats which.
+  plus a constant in `facts/compute.py` of which tool beats which.
   Cost: two days, half of it the constant.
 - **History across captures.** Every rates pull appends a snapshot; only the last step
   is a fact. A hero's win-rate series, who is rising and falling this
@@ -170,7 +170,7 @@ yield, best first:
   damage ultimates carry a figure); projectile-eating tools (Defense
   Matrix, Kinetic Grasp) and hack against deployables; damage mitigation;
   a hero's win-rate variance across maps (generalist or specialist); ult
-  charge lost on a swap. Each is a metric in `ui/facts/compute.py` first,
+  charge lost on a swap. Each is a metric in `facts/compute.py` first,
   then a rule. Cost: an hour to a day each; the per-role splits are the
   cheapest and unlock the most.
 

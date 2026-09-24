@@ -3,7 +3,7 @@ kit numbers, each read in its own units - an ultimate's numbers its own, a
 percent not hit points, a sum not one hit - the weapon a hero fights with,
 the tools counted once, the roster-wide benches and no hole in a released
 hero's core numbers. The scrape is the point: every figure is the wiki's.
-The derivation's rules are tests/ui/test_scalars.py's and test_kit.py's."""
+The derivation's rules are tests/facts/test_scalars.py's and test_kit.py's."""
 
 import statistics
 

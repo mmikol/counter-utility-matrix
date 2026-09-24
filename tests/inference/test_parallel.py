@@ -5,11 +5,11 @@ board's cancelled rounds are test_supersede's."""
 
 import pytest
 
+from facts.draft import Draft
 from inference import catalog
 from inference.strategy import CatalogError
 from tests.inference import FIXTURE_PLAYBOOK
 from tests.inference.tracing import TRACED, Call, traced_board
-from ui.facts.draft import Draft
 
 
 def _timeless(board):

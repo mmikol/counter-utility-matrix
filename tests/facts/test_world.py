@@ -1,7 +1,7 @@
 """The World itself: every data table the load reads, the names a hero or a
 map resolves by, one hero to a seat, and the model's own lookups and
 derivations on the synthetic World. The kits the load reads are
-tests/ui/test_world_kits.py's, the maps test_world_maps.py's."""
+tests/facts/test_world_kits.py's, the maps test_world_maps.py's."""
 
 import pathlib
 import re
@@ -9,9 +9,9 @@ import re
 import pytest
 
 from db import Refusal
-from ui.facts import model, tables
-from ui.facts.model import Hero, Map
-from ui.facts.records import Rates, StyleScore
+from facts import model, tables
+from facts.model import Hero, Map
+from facts.records import Rates, StyleScore
 
 
 @pytest.mark.invariant

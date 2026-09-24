@@ -1,9 +1,9 @@
 """The World: the whole database in memory - the heroes, the maps, the
-relations between them and the names they resolve by. ui.facts.tables.load
+relations between them and the names they resolve by. facts.tables.load
 builds one from Postgres on every request, so the UI layer always reads what
 the data layer stored. A hero's kit pieces and the numbers read off their
-rows are ui.facts.kit's; the records a Hero, a Map and the World hand on are
-ui.facts.records'.
+rows are facts.kit's; the records a Hero, a Map and the World hand on are
+facts.records'.
 """
 
 import datetime
@@ -14,8 +14,8 @@ from typing import NamedTuple
 
 from db import KIND_ULTIMATE, Refusal
 from db.data.names import name_key
-from ui.facts.kit import Kit
-from ui.facts.records import (
+from facts.kit import Kit
+from facts.records import (
     MapRate,
     Modifier,
     Patch,

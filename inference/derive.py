@@ -34,10 +34,10 @@ from collections.abc import Callable, Collection, Iterable
 from typing import TypedDict
 
 from db import Refusal
+from facts import compute
 from inference import catalog as catalog_module
 from inference import tune
 from inference.strategy import Form, Strategy
-from ui.facts import compute
 
 CLI_CANDIDATES = ("claude",                                   # on PATH, any OS
                   os.path.expanduser("~/.local/bin/claude"))    # the native installer's default

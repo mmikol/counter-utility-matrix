@@ -36,11 +36,11 @@ from psycopg.rows import TupleRow
 
 from db import psql, web
 from db.mcp import tools
+from facts import board_facts, tables
+from facts.draft import Draft, board_query, is_sided, parse_board
 from inference import catalog as catalog_module
 from inference import engine, parallel, supersede
 from ui import pages
-from ui.facts import board_facts, tables
-from ui.facts.draft import Draft, board_query, is_sided, parse_board
 
 # a parsed query string; a JSON endpoint answers it with a db.web.Reply, a JSON
 # object and an HTTP status

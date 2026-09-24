@@ -31,16 +31,16 @@ them by key, and rendered as sentences so a person - or the /comp skill -
 can read them as evidence. Ids are dense and stable within a board.
 
 This module writes the meta, the bans, the map and the playbook's record;
-ui.facts.hero_facts writes a hero's facts, and ui.facts.team_facts a
+facts.hero_facts writes a hero's facts, and facts.team_facts a
 team's and the matchup's.
 """
 
 from db import Refusal
-from ui.facts import compute, hero_facts, team_facts
-from ui.facts.compute import TERRAIN_STANDOUT
-from ui.facts.draft import MAX_BANS, SIDES, Draft, is_sided, opposite
-from ui.facts.factset import PLAYBOOK_SCOPE, FactSet
-from ui.facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Map, Resolved, World
+from facts import compute, hero_facts, team_facts
+from facts.compute import TERRAIN_STANDOUT
+from facts.draft import MAX_BANS, SIDES, Draft, is_sided, opposite
+from facts.factset import PLAYBOOK_SCOPE, FactSet
+from facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Map, Resolved, World
 
 
 def _g(value: float) -> str:

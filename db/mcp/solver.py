@@ -10,10 +10,10 @@ from typing import TypedDict
 from db.mcp.boards import board_tool
 from db.mcp.registry import Context, tool
 from db.mcp.schema import ToolReply
+from facts import tables
+from facts.draft import Draft
 from inference import catalog, engine, reach
 from inference.result import Result
-from ui.facts import tables
-from ui.facts.draft import Draft
 
 COMPACT_TERMS = 15        # the heaviest terms a compact reply carries
 

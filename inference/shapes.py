@@ -7,9 +7,9 @@ whatever picks are locked.
 from collections.abc import Iterable, Sequence
 from typing import NamedTuple
 
+from facts.draft import MAX_TANKS, TEAM_SIZE
 from inference.expr import Expr, scope
 from inference.strategy import Strategy
-from ui.facts.draft import MAX_TANKS, TEAM_SIZE
 
 SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size", "team.open_slots"}
 

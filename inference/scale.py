@@ -21,11 +21,11 @@ import random
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
+from facts import compute
+from facts.model import ROLES, Hero
+from facts.team import number
 from inference.scoring import CONFIDENCE_KEY, Bounds, Candidate, Interval, MetricKey, Objective
 from inference.shapes import legal_shapes
-from ui.facts import compute
-from ui.facts.model import ROLES, Hero
-from ui.facts.team import number
 
 REFERENCE_SIZE = 1200
 REFERENCE_SEED = 20260913

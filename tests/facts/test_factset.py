@@ -5,8 +5,8 @@ import dataclasses
 
 import pytest
 
-from ui.facts.draft import Draft
-from ui.facts.factset import FactSet
+from facts.draft import Draft
+from facts.factset import FactSet
 
 
 def test_a_fact_is_found_under_every_metric_its_sentence_states():

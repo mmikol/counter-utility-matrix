@@ -9,8 +9,8 @@ from typing import TypedDict
 from db.mcp.boards import board_tool
 from db.mcp.registry import Context, tool
 from db.mcp.schema import ToolReply
-from ui.facts import board_facts, tables
-from ui.facts.draft import Draft
+from facts import board_facts, tables
+from facts.draft import Draft
 
 
 class RosterHero(TypedDict):

@@ -32,11 +32,11 @@ from urllib.parse import parse_qs, urlsplit
 import psycopg
 
 from db import psql, web
+from facts import tables
+from facts.draft import parse_board
 from inference import catalog as catalog_module
 from inference import engine, parallel, supersede
 from inference.strategy import CatalogError
-from ui.facts import tables
-from ui.facts.draft import parse_board
 
 # A parsed query string. A handler answers a db.web.Reply: a JSON object and
 # its status.

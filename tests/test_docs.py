@@ -83,7 +83,7 @@ ENV_DOCS = ("architecture.md", "db.md")
 def test_every_setting_the_code_reads_is_documented():
     assert ENV_RE.findall('CLI = "COUNTRIX_X"') == ["COUNTRIX_X"]   # a name kept in a constant
     names = set()
-    for path in _python_files("db", "ui", "inference"):
+    for path in _python_files("db", "facts", "ui", "inference"):
         with open(path, encoding="utf-8") as handle:
             names |= set(ENV_RE.findall(handle.read()))
     documented = "".join(_read("docs", doc) for doc in ENV_DOCS)
@@ -107,7 +107,7 @@ def test_only_the_door_calls_the_playbook_writers():
     assert WRITER_RE.search("        catalog.mirror(cx, cat)")
     assert not WRITER_RE.search('tools.run_tool(ctx, "tune", **arguments)')
     outside = []
-    for path in _python_files("db", "ui", "inference", "scripts"):
+    for path in _python_files("db", "facts", "ui", "inference", "scripts"):
         relative = os.path.relpath(path, ROOT)
         with open(path, encoding="utf-8") as handle:
             calls = WRITER_RE.search(handle.read())
@@ -121,7 +121,7 @@ def test_every_shallow_indent_sits_on_a_four_column_stop():
     16 columns and counts nesting in that unit: one line off a multiple of 4
     makes the unit 1 and every column a level. Docstrings and strings count."""
     off = []
-    for path in _python_files("db", "ui", "inference", "tests", "scripts"):
+    for path in _python_files("db", "facts", "ui", "inference", "tests", "scripts"):
         with open(path, encoding="utf-8") as handle:
             for number, line in enumerate(handle, 1):
                 text = line.lstrip()
@@ -164,7 +164,7 @@ def test_no_module_reads_the_environment_at_import():
                                         "def f(y=os.getenv('B')):\n"
                                         "    return os.environ['C']\n")) == [2, 3]
     frozen = []
-    for path in _python_files("db", "ui", "inference", "scripts"):
+    for path in _python_files("db", "facts", "ui", "inference", "scripts"):
         with open(path, encoding="utf-8") as handle:
             tree = ast.parse(handle.read(), path)
         frozen += ["%s:%d" % (os.path.relpath(path, ROOT), line)

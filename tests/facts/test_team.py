@@ -1,11 +1,11 @@
-"""The team metrics of ui/facts/team.py, section by section, on the synthetic
+"""The team metrics of facts/team.py, section by section, on the synthetic
 World: every expected value is worked by hand from tests/synthetic.py, so a
 change to the arithmetic fails here whatever the scrape holds. No database."""
 
 import pytest
 
-from ui.facts import compute
-from ui.facts.team import FLIER_REACH, SPECIALIST_DELTA, team_metrics
+from facts import compute
+from facts.team import FLIER_REACH, SPECIALIST_DELTA, team_metrics
 
 
 def _picks(w, *names):
@@ -180,7 +180,7 @@ def test_a_metric_read_as_the_wrong_kind_is_the_callers_error():
     name, the names, the synergy pairs, the tally, the answers - and a value
     of another kind raises: the catalog keeps text metrics out of every place
     a number is read."""
-    from ui.facts import team
+    from facts import team
     assert team.number(3) == 3 and team.number(2.5) == 2.5
     assert team.numbers({"a": 1, "b": "dive", "c": 2.5, "d": ["x"]}) == {"a": 1, "c": 2.5}
     assert team.text("dive") == "dive"

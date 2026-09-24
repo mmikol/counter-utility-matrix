@@ -40,14 +40,14 @@ from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
 from typing import Concatenate, NamedTuple
 
+from facts.draft import Draft
+from facts.model import World
 from inference import catalog as catalog_module
 from inference.scale import Standing, Tally, reference_bounds, reference_standing
 from inference.scoring import Bounds, Candidate, Interval
 from inference.solver import Solved, Solver, Swept
 from inference.strategy import Strategy
 from inference.supersede import Watch
-from ui.facts.draft import Draft
-from ui.facts.model import World
 
 WORKER_CEILING = 12          # a worker holds about 70 MB, and past a dozen slices the
                              # rounds' own overhead eats what a finer slice saves

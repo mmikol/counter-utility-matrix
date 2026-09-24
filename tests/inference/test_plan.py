@@ -7,13 +7,13 @@ database."""
 import copy
 import os
 
+from facts import board_facts
+from facts.draft import Draft
+from facts.records import StyleScore
+from facts.team import team_metrics
 from inference import catalog
 from inference.expr import Expr
 from tests.inference import FIXTURE_PLAYBOOK
-from ui.facts import board_facts
-from ui.facts.draft import Draft
-from ui.facts.records import StyleScore
-from ui.facts.team import team_metrics
 
 
 def test_the_momentum_verdict_reads_the_two_current_comps():
@@ -76,8 +76,8 @@ def test_the_plan_names_the_terrain_the_facts_hold_and_no_other(
         synthetic_world, harbor_gate_board):
     """The map sentence names the map.terrain facts above the ordinary map, largest
     first; a board whose facts hold none for the map names none."""
+    from facts import model
     from inference import plan
-    from ui.facts import model
     world = synthetic_world
     blue_r = harbor_gate_board.blue
     above = [

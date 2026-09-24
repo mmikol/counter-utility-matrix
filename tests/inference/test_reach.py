@@ -12,10 +12,10 @@ import json
 import pytest
 
 from db import Refusal
+from facts.model import World
 from inference import catalog, reach
 from scripts import reach as recorder
 from tests.inference import recorded
-from ui.facts.model import World
 
 UNSEATED = {"Freja", "Shion"}       # named, not waived - see the test
 

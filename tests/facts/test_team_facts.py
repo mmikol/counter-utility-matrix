@@ -1,14 +1,14 @@
-"""A team's facts and the matchup's from ui/facts/team_facts.py, written
+"""A team's facts and the matchup's from facts/team_facts.py, written
 straight from a board on the synthetic World: one fact per team metric,
 worded around the number the solver scores, each side's versus facts once
 the other side has picks, and the matchup once both do. Every sentence is
 worked from tests/synthetic.py. No database."""
 
-from ui.facts import team_facts
-from ui.facts.draft import Draft
-from ui.facts.factset import FactSet
-from ui.facts.model import Resolved
-from ui.facts.team import team_metrics
+from facts import team_facts
+from facts.draft import Draft
+from facts.factset import FactSet
+from facts.model import Resolved
+from facts.team import team_metrics
 
 
 def _facts(world, map_name, red, blue):

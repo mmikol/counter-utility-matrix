@@ -2,13 +2,13 @@
 the traits its kit's numbers and keywords carry, its abilities, weapons and
 perks, its rates, and the wiki's counters and partners - then what only
 this board has: on this map, against these opponents, beside these
-teammates. ui.facts.board_facts calls write() once per pick, red first.
+teammates. facts.board_facts calls write() once per pick, red first.
 """
 
-from ui.facts.compute import TREND_POINTS
-from ui.facts.factset import FactSet
-from ui.facts.model import Hero, Map, Resolved, World
-from ui.facts.team import RANK_SENSITIVE, SPECIALIST_DELTA
+from facts.compute import TREND_POINTS
+from facts.factset import FactSet
+from facts.model import Hero, Map, Resolved, World
+from facts.team import RANK_SENSITIVE, SPECIALIST_DELTA
 
 # a kit trait as the fact states it - key, sentence, value, unit - or None
 # where the kit does not carry it

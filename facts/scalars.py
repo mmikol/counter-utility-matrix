@@ -11,11 +11,11 @@ the authored name lists below decide what a kit piece counts toward.
 import statistics
 
 from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON
-from ui.facts.kit import Kit, dual_rate
-from ui.facts.model import Hero
+from facts.kit import Kit, dual_rate
+from facts.model import Hero
 
 # Keyword families the wiki tags abilities with, read verbatim from the
-# keywords column; the wiki's prose is read only in ui.facts.kit, and the name
+# keywords column; the wiki's prose is read only in facts.kit, and the name
 # lists below (PILOT_GUNS to SAVE_TOOLS) are authored. The wiki writes a
 # keyword as `family;;qualifier` ("area of effect;;spherical", "invulnerable;;
 # targets"): a Kit keeps the family in `keywords` and the whole atom in `atoms`.

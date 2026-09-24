@@ -47,9 +47,9 @@ reads as params.NAME - tuning is editing the file.
 from collections.abc import Mapping
 from typing import Literal, TypedDict
 
+from facts import compute
 from inference.expr import Expr, ExprError, Section, compile_expr
 from inference.frontmatter import Frontmatter, Scalar
-from ui.facts import compute
 
 # a strategy's kind, as its frontmatter names it, and its form, as its fields make it
 Kind = Literal["constraint", "heuristic", "assumption"]

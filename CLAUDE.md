@@ -16,14 +16,14 @@ doc per layer. This file is what a session needs before it changes code.
 ```bash
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
-.venv/bin/ruff check db ui inference tests scripts orchestrator.py    # the paths CI lints
-.venv/bin/python -m mypy db ui inference orchestrator.py scripts     # the types CI checks
+.venv/bin/ruff check db facts ui inference tests scripts orchestrator.py        # the paths CI lints
+.venv/bin/python -m mypy db facts ui inference orchestrator.py scripts          # the types CI checks
 
-.venv/bin/python -m pytest -q -p no:cacheprovider --cov              # full suite, 75% bar, needs the built database
+.venv/bin/python -m pytest -q -p no:cacheprovider --cov                         # full suite, 75% bar, needs the built database
 COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=78   # as CI runs it
-.venv/bin/python -m pytest -q tests/test_docs.py                     # one file
+.venv/bin/python -m pytest -q tests/test_docs.py                                # one file
 .venv/bin/python -m pytest -q 'tests/test_docs.py::test_the_overview_names_everything_at_the_root'   # one test
-.venv/bin/python -m pytest -q -m 'not invariant'                     # everything that needs no database
+.venv/bin/python -m pytest -q -m 'not invariant'                                # everything that needs no database
 
 .venv/bin/python -m db.mcp call db_rebuild      # build the database: the embedded cluster at db/psql/cluster
 .venv/bin/python -m db.mcp call db_migrate      # apply new migrations in place, keeping the data
@@ -87,12 +87,12 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   and `inference/` connect through `db.psql.default_dsn()` -
   `DATABASE_URL`, else the embedded pgserver cluster, which starts on
   first touch.
-- **One definition per metric.** `ui/facts/team.py` defines every team
-  metric and `ui/facts/compute.py` the matchup, map and world ones, each in a
+- **One definition per metric.** `facts/team.py` defines every team
+  metric and `facts/compute.py` the matchup, map and world ones, each in a
   registry, and `compute.registry()` gathers them. The facts engine words
   them as facts, the solver scores the same functions, and the catalog
   validates a strategy's `metric` against the registry, so the number on the
-  board and the number the solver maximises cannot drift. `ui/facts` is a shared library: `inference/`,
+  board and the number the solver maximises cannot drift. `facts/` is a shared library: `inference/`,
   the door's `facts`, `solver`, `boards` and `playbook` modules and `scripts/reach.py` import it.
 - **Facts are numbered.** `FactSet` numbers facts F1.. and the playbook's
   record S1.. in emission order; a solver contribution cites a fact by metric
@@ -140,10 +140,10 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   its package's `__init__.py` docstring: indented, the name, then two
   spaces or more before what it is (`.py` optional, a folder's slash too).
   A name that only opens a wrapped line of prose does not count.
-- Every quoted `"COUNTRIX_..."` name in `db/`, `ui/`, `inference/` or
-  `orchestrator.py` must appear in docs/architecture.md or docs/db.md, and
-  is read where it is used or by `main()` at start: an `os.environ` or
-  `os.getenv` that runs at import fails
+- Every quoted `"COUNTRIX_..."` name in `db/`, `facts/`, `ui/`,
+  `inference/` or `orchestrator.py` must appear in docs/architecture.md or
+  docs/db.md, and is read where it is used or by `main()` at start: an
+  `os.environ` or `os.getenv` that runs at import fails
   `test_no_module_reads_the_environment_at_import`.
 - A new migration is named by its number in docs/db.md's `migrations/`
   row, the one inventory of the schema's steps.
@@ -171,7 +171,7 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   holds: a backticked id the record cites and `inference/strategies/`
   lacks is a dropped rule, and fails.
 - A new table carries `source_id` and `cao`, has rows, is exported to
-  `db/raw` (`export_csv`) and is named in `ui/facts/tables.py` (a test greps
+  `db/raw` (`export_csv`) and is named in `facts/tables.py` (a test greps
   its source); regenerate the schema sections of docs/db.md. Its migration
   also wants a `schema.DOC_DOMAIN` entry keyed by filename, or docs/db.md
   files it under foundation - no test catches that one.

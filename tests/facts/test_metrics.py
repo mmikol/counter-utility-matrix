@@ -1,7 +1,7 @@
-"""The metrics of ui/facts/compute.py and the sides of ui/facts/draft.py on
+"""The metrics of facts/compute.py and the sides of facts/draft.py on
 the synthetic World: the namespace a strategy reads, the matchup, the map
 metrics and the other side's likely six, every expected value worked by
-hand from tests/synthetic.py. The team metrics are tests/ui/test_team.py's.
+hand from tests/synthetic.py. The team metrics are tests/facts/test_team.py's.
 No database."""
 
 import inspect
@@ -9,12 +9,12 @@ from collections import Counter
 
 import pytest
 
-from ui.facts import compute
-from ui.facts.compute import STAGE_FEATURES, STAGE_MENTIONS, TERRAIN_STANDOUT
-from ui.facts.draft import EXPECTED_SHAPE, TEAM_SIZE, is_sided, opposite
-from ui.facts.model import TERRAIN_FEATURES
-from ui.facts.records import MapRate, StageTerrain
-from ui.facts.team import TEAM_METRICS, team_metrics
+from facts import compute
+from facts.compute import STAGE_FEATURES, STAGE_MENTIONS, TERRAIN_STANDOUT
+from facts.draft import EXPECTED_SHAPE, TEAM_SIZE, is_sided, opposite
+from facts.model import TERRAIN_FEATURES
+from facts.records import MapRate, StageTerrain
+from facts.team import TEAM_METRICS, team_metrics
 
 
 def test_metrics_cover_the_registry_exactly(synthetic_world):

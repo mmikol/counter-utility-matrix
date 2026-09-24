@@ -131,8 +131,8 @@ in your browser and rides with every request until reset; the file's weight is t
 Store writes it into the file through the tune tool, and logs it. Only a heuristic has a
 slider, 0 to 10; a scored constraint keeps the weight in its file.</p>
 <h2 id='pieces'>How the pieces fit</h2>
-<pre class='eq'>sources → db/data (fetch) → db/psql (the database) → ui/facts (FACTS of a board)
-                                                                    &darr;
+<pre class='eq'>sources → db/data (fetch) → db/psql (the database) → facts/ (FACTS of a board)
+                                                                  &darr;
                    inference/strategies (STRATEGIES) → inference/solver (ARGMAX) → the board</pre>
 <p><b>The data layer</b> (<code>db/</code>): the sources in one Postgres schema, with the MCP
 tools as the one door. A sentry watches the strategy files, the database's free text and the

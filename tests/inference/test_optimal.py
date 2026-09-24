@@ -20,10 +20,10 @@ import re
 
 import pytest
 
+from facts.draft import Draft
 from inference import catalog, engine
 from scripts import optimal
 from tests.inference import recorded
-from ui.facts.draft import Draft
 
 
 @pytest.mark.invariant

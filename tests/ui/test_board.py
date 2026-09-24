@@ -6,8 +6,8 @@ routing; tests/ui/test_board_server.py serves it."""
 import pytest
 
 from db import Refusal
+from facts.draft import parse_board
 from ui import board
-from ui.facts.draft import parse_board
 
 
 @pytest.mark.invariant

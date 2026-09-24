@@ -13,8 +13,8 @@ or the user points at, and leave a report.
 
 1. **Lint, types and tests, three ways.** From the repo root:
 
-       .venv/bin/ruff check db ui inference tests scripts orchestrator.py
-       .venv/bin/python -m mypy db ui inference orchestrator.py scripts
+       .venv/bin/ruff check db facts ui inference tests scripts orchestrator.py
+       .venv/bin/python -m mypy db facts ui inference orchestrator.py scripts
        .venv/bin/python -m pytest -q -p no:cacheprovider --cov
        COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -p no:cacheprovider \
            --cov --cov-fail-under=78
@@ -59,7 +59,7 @@ or the user points at, and leave a report.
    match them.
 
 4. **Nothing dead, nothing twice.** Every top-level function, class and
-   constant in `db/`, `ui/`, `inference/` should be referenced outside
+   constant in `db/`, `facts/`, `ui/`, `inference/` should be referenced outside
    its own module or be private to it on purpose; a constant defined in
    two modules is defined once; a helper that exists only to serve
    something deleted goes with it; so does a stylesheet class or script

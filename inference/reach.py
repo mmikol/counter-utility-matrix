@@ -20,9 +20,9 @@ Shion do not, as of the scale that stopped moving with the bans.
 
 from typing import NamedTuple, TypedDict
 
+from facts.draft import MAX_BANS, SIDES, Draft, is_sided
+from facts.model import Hero, Map, World
 from inference import engine
-from ui.facts.draft import MAX_BANS, SIDES, Draft, is_sided
-from ui.facts.model import Hero, Map, World
 
 MAPS = 4
 CLOSEST = 5         # boards the ban search starts from

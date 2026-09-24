@@ -15,7 +15,7 @@ def test_the_board_survives_the_round_trip_through_a_query_string():
     so the two doors cannot drift apart on a spelling."""
     from urllib.parse import parse_qs, urlencode
 
-    from ui.facts.draft import Draft, board_query, parse_board
+    from facts.draft import Draft, board_query, parse_board
     for draft in (Draft("King's Row", ("Zarya", "Pharah"), ("Ana",), ("Widowmaker",), "attack"),
                   Draft()):
         written = urlencode(board_query(draft), doseq=True)
@@ -26,7 +26,7 @@ def test_the_wire_refuses_a_team_of_seven_and_cuts_only_the_bans():
     """Seven picks on a team is no board a lobby seats, and cutting it to six
     would answer one the caller did not send: both doors refuse it. The bans
     are cut to five, as the page sends them."""
-    from ui.facts.draft import parse_board
+    from facts.draft import parse_board
     seven = ["Ana", "Kiriko", "Lúcio", "Tracer", "Genji", "Sojourn", "Ashe"]
     for team in ("red", "blue"):
         with pytest.raises(Refusal, match="more than 6 %s picks" % team):

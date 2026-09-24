@@ -1,7 +1,7 @@
 -- counterpick.gg goes: the sources are Blizzard, the wiki and the playbook.
 --
 -- map_strategy goes: a hero's best maps are derived at load
--- (ui/facts/model.py) from Blizzard's per-map win rates. counterpick's rates
+-- (facts/tables.py) from Blizzard's per-map win rates. counterpick's rates
 -- and their snapshots go. counters stays and is filled from the wiki:
 -- pull_counters replaces the table whole, so run it after this migration.
 BEGIN;

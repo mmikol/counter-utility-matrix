@@ -15,8 +15,8 @@ from db import ROOT
 from db.mcp.registry import Context, tool
 from db.mcp.schema import Properties, ToolReply
 from db.mcp.server import Resource, ResourceText
+from facts import compute
 from inference import catalog, derive, tune
-from ui.facts import compute
 
 
 @tool(

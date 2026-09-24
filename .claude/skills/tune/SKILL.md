@@ -43,7 +43,7 @@ reason in `inference/strategies/tuning-log.md`. Nothing is edited by hand.
 - `tuning_log` (tool) or the `strategy://tuning-log` resource is the
   audit trail - show it when the user asks how the weights got here.
 - At most two tanks is the queue's own rule: the solver keeps every six
-  to it whatever the playbook holds (`MAX_TANKS` in `ui/facts/draft.py`),
+  to it whatever the playbook holds (`MAX_TANKS` in `facts/draft.py`),
   and the `open-queue-ranked` assumption states it. No strategy file
   carries it, so there is no weight to tune for it.
 

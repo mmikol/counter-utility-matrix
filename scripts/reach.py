@@ -16,8 +16,8 @@ import os
 import psycopg
 
 from db import ROOT, psql
+from facts import tables
 from inference import catalog, reach
-from ui.facts import tables
 
 OUT = os.path.join(ROOT, "tests", "fixtures", "reach.json")
 

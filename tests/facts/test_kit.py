@@ -5,7 +5,7 @@ row is built by hand in the shape the wiki publishes it."""
 import pytest
 
 from db import KIND_ABILITY, KIND_ULTIMATE, KIND_WEAPON
-from ui.facts.kit import Kit, Stat, dual_rate
+from facts.kit import Kit, Stat, dual_rate
 
 # a stat row as the loader reads it, column by column
 STAT_COLUMNS = ("code", "value", "unit_num", "unit_den", "den_value", "condition", "text")

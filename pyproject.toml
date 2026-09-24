@@ -27,14 +27,14 @@ ignore = ["UP031", "UP032", "RUF001", "RUF002", "RUF003", "RUF012"]
 "tests/**" = ["PLC0415"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["db", "ui", "inference"]
+known-first-party = ["db", "facts", "ui", "inference"]
 
 # http.server dispatches a request to do_<METHOD>; ruff sees that only on a
 # direct subclass of its handler, not on db.web.Handler's
 [tool.ruff.lint.pep8-naming]
 extend-ignore-names = ["do_*"]
 
-# The types: `python -m mypy db ui inference orchestrator.py scripts`, as CI
+# The types: `python -m mypy db facts ui inference orchestrator.py scripts`, as CI
 # runs it; the tests are not checked. Every function and method is annotated.
 # psycopg, requests and beautifulsoup4 ship their own types (py.typed), so no
 # stub package is installed; a missing import is ignored by name, never
@@ -52,7 +52,7 @@ module = ["pgserver", "pgserver.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]
-source = ["db", "ui", "inference", "orchestrator"]
+source = ["db", "facts", "ui", "inference", "orchestrator"]
 
 [tool.coverage.report]
 # the bar where the database exists (locally, and inside the image); CI builds

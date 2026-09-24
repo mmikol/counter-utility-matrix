@@ -12,11 +12,11 @@ import pytest
 
 from db import Refusal
 from db.data.names import name_key
+from facts.draft import Draft
+from facts.records import StyleScore, Synergy
+from facts.team import team_metrics
 from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
-from ui.facts.draft import Draft
-from ui.facts.records import StyleScore, Synergy
-from ui.facts.team import team_metrics
 
 
 def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(synthetic_world, tmp_path):
@@ -250,7 +250,7 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(syntheti
     heroes = [world.hero(n) for n in ("Anvil", "Kite", "Flint", "Needle", "Balm", "Sorrel")]
     forward = team_metrics(world, heroes, world.map("Ember Ruins"), [])
 
-    from ui.facts import model
+    from facts import model
 
     class Reversed(model.Hero):                # the same hero, its styles iterated backwards
         def __init__(self, hero):

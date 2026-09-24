@@ -1,4 +1,4 @@
-"""A hero's facts from ui/facts/hero_facts.py, written for one hero at a time
+"""A hero's facts from facts/hero_facts.py, written for one hero at a time
 on the synthetic World: who it is, the traits its numbers carry, its kit
 piece by piece, its rates and what they warn of, where it does best, the
 wiki's relations, and what only the board has - the map, the opponents and
@@ -6,12 +6,12 @@ the teammates. Every sentence is worked from tests/synthetic.py. No
 database."""
 
 from db import KIND_ABILITY, KIND_ULTIMATE, KIND_WEAPON
-from ui.facts import hero_facts
-from ui.facts.draft import Draft
-from ui.facts.factset import FactSet
-from ui.facts.kit import Kit, Stat
-from ui.facts.model import Resolved
-from ui.facts.records import Modifier, PerkEffect
+from facts import hero_facts
+from facts.draft import Draft
+from facts.factset import FactSet
+from facts.kit import Kit, Stat
+from facts.model import Resolved
+from facts.records import Modifier, PerkEffect
 
 
 def _facts(world, name, *, team="blue", map_name=None, red=(), blue=()):

@@ -1,10 +1,10 @@
 -- The strategies are the one input a user writes. Every other table is
 -- pulled from a source.
 --
--- map_playstyle goes: a map's styles are derived at load (ui/facts/model.py)
+-- map_playstyle goes: a map's styles are derived at load (facts/tables.py)
 -- from the wiki's hero playstyle tags and the per-map win rates. comp_archetypes
--- goes: it only ever said two slots per role, which ui/facts/compute.py holds
--- as EXPECTED_SHAPE. seasons and synergies stay and are filled from the wiki:
+-- goes: it only ever said two slots per role, which facts/draft.py holds as
+-- EXPECTED_SHAPE. seasons and synergies stay and are filled from the wiki:
 -- pull_seasons and pull_synergies each replace the table whole, so run both
 -- after this migration to replace the rows the CSVs loaded.
 BEGIN;

@@ -1,14 +1,14 @@
-"""A hero's derived numbers from ui/facts/scalars.py, section by section:
+"""A hero's derived numbers from facts/scalars.py, section by section:
 each test builds a hero's kit by hand, in the shape the load reads it, runs
 scalars.derive_scalars and reads the fields it sets. The kit reader's own
-wording rules are tests/ui/test_kit.py's. No database."""
+wording rules are tests/facts/test_kit.py's. No database."""
 
 import pytest
 
 from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON
-from ui.facts import scalars
-from ui.facts.kit import Kit, Stat
-from ui.facts.model import Hero
+from facts import scalars
+from facts.kit import Kit, Stat
+from facts.model import Hero
 
 
 def _stat(code, value, unit_num=None, unit_den=None, den=None, condition=None, text=None):

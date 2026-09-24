@@ -2,17 +2,17 @@
 reader, for each side with picks, then the matchup once both sides have
 them. The numbers are team_metrics' and compute.matchup_metrics' - the
 ones the solver scores - so a fact states exactly what a strategy reads.
-ui.facts.board_facts calls write() once per board.
+facts.board_facts calls write() once per board.
 """
 
 import functools
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from ui.facts import compute
-from ui.facts.factset import FactSet
-from ui.facts.model import SQUISHY_POOL, Hero, Map, Resolved, World
-from ui.facts.team import (
+from facts import compute
+from facts.factset import FactSet
+from facts.model import SQUISHY_POOL, Hero, Map, Resolved, World
+from facts.team import (
     RANK_SENSITIVE,
     TEAM_METRICS,
     MetricBag,

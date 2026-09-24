@@ -272,8 +272,8 @@ it - each weighted 1/(its tag count) - of the hero's win rate on the map
 minus its overall win rate, z-scored across the maps. `best_maps` derives
 each hero's best maps: the three with the largest map win rate minus
 overall win rate, only where positive, ties by map name. A test in
-`tests/ui` insists every data table is read here: a table nothing reads
-is not data.
+`tests/facts` insists every data table is read here: a table nothing
+reads is not data.
 
 ### `scalars.py` - a hero's numbers
 
@@ -392,7 +392,7 @@ matchup's.
 sequenceDiagram
     actor You
     participant Board as ui/board.py
-    participant Facts as ui/facts/ (World + FactSet)
+    participant Facts as facts/ (World + FactSet)
     participant Solver as inference/ (solver)
     participant DB as PostgreSQL
 
@@ -416,11 +416,11 @@ side each team holds.
 
 ## What reads this package
 
-No other layer imports the board or its pages. `ui/facts` is read by the
+No other layer imports the board or its pages. `facts/` is read by the
 inference layer, the door and the reach recorder, all through the same
 functions the board calls:
 
-| reader | what it imports from `ui/facts` |
+| reader | what it imports from `facts/` |
 | --- | --- |
 | the objective and the scale (`inference/scoring.py`, `inference/scale.py`) | `compute`, `team`, `model` |
 | the shapes (`inference/shapes.py`) | `draft` |

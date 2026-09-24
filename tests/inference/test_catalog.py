@@ -11,11 +11,11 @@ from pathlib import Path
 import pytest
 
 from db import Refusal
+from facts import compute
 from inference import catalog
 from inference.frontmatter import Parsed, parse_frontmatter
 from inference.strategy import KINDS, CatalogError, Strategy
 from tests.inference import FIXTURE_PLAYBOOK
-from ui.facts import compute
 
 
 def _fights(strategies: Iterable[Strategy]) -> list[str]:

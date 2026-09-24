@@ -19,9 +19,9 @@ from psycopg.rows import TupleRow
 
 from db import KIND_WEAPON
 from db.data.names import name_key
-from ui.facts.kit import Kit, Stat
-from ui.facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
-from ui.facts.records import (
+from facts.kit import Kit, Stat
+from facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
+from facts.records import (
     MapRate,
     Modifier,
     Patch,
@@ -32,7 +32,7 @@ from ui.facts.records import (
     StyleScore,
     Synergy,
 )
-from ui.facts.scalars import derive_scalars
+from facts.scalars import derive_scalars
 
 type Connection = psycopg.Connection[TupleRow]
 

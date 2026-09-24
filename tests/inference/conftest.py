@@ -8,9 +8,9 @@ import shutil
 
 import pytest
 
+from facts.draft import Draft
 from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
-from ui.facts.draft import Draft
 
 
 @pytest.fixture()

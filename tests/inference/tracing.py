@@ -5,7 +5,7 @@ supersede tests a stale board that stops and keeps the pool."""
 
 from concurrent.futures.process import BrokenProcessPool
 
-from ui.facts.draft import Draft
+from facts.draft import Draft
 
 
 class Call:

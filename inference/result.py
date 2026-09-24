@@ -11,13 +11,13 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Literal, NotRequired, TypedDict
 
+from facts.draft import TEAM_SIZE
+from facts.factset import Fact, FactSet
+from facts.model import ROLES
+from facts.team import text
 from inference import catalog as catalog_module
 from inference.scoring import Candidate, Contribution
 from inference.strategy import Strategy
-from ui.facts.draft import TEAM_SIZE
-from ui.facts.factset import Fact, FactSet
-from ui.facts.model import ROLES
-from ui.facts.team import text
 
 # A result or a board as to_dict() serves it: a JSON object, read by the shells.
 Payload = dict[str, object]

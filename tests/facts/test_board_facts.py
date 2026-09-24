@@ -1,12 +1,12 @@
-"""A board's facts from ui/facts/board_facts.py, on the synthetic World: the
+"""A board's facts from facts/board_facts.py, on the synthetic World: the
 order and the numbering, the team and matchup facts, the warnings, the bans
 and the sides, each worded from what tests/synthetic.py sets. No database."""
 
 import pytest
 
 from db import Refusal
-from ui.facts import board_facts, factset
-from ui.facts.draft import Draft
+from facts import board_facts, factset
+from facts.draft import Draft
 
 
 def test_every_fact_is_keyed_and_the_meta_comes_first(synthetic_world):

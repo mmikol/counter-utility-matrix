@@ -66,7 +66,7 @@ def world(db):
     """The World the facts and the inference tests read, built once per module.
     The load runs a read transaction; rolling it back leaves the session
     connection clean for the next fixture."""
-    from ui.facts import tables
+    from facts import tables
 
     w = tables.load(db)
     db.rollback()

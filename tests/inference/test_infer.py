@@ -9,10 +9,10 @@ import os
 import pytest
 
 from db import Refusal
+from facts import board_facts
+from facts.draft import Draft
 from inference import catalog
 from tests.inference import FIXTURE_PLAYBOOK
-from ui.facts import board_facts
-from ui.facts.draft import Draft
 
 
 def test_infer_keeps_locked_picks_and_the_open_queue_shape(synthetic_world):

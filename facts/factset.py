@@ -4,14 +4,14 @@ A Fact is one sentence and the structured claim behind it (scope, subject,
 key, value, unit, source); the FactSet numbers them in emission order and
 files each under the metrics it states, so the inference layer finds a fact
 by metric and a person reads the same facts as numbered sentences.
-ui.facts.board_facts writes a board's facts into one.
+facts.board_facts writes a board's facts into one.
 """
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from ui.facts.draft import Draft
+from facts.draft import Draft
 
 
 @dataclass(frozen=True, slots=True)

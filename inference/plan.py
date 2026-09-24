@@ -10,12 +10,12 @@ roles the six holds.
 from collections.abc import Iterable, Mapping, Sequence
 from typing import NamedTuple
 
+from facts.draft import TEAM_SIZE
+from facts.factset import FactSet
+from facts.model import ROLES, Hero, Map, World
+from facts.team import team_metrics, text
 from inference import catalog as catalog_module
 from inference.result import Momentum, Odds, Result, rates_queue
-from ui.facts.draft import TEAM_SIZE
-from ui.facts.factset import FactSet
-from ui.facts.model import ROLES, Hero, Map, World
-from ui.facts.team import team_metrics, text
 
 
 class Seats(NamedTuple):
