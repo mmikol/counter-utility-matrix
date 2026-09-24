@@ -202,10 +202,10 @@ def api_weight(payload: dict[str, Any]) -> Reply:
         return {"line": text.split("\n")[0], "change": change}, 200
     from db.mcp import tools
     try:
-        text, change = tools.run_tool(tool_context(), "tune", **arguments)
+        text, stored = tools.run_tool(tool_context(), "tune", **arguments)
     except tools.ToolError as error:
         return {"error": str(error)}, 400
-    return {"line": text.split("\n")[0], "change": change}, 200
+    return {"line": text.split("\n")[0], "change": stored}, 200
 
 
 def api_strategies() -> Reply:
