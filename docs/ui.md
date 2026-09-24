@@ -50,6 +50,8 @@ ui/
     compute.py     the matchup, map and world metrics, and the registry of them all
     factset.py     the FactSet: a board's facts, numbered and filed by metric
     board_facts.py generate(): every fact for a board, written into a FactSet
+    hero_facts.py  a named hero's facts: the kit, the rates, this board's own
+    team_facts.py  a team's facts, one per team metric, and the matchup's
 ```
 
 ## `board.py` - the page and its endpoints
@@ -334,6 +336,13 @@ are dense and stable within a board, which is what makes a citation mean
 something. Below the facts, numbered S1.., rides the playbook's record -
 how many constraints, heuristics and assumptions the catalog holds -
 citable but never mistaken for data, and not the strategies themselves.
+
+`factset.py` is the record: a `Fact`, and the `FactSet` that numbers them
+and files each under every metric its sentence states, so `find(key)` is
+every fact stating that metric and a subject narrows it. The writers are
+three modules: `board_facts.py` holds `generate()` and the meta, bans, map
+and playbook writers, `hero_facts.py` a named hero's, and `team_facts.py`
+each team's and the matchup's.
 
 ## One click on the board
 

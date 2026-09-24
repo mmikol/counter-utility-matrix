@@ -178,20 +178,20 @@ def matchup_metrics(blue_t: MetricBag, red_t: MetricBag) -> MetricBag:
     blue_heal, red_heal = number(blue_t["heal_peak_max"]), number(red_t["heal_peak_max"])
     blue_burst, red_burst = number(blue_t["burst_max"]), number(red_t["burst_max"])
     size = number(blue_t["size"])
-    x: MetricBag = {}
-    x["pool_diff"] = blue_pool - red_pool
-    x["dps_diff"] = blue_dps - red_dps
-    x["hps_diff"] = number(blue_t["hps_floor"]) - number(red_t["hps_floor"])
-    x["burst_vs_heal"] = blue_burst - red_heal
-    x["heal_vs_burst"] = blue_heal - red_burst
-    x["chew_time_ours"] = red_pool / blue_dps if blue_dps and red_pool else 999.0
-    x["chew_time_theirs"] = blue_pool / red_dps if red_dps and blue_pool else 999.0
-    x["tempo_diff"] = number(red_t["cooldown_median"]) - number(blue_t["cooldown_median"])
-    x["range_diff"] = number(blue_t["range_median"]) - number(red_t["range_median"])
-    x["exposure_share"] = number(blue_t["exposed_count"]) / size if size else 0.0
-    x.update(red_matchup(red_t))
-    x["ult_answers"] = number(blue_t["invuln"]) + number(blue_t["cleanse"])
-    return x
+    matchup: MetricBag = {}
+    matchup["pool_diff"] = blue_pool - red_pool
+    matchup["dps_diff"] = blue_dps - red_dps
+    matchup["hps_diff"] = number(blue_t["hps_floor"]) - number(red_t["hps_floor"])
+    matchup["burst_vs_heal"] = blue_burst - red_heal
+    matchup["heal_vs_burst"] = blue_heal - red_burst
+    matchup["chew_time_ours"] = red_pool / blue_dps if blue_dps and red_pool else 999.0
+    matchup["chew_time_theirs"] = blue_pool / red_dps if red_dps and blue_pool else 999.0
+    matchup["tempo_diff"] = number(red_t["cooldown_median"]) - number(blue_t["cooldown_median"])
+    matchup["range_diff"] = number(blue_t["range_median"]) - number(red_t["range_median"])
+    matchup["exposure_share"] = number(blue_t["exposed_count"]) / size if size else 0.0
+    matchup.update(red_matchup(red_t))
+    matchup["ult_answers"] = number(blue_t["invuln"]) + number(blue_t["cleanse"])
+    return matchup
 
 
 def arenas(m: Map | None) -> list[str]:

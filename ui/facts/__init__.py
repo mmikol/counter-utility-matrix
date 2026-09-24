@@ -19,5 +19,9 @@
                 record S1.., each fact filed under every metric it states
     board_facts generate() - every fact for a map and two teams:
                 independent facts per hero and map, joint facts per team,
-                matchup facts once both teams have picks
+                matchup facts once both teams have picks; the meta, bans,
+                map and playbook writers
+    hero_facts  a named hero's facts: its kit, rates and relations, then
+                the ones only this board has
+    team_facts  a team's facts, one per team metric, and the matchup's
 """
