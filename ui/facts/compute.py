@@ -16,7 +16,8 @@ which the description says) and `map.known` tells a strategy which.
 
 import statistics
 from collections import Counter, OrderedDict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
+from typing import TypedDict
 
 from ui.facts.draft import EXPECTED_SHAPE, TEAM_SIZE, is_sided
 from ui.facts.model import ROLES, SQUISHY_POOL, TERRAIN_FEATURES, Hero, Map, World
@@ -268,56 +269,74 @@ def _mean(values: Iterable[float | None]) -> float:
 SYNERGY_PULL = 2.0        # pick-rate points a hero gains per synergy partner already on the six
 
 
-def expected_picks(world, m, *, revealed=(), banned=(), shape=None):
+class ExpectedPick(TypedDict):
+    """One of the other side's likely six: the hero, its role, the pick rate
+    it rests on (None for a revealed pick or a hero with no rate), whether it
+    was revealed, and the reason in words."""
+    hero: str
+    role: str
+    rate: float | None
+    locked: bool
+    why: str
+
+
+def expected_picks(world: World, m: Map | None, *, revealed: Sequence[Hero] = (),
+                   banned: Sequence[Hero] = ()) -> list[ExpectedPick]:
     """What the other side is likely to field, from the data alone - no
     strategy read: any picks given as revealed first, then slot by slot the
     hero the map's pick rates (the overall meta with no map set) and the
     wiki's synergies make likeliest - a hero's likelihood is its pick rate
     plus SYNERGY_PULL per partner already on the six - into a two-two-two,
-    past the bans. Deterministic; the board calls it with nothing revealed,
-    so the six is static for the board. Each entry says what it rests on
-    -> [{hero, role, rate, locked, why}]."""
-    shape = dict(shape or EXPECTED_SHAPE)
-    revealed, banned_ids = list(revealed), {h.id for h in banned}
+    past the bans. Ties go to the alphabetically first name. Deterministic;
+    the board calls it with nothing revealed, so the six is static for the
+    board. Each entry says what it rests on."""
+    shape = dict(EXPECTED_SHAPE)
     chosen = list(revealed)
     for h in revealed:
         shape[h.role] = max(0, shape.get(h.role, 0) - 1)
-    taken = {h.id for h in revealed} | banned_ids
+    taken = {h.id for h in revealed} | {h.id for h in banned}
 
-    def rate(h):
+    def rate(h: Hero) -> tuple[float | None, bool]:
         r = h.map_pick(m.id) if m is not None else None
         return (r if r is not None else h.pick, r is not None)
 
-    def partners(h):
+    def partners(h: Hero) -> list[Hero]:
         return [c for c in chosen if world.synergy(c.id, h.id)]
 
-    picked = []
+    picked: list[ExpectedPick] = []
     while any(shape.values()):
         field = [h for h in world.heroes.values()
                  if h.released and h.id not in taken and shape.get(h.role, 0) > 0]
         if not field:
             break
-        best = max(field, key=lambda h: ((rate(h)[0] or 0.0) + SYNERGY_PULL * len(partners(h)),
-                                         [-ord(c) for c in h.name]))
+        best = min(field, key=lambda h: (
+            -((rate(h)[0] or 0.0) + SYNERGY_PULL * len(partners(h))), h.name))
         value, on_map = rate(best)
-        with_ = partners(best)
-        if value is None:
-            why = "no pick rate on record"
-        elif on_map:
-            why = "picked in %.1f%% of matches on %s" % (value, m.name)
-        else:
-            why = "picked in %.1f%% of matches overall%s" % (
-                value, " (no rate on this map)" if m is not None else " (no map set)")
-        if with_:
-            why += "; pairs with " + ", ".join(c.name for c in with_)
         picked.append({"hero": best.name, "role": best.role, "rate": value, "locked": False,
-                       "why": why})
+                       "why": _pick_reason(value, on_map, m, partners(best))})
         chosen.append(best)
         taken.add(best.id)
         shape[best.role] -= 1
-    out = [{"hero": h.name, "role": h.role, "rate": None, "locked": True, "why": "revealed"}
-           for h in revealed]
+    out: list[ExpectedPick] = [
+        {"hero": h.name, "role": h.role, "rate": None, "locked": True, "why": "revealed"}
+        for h in revealed]
     return out + sorted(picked, key=lambda p: (ROLES.index(p["role"]), p["hero"]))
+
+
+def _pick_reason(value: float | None, on_map: bool, m: Map | None,
+                 partners: Sequence[Hero]) -> str:
+    """What an expected pick rests on: its pick rate here, or overall with
+    why, and the partners already on the six it pairs with."""
+    if value is None:
+        why = "no pick rate on record"
+    elif on_map and m is not None:
+        why = "picked in %.1f%% of matches on %s" % (value, m.name)
+    else:
+        why = "picked in %.1f%% of matches overall%s" % (
+            value, " (no rate on this map)" if m is not None else " (no map set)")
+    if partners:
+        why += "; pairs with " + ", ".join(c.name for c in partners)
+    return why
 
 
 def team_metrics(world: World, heroes: Iterable[Hero], m: Map | None = None,

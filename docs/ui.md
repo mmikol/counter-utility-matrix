@@ -270,7 +270,8 @@ prints them as the vocabulary a strategy may reference):
 `world_metrics(world)` the rest; `namespace(...)` bundles them as the
 `team`, `enemy`, `matchup`, `map` and `world` sections a strategy's
 expression reads. `expected_picks` is red's likely six from the data
-alone, filled into `EXPECTED_SHAPE` (two per role).
+alone, filled into `EXPECTED_SHAPE` (two per role) with a tie going to
+the alphabetically first name, each pick an `ExpectedPick` record.
 
 ### `draft.py` - the board's vocabulary
 
