@@ -263,12 +263,15 @@ def _commit(directory: str, hid: str, text: str,
     written, the docs regenerated, one line logged -> (the strategy as loaded,
     the line). `what` words the change from the loaded strategy; it is a
     callable because a pair's text can hold an expression's %, which a
-    %-template would misread."""
+    %-template would misread. A file the catalog never reads, the markdown
+    beside the playbook, is refused before anything is written."""
     loaded = validate(directory, hid, text)
+    strategy = next((h for h in loaded if h.id == hid), None)
+    if strategy is None:
+        raise TuneError("%s.md lives beside the playbook and is not a strategy" % hid)
     with open(os.path.join(directory, hid + ".md"), "w", encoding="utf-8") as handle:
         handle.write(text)
     _document(directory, loaded)
-    strategy = next(h for h in loaded if h.id == hid)
     line = "- %s `%s` %s (%s) [%s]" % (_stamp(), hid, what(strategy),
                                       " ".join(reason.split()), by)
     _log(_where(directory)[1], line)

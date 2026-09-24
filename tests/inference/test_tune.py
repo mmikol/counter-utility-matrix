@@ -143,6 +143,22 @@ def test_tune_and_complete_refuse_ids_that_are_paths(catalog_copy):
         tune.add("too-long", "x" * 121, "constraint", "prose", None, "r", directory=catalog_copy)
 
 
+def test_the_markdown_beside_the_playbook_is_no_strategy_to_add_or_tune(catalog_copy):
+    # the catalog never reads tuning-log.md, so a strategy by that id is refused unwritten
+    log = Path(catalog_copy, "tuning-log.md")
+    with pytest.raises(tune.TuneError, match="beside the playbook"):
+        tune.add("tuning-log", "Log", "assumption", "One.", None, "r", directory=catalog_copy)
+    assert not log.exists()
+    # a log that opens with frontmatter is still the log
+    text = "---\nname: Log\nkind: assumption\n---\n# Log\n\nOne.\n"
+    log.write_text(text, encoding="utf-8")
+    with pytest.raises(tune.TuneError, match="beside the playbook"):
+        tune.tune("tuning-log", "category", "general", "r", directory=catalog_copy)
+    with pytest.raises(tune.TuneError, match="beside the playbook"):
+        tune.complete("tuning-log", {"category": "general"}, "r", directory=catalog_copy)
+    assert log.read_text(encoding="utf-8") == text
+
+
 def test_frontmatter_cannot_be_injected_through_a_field_or_a_value(catalog_copy):
     for field, value in (("params.A\nweight: 99\nB", 1), ("params.lower", 1),
                          ("when", "1 == 1\nweight: 99"), ("bonus", "---\nx"),
