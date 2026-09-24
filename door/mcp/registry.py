@@ -37,7 +37,7 @@ from db import CACHE_DIRS, ROOT, embed, psql
 from db.data import fetch
 from db.data.fetch import Log
 from door.mcp.audit import audited
-from door.mcp.schema import Properties, Property, Tool, ToolReply, ToolSchema
+from door.mcp.schema import Properties, Property, Tool, ToolReply, ToolSchema, tool_schema
 
 # A tool's function: its context first, its arguments by name.
 type ToolFn = Callable[..., ToolReply]
@@ -103,8 +103,7 @@ class Registry:
         """The decorator that registers a function as a tool: its arguments
         are the named properties, the required ones must be present, and no
         other is accepted."""
-        schema = ToolSchema(type="object", properties=properties or {},
-                            required=list(required), additionalProperties=False)
+        schema = tool_schema(properties, required)
 
         def decorate(fn: ToolFn) -> ToolFn:
             self.register(ToolSpec(name=name, description=description, schema=schema, fn=fn,

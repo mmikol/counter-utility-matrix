@@ -1,11 +1,11 @@
 """A tool as the protocol serves it: its arguments declared as JSON Schema -
-a ToolSchema of one Property per argument - what it answers (ToolReply), and
-the Tool that checks every call against its schema before the function
-runs, so a call the schema refuses never reaches the tool, whichever door it
-came in by.
+a ToolSchema of one Property per argument, which tool_schema builds - what
+it answers (ToolReply), and the Tool that checks every call against its
+schema before the function runs, so a call the schema refuses never
+reaches the tool, whichever door it came in by.
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import NamedTuple, TypedDict
 
 from db import Refusal
@@ -39,6 +39,13 @@ class ToolSchema(TypedDict):
     properties: Properties
     required: list[str]
     additionalProperties: bool
+
+
+def tool_schema(properties: Properties | None = None, required: Sequence[str] = ()) -> ToolSchema:
+    """A tool's schema: the named properties, the required ones present, no
+    other admitted."""
+    return ToolSchema(type="object", properties=properties or {}, required=list(required),
+                      additionalProperties=False)
 
 
 class ToolDescription(TypedDict):
@@ -100,12 +107,12 @@ class Tool:
         """Refuse a call the schema does not allow. An argument it does not
         declare, one it requires left out, and a value that is not the
         declared type or not one of the declared values are each a Refusal."""
-        properties = self.schema.get("properties", {})
+        properties = self.schema["properties"]
         unknown = set(arguments) - set(properties)
         if unknown:
             raise Refusal("%s: unknown argument(s) %s" % (
                 self.name, ", ".join(sorted(unknown))))
-        for required in self.schema.get("required", ()):
+        for required in self.schema["required"]:
             if required not in arguments:
                 raise Refusal("%s: missing %r" % (self.name, required))
         for argument, value in arguments.items():

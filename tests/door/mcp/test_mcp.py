@@ -17,7 +17,7 @@ import pytest
 from db import ROOT, Refusal
 from door.mcp import tools
 from door.mcp.audit import audit
-from door.mcp.schema import Tool
+from door.mcp.schema import Tool, tool_schema
 from door.mcp.server import Server
 from inference import catalog, tune
 
@@ -87,10 +87,10 @@ def test_bad_json_is_a_parse_error_not_a_crash():
 
 
 def test_tool_refuses_unknown_and_missing_arguments():
-    tool = Tool("t", "d", {"type": "object", "required": ["a"], "properties": {
+    tool = Tool("t", "d", tool_schema({
         "a": {"type": "string"}, "n": {"type": "integer"}, "x": {"type": "number"},
         "names": {"type": "array", "items": {"type": "string"}},
-        "side": {"type": "string", "enum": ["attack", "defense"]}, "any": {}}},
+        "side": {"type": "string", "enum": ["attack", "defense"]}, "any": {}}, ["a"]),
         lambda **kw: ("ok", kw))
     with pytest.raises(Refusal, match="unknown argument"):
         tool({"a": "x", "b": 1})
@@ -121,7 +121,7 @@ def test_server_reports_a_refused_tool_as_is_error(tmp_path):
 
     def refuse_a_tune(**kw):
         raise tune.TuneError("no strategy 'x'")
-    empty = {"type": "object", "properties": {}}
+    empty = tool_schema()
     audit = tmp_path / "audit.jsonl"
     server = Server([Tool("t", "d", empty, refuse), Tool("tuned", "d", empty, refuse_a_tune)],
                     audit_path=str(audit))
@@ -143,7 +143,7 @@ def test_a_fault_inside_a_tool_is_internal_and_logged_not_a_bad_parameter(tmp_pa
     def crash(**kw):
         raise KeyError("a lookup inside the tool")
     logged = []
-    server = Server([Tool("t", "d", {"type": "object", "properties": {}}, crash)],
+    server = Server([Tool("t", "d", tool_schema(), crash)],
                     log=logged.append, audit_path=str(tmp_path / "audit.jsonl"))
     call = lambda method, params: server.handle(                      # noqa: E731
         {"jsonrpc": "2.0", "id": 1, "method": method, "params": params})

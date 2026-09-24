@@ -12,7 +12,7 @@ import pytest
 
 from db import Refusal, web
 from door.mcp.http import HttpServer
-from door.mcp.schema import Tool
+from door.mcp.schema import Tool, tool_schema
 from door.mcp.server import Server
 
 
@@ -94,7 +94,7 @@ def _door(tmp_path, token=None):
 
     def refuse(**kw):
         raise Refusal("no strategy 'x'")
-    empty = {"type": "object", "properties": {}}
+    empty = tool_schema()
     mcp = Server([Tool("hello", "d", empty, hello), Tool("refuse", "d", empty, refuse)],
                  audit_path=str(tmp_path / "audit.jsonl"))
     httpd = HttpServer(("127.0.0.1", 0), mcp, lambda: {"status": "ok"}, token=token)
