@@ -55,7 +55,7 @@ class Migration:
 
     @property
     def name(self) -> str:
-        """The filename, which is what the ledger records."""
+        """The filename, as the ledger records it."""
         return os.path.basename(self.path)
 
 
