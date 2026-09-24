@@ -60,8 +60,9 @@ class SourceRow(TypedDict):
     tools: list[str]
 
 
-@tool("list_sources", "The sources the data layer pulls from, what each"
-      " supplies, and how many pages its cache holds.")
+@tool(
+    "list_sources", "The sources the data layer pulls from, what each"
+    " supplies, and how many pages its cache holds.")
 def list_sources(ctx: Context) -> ToolReply:
     rows: list[SourceRow] = []
     for source in (BLIZZARD, WIKI):
@@ -106,91 +107,102 @@ def pull_tool(
 # snapshot (rates). Each body looks its module's run up when it is called, so
 # a test that replaces the run replaces the pull's.
 
-@pull_tool("pull_heroes", "Blizzard's roster: heroes, roles, subroles, portraits,"
-           " ability and perk text. Run first - everything links to heroes.",
-           source="blizzard", stored="roster stored")
+@pull_tool(
+    "pull_heroes", "Blizzard's roster: heroes, roles, subroles, portraits,"
+    " ability and perk text. Run first - everything links to heroes.",
+    source="blizzard", stored="roster stored")
 def pull_heroes(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return blizzard_heroes.run(connection, pull)
 
 
-@pull_tool("pull_kits", "The wiki's Cargo ability table and hero articles: weapons"
-           " and firing configs, every published number, ability kinds and"
-           " keywords, hero health pools. Run after pull_heroes.",
-           source="wiki", stored="kit numbers stored",
-           properties=dict(REFRESH, supplement={
-               "type": "boolean",
-               "description": "also read each hero article for the flags Cargo lacks"
-                              " (default true)"}))
+@pull_tool(
+    "pull_kits", "The wiki's Cargo ability table and hero articles: weapons"
+    " and firing configs, every published number, ability kinds and"
+    " keywords, hero health pools. Run after pull_heroes.",
+    source="wiki", stored="kit numbers stored",
+    properties=dict(REFRESH, supplement={
+        "type": "boolean",
+        "description": "also read each hero article for the flags Cargo lacks"
+                       " (default true)"}))
 def pull_kits(
         connection: psycopg.Connection, pull: fetch.PullContext,
         supplement: bool = True) -> PullSummary:
     return wiki_heroes.run(connection, pull, supplement=supplement)
 
 
-@pull_tool("pull_maps", "The wiki's map pool: maps, game modes, playable"
-           " combinations, and each map's stages: a Control map's three, a Flashpoint"
-           " map's five points, a Hybrid map's two phases, an Escort map's stretches"
-           " where its article names them. Push maps have none.",
-           source="wiki", stored="map pool stored")
+@pull_tool(
+    "pull_maps", "The wiki's map pool: maps, game modes, playable"
+    " combinations, and each map's stages: a Control map's three, a Flashpoint"
+    " map's five points, a Hybrid map's two phases, an Escort map's stretches"
+    " where its article names them. Push maps have none.",
+    source="wiki", stored="map pool stored")
 def pull_maps(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return wiki_maps.run(connection, pull)
 
 
-@pull_tool("pull_terrain", "The wiki's map articles: per map, the mentions of each"
-           " terrain feature (chokes, interiors, high_ground, flanks, sightlines,"
-           " open_ground, hazards, cover) and the mentions per thousand words; the"
-           " same per stage, where the article has text about the stage. Reloads"
-           " map_terrain and stage_terrain whole. Run after pull_maps: a stage must"
-           " exist before its terrain.", source="wiki", stored="terrain stored")
+@pull_tool(
+    "pull_terrain", "The wiki's map articles: per map, the mentions of each"
+    " terrain feature (chokes, interiors, high_ground, flanks, sightlines,"
+    " open_ground, hazards, cover) and the mentions per thousand words; the"
+    " same per stage, where the article has text about the stage. Reloads"
+    " map_terrain and stage_terrain whole. Run after pull_maps: a stage must"
+    " exist before its terrain.", source="wiki", stored="terrain stored")
 def pull_terrain(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return wiki_terrain.run(connection, pull)
 
 
-@pull_tool("pull_patches", "The wiki's patch list, so every rates snapshot can say"
-           " which game version it measured.", source="wiki", stored="patches stored")
+@pull_tool(
+    "pull_patches", "The wiki's patch list, so every rates snapshot can say"
+    " which game version it measured.", source="wiki", stored="patches stored")
 def pull_patches(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return wiki_patches.run(connection, pull)
 
 
-@pull_tool("pull_seasons", "The wiki's Season pages: every season that has started,"
-           " with its start date. Restamps every rates snapshot with its season. Run"
-           " before pull_rates.", source="wiki", stored="seasons stored")
+@pull_tool(
+    "pull_seasons", "The wiki's Season pages: every season that has started,"
+    " with its start date. Restamps every rates snapshot with its season. Run"
+    " before pull_rates.", source="wiki", stored="seasons stored")
 def pull_seasons(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return wiki_seasons.run(connection, pull)
 
 
-@pull_tool("pull_rates", "Blizzard's win/pick/ban rates as a NEW dated snapshot,"
-           " by rank tier and by map (Competitive Role Queue - the page offers no"
-           " Open Queue - console, Americas). Slow when uncached: ~40 pages, 5s apart.",
-           source="blizzard", stored="snapshot stored")
+@pull_tool(
+    "pull_rates", "Blizzard's win/pick/ban rates as a NEW dated snapshot,"
+    " by rank tier and by map (Competitive Role Queue - the page offers no"
+    " Open Queue - console, Americas). Slow when uncached: ~40 pages, 5s apart.",
+    source="blizzard", stored="snapshot stored")
 def pull_rates(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return blizzard_meta.run(connection, pull)
 
 
-@pull_tool("pull_playstyles", "The wiki's team-composition page: which playstyle"
-           " (dive, brawl, poke) each hero belongs to.", source="wiki", stored="styles stored")
+@pull_tool(
+    "pull_playstyles", "The wiki's team-composition page: which playstyle"
+    " (dive, brawl, poke) each hero belongs to.", source="wiki", stored="styles stored")
 def pull_playstyles(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return wiki_playstyles.run(connection, pull)
 
 
-@pull_tool("pull_synergies", "The Synergy section of every hero's wiki article: one"
-           " row per pair, score 2 when both articles name each other, 1 when one"
-           " does, the wiki's advice as the note. Run after pull_heroes.",
-           source="wiki", stored="pairs stored")
+@pull_tool(
+    "pull_synergies", "The Synergy section of every hero's wiki article: one"
+    " row per pair, score 2 when both articles name each other, 1 when one"
+    " does, the wiki's advice as the note. Run after pull_heroes.",
+    source="wiki", stored="pairs stored")
 def pull_synergies(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return wiki_synergies.run(connection, pull)
 
 
-@pull_tool("pull_counters", "The Match-Up column of every hero's wiki article: each"
-           " written cell read as a verdict and stored as a directed edge, one row ="
-           " countered_by answers hero. Reloads the table whole. Run after"
-           " pull_heroes.", source="wiki", stored="counters stored")
+@pull_tool(
+    "pull_counters", "The Match-Up column of every hero's wiki article: each"
+    " written cell read as a verdict and stored as a directed edge, one row ="
+    " countered_by answers hero. Reloads the table whole. Run after"
+    " pull_heroes.", source="wiki", stored="counters stored")
 def pull_counters(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return wiki_matchups.run(connection, pull)
 
 
-@tool("load_authored", "Store the one input a user writes: the mirror of the"
-      " strategies in inference/strategies/. A whole-truth reload.")
+@tool(
+    "load_authored", "Store the one input a user writes: the mirror of the"
+    " strategies in inference/strategies/. A whole-truth reload.")
 def load_authored(ctx: Context) -> ToolReply:
     with ctx.connect() as cx:
         cat = catalog.load()
@@ -208,9 +220,10 @@ def load_authored(ctx: Context) -> ToolReply:
     return ToolReply(text, {"strategies": summary})
 
 
-@tool("sync_all", "Every pull_* tool in dependency order, then the strategies"
-      " mirror, then the CSV mirror. On a populated database this is an"
-      " update: entities refresh in place, rates append a snapshot.", REFRESH)
+@tool(
+    "sync_all", "Every pull_* tool in dependency order, then the strategies"
+    " mirror, then the CSV mirror. On a populated database this is an"
+    " update: entities refresh in place, rates append a snapshot.", REFRESH)
 def sync_all(ctx: Context, refresh: bool = False) -> ToolReply:
     results: dict[str, Mapping[str, object]] = {}
     pulls = ctx.tools.pulls()

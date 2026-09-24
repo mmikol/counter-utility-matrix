@@ -26,8 +26,9 @@ from db.mcp.playbook import StrategyResources
 from db.mcp.registry import NoSuchToolError, Registry, ToolReply
 from db.mcp.server import Tool
 
-__all__ = ["REGISTRY", "Context", "Log", "NoSuchToolError", "StrategyResources", "build",
-           "run_tool", "write_tool_docs"]
+__all__ = [
+    "REGISTRY", "Context", "Log", "NoSuchToolError", "StrategyResources", "build", "run_tool",
+    "write_tool_docs"]
 
 REGISTRY = Registry.joined(pulls.TOOLS, lifecycle.TOOLS, layers.TOOLS, playbook.TOOLS)
 

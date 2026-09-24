@@ -24,17 +24,21 @@ tool = TOOLS.tool
 
 BOARD: Properties = {
     "map": {"type": "string", "description": "map name (any spelling)"},
-    "red": {"type": "array", "items": {"type": "string"},
-            "description": "the enemy team's revealed heroes"},
-    "blue": {"type": "array", "items": {"type": "string"},
-             "description": "your team's locked heroes"},
-    "bans": {"type": "array", "items": {"type": "string"},
-             "description": "the match's bans, up to five (each team's two and"
-                            " the lobby's), all optional; neither team can"
-                            " pick them"},
-    "side": {"type": "string", "enum": ["attack", "defense", ""],
-             "description": "blue's side on an Escort or Hybrid map (red gets"
-                            " the other); ignored on Control, Push, Flashpoint"},
+    "red": {
+        "type": "array", "items": {"type": "string"},
+        "description": "the enemy team's revealed heroes"},
+    "blue": {
+        "type": "array", "items": {"type": "string"},
+        "description": "your team's locked heroes"},
+    "bans": {
+        "type": "array", "items": {"type": "string"},
+        "description": "the match's bans, up to five (each team's two and"
+                       " the lobby's), all optional; neither team can"
+                       " pick them"},
+    "side": {
+        "type": "string", "enum": ["attack", "defense", ""],
+        "description": "blue's side on an Escort or Hybrid map (red gets"
+                       " the other); ignored on Control, Push, Flashpoint"},
 }
 
 # A board tool's function: its context, the Draft, then its own arguments.
@@ -88,16 +92,18 @@ class RosterMap(TypedDict):
     mode: str | None
 
 
-@tool("roster", "Every hero with role, subrole, health pool, portrait and status"
-      " (released, or announced with its release day - shown, never picked), plus"
-      " the map pool with modes - the vocabulary the board tools accept.")
+@tool(
+    "roster", "Every hero with role, subrole, health pool, portrait and status"
+    " (released, or announced with its release day - shown, never picked), plus"
+    " the map pool with modes - the vocabulary the board tools accept.")
 def roster(ctx: Context) -> ToolReply:
     with ctx.connect() as cx:
         world = tables.load(cx)
-    heroes = [RosterHero(name=h.name, role=h.role, subrole=h.subrole, pool=h.pool,
-                         portrait=h.portrait, status=h.status,
-                         release_date=str(h.release_date) if h.release_date else None)
-              for h in world.heroes_by_role()]
+    heroes = [
+        RosterHero(name=h.name, role=h.role, subrole=h.subrole, pool=h.pool,
+                   portrait=h.portrait, status=h.status,
+                   release_date=str(h.release_date) if h.release_date else None)
+        for h in world.heroes_by_role()]
     maps = [RosterMap(name=m.name, mode=m.mode) for m in world.maps_sorted()]
     text = "\n".join("%-9s %-14s %s%s" % (h["role"], h["subrole"], h["name"], _announced(h))
                      for h in heroes) + "\n\nmaps: " + ", ".join(
@@ -114,13 +120,14 @@ def _announced(hero: RosterHero) -> str:
     return "  (announced%s)" % (", releases " + day if day else "")
 
 
-@board_tool("facts", "The UI LAYER: every fact the database holds about a board -"
-            " independent facts per named hero and for the map, joint facts per"
-            " team once it has picks (shape, effective HP, damage and healing"
-            " floors, range, tempo, cohesion, coverage...), and matchup facts"
-            " once both teams have picks. Numbered F1.. for citation.",
-            {"format": {"type": "string", "enum": ["lines", "json"],
-                        "description": "lines (default) or json"}})
+@board_tool(
+    "facts", "The UI LAYER: every fact the database holds about a board -"
+    " independent facts per named hero and for the map, joint facts per"
+    " team once it has picks (shape, effective HP, damage and healing"
+    " floors, range, tempo, cohesion, coverage...), and matchup facts"
+    " once both teams have picks. Numbered F1.. for citation.",
+    {"format": {"type": "string", "enum": ["lines", "json"],
+                "description": "lines (default) or json"}})
 def facts(ctx: Context, draft: Draft, format: str = "lines") -> ToolReply:
     with ctx.connect() as cx:
         world = tables.load(cx)
@@ -156,25 +163,28 @@ class CompactInfer(TypedDict):
     largest: list[WeightedTerm]
 
 
-@board_tool("infer", "The INFERENCE LAYER: the optimal six for this board under"
-            " the markdown strategies in inference/strategies/ (players assumed"
-            " to play optimally). Locked blue picks are kept; the rest is"
-            " searched. Returns the comp, per-pick reasons with fact citations,"
-            " the strategy score breakdown, and alternatives.",
-            {"top": {"type": "integer", "description": "alternatives to return (default 5)"},
-             "pool": {"type": "integer",
-                      "description": "candidates per role the search keeps (default 6)"},
-             "compact": {"type": "boolean",
-                         "description": "true: a reply small enough to carry under a"
-                                        " playbook of hundreds. The structured payload"
-                                        " then has its own keys: map, side, red, blue,"
-                                        " score, terms (how many scoring terms the full"
-                                        " reply carries), idle, silent (applying,"
-                                        " metric not varying on this board) and largest"
-                                        " (the %d heaviest terms, each an id and its"
-                                        " weighted value)" % COMPACT_TERMS}})
-def infer(ctx: Context, draft: Draft, top: int = 5, pool: int = 6,
-          compact: bool = False) -> ToolReply:
+@board_tool(
+    "infer", "The INFERENCE LAYER: the optimal six for this board under"
+    " the markdown strategies in inference/strategies/ (players assumed"
+    " to play optimally). Locked blue picks are kept; the rest is"
+    " searched. Returns the comp, per-pick reasons with fact citations,"
+    " the strategy score breakdown, and alternatives.",
+    {
+        "top": {"type": "integer", "description": "alternatives to return (default 5)"},
+        "pool": {"type": "integer",
+                 "description": "candidates per role the search keeps (default 6)"},
+        "compact": {"type": "boolean",
+                    "description": "true: a reply small enough to carry under a"
+                                   " playbook of hundreds. The structured payload"
+                                   " then has its own keys: map, side, red, blue,"
+                                   " score, terms (how many scoring terms the full"
+                                   " reply carries), idle, silent (applying,"
+                                   " metric not varying on this board) and largest"
+                                   " (the %d heaviest terms, each an id and its"
+                                   " weighted value)" % COMPACT_TERMS}})
+def infer(
+        ctx: Context, draft: Draft, top: int = 5, pool: int = 6,
+        compact: bool = False) -> ToolReply:
     with ctx.connect() as cx:
         world = tables.load(cx)
     pool, top = engine.clamp_search(pool, top)
@@ -205,9 +215,10 @@ def _compact(result: Result) -> tuple[str, CompactInfer]:
     return "\n".join(lines), payload
 
 
-@board_tool("evaluate", "Score a FULL blue six against the strategies without"
-            " searching: the breakdown per strategy, constraint violations, and"
-            " how it ranks against the optimum.", required=["blue"])
+@board_tool(
+    "evaluate", "Score a FULL blue six against the strategies without"
+    " searching: the breakdown per strategy, constraint violations, and"
+    " how it ranks against the optimum.", required=["blue"])
 def evaluate(ctx: Context, draft: Draft) -> ToolReply:
     # the schema requires blue: the engine takes a full six, so a call
     # without one never reaches the engine
@@ -217,12 +228,13 @@ def evaluate(ctx: Context, draft: Draft) -> ToolReply:
     return ToolReply(result.rendered(), result.to_dict())
 
 
-@tool("reach", "Can the playbook ever pick this hero? A board that suits it - one of"
-      " its maps, a red it answers, the match's bans spent on the rivals holding its seat - on"
-      " which it is in the optimal six; with none, the closest it came. A hero that"
-      " cannot be reached is one the facts or the strategies cannot see.",
-      {"hero": {"type": "string", "description": "a released hero (any spelling)"}},
-      ["hero"])
+@tool(
+    "reach", "Can the playbook ever pick this hero? A board that suits it - one of"
+    " its maps, a red it answers, the match's bans spent on the rivals holding its seat - on"
+    " which it is in the optimal six; with none, the closest it came. A hero that"
+    " cannot be reached is one the facts or the strategies cannot see.",
+    {"hero": {"type": "string", "description": "a released hero (any spelling)"}},
+    ["hero"])
 def reach_tool(ctx: Context, hero: str) -> ToolReply:   # _tool: inference.reach holds the bare name
     with ctx.connect() as cx:
         world = tables.load(cx)
@@ -238,25 +250,28 @@ def reach_tool(ctx: Context, hero: str) -> ToolReply:   # _tool: inference.reach
         ", ".join(found["six"])), found)
 
 
-@board_tool("board", "The whole board at any stage of the draft (no map, a map, a side,"
-            " bans, red's picks as they reveal): blue's optimal six as the best counter"
-            " to red's selection - to their likely six until they reveal a pick"
-            " (blue's own picks never constrain it), red's best"
-            " counter to yours, both current comps scored on those scales, your picks"
-            " against red's best counter, your locked picks with the empty slots filled,"
-            " the fight odds (each seat's share of its own optimal, and the two against"
-            " each other), the game plan in prose, the shapes the queue and the"
-            " playbook's limits allow, and red's likely six"
-            " from the data alone (a two-two-two from the map's pick rates and the"
-            " wiki's synergies, past the bans; static for the board, no strategy read).",
-            {"pool": {"type": "integer",
-                      "description": "candidates per role the search keeps (default 6)"},
-             "weights": {"type": "object",
-                         "description": "{heuristic id: 0..10} - weights to score this"
-                                        " board under instead of the files' (the playbook"
-                                        " tab's sliders); the files are untouched"}})
-def board(ctx: Context, draft: Draft, pool: int = 6,
-          weights: Mapping[str, object] | None = None) -> ToolReply:
+@board_tool(
+    "board", "The whole board at any stage of the draft (no map, a map, a side,"
+    " bans, red's picks as they reveal): blue's optimal six as the best counter"
+    " to red's selection - to their likely six until they reveal a pick"
+    " (blue's own picks never constrain it), red's best"
+    " counter to yours, both current comps scored on those scales, your picks"
+    " against red's best counter, your locked picks with the empty slots filled,"
+    " the fight odds (each seat's share of its own optimal, and the two against"
+    " each other), the game plan in prose, the shapes the queue and the"
+    " playbook's limits allow, and red's likely six"
+    " from the data alone (a two-two-two from the map's pick rates and the"
+    " wiki's synergies, past the bans; static for the board, no strategy read).",
+    {
+        "pool": {"type": "integer",
+                 "description": "candidates per role the search keeps (default 6)"},
+        "weights": {"type": "object",
+                    "description": "{heuristic id: 0..10} - weights to score this"
+                                   " board under instead of the files' (the playbook"
+                                   " tab's sliders); the files are untouched"}})
+def board(
+        ctx: Context, draft: Draft, pool: int = 6,
+        weights: Mapping[str, object] | None = None) -> ToolReply:
     with ctx.connect() as cx:
         world = tables.load(cx)
     pool, _ = engine.clamp_search(pool)
@@ -265,14 +280,16 @@ def board(ctx: Context, draft: Draft, pool: int = 6,
     return ToolReply(b.rendered(), b.to_dict())
 
 
-@tool("metrics", "The vocabulary a strategy may reference: every metric key with its"
-      " meaning - team.*, enemy.* (the same for the red side), matchup.*, map.*,"
-      " world.* - and which are text. What /strategy reads to infer a heuristic's"
-      " metric or a constraint's expression from prose.")
+@tool(
+    "metrics", "The vocabulary a strategy may reference: every metric key with its"
+    " meaning - team.*, enemy.* (the same for the red side), matchup.*, map.*,"
+    " world.* - and which are text. What /strategy reads to infer a heuristic's"
+    " metric or a constraint's expression from prose.")
 def metrics(ctx: Context) -> ToolReply:
     reg = compute.registry()
     numeric = {k: v for k, v in reg.items() if k not in compute.TEXT_METRICS}
-    lines = ["%-32s %s%s" % (k, v, "  (text)" if k in compute.TEXT_METRICS else "")
-             for k, v in reg.items() if not k.startswith("enemy.")]
+    lines = [
+        "%-32s %s%s" % (k, v, "  (text)" if k in compute.TEXT_METRICS else "")
+        for k, v in reg.items() if not k.startswith("enemy.")]
     return ToolReply("\n".join(lines), {"metrics": reg, "numeric": sorted(numeric),
                                         "text": sorted(compute.TEXT_METRICS)})

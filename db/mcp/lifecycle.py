@@ -50,13 +50,14 @@ class DbStatus(TypedDict):
 
 
 # the tables db_status counts, where they exist
-COUNTED = ("heroes", "abilities", "maps", "hero_meta", "map_meta", "counters", "synergies",
-           "strategies")
+COUNTED = (
+    "heroes", "abilities", "maps", "hero_meta", "map_meta", "counters", "synergies", "strategies")
 
 
-@tool("db_status", "Which database the tools are pointed at, its state (empty,"
-      " stale, unfilled or current - what the containers wait on), its table and"
-      " row counts, and the rates snapshots it holds.")
+@tool(
+    "db_status", "Which database the tools are pointed at, its state (empty,"
+    " stale, unfilled or current - what the containers wait on), its table and"
+    " row counts, and the rates snapshots it holds.")
 def db_status(ctx: Context) -> ToolReply:
     with ctx.connect() as cx:
         ready = schema.state(cx)
@@ -97,13 +98,13 @@ def _snapshots(cx: psycopg.Connection) -> list[Snapshot]:
     if not psql.scalar(cx.execute("select to_regclass('meta_snapshots')")):
         return []
     return [Snapshot(id=i, captured=str(c), queue=q, source=s) for i, c, q, s in cx.execute("""
-        select ms.snapshot_id, ms.captured_at::date, ms.queue,
-               src.code from meta_snapshots ms
-        join sources src using(source_id) order by 1""")]
+        select ms.snapshot_id, ms.captured_at::date, ms.queue, src.code
+        from meta_snapshots ms join sources src using(source_id) order by 1""")]
 
 
-@tool("db_init", "Apply the migrations to an EMPTY database (schema only;"
-      " sync_all fills it). Refuses a database that already has tables.")
+@tool(
+    "db_init", "Apply the migrations to an EMPTY database (schema only;"
+    " sync_all fills it). Refuses a database that already has tables.")
 def db_init(ctx: Context) -> ToolReply:
     with ctx.connect() as cx:
         if schema.table_count(cx):
@@ -114,9 +115,10 @@ def db_init(ctx: Context) -> ToolReply:
     return ToolReply("db_init: %d tables, no data" % n, {"table_count": n})
 
 
-@tool("db_migrate", "Apply the migrations the ledger has not recorded, in"
-      " place: a populated database catching up with the files without a"
-      " rebuild. Nothing pending is not an error.")
+@tool(
+    "db_migrate", "Apply the migrations the ledger has not recorded, in"
+    " place: a populated database catching up with the files without a"
+    " rebuild. Nothing pending is not an error.")
 def db_migrate(ctx: Context) -> ToolReply:
     with ctx.connect() as cx:
         names = schema.pending(cx)
@@ -127,8 +129,9 @@ def db_migrate(ctx: Context) -> ToolReply:
                      {"applied": names})
 
 
-@tool("db_rebuild", "Drop everything, reapply the migrations and run"
-      " sync_all.", REFRESH)
+@tool(
+    "db_rebuild", "Drop everything, reapply the migrations and run"
+    " sync_all.", REFRESH)
 def db_rebuild(ctx: Context, refresh: bool = False) -> ToolReply:
     with ctx.connect() as cx:
         dropped = schema.rebuild(cx, quiet=True)
@@ -145,9 +148,10 @@ def export_csv(ctx: Context) -> ToolReply:
                      {"row_counts": counts})
 
 
-@tool("db_docs", "Regenerate the generated sections of the docs: the ERD and data"
-      " dictionary in docs/db.md from the live schema, the catalog and vocabulary in"
-      " docs/inference.md from the strategies files, the tool reference in docs/mcp.md.")
+@tool(
+    "db_docs", "Regenerate the generated sections of the docs: the ERD and data"
+    " dictionary in docs/db.md from the live schema, the catalog and vocabulary in"
+    " docs/inference.md from the strategies files, the tool reference in docs/mcp.md.")
 def db_docs(ctx: Context) -> ToolReply:
     with ctx.connect() as cx:
         text = schema.generate_docs(cx)
@@ -192,10 +196,11 @@ def reader_dsn(dsn: str) -> str:
     return psycopg.conninfo.make_conninfo("", **parts)
 
 
-@tool("query", "Run read-only SQL against the database (SELECT/WITH only,"
-      " one statement, first %d rows). Every table is documented in"
-      " the data dictionary in docs/db.md." % MAX_ROWS,
-      {"sql": {"type": "string", "description": "the statement"}}, ["sql"])
+@tool(
+    "query", "Run read-only SQL against the database (SELECT/WITH only,"
+    " one statement, first %d rows). Every table is documented in"
+    " the data dictionary in docs/db.md." % MAX_ROWS,
+    {"sql": {"type": "string", "description": "the statement"}}, ["sql"])
 def query(ctx: Context, sql: str) -> ToolReply:
     columns, rows = _read_only(ctx.dsn, _checked_sql(sql))
     kept, truncated = _page(rows)
