@@ -205,7 +205,7 @@ Use the narrow streets.
 
 def test_a_section_splits_into_paragraphs_and_list_items():
     body = dict(terrain.sections(CONTROL))[("Strategy",)]
-    assert terrain.paragraphs(body) == [
+    assert terrain.section_paragraphs(body) == [
         "On the Well section of the map, the big hole in the middle of the point kills.",
         "The Ruins and the Lighthouse both have long sightlines.",
         "On Ruins, heroes can hide behind the pillars.",

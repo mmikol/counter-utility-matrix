@@ -66,3 +66,15 @@ def test_find_templates_yields_each_top_level_block():
     assert len(found) == 2
     assert markup.parse_params(found[0]) == {"a": "1"}
     assert markup.parse_params(found[1])["b"] == "{{tt|2|two}}"
+
+
+def test_a_section_body_ends_at_the_next_heading_of_any_depth():
+    dive = "=== Dive heroes ==="
+    text = dive + "\n* [[Winston]]\n=== Brawl heroes ===\n* [[Reinhardt]]\n"
+    assert markup.section_body(text, len(dive)) == "\n* [[Winston]]\n"
+    season = "=== Season 1 ==="
+    text = season + "\n(4 October 2022 - 6 December 2022)\n==References==\n"
+    assert markup.section_body(text, len(season)) == "\n(4 October 2022 - 6 December 2022)\n"
+    # no heading after it: the body runs to the end
+    poke = "=== Poke heroes ==="
+    assert markup.section_body(poke + "\n* [[Ana]]", len(poke)) == "\n* [[Ana]]"

@@ -101,7 +101,7 @@ def stripped(body: str) -> str:
     return BLANK_NOTICE_RE.sub(" ", body)
 
 
-def prose(body: str) -> str:
+def section_prose(body: str) -> str:
     """Stripped wikitext -> its prose, the list items that are names dropped."""
     lines = []
     for line in body.splitlines():
@@ -113,12 +113,12 @@ def prose(body: str) -> str:
     return markup.wikitext_to_text("\n".join(lines))
 
 
-def plain(body: str) -> str:
+def section_plain(body: str) -> str:
     """A section's wikitext -> its prose."""
-    return prose(stripped(body))
+    return section_prose(stripped(body))
 
 
-def paragraphs(body: str) -> list[str]:
+def section_paragraphs(body: str) -> list[str]:
     """A section's wikitext -> the prose of each paragraph and list item."""
     blocks: list[str] = []
     open_block = False
@@ -130,7 +130,7 @@ def paragraphs(body: str) -> list[str]:
             open_block = not line.startswith(("*", "#"))
         else:
             blocks[-1] += "\n" + line
-    return [text for text in map(prose, blocks) if text]
+    return [text for text in map(section_prose, blocks) if text]
 
 
 def terrain_text(text: str) -> str:
@@ -139,7 +139,7 @@ def terrain_text(text: str) -> str:
     parts = [markup.wikitext_to_text(m) for m in INFOBOX_TERRAIN_RE.findall(text)]
     for path, body in sections(text):
         if is_kept(path):
-            parts += [markup.tidy(path[-1]), plain(body)]
+            parts += [markup.tidy(path[-1]), section_plain(body)]
     return " . ".join(part for part in parts if part)
 
 
@@ -171,9 +171,9 @@ def stage_texts(text: str, stages: list[str], phases: bool = False) -> dict[str,
         titles = {title.casefold() for title in path}
         under = [stage for stage in stages if titles & headings[stage]]
         if under:
-            parts[under[0]] += [markup.tidy(path[-1]), plain(body)]
+            parts[under[0]] += [markup.tidy(path[-1]), section_plain(body)]
         elif not phases:
-            for paragraph in paragraphs(body):
+            for paragraph in section_paragraphs(body):
                 about = [s for s in stages if named[s].search(paragraph)]
                 if len(about) == 1:
                     parts[about[0]].append(paragraph)

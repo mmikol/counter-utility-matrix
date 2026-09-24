@@ -11,7 +11,8 @@ They are different grammars, but the wiki mixes the same furniture through
 both - file links, comments, <br>, bare URLs - so the tidying is shared.
 
 split_type unpicks Cargo's typed fields, where a kind and a firing mode are
-packed into one string: "Weapon;;Hip Fire".
+packed into one string: "Weapon;;Hip Fire". section_body cuts an article's
+section at the next heading of any depth.
 """
 
 import re
@@ -67,6 +68,17 @@ def split_type(ability_type):
 
 
 # --- article wikitext --------------------------------------------------
+
+# A heading of any depth: "== Gameplay ==", "=== Dive heroes ===".
+ANY_HEADING_RE = re.compile(r"^=+.*=+\s*$", re.M)
+
+
+def section_body(text: str, start: int) -> str:
+    """The text from `start` to the next heading of any depth, or to the end."""
+    body = text[start:]
+    following = ANY_HEADING_RE.search(body)
+    return body[: following.start()] if following else body
+
 
 def find_templates(text, name_pattern):
     """Yield the source of each top-level {{Name ...}} template."""

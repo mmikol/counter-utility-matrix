@@ -18,7 +18,6 @@ COMPOSITION_PAGE = "Team Composition"
 
 # "=== Dive heroes ===" opens the hero list for the Dive playstyle.
 HERO_SECTION_RE = re.compile(r"^===\s*(.+?)\s+heroes\s*===\s*$", re.M | re.I)
-ANY_HEADING_RE = re.compile(r"^=+.*=+\s*$", re.M)
 
 
 def parse_playstyles(text):
@@ -26,10 +25,7 @@ def parse_playstyles(text):
     playstyles = []
     for match in HERO_SECTION_RE.finditer(text):
         name = match.group(1).strip()
-        body = text[match.end():]
-        following = ANY_HEADING_RE.search(body)
-        if following:
-            body = body[: following.start()]
+        body = markup.section_body(text, match.end())
         heroes = [link.strip() for link in markup.LINK_RE.findall(body)]
         if heroes:
             playstyles.append((name.lower(), name, heroes))

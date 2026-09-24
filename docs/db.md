@@ -77,7 +77,7 @@ store them, and return a `PullSummary`.
 | | `playstyles.py` | the team-composition playstyles (dive, brawl, poke) and the heroes listed under each. |
 | | `synergies.py` | which heroes work with which, from the Team Synergy cells in the "Match-Ups and Team Synergy" section of every released hero's article: a pair is stored once, score 2 when both articles claim it, 1 when one does; note is the wiki's advice cut to one clause. Reloads the table. Runs after `blizzard.heroes`. |
 | | `matchups.py` | who answers whom, from the Match-Up cells of the same section, through `synergies.py`'s section and row parsing. Each written cell is a verdict from the article hero's seat: the other hero answers this one, this one answers the other, or neither. The wiki's MATCHUP or VS. rating decides where there is one; otherwise the prose is scored. A verdict either way is one directed edge in `counters`; a pair the two articles contradict on gets none. Reloads the table. Runs after `blizzard.heroes`. |
-| | `markup.py` | reading the wiki's two markups - Cargo's rendered HTML and article wikitext - and the tidying both need; the link pattern. |
+| | `markup.py` | reading the wiki's two markups - Cargo's rendered HTML and article wikitext - and the tidying both need; the link pattern; a section's body, cut at the next heading of any depth. |
 | | `measurements.py` | a stat value ("75 over 0.59 seconds", "10 - 20 meters", a yes/no glyph) into value, unit, window and condition. |
 | | `weapons.py` | the wiki's one-entry-per-firing-mode list grouped into weapons and their configs. |
 | | `modifiers.py` | what a buff scales and who it lands on, recovered from the value's wording and the ability's keywords. |

@@ -27,7 +27,6 @@ SEASON_PAGE = "Season"
 SUBPAGE_RE = re.compile(r"\{\{\s*main\s*\|\s*(%s/[^}|]+?)\s*\}\}" % SEASON_PAGE, re.I)
 ARC_RE = re.compile(r"^\s*'{2,5}([^'\n]+?)'{2,5} is the \d{4} arc\b", re.M)
 HEADING_RE = re.compile(r"^===\s*(Season\s+\d+.*?)\s*===[ \t]*$", re.M | re.I)
-ANY_HEADING_RE = re.compile(r"^=+.*=+\s*$", re.M)
 
 MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august",
           "september", "october", "november", "december"]
@@ -78,11 +77,7 @@ def parse_seasons(text):
         name = markup.wikitext_to_text(match.group(1))
         if arc:
             name = "%s %s" % (arc.group(1).strip(), name)
-        body = text[match.end():]
-        following = ANY_HEADING_RE.search(body)
-        if following:
-            body = body[: following.start()]
-        seasons.append((name, parse_run(body)))
+        seasons.append((name, parse_run(markup.section_body(text, match.end()))))
     return seasons
 
 
