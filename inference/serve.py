@@ -10,10 +10,10 @@
     GET  /evaluate?map=&side=&red=&blue=&bans=   a full six scored against the field
     GET  /strategies                   the catalog
 
-The same functions ui/board.py calls in-process when no INFERENCE_URL is set.
-http.server, no web framework. A request that raises is answered by
-db.web.failure: a Refusal 400 with its message, anything else 500 with its
-type and message, the traceback on stderr.
+The same functions ui/board.py calls in-process when COUNTRIX_INFERENCE_URL
+is unset. http.server, no web framework. A request that raises is answered
+by db.web.failure: a Refusal 400 with its message, anything else 500 with
+its type and message, the traceback on stderr.
 """
 
 import argparse

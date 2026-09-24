@@ -67,7 +67,7 @@ GITHUB_MARK = ("<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='tru
 # The inference layer runs in-process unless a service is named: in the
 # compose stack the `inference` container serves it (inference/serve.py).
 def inference_url() -> str:
-    return os.environ.get("INFERENCE_URL", "").rstrip("/")
+    return os.environ.get("COUNTRIX_INFERENCE_URL", "").rstrip("/")
 
 
 # the board's one write - storing a heuristic's weight - goes to the data

@@ -26,7 +26,7 @@ Five of the six services are needed to answer a request:
 | --- | --- |
 | `db` | the board queries PostgreSQL directly on every request |
 | `ui` | the board itself, and the only port a deployment should expose |
-| `inference` | the solver; the board delegates to it over `INFERENCE_URL` |
+| `inference` | the solver; the board delegates to it over `COUNTRIX_INFERENCE_URL` |
 | `data` | builds the database and applies migrations on boot, then idles |
 | `refresher` | the daily re-scrape, so the data does not go stale |
 

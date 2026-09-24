@@ -145,7 +145,7 @@ services:
       - "127.0.0.1:8017:8017"
     environment:
       <<: *env
-      INFERENCE_URL: http://inference:8019
+      COUNTRIX_INFERENCE_URL: http://inference:8019
       COUNTRIX_UI_HOST: 0.0.0.0
       # the board writes nothing unless COUNTRIX_READ_ONLY=0; the two
       # below are the channel that one write would use (the data layer's tune)

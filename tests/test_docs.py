@@ -60,7 +60,7 @@ def test_every_relative_link_in_the_docs_resolves():
 
 
 ENV_RE = re.compile(r"""os\.environ\.get\(\s*["']"""
-                    r"""(COUNTRIX_[A-Z_]+|INFERENCE_URL|DATABASE_URL)["']""")
+                    r"""(COUNTRIX_[A-Z_]+|DATABASE_URL)["']""")
 # read where the code reads them, documented where a reader looks: the settings
 # table in architecture.md, or db.md for the refresh clock it delegates
 ENV_DOCS = ("architecture.md", "db.md")

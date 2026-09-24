@@ -102,8 +102,9 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   and the pooled and sequential answers must agree bit for bit: string-seeded
   RNGs, integer tallies, ties broken by `map_win_mean` and then sorted names.
 - **The board** (`ui/board.py`) serves `/api/facts` in-process and delegates
-  `/api/infer` and `/api/strategies` to `INFERENCE_URL` when set. It is read-only unless
-  `COUNTRIX_READ_ONLY=0`; its one write is a `tune` call through the door.
+  `/api/infer` and `/api/strategies` to `COUNTRIX_INFERENCE_URL` when set. It
+  is read-only unless `COUNTRIX_READ_ONLY=0`; its one write is a `tune` call
+  through the door.
 - **Docker** runs one image as five roles plus postgres (`compose.yaml`,
   `docker-entrypoint.sh`). Migrations ship in the image, not a mount: once
   `orchestrator.py up` rebuilds it, any new migration file makes the `data`
