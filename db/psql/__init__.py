@@ -1,23 +1,27 @@
 """The database: where it is, and the small things every writer needs.
 
-    default_dsn        $DATABASE_URL, or the embedded cluster at
-                       db/psql/cluster (pgserver, first touch); a host
-                       without pgserver must set DATABASE_URL
-    UNREACHABLE        the errors that mean the database is out of reach
-    register_source    the `sources` row a page or a file becomes, upserted;
-                       every table's rows carry its source_id
-    identifier         a table or column name on its way into SQL text,
-                       checked and quoted
-    lookup_ids         {name: id} for matching what a source says against
-                       what is loaded
-    scalar             the one value a statement returns: a count, an
-                       upsert's RETURNING
+    default_dsn         $DATABASE_URL, or the embedded cluster at
+                        db/psql/cluster (pgserver, first touch); a host
+                        without pgserver must set DATABASE_URL
+    UNREACHABLE         the errors that mean the database is out of reach
+    register_source     the `sources` row a page or a file becomes, upserted;
+                        every table's rows carry its source_id
+    identifier          a table or column name on its way into SQL text,
+                        checked and returned as a psycopg.sql.Identifier
+    lookup_ids          {name: id} for matching what a source says against
+                        what is loaded
+    scalar              the one value a statement returns: a count, an
+                        upsert's RETURNING
     now, current_patch, current_season
-                       what a capture is stamped with
-    export             the CSV mirror under db/raw, and its mark (ExportMark)
+                        what a capture is stamped with
+    export              the CSV mirror under db/raw, and its mark (ExportMark)
 
-The schema itself - migrations, the ledger, rebuild, the
-generated docs - is db.psql.schema. Nothing here knows a particular source.
+    schema              the migrations applied and recorded in the ledger,
+                        pending, rebuild, the generated docs, and state():
+                        how ready the database is
+    migrations/         NNN_name.sql, the schema as a sequence
+
+Nothing here knows a particular source.
 """
 
 import json

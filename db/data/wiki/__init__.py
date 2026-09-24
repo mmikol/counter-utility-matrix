@@ -1,31 +1,41 @@
 """overwatch.fandom.com - the Overwatch Wiki: page to table.
 
-    heroes         hero kits via the Cargo Abilities table: weapons and
-                   firing configs, abilities, perks, stats, keywords; the
-                   announced heroes
-    kit_rows       a Cargo Abilities row -> a typed weapon, ability or perk
-                   entry of one hero's kit
-    hero_articles  a hero's article -> the stats Cargo lacks, the health
-                   pool, an announcement
-    kit_store      the kits into the tables
-    maps           maps, game modes and stages from the Maps article
-    patches        game versions from the Patches cargo table
-    playstyles     the team-composition playstyles (dive, brawl, poke)
-    seasons        the seasons that have started, from the Season pages
-    synergies      pairs that work together, from each hero article's
-                   Synergy column
-    matchups       who answers whom (counters), from the same section's
-                   Match-Up column
-    markup         reading the wiki's two markups - Cargo's rendered HTML
-                   and article wikitext - and the tidying both need
-    measurements   a stat value -> value, unit, window, condition
-    weapons        firing modes grouped into weapons
-    modifiers      buff direction and target, off the keywords
+Page to table, each ends in run(connection, pull):
+
+    heroes          hero kits via the Cargo Abilities table: weapons and
+                    firing configs, abilities, perks, stats, keywords; the
+                    announced heroes. Its parts:
+        kit_rows        a Cargo Abilities row -> a typed weapon, ability or
+                        perk entry of one hero's kit
+        hero_articles   a hero's article -> the stats Cargo lacks, the
+                        health pool, an announcement
+        kit_store       the kits into the tables
+    maps            maps, game modes and stages from the Maps article
+    terrain         the ground each map article describes - chokes,
+                    interiors, high ground, flanks, sightlines, open ground,
+                    hazards, cover - counted per map and per stage
+                    (pull_terrain, after maps)
+    matchups        who answers whom (counters), from each hero article's
+                    Match-Up column
+    patches         game versions from the Patches cargo table
+    playstyles      the team-composition playstyles (dive, brawl, poke)
+    seasons         the seasons that have started, from the Season pages
+    synergies       pairs that work together, from the same section's
+                    Synergy column
+
+Readers the loaders share, no run():
+
+    markup          reading the wiki's two markups - Cargo's rendered HTML
+                    and article wikitext - and the tidying both need
+    measurements    a stat value -> value, unit, window, condition
+    weapons         firing modes grouped into weapons
+    modifiers       buff direction and target, off the keywords
 
 The article HTML sits behind a bot challenge; the only open path is the
 MediaWiki endpoint below, which returns JSON (Cargo) and raw wikitext and
 rate-limits. This module is that client, run on db.data.fetch's request
-loop and page cache, and the `sources` row its pages become.
+loop and page cache at the pace of its two policies (CARGO_POLICY,
+ARTICLE_POLICY), and the `sources` row its pages become.
 fetch_articles is how a pull reads one article per entity: an article that
 will not fetch is recorded by name and the rest are read.
 """

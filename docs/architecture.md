@@ -25,7 +25,7 @@ Code on your subscription, before a game, never during one.
 | folder | what it is | read |
 | --- | --- | --- |
 | `db/` | **DATA LAYER** - `data/` and `psql/` pull every source, clean it and store it, with the schema, its migrations and the embedded cluster. A wiki stat is stored as measurements beside its original text (`data/wiki/measurements.py`); the UI layer's `ui/facts/kit.py` reads a kit's combat numbers off both at read time, so a misread wording is fixed there and needs no re-pull. `mcp/` and `sentry` stand over all three layers rather than inside this one: the door serves the UI layer's facts and the inference layer's solver through the same tools, and the guard watches the playbook beside the database. The door gates every write, the sentry's quarantine rename aside; the other two layers read Postgres directly, over `db.psql.default_dsn()` | [db.md](db.md) |
-| `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet | [ui.md](ui.md) |
+| `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet. `ui/facts` is the FACTS kernel the other two layers import - the solver, the deriver and the door's board tools read the numbers the board shows - and `board.py`, `pages.py` and `static/` are the only presentation code | [ui.md](ui.md) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints, heuristics and assumptions in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
 | `tests/` | one folder per layer (`tests/db`, `tests/ui`, `tests/inference`), the root files' tests beside them (`test_docs.py`, `test_orchestrator.py`), `synthetic.py`, a World of twelve invented heroes and three maps built by hand, which the metric, derivation and board-facts tests work their expected values from with no database, and `tests/fixtures/playbook/`, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the user's assumptions (its rules were emptied on purpose and are being rebuilt by hand; `inference/README.md` is the record). `pytest -q` runs them, skipping what needs a built database when there is none | |
 | `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain` | [skills.md](skills.md) |
@@ -40,7 +40,7 @@ How they fit:
 flowchart LR
     subgraph SOURCES["sources (free, no data APIs)"]
         BLZ["Blizzard<br/>roster, portraits, rates"]
-        WIKI["Overwatch wiki<br/>kits, numbers, keywords,<br/>maps, patches, seasons,<br/>styles, synergies, counters"]
+        WIKI["Overwatch wiki<br/>kits, numbers, keywords,<br/>maps, terrain, patches, seasons,<br/>styles, synergies, counters"]
     end
 
     subgraph DATA["the door - db/mcp/ (an MCP server over all three layers)"]
@@ -212,7 +212,7 @@ servers and every tool.
 | `/strategy` | asks for a name, a kind and prose, infers the frontmatter and stores the strategy through `add_strategy` |
 | `/patches` | pulls the patch list and, when a patch shipped since the capture, refetches what it changes: rates, kits, Blizzard's text |
 | `/heroes` | adds or refreshes heroes: Blizzard's roster, the wiki's kits, styles and synergies, the announced heroes ahead of release, counters |
-| `/maps` | adds or refreshes maps: the pool, modes and stages, the per-map rates, the style each map's rates reward |
+| `/maps` | adds or refreshes maps: the pool, modes and stages, their terrain, the per-map rates, the style each map's rates reward |
 | `/refresh` | the agents' run, the one `orchestrator.py agents` executes headless: refresh, complete drafts, re-infer with restraint, regenerate, report |
 | `/maintain` | the repo's maintainer: lint, types and tests three ways, docs current, stale names, dead code, layout, security posture, a report |
 

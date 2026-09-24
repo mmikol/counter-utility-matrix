@@ -4,9 +4,9 @@ page to table, plus what they share.
     blizzard/     the official site: heroes (roster, roles, portraits,
                   text), meta (rates as dated snapshots)
     wiki/         the MediaWiki endpoint: heroes (kits, numbers, keywords),
-                  maps, patches, seasons, playstyles, synergies, matchups
-                  (counters) - and the markup, measurement, weapon and
-                  modifier readers the kit data needs
+                  maps, terrain, patches, seasons, playstyles, synergies,
+                  matchups (counters) - and the markup, measurement, weapon
+                  and modifier readers the kit data needs
     authored/     the source row of the one input a user writes, the
                   strategies in inference/strategies/
     fetch         the page cache, its freshness policy and the request loop

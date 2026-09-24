@@ -78,6 +78,7 @@ and return a `PullSummary`.
 | | `hero_articles.py` | a hero's article: the interaction flags and other stats Cargo does not register, merged into the kit where Cargo left them empty; the health pool from the infobox; the announcement of a hero marked upcoming. |
 | | `kit_store.py` | the kits into the tables: weapons, firing configs, stats, modifiers and perk links reloaded whole, abilities classified and the ones Blizzard omits added, each hero's pools set; a tally of every row written. |
 | | `maps.py` | maps, game modes and stages from the Maps article's Standard Play section. |
+| | `terrain.py` | the ground each map's article describes: the sections about play kept, the lore dropped, and the mentions of each terrain feature - chokes, interiors, high ground, flanks, sightlines, open ground, hazards, cover - counted per map and per thousand words (`map_terrain`), and the same per stage over the text the article has about that stage (`stage_terrain`). Reloads both tables. Runs after `wiki.maps`: a stage must exist before its terrain. |
 | | `patches.py` | game versions from the Patches cargo table; snapshots link to the patch current at capture. Runs before the rates pulls. |
 | | `seasons.py` | every season that has started, with its start date, from the Season article's subpages; note is the subpage. Reloads the table and restamps every rates snapshot with its season. Runs before the rates pulls. |
 | | `playstyles.py` | the team-composition playstyles (dive, brawl, poke) and the heroes listed under each. |
@@ -136,7 +137,7 @@ other database.
 ## The order of a build
 
 `sync_all` runs the pulls in dependency order - `blizzard.heroes`,
-`wiki.heroes`, `wiki.maps`, `wiki.patches`, `wiki.seasons`,
+`wiki.heroes`, `wiki.maps`, `wiki.terrain`, `wiki.patches`, `wiki.seasons`,
 `blizzard.meta`, `wiki.playstyles`, `wiki.synergies`, `wiki.matchups` -
 then `load_authored`, then `export_csv`. Entity tables refresh in place;
 each rates pull appends a dated snapshot, the series the trend facts

@@ -1,6 +1,6 @@
 ---
 name: maps
-description: Add or update maps in Countrix's database - a new map, a mode change, the stages, the per-map rates, and the style a map rewards, derived from those rates. Use when the user names a new map, says "add the new map", "is X in the pool", "update the maps", or a map shows no rewarded style.
+description: Add or update maps in Countrix's database - a new map, a mode change, the stages and their terrain, the per-map rates, and the style a map rewards, derived from those rates. Use when the user names a new map, says "add the new map", "is X in the pool", "update the maps", or a map shows no rewarded style.
 ---
 
 Bring the map pool up to date. Work through the
@@ -11,7 +11,10 @@ Bring the map pool up to date. Work through the
    the user named is there, say so and stop unless they asked for a
    refresh.
 2. **The pool.** `pull_maps` with `refresh: true`: the wiki's map pool -
-   maps, game modes, playable stages. A new map arrives here.
+   maps, game modes, playable stages. A new map arrives here. Then
+   `pull_terrain` with `refresh: true`: the ground each map's article
+   describes, counted per map and per stage - it needs the stages
+   `pull_maps` just stored.
 3. **Rates.** `pull_rates` with `refresh: true` brings the per-map rates
    for a map in the game's rotation. Each hero's best maps are derived
    from them when the facts load: the three maps where its win rate is

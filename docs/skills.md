@@ -171,7 +171,8 @@ mirrors the strategy files only.
 **Say:** "add the new map", "is X in the pool", "update the maps".
 
 **Does:** `roster` for the pool, `pull_maps` (the wiki's maps, modes and
-stages), `pull_rates` for the per-map rates, `facts` with the map for the
+stages), `pull_terrain` (each map's ground, counted per map and per
+stage), `pull_rates` for the per-map rates, `facts` with the map for the
 style it rewards, then `db_docs` and `export_csv`. A map's styles and
 each hero's best maps are derived from those rates when the facts load.
 A style: for each of the wiki's playstyles, how much better the heroes tagged

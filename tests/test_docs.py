@@ -192,6 +192,37 @@ def test_the_overview_names_everything_at_the_root():
     assert not missing, missing
 
 
+def _maps(doc, entry):
+    """Whether a package docstring has a map line for the entry: indented,
+    the name (a module without .py, a folder with or without its slash),
+    then the column gap or the line's end. A word that opens a wrapped line
+    of prose is followed by one space, so it is not a map line."""
+    stem = entry[:-3] if entry.endswith(".py") else entry
+    return re.search(r"^ {2,}%s(?:\.py)?/?(?: {2,}|$)" % re.escape(stem), doc, re.M) is not None
+
+
+@needs_git
+def test_every_package_map_names_what_the_package_holds():
+    """A package's __init__ docstring maps every tracked module, folder and
+    file in it, the way the overview maps the root."""
+    assert _maps("    board.py    the server\n    facts/      the World", "facts")
+    assert not _maps("    board.py    the board's endpoints over the\n"
+                     "                facts and the inference layer", "facts")
+    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True,
+                             text=True).stdout.split()
+    packages = sorted({os.path.dirname(p) for p in tracked
+                       if os.path.basename(p) == "__init__.py" and not p.startswith("tests/")})
+    assert "db/data/wiki" in packages
+    missing = []
+    for package in packages:
+        entries = {p[len(package) + 1:].split("/")[0] for p in tracked
+                   if p.startswith(package + "/")} - {"__init__.py"}
+        tree = ast.parse(_read(package, "__init__.py"))
+        doc = ast.get_docstring(tree, clean=False) or ""
+        missing += ["%s/%s" % (package, e) for e in sorted(entries) if not _maps(doc, e)]
+    assert not missing, missing
+
+
 def test_mcp_json_registers_the_two_servers():
     servers = json.loads(_read(".mcp.json"))["mcpServers"]
     assert set(servers) == {"countrix", "countrix-docker"}
@@ -213,7 +244,7 @@ MUST_NAME = {   # a skill is a playbook over these tools; if a tool is renamed, 
     "maintain": {"db_docs", "db_status", "strategies"},
     "patches": {"pull_patches", "pull_rates", "pull_kits", "pull_heroes", "db_docs", "export_csv"},
     "heroes": {"roster", "pull_heroes", "pull_kits", "pull_synergies", "pull_counters"},
-    "maps": {"roster", "pull_maps", "pull_rates", "pull_playstyles", "facts"},
+    "maps": {"roster", "pull_maps", "pull_terrain", "pull_rates", "pull_playstyles", "facts"},
 }
 
 

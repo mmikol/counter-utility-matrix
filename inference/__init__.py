@@ -6,6 +6,8 @@
                   while a condition holds); a heuristic maximises or
                   minimises a metric; an assumption is prose the agent holds
                   a comp to
+    README.md     the citation record the playbook is rebuilt from: a line
+                  per strategy id, shipped or removed
     catalog       reads, validates and mirrors the strategies
     expr          the safe expression language the frontmatter uses
     scoring       the objective: what one six scores on one board, and the legal
