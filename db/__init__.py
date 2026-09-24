@@ -66,7 +66,7 @@ class Source:
 
 # The ability vocabulary: db/psql/migrations/002_heroes.sql seeds ability_kinds
 # with these codes, db/data/wiki/heroes.py resolves each to its kind_id when it
-# writes, and the UI layer's model compares kits against them.
+# writes, and the UI layer's facts package compares kits against them.
 KIND_WEAPON, KIND_ABILITY, KIND_ULTIMATE, KIND_PASSIVE = (
     "weapon", "ability", "ultimate", "passive")
 ABILITY_KINDS = (KIND_WEAPON, KIND_ABILITY, KIND_ULTIMATE, KIND_PASSIVE)

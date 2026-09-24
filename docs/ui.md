@@ -42,6 +42,7 @@ ui/
   facts/           everything the database knows about a board
     model.py       the World: the database in memory, per request
     tables.py      the load: every table read into a World, the maps' styles, the best maps
+    scalars.py     a hero's numbers derived from its kit, one step per section
     kit.py         a kit piece's stat rows and the combat numbers read off them
     records.py     the typed records a Hero, a Map and the World hand on
     compute.py     the metrics registry: every number, one function each
@@ -195,16 +196,11 @@ misread stat is fixed in this file and needs no re-pull.
 
 The World holds what `tables.load` read. A map's `style_top` is the
 highest of its styles, ties by name; `style_margin` is the top minus the
-runner-up. `Hero.derive_scalars()` derives the hero's numbers from weapons, abilities
-and passives; ultimates add tools only, perks nothing. dps: the held
-weapon, sustained, reload in. burst: the biggest single hit, a headshot
-where one counts. hps and peak heal: healing onto teammates, per second
-and per cast; self-heal apart. Reach: the weapons' published range or
-falloff; unknown stays out. Then mobility and crowd-control tools,
-hitscan, flight, anti-heal, cleanse, barrier, effective HP - so the
-metrics read fields, not SQL. `resolve(map, red, blue, bans)` turns names into objects
-through the same name matching the data layer uses, and refuses a banned
-pick, an unknown hero, or a hero on both teams.
+runner-up. A hero's `derive_rates()` reads its rank spread and trend off
+the rates, and `cap_ult(cap)` caps its ultimate's damage at the roster's
+largest single figure. `resolve(map, red, blue, bans)` turns names into
+objects through the same name matching the data layer uses, and refuses a
+banned pick, an unknown hero, or a hero on both teams.
 
 ### `tables.py` - the load
 
@@ -224,6 +220,21 @@ each hero's best maps: the three with the largest map win rate minus
 overall win rate, only where positive, ties by map name. A test in
 `tests/ui` insists every data table is read here: a table nothing reads
 is not data.
+
+### `scalars.py` - a hero's numbers
+
+`derive(hero)` derives the hero's numbers from weapons, abilities and
+passives; ultimates add tools only, perks nothing. It runs one step per
+section, in order, each setting its own fields on the hero: the body
+(pool, keywords, a form's armor, cooldowns); dps, the held weapon
+sustained with its reload in; burst, the biggest single hit, a headshot
+where one counts; healing - hps and peak heal onto teammates, per second
+and per cast, self-heal apart - the one step that reads an earlier
+result, dps; reach, the weapons' published range or falloff, unknown
+staying out; then the weapon kinds, area, barriers, amps and anti-heal,
+crowd control and mobility, cleanses and saves, and the ultimate - so the
+metrics read fields, not SQL. The ultimate's raw damage waits for
+`cap_ult`, which the load calls once the roster's cap is known.
 
 ### `compute.py` - the metrics registry
 

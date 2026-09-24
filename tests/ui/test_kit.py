@@ -209,3 +209,31 @@ def test_a_cast_of_several_pieces_hits_with_all_of_them():
         ("damage", 25, "hp", None, None, "pellet", "25"),
         ("pellets", 6, None, None, None, None, "6"))
     assert one.cast_hit() is None and summed.cast_hit() is None and gun.cast_hit() is None
+
+
+def test_a_heal_rate_is_the_weapons_else_the_per_second_heal_for_its_uptime():
+    staff = _kit(KIND_WEAPON, ("hps", 60, "hp", "seconds", 1, None, "60 per second"))
+    assert staff.heal_rate() == 60
+    # a weapon that publishes no rate heals at its per-second row
+    beam = _kit(KIND_WEAPON, ("heal", 20, "hp", "seconds", 1, None, "20 per second"))
+    assert beam.heal_rate() == 20
+    # up for 2 s of every 2 + 8; a heal on the hero itself is not a rate onto a target
+    field = _kit(
+        KIND_ABILITY,
+        ("heal", 100, "hp", "seconds", 1, None, "100 per second"),
+        ("heal", 50, "hp", "seconds", 1, "self", "50 per second"),
+        ("duration", 2, "seconds", None, None, None, "2 seconds"),
+        ("cooldown", 8, "seconds", None, None, None, "8 seconds"))
+    assert field.heal_rate() == pytest.approx(20.0)
+    assert _kit(KIND_ABILITY, ("heal", 50, "hp", "seconds", 1, "self", "50/s")).heal_rate() is None
+
+
+def test_a_heal_that_runs_for_a_duration_is_one_cast():
+    # 150 a second for 3 s is 450; "100 over 3 seconds" is 100; a flat heal is no run
+    burst = _kit(
+        KIND_ABILITY,
+        ("hps", 150, "hp", "seconds", 1, None, "150 per second"),
+        ("heal", 100, "hp", "seconds", 3, None, "100 over 3 seconds"),
+        ("heal", 80, "hp", None, None, None, "80"),
+        ("duration", 3, "seconds", None, None, None, "3 seconds"))
+    assert burst.run_casts() == [450, 100]

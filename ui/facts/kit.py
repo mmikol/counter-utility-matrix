@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from decimal import Decimal
 from typing import NamedTuple, TypedDict
 
-from db import KIND_ABILITY
+from db import KIND_ABILITY, KIND_WEAPON
 
 # the qualifiers that land a keyword on a teammate ("heal;;target ally")
 ALLY_QUALIFIERS = ("target ally", "targets")
@@ -292,6 +292,32 @@ class Kit:
             return firing
         lasts = ammo / (self.max_stat("ammo_drain") or 1.0) / rate
         return firing * lasts / (lasts + max(reloads))
+
+    def heal_rate(self) -> float | None:
+        """Healing per second onto a target: a weapon's sustained rate; else the
+        largest per-second heal, up for `duration` of every duration plus
+        cooldown where the piece publishes both. A heal on the hero itself is
+        not counted."""
+        rate = self.rate("hps", "heal") if self.kind == KIND_WEAPON else None
+        if rate is not None:
+            return rate
+        rate = max(
+            (s.per_second for c in ("hps", "heal") for s in self.stats.get(c, ())
+                if s.per_second and s.condition != "self"),
+            default=None)
+        wait, lasts = self.max_stat("cooldown"), self.max_stat("duration")
+        if rate and wait and lasts:     # up for `lasts` of every lasts + wait
+            return rate * (lasts / (lasts + wait))
+        return rate
+
+    def run_casts(self) -> list[float]:
+        """A heal that runs for a duration, as the cast it adds up to: 150 a
+        second for 3 s is 450, "100 over 3 seconds" is 100."""
+        runs = self.max_stat("duration") or 0.0
+        return [
+            s.value if s.den_value not in (None, 1.0) else s.per_second * runs
+            for c in ("hps", "heal") for s in self.stats.get(c, ())
+            if s.value is not None and s.per_second]
 
     # --- hits --------------------------------------------------------------
 

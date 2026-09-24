@@ -16,11 +16,12 @@ import statistics
 import psycopg
 from psycopg.rows import TupleRow
 
-from db import KIND_ULTIMATE, KIND_WEAPON
+from db import KIND_WEAPON
 from db.data.names import name_key
 from ui.facts.kit import Kit, Stat
-from ui.facts.model import REMECH, TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
+from ui.facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
 from ui.facts.records import Modifier, Snapshot
+from ui.facts.scalars import derive
 
 type Connection = psycopg.Connection[TupleRow]
 
@@ -240,6 +241,8 @@ def _read_rates(cx: Connection, w: World) -> None:
             where t.code = 'all' and m.snapshot_id = %s""" % PREVIOUS_BLIZZARD):
         if win is not None:
             w.heroes[hid].prev_win = float(win)
+    for hero in w.heroes.values():
+        hero.derive_rates()
 
 
 def _read_maps(cx: Connection, w: World) -> None:
@@ -336,22 +339,19 @@ def _benches(w: World) -> None:
     # one ultimate's damage is worth, at most, the largest single figure one
     # publishes: a beam held for twenty seconds is not seven Self-Destructs
     flat_ults = [
-        s.value for h in w.heroes.values() if h.released for u in h.abilities
-        if u.kind == KIND_ULTIMATE and u.name not in REMECH
-        for s in u.stats.get("damage", ())
-        if s.value is not None and s.unit_den is None and s.unit_num != "percent"]
-    w.ult_cap = max(flat_ults) if flat_ults else 0.0
-    if w.ult_cap:                  # no cap to apply: every hero keeps its raw figure
-        for hero in w.heroes.values():
-            hero.ult_damage = min(hero.ult_damage_raw, w.ult_cap)
+        s.value for h in w.heroes.values() if h.released for u in h.ults
+        for s in u.flat("damage")]
+    w.ult_cap = max(flat_ults, default=0.0)
+    for hero in w.heroes.values():
+        hero.cap_ult(w.ult_cap)
 
 
 def load(cx: Connection) -> World:
     """The whole database -> World. `cx` is an open psycopg connection; this
     module never opens one of its own. The steps run in the order each relies
-    on: the kit before the derived numbers, the rates before best_maps and
-    map_styles, the terrain before map_styles, and the benches over the
-    derived roster."""
+    on: the kit before scalars.derive, the rates before derive_rates,
+    best_maps and map_styles, the terrain before map_styles, and the benches
+    over the derived roster."""
     w = World()
     _read_heroes(cx, w)
     _read_abilities(cx, w)
@@ -365,6 +365,6 @@ def load(cx: Connection) -> World:
     _read_provenance(cx, w)
     map_styles(w)
     for hero in w.heroes.values():
-        hero.derive_scalars()
+        derive(hero)
     _benches(w)
     return w
