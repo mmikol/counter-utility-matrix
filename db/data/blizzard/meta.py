@@ -22,15 +22,11 @@ from bs4 import BeautifulSoup, Tag
 
 from db import INPUT_DEVICE, PLATFORM, REGION, psql
 from db.data import PullSummary, fetch
-from db.data.blizzard import BLIZZARD, RATES_URL, attr
+from db.data.blizzard import BLIZZARD, RATES_URL, BlizzardError, attr
 from db.data.fetch import cache_key, cached_get
 from db.psql import current_patch, current_season
 
 # --- extract: markup -> Python ---------------------------------------------
-
-class RatesError(Exception):
-    pass
-
 
 class RateRow(NamedTuple):
     """One hero's row of the data table; a rate the page leaves out is None."""
@@ -46,7 +42,7 @@ def parse_rows(html: str) -> list[RateRow]:
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("blz-data-table")
     if not isinstance(table, Tag) or not table.get("rows"):
-        raise RatesError("no blz-data-table rows attribute - the page changed")
+        raise BlizzardError("no blz-data-table rows attribute - the page changed")
 
     stats = []
     for row in json.loads(attr(table, "rows")):
@@ -57,7 +53,7 @@ def parse_rows(html: str) -> list[RateRow]:
         stats.append(RateRow(name=name, win_rate=cells.get("winrate"),
                              pick_rate=cells.get("pickrate"), ban_rate=cells.get("banrate")))
     if not stats:
-        raise RatesError("data table held no hero rows")
+        raise BlizzardError("data table held no hero rows")
     return stats
 
 
@@ -66,7 +62,7 @@ def parse_filter_options(html: str, select_id: str) -> list[tuple[str, str]]:
     soup = BeautifulSoup(html, "html.parser")
     select = soup.find("select", id=select_id)
     if not isinstance(select, Tag):
-        raise RatesError("no %s on the page" % select_id)
+        raise BlizzardError("no %s on the page" % select_id)
     return [
         (attr(option, "value"), option.get_text(strip=True))
         for option in select.find_all("option")
@@ -100,7 +96,7 @@ def competitive_rq(pull: fetch.PullContext) -> str:
     options = parse_filter_options(page, "filter-rq-select")
     codes = [code for code, label in options if label == QUEUE_LABEL]
     if len(codes) != 1:
-        raise RatesError(
+        raise BlizzardError(
             "queue filter no longer offers exactly one %r: %s"
             % (QUEUE_LABEL, options))
     return codes[0]

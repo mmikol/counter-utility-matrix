@@ -16,7 +16,7 @@ from bs4 import BeautifulSoup, Tag
 
 from db import PERK_TIERS, psql
 from db.data import ArticlePullSummary, fetch
-from db.data.blizzard import BASE_URL, BLIZZARD, HEROES_URL, attr
+from db.data.blizzard import BASE_URL, BLIZZARD, HEROES_URL, BlizzardError, attr
 from db.data.fetch import cache_key, cached_get
 
 # One host serves every page. A keep-alive socket it drops fails one request,
@@ -75,10 +75,6 @@ def node_text(node: Tag) -> str:
 URL_IN_STYLE_RE = re.compile(r"url\((['\"]?)(.*?)\1\)")
 
 
-class ScrapeError(Exception):
-    pass
-
-
 def _style_url(node: Tag) -> str | None:
     match = URL_IN_STYLE_RE.search(attr(node, "style") if node.has_attr("style") else "")
     return match.group(2) if match else None
@@ -100,7 +96,7 @@ def parse_subroles(soup: BeautifulSoup) -> dict[str, Subrole]:
             "passive_description": node_text(spans[1]),
         }
     if not subroles:
-        raise ScrapeError("no subroles found on the heroes page")
+        raise BlizzardError("no subroles found on the heroes page")
     return subroles
 
 
@@ -131,7 +127,7 @@ def parse_roster(soup: BeautifulSoup) -> list[RosterHero]:
         heading = card.find("h2", attrs={"slot": "heading"})
         href = attr(card, "href") if card.has_attr("href") else ""
         if heading is None or not href:
-            raise ScrapeError("hero card missing a name or link: %r" % card.get("id"))
+            raise BlizzardError("hero card missing a name or link: %r" % card.get("id"))
         portrait = card.find("blz-image", class_="heroCardPortrait")
         heroes.append(
             {
@@ -145,7 +141,7 @@ def parse_roster(soup: BeautifulSoup) -> list[RosterHero]:
             }
         )
     if not heroes:
-        raise ScrapeError("no hero cards found on the heroes page")
+        raise BlizzardError("no hero cards found on the heroes page")
     return heroes
 
 
@@ -155,18 +151,18 @@ def parse_abilities(soup: BeautifulSoup, slug: str) -> list[AbilityText]:
     the wiki load to fill in."""
     carousels = soup.find_all("blz-carousel")
     if len(carousels) != 1:
-        raise ScrapeError("%s: expected 1 carousel, found %d" % (slug, len(carousels)))
+        raise BlizzardError("%s: expected 1 carousel, found %d" % (slug, len(carousels)))
 
     slides = carousels[0].find_all("blz-feature", attrs={"slot": "slide"})
     if not slides:
-        raise ScrapeError("%s: no abilities found" % slug)
+        raise BlizzardError("%s: no abilities found" % slug)
 
     abilities: list[AbilityText] = []
     for position, slide in enumerate(slides):
         heading = slide.find("h3", class_="heading")
         description = slide.find("p", attrs={"slot": "description"})
         if heading is None or description is None:
-            raise ScrapeError("%s: ability slide %d is malformed" % (slug, position))
+            raise BlizzardError("%s: ability slide %d is malformed" % (slug, position))
         abilities.append(
             {
                 "name": heading.get_text(strip=True),
@@ -182,18 +178,18 @@ def parse_perks(soup: BeautifulSoup, slug: str) -> list[PerkText]:
     Stadium Powers live in their own section and are deliberately not read."""
     section = soup.find("blz-section", id="perks")
     if section is None:
-        raise ScrapeError("%s: no perks section" % slug)
+        raise BlizzardError("%s: no perks section" % slug)
 
     perks: list[PerkText] = []
     for category in section.select("div.perk-category"):
         tier_codes = [c for c in category.get_attribute_list("class") if c in PERK_TIERS]
         if len(tier_codes) != 1:
-            raise ScrapeError("%s: perk category has no tier: %r" % (slug, category.get("class")))
+            raise BlizzardError("%s: perk category has no tier: %r" % (slug, category.get("class")))
         tier_code = tier_codes[0]
 
         details = category.select("div.perk-details")
         if len(details) != 2:
-            raise ScrapeError(
+            raise BlizzardError(
                 "%s: expected 2 %s perks, found %d" % (slug, tier_code, len(details))
             )
 
@@ -201,7 +197,7 @@ def parse_perks(soup: BeautifulSoup, slug: str) -> list[PerkText]:
             heading = detail.find("h3", attrs={"slot": "subheading"})
             description = detail.find("div", attrs={"slot": "description"})
             if heading is None or description is None:
-                raise ScrapeError("%s: malformed %s perk" % (slug, tier_code))
+                raise BlizzardError("%s: malformed %s perk" % (slug, tier_code))
             perks.append(
                 {
                     "tier_id": PERK_TIERS[tier_code],
@@ -212,7 +208,7 @@ def parse_perks(soup: BeautifulSoup, slug: str) -> list[PerkText]:
             )
 
     if len(perks) != 4:
-        raise ScrapeError("%s: expected 4 perks, found %d" % (slug, len(perks)))
+        raise BlizzardError("%s: expected 4 perks, found %d" % (slug, len(perks)))
     return perks
 
 
@@ -339,6 +335,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummar
     missing: list[str] = []
     for index, hero in enumerate(heroes, start=1):
         slug = hero["slug"]
+        # only the fetch sits in the try: a changed page's BlizzardError fails the pull
         try:
             page = cached_get(pull, "%s/heroes/%s/" % (BASE_URL, slug), cache_key(slug),
                               policy=PAGE_POLICY)

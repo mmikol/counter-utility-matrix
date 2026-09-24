@@ -8,7 +8,7 @@ import json
 import pytest
 
 from db.data import fetch
-from db.data.blizzard import meta
+from db.data.blizzard import BlizzardError, meta
 
 
 def rates_page(rows):
@@ -53,12 +53,12 @@ def test_a_rate_row_is_read_off_the_data_table_json():
     '<main><blz-data-table rows=""></blz-data-table></main>',
 ], ids=["no table", "no rows attribute", "empty rows attribute"])
 def test_a_page_without_the_rows_attribute_is_refused(page):
-    with pytest.raises(meta.RatesError, match="the page changed"):
+    with pytest.raises(BlizzardError, match="the page changed"):
         meta.parse_rows(page)
 
 
 def test_a_table_with_no_named_hero_is_refused():
-    with pytest.raises(meta.RatesError, match="no hero rows"):
+    with pytest.raises(BlizzardError, match="no hero rows"):
         meta.parse_rows(rates_page([{"cells": {}}]))
 
 
@@ -76,7 +76,7 @@ def test_a_filter_reads_its_own_options_and_skips_the_one_without_a_value():
 
 
 def test_a_missing_filter_is_refused_by_its_id():
-    with pytest.raises(meta.RatesError, match="filter-rq-select"):
+    with pytest.raises(BlizzardError, match="filter-rq-select"):
         meta.parse_filter_options(FILTERS, "filter-rq-select")
 
 
@@ -98,7 +98,7 @@ def test_the_queue_code_is_read_from_the_page_not_hardcoded(monkeypatch, code):
 ], ids=["none", "two"])
 def test_a_queue_filter_without_exactly_one_competitive_queue_is_refused(monkeypatch, options):
     stub_fetch(monkeypatch, select("filter-rq-select", options))
-    with pytest.raises(meta.RatesError, match="exactly one"):
+    with pytest.raises(BlizzardError, match="exactly one"):
         meta.competitive_rq(fetch.PullContext("cache"))
 
 

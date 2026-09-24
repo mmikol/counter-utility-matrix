@@ -6,9 +6,9 @@ import pytest
 from bs4 import BeautifulSoup
 
 from db.data import fetch
+from db.data.blizzard import BlizzardError
 from db.data.blizzard import heroes as blizzard_heroes
 from db.data.blizzard.heroes import (
-    ScrapeError,
     node_text,
     parse_abilities,
     parse_icons,
@@ -85,7 +85,7 @@ def test_a_subrole_is_its_label_and_its_passive():
 
 
 def test_a_roster_with_no_subroles_is_refused():
-    with pytest.raises(ScrapeError, match="no subroles"):
+    with pytest.raises(BlizzardError, match="no subroles"):
         parse_subroles(soup(CARDS))
 
 
@@ -121,7 +121,7 @@ def test_a_hero_card_gives_the_slug_its_link_ends_in():
     (SUBROLES, "no hero cards"),
 ], ids=["no name", "no link", "no cards"])
 def test_a_roster_without_whole_hero_cards_is_refused(page, reason):
-    with pytest.raises(ScrapeError, match=reason):
+    with pytest.raises(BlizzardError, match=reason):
         parse_roster(soup(page))
 
 
@@ -168,7 +168,7 @@ def test_a_hero_page_gives_its_abilities_in_carousel_order():
         "</blz-feature></blz-carousel>", "ana: ability slide 0 is malformed"),
 ], ids=["no carousel", "two carousels", "no slides", "no description"])
 def test_a_malformed_hero_page_is_refused_by_name(page, reason):
-    with pytest.raises(ScrapeError, match=reason):
+    with pytest.raises(BlizzardError, match=reason):
         parse_abilities(soup(page), "ana")
 
 
@@ -194,7 +194,7 @@ def test_stadium_powers_are_not_read_as_perks():
     ('<blz-section id="perks">%s</blz-section>' % MINOR, "ana: expected 4 perks, found 2"),
 ], ids=["no section", "no tier", "three perks", "no description", "one category"])
 def test_a_malformed_perks_section_is_refused_by_name(page, reason):
-    with pytest.raises(ScrapeError, match=reason):
+    with pytest.raises(BlizzardError, match=reason):
         parse_perks(soup(page), "ana")
 
 
@@ -221,3 +221,16 @@ def test_a_hero_page_that_will_not_fetch_is_recorded_and_the_rest_are_stored(mon
         params[0] for sql, params in cursor.statements
         if sql.startswith(("INSERT INTO abilities", "INSERT INTO perks"))}
     assert len(owners) == 1                  # one hero's rows, Tracer's; none written for Ana
+
+
+def test_a_changed_hero_page_fails_the_pull_and_is_not_counted_missing(monkeypatch):
+    """A page that fetched but no longer reads as a hero page is the site
+    changing shape, not a page that would not fetch: the pull raises before
+    it writes anything, and no hero is counted missing."""
+    def pages(pull, url, key, **kwargs):
+        return "<main></main>" if key == "tracer" else HERO if key == "ana" else ROSTER
+    monkeypatch.setattr(blizzard_heroes, "cached_get", pages)
+    connection = RecordingConnection()
+    with pytest.raises(BlizzardError, match="tracer: expected 1 carousel, found 0"):
+        blizzard_heroes.run(connection, fetch.PullContext(None, log=lambda line: None))
+    assert connection.cursors == [] and connection.commits == 0
