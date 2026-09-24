@@ -371,33 +371,35 @@ class Split:
     def __init__(self, run: Run, spec: Spec, slices: int, bounds: Bounds | None = None,
                  standing: Tally | None = None) -> None:
         self.started = time.time()
-        self.run, self.spec, self.count = run, spec, slices
+        self.run, self.spec, self.slices = run, spec, slices
         self.bounds, self.standing, self.size = bounds, standing, 0
         self.verdicts: list[Verdict] = []
         self.tallies: list[Future[Tally]] | None = None
-        self.scale: list[Future[Bounds]] | None = None if bounds is not None else [
+        self.sampling: list[Future[Bounds]] | None = None if bounds is not None else [
             run.submit(_bounds, spec, i, slices) for i in range(slices)]
-        self.slices: list[Future[tuple[int, list[Verdict]]]] | None = None
+        self.sweeping: list[Future[tuple[int, list[Verdict]]]] | None = None
         self.tail: Future[tuple[list[Verdict], int]] | None = None
 
-    def _scale(self) -> Bounds:
+    def _frozen_bounds(self) -> Bounds:
         """The bounds the search runs under: set once rank_roster() has run."""
         if self.bounds is None:
-            raise RuntimeError("the split has no scale before rank_roster()")
+            raise RuntimeError("the split has no bounds before rank_roster()")
         return self.bounds
 
     def rank_roster(self) -> None:
-        """Take the scale the slices drew, and send the sample out again to be
-        scored under it: each hero's standing, which ranks the pools."""
+        """Take the bounds the sampling round drew, and send the sample out
+        again to be scored under them: each hero's standing, which ranks the
+        pools."""
         self.run.watch.check()
-        if self.scale is not None:
+        if self.sampling is not None:
             self.bounds = {}
-            for future in self.scale:
+            for future in self.sampling:
                 _widen(self.bounds, future.result())
-            self.scale = None
+            self.sampling = None
         if self.standing is None and self.tallies is None:
-            self.tallies = [self.run.submit(_standing, self.spec, self._scale(), i, self.count)
-                            for i in range(self.count)]
+            self.tallies = [
+                self.run.submit(_standing, self.spec, self._frozen_bounds(), i, self.slices)
+                for i in range(self.slices)]
 
     def sweep(self) -> None:
         """Take the standing, and send the enumeration out."""
@@ -407,26 +409,26 @@ class Split:
             for future in self.tallies:
                 _merge_tallies(self.standing, future.result())
             self.tallies = None
-        self.slices = [
-            self.run.submit(_sweep, self.spec, self._scale(), self.standing, i, self.count)
-            for i in range(self.count)]
+        self.sweeping = [
+            self.run.submit(_sweep, self.spec, self._frozen_bounds(), self.standing, i, self.slices)
+            for i in range(self.slices)]
 
     def merge(self) -> None:
-        """Collect the slices and send the merged field off to be ranked."""
+        """Collect the sweep and send the merged field off to be ranked."""
         self.run.watch.check()
-        if self.slices is None:
+        if self.sweeping is None:
             raise RuntimeError("merge() follows sweep()")
         self.verdicts = []
-        for future in self.slices:
+        for future in self.sweeping:
             self.size, part = future.result()
             self.verdicts.extend(part)
-        self.tail = self.run.submit(_rank, self.spec, self._scale(), self.standing,
+        self.tail = self.run.submit(_rank, self.spec, self._frozen_bounds(), self.standing,
                                     self.verdicts, self.run.top)
 
     def _scaled_solver(self) -> Solver:
         """The Solver for this split's board, on the scale its slices froze."""
         solver = _solver(self.run.world, self.run.catalog, self.spec)
-        solver.adopt_bounds(self._scale(), self.standing)
+        solver.adopt_bounds(self._frozen_bounds(), self.standing)
         return solver
 
     def solved(self) -> Solved:

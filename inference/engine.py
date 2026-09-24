@@ -344,8 +344,8 @@ def _board_once(
     blue_split.sweep()
     red_split.sweep()
     # a fill is its seat's board, so it takes the seat's scale and draws none
-    fill_split = solve.split(ours, solve.half, wanted=_drafting(ours), scale=blue_split)
-    red_fill_split = solve.split(theirs, solve.rest, wanted=_drafting(theirs), scale=red_split)
+    fill_split = solve.split(ours, solve.half, wanted=_drafting(ours), scale_of=blue_split)
+    red_fill_split = solve.split(theirs, solve.rest, wanted=_drafting(theirs), scale_of=red_split)
     fill_split.sweep()
     red_fill_split.sweep()
     blue_split.merge()
@@ -353,7 +353,7 @@ def _board_once(
     blue = solve.optimal(blue_seat, blue_split, seat="blue")
     red = solve.optimal(red_seat, red_split, seat="red")
     countered_seat = draft._replace(red=tuple(red.result.blue))
-    against_split, answer_split = solve.countering(countered_seat)
+    against_split, answer_split = solve.sweep_countered(countered_seat)
     for split in (fill_split, red_fill_split, against_split, answer_split):
         split.merge()
     # a full six is ranked against the field its seat's search just swept;
@@ -403,16 +403,16 @@ class _Pass:
 
     def split(
             self, draft: Draft, slices: int, *, wanted: bool = True,
-            pool_size: int | None = None, scale: Searching | None = None) -> Searching:
+            pool_size: int | None = None, scale_of: Searching | None = None) -> Searching:
         """One search sent out, unless there are no workers or it is not
-        wanted. With `scale`, a search on the same board, it takes that
+        wanted. With `scale_of`, a search on the same board, it takes that
         search's bounds and standing and draws no sample of its own."""
         if self.run is None or not wanted:
             return parallel.NullSplit(self.watch)
         spec = parallel.Spec(draft, pool_size or self.brief.pool_size)
-        if scale is None:
+        if scale_of is None:
             return parallel.Split(self.run, spec, slices)
-        return parallel.Split(self.run, spec, slices, scale.bounds, scale.standing)
+        return parallel.Split(self.run, spec, slices, scale_of.bounds, scale_of.standing)
 
     def optimal(
             self, draft: Draft, search: Searching, *, seat: Seat, kind: ResultKind = "infer",
@@ -443,22 +443,22 @@ class _Pass:
         fill.scale_to(best)
         return fill
 
-    def _countering(self, draft: Draft) -> bool:
+    def _wants_countered(self, draft: Draft) -> bool:
         """Whether the countered case is solved: blue has picks, red a six,
         and the brief asks for it."""
         return bool(self.brief.countered and draft.blue and draft.red)
 
-    def countering(self, draft: Draft) -> tuple[Searching, Searching]:
+    def sweep_countered(self, draft: Draft) -> tuple[Searching, Searching]:
         """The countered case's two searches, swept: blue's best counter to
         red's optimal six (`draft.red`), which is its 100, and blue's picks
         filled against that six on the same scale - the second only while
         blue is half-drafted."""
-        wanted = self._countering(draft)
+        wanted = self._wants_countered(draft)
         against = self.split(draft._replace(blue=()), self.rest, wanted=wanted,
                              pool_size=self.countered_pool)
         against.sweep()
         answer = self.split(draft, self.rest, wanted=wanted and _drafting(draft),
-                            pool_size=self.countered_pool, scale=against)
+                            pool_size=self.countered_pool, scale_of=against)
         answer.sweep()
         return against, answer
 
@@ -468,7 +468,7 @@ class _Pass:
         counter to that six. A full six is ranked against that counter's
         field; a half-drafted one is filled, as the fill reads blue's picks.
         None where the countered case is not solved."""
-        if not self._countering(draft):
+        if not self._wants_countered(draft):
             return None
         top = self.optimal(draft._replace(blue=()), against, seat="blue",
                            pool_size=self.countered_pool)
