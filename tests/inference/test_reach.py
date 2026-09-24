@@ -10,9 +10,9 @@ import os
 import pytest
 
 from inference import catalog, reach
+from tests.inference import FIXTURES
 
-FIXTURE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                       "fixtures", "reach.json")
+FIXTURE = os.path.join(FIXTURES, "reach.json")
 
 
 UNSEATED = {"Freja", "Shion"}       # named, not waived - see the test

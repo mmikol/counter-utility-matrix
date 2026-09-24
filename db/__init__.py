@@ -24,8 +24,10 @@ boundary does not draw it.
     sentry        the guard: the playbook, the free text in the database, the door
     raw/          the CSV mirror the tools export (gitignored)
 
-This file holds what the whole layer must agree on: where things live, and
-the scope every rates snapshot is pinned to. docs/db.md walks the tree.
+This file holds what the whole layer must agree on: where things live (ROOT
+and the paths under it), the scope every rates snapshot is pinned to, and
+embed, which rewrites one generated section of a markdown file for every
+layer that generates docs. docs/db.md walks the tree.
 
 Every row carries a source_id, and that is the only distinction drawn
 between what was measured, what was judged and what was written by hand.
@@ -49,6 +51,7 @@ CACHE_DIRS = {
     "wiki": os.path.join(ROOT, ".cache-wiki"),
 }
 
+
 # The ability vocabulary: db/psql/migrations/002_heroes.sql seeds ability_kinds
 # with these codes, db/data/wiki/heroes.py resolves each to its kind_id when it
 # writes, and the UI layer's model compares kits against them.
@@ -61,3 +64,18 @@ ABILITY_KINDS = (KIND_WEAPON, KIND_ABILITY, KIND_ULTIMATE, KIND_PASSIVE)
 PLATFORM = "console"
 INPUT_DEVICE = "controller"
 REGION = "americas"
+
+
+def embed(path: str, name: str, text: str) -> None:
+    """Replace the generated section `name` of a markdown file - the text between
+    <!-- generated:name --> and <!-- /generated:name --> - keeping the rest. A
+    file without both markers is a ValueError."""
+    with open(path, encoding="utf-8") as handle:
+        doc = handle.read()
+    start, end = "<!-- generated:%s -->" % name, "<!-- /generated:%s -->" % name
+    if start not in doc or end not in doc:
+        raise ValueError("%s has no %s markers" % (path, name))
+    head = doc[:doc.index(start) + len(start)]
+    tail = doc[doc.index(end):]
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(head + "\n" + text.strip("\n") + "\n" + tail)

@@ -14,8 +14,8 @@
 
 The agents run on the host, on the subscription (the claude CLI, signed in
 once); without the CLI the run still brings the stack up and says so. Nothing
-beyond the standard library and inference.derive. Exit code 0 means everything
-answered.
+beyond the standard library, db's ROOT and inference.derive. Exit code 0 means
+everything answered.
 """
 
 import json
@@ -25,11 +25,14 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Mapping
+from typing import Any, TypedDict
+
+from db import ROOT
 
 URLS = {"data": "http://localhost:8020/health",
         "inference": "http://localhost:8019/health",
         "ui": "http://localhost:8017/api/roster"}
-ROOT = os.path.dirname(os.path.abspath(__file__))
 BOARD = "http://localhost:8017"
 # one board solved through the service before the stack is called ready: only
 # the container (1 GiB, a read-only root) shows whether this playbook fits its
@@ -37,13 +40,14 @@ BOARD = "http://localhost:8017"
 PROBE = "http://localhost:8019/board?map=King%27s%20Row&red=Zarya&red=Pharah&side=attack"
 
 
-def sh(*args):
+def sh(*args: str) -> None:
     result = subprocess.run(list(args))
     if result.returncode:
         raise SystemExit("error: %s exited %d" % (" ".join(args), result.returncode))
 
 
-def get_json(url, timeout=10):
+def get_json(url: str, timeout: float = 10) -> Any:
+    """The JSON a URL answers, or None when it does not answer with JSON."""
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
@@ -51,7 +55,7 @@ def get_json(url, timeout=10):
         return None
 
 
-def wait_for(url, seconds, what):
+def wait_for(url: str, seconds: int, what: str) -> Any:
     started = time.time()
     while time.time() - started < seconds:
         data = get_json(url)
@@ -61,7 +65,7 @@ def wait_for(url, seconds, what):
     raise SystemExit("error: %s did not answer at %s within %ds" % (what, url, seconds))
 
 
-def health():
+def health() -> dict[str, Any]:
     """{layer: json or None} for the three served layers, and "board": the
     probe's seconds and picks, or None when the service could not solve one."""
     h = {layer: get_json(url) for layer, url in URLS.items()}
@@ -69,7 +73,12 @@ def health():
     return h
 
 
-def probe():
+class Probe(TypedDict):
+    seconds: float
+    picks: list[str]
+
+
+def probe() -> Probe | None:
     """One board solved through the inference service -> {"seconds", "picks"},
     or None when the service did not answer with a six: unreachable, erroring,
     or a playbook whose limits seat no composition."""
@@ -78,12 +87,13 @@ def probe():
     picks = (data or {}).get("blue", {}).get("blue") or []
     if len(picks) != 6:                            # a six, or the service failed
         return None
-    return {"seconds": round(time.time() - started, 1), "picks": picks}
+    return Probe(seconds=round(time.time() - started, 1), picks=picks)
 
 
-def verdict(h):
+def verdict(h: Mapping[str, Any]) -> tuple[bool, list[str]]:
     """(ok, [lines]) from the health map."""
-    lines, ok = [], True
+    lines: list[str] = []
+    ok = True
     data = h.get("data")
     if not data or data.get("status") != "ok":
         ok = False
@@ -134,9 +144,9 @@ def verdict(h):
     return ok, lines
 
 
-def dotenv():
+def dotenv() -> dict[str, str]:
     """KEY=VALUE lines of .env beside this file, if any: what compose reads."""
-    out = {}
+    out: dict[str, str] = {}
     try:
         with open(os.path.join(ROOT, ".env"), encoding="utf-8") as handle:
             for line in handle:
@@ -149,17 +159,18 @@ def dotenv():
     return out
 
 
-def token():
+def token() -> str | None:
     return os.environ.get("COUNTRIX_MCP_TOKEN") or dotenv().get("COUNTRIX_MCP_TOKEN")
 
 
-def mcp(name, arguments=None, timeout=600):
+def mcp(name: str, arguments: dict[str, Any] | None = None, timeout: float = 600) -> str:
     """Call one tool on the stack's MCP endpoint -> its text."""
     payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                           "params": {"name": name, "arguments": arguments or {}}})
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if token():
-        headers["Authorization"] = "Bearer " + token()
+    bearer = token()
+    if bearer:
+        headers["Authorization"] = "Bearer " + bearer
     request = urllib.request.Request("http://localhost:8020/mcp", data=payload.encode(),
                                      headers=headers)
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -169,7 +180,7 @@ def mcp(name, arguments=None, timeout=600):
     return body["result"]["content"][0]["text"]
 
 
-def derive_pending(h):
+def derive_pending(h: Mapping[str, Any]) -> None:
     """Drafts in inference/strategies/ are completed on the host (the claude CLI
     lives here, not in the containers), then the stack's database re-mirrors."""
     pending = (h.get("inference") or {}).get("pending")
@@ -180,7 +191,7 @@ def derive_pending(h):
     mcp("load_authored")
 
 
-def up():
+def up() -> int:
     print("building the image and starting the containers...")
     sh("docker", "compose", "build", "data")
     sh("docker", "compose", "up", "-d", "--remove-orphans")
@@ -200,7 +211,7 @@ def up():
     return report(ok, lines)
 
 
-def sentry_line():
+def sentry_line() -> str | None:
     """What the sentry last saw, from the report it leaves in db/raw."""
     path = os.path.join(ROOT, "db", "raw", "sentry.json")
     try:
@@ -218,7 +229,7 @@ def sentry_line():
     return " - ".join(parts)
 
 
-def status():
+def status() -> int:
     h = health()
     derive_pending(h)
     ok, lines = verdict(h if not (h.get("inference") or {}).get("pending") else health())
@@ -243,7 +254,7 @@ AGENT_TOOLS = ",".join("mcp__%s__%s" % (server, name)
                        for name in AGENT_TOOL_NAMES)
 
 
-def agents_command(claude=None):
+def agents_command(claude: str | None = None) -> list[str]:
     """The headless run: Claude Code in print mode on the /refresh skill, with
     the stack's MCP tools allowed and nothing else."""
     from inference import derive
@@ -256,7 +267,7 @@ def agents_command(claude=None):
             "--no-session-persistence"]
 
 
-def agents():
+def agents() -> int:
     """The agents' run, on the host, on the subscription; schedule it with cron
     or launchd."""
     print("agents: Claude Code, headless, on the /refresh skill (minutes)...")
@@ -281,7 +292,7 @@ def agents():
     return status()
 
 
-def run():
+def run() -> int:
     """The stack up, the agents' run when the CLI is here, the app left running."""
     code = up()
     if code:
@@ -298,7 +309,7 @@ def run():
     return 0
 
 
-def report(ok, lines):
+def report(ok: bool, lines: list[str]) -> int:
     for line in lines:
         print("  " + line)
     print("%s - board %s, inference :8019, MCP over HTTP :8020/mcp"
@@ -306,13 +317,13 @@ def report(ok, lines):
     return 0 if ok else 1
 
 
-def refresh():
+def refresh() -> int:
     print("refreshing every source through the data layer (minutes at a polite pace)...")
     print(mcp("sync_all", {"refresh": True}, timeout=3600))
     return status()
 
 
-def test():
+def test() -> int:
     """The suite inside the image: coverage writes to the tmpfs (the root is
     read-only); the shipped playbook is used whatever .env names."""
     sh("docker", "compose", "run", "--rm", "-e", "COVERAGE_FILE=/tmp/.coverage",
@@ -321,13 +332,13 @@ def test():
     return 0
 
 
-def down():
+def down() -> int:
     sh("docker", "compose", "down")
     print("stopped; the database volume stays")
     return 0
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     verbs = {"run": run, "up": up, "agents": agents, "status": status,
              "refresh": refresh, "test": test, "down": down}
     if not argv:

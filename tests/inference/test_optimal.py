@@ -16,9 +16,9 @@ import os
 import pytest
 
 from inference import catalog, engine
+from tests.inference import FIXTURES
 
-FIXTURE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                       "fixtures", "optimal.json")
+FIXTURE = os.path.join(FIXTURES, "optimal.json")
 
 
 def _boards():

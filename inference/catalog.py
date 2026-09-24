@@ -47,15 +47,20 @@ reads as params.NAME - tuning is editing the file.
 import copy
 import os
 import re
+from collections.abc import Iterable, Mapping
+from typing import TYPE_CHECKING, Any, TypedDict
 
-from db import ROOT
-from inference.expr import ExprError, Section, compile_expr
+from db import ROOT, embed
+from inference.expr import Expr, ExprError, Section, compile_expr
 from ui.facts import compute
+
+if TYPE_CHECKING:
+    import psycopg
 
 SHIPPED_DIR = os.path.join(ROOT, "inference", "strategies")
 
 
-def strategies_dir():
+def strategies_dir() -> str:
     """The playbook in force: the shipped one, unless COUNTRIX_STRATEGIES
     names another folder - a path relative to the repo root or absolute. Read
     where it is needed rather than snapshotted at import, so the setting means
@@ -78,12 +83,18 @@ BOARD_SECTIONS = ("enemy", "map", "world", "params")
 
 
 class CatalogError(ValueError):
-    file = None         # the strategy file at fault, when one is
+    file: str | None = None         # the strategy file at fault, when one is
+
+
+# One frontmatter value as the dialect reads it, and a file's frontmatter:
+# whatever the file wrote, checked field by field in Strategy.
+type Scalar = str | int | float | bool | list[Scalar] | None
+Meta = dict[str, Any]
 
 
 # --- the frontmatter dialect --------------------------------------------------
 
-def _scalar(text):
+def _scalar(text: str) -> Scalar:
     text = text.strip()
     if not text:
         return ""
@@ -109,7 +120,7 @@ def _scalar(text):
         return text
 
 
-def parse_frontmatter(text):
+def parse_frontmatter(text: str) -> tuple[Meta, str]:
     """'---\\nkey: value\\n---\\nbody' -> (meta, body). Flat keys plus one
     level of indented mapping (params:)."""
     if not text.startswith("---"):
@@ -118,7 +129,8 @@ def parse_frontmatter(text):
     if end < 0:
         raise CatalogError("unterminated frontmatter")
     header, body = text[3:end], text[end + 4:]
-    meta, current = {}, None
+    meta: Meta = {}
+    current: str | None = None
     for raw in header.splitlines():
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
@@ -143,16 +155,39 @@ def parse_frontmatter(text):
 
 # --- the strategy --------------------------------------------------------------
 
+class StrategyRecord(TypedDict):
+    """A strategy as the tools, the service and the board serve it."""
+    id: str
+    name: str
+    kind: str
+    form: str
+    pending: bool
+    need: bool
+    category: str
+    direction: str | None
+    metric: str | None
+    weight: float
+    soft: bool
+    confidence: str | None
+    when: str | None
+    require: str | None
+    bonus: str | None
+    penalty: str | None
+    params: dict[str, Scalar]
+    body: str
+
+
 class Strategy:
-    def __init__(self, hid, meta, body, raw, path):
+    def __init__(self, hid: str, meta: Meta, body: str, raw: str, path: str) -> None:
         self.id, self.body, self.raw, self.path = hid, body, raw, path
         self.name = str(meta.get("name") or hid.replace("-", " "))
-        self.kind = meta.get("kind")
-        if self.kind not in KINDS:
+        kind = meta.get("kind")
+        if not isinstance(kind, str) or kind not in KINDS:
             raise CatalogError("%s: kind must be one of %s" % (hid, "/".join(KINDS)))
+        self.kind = kind
         self.category = str(meta.get("category") or "general")
-        self.direction = meta.get("direction")
-        self.metric = meta.get("metric")
+        self.direction: str | None = meta.get("direction")
+        self.metric: str | None = meta.get("metric")
         try:
             self.weight = float(meta.get("weight", 1.0) or 0.0)
         except (TypeError, ValueError):
@@ -164,21 +199,24 @@ class Strategy:
         # the term through the same reference bounds the metric uses, so a rule
         # whose premise is barely true contributes barely anything. Declared, not
         # coded: nothing here knows which metric any rule names.
-        self.confidence = meta.get("confidence")
-        self.params = dict((meta.get("params") or {}).items())
+        self.confidence: str | None = meta.get("confidence")
+        self.params: dict[str, Scalar] = dict((meta.get("params") or {}).items())
         self.params_section = Section({k: 0 if v is None else v
                                        for k, v in self.params.items()})
         try:
-            self.when = compile_expr(str(meta["when"])) if "when" in meta else None
-            self.require = compile_expr(str(meta["require"])) if "require" in meta else None
-            self.bonus = compile_expr(str(meta["bonus"])) if "bonus" in meta else None
-            self.penalty = (compile_expr(str(meta["penalty"]))
-                            if "penalty" in meta else None)
+            self.when: Expr | None = (compile_expr(str(meta["when"]))
+                                      if "when" in meta else None)
+            self.require: Expr | None = (compile_expr(str(meta["require"]))
+                                         if "require" in meta else None)
+            self.bonus: Expr | None = (compile_expr(str(meta["bonus"]))
+                                       if "bonus" in meta else None)
+            self.penalty: Expr | None = (compile_expr(str(meta["penalty"]))
+                                         if "penalty" in meta else None)
         except ExprError as error:
             raise CatalogError("%s: %s" % (hid, error)) from error
         self._check()
 
-    def _check(self):
+    def _check(self) -> None:
         known = compute.registry()
         if self.kind == "heuristic" and (self.metric or self.direction):
             if self.direction not in ("maximize", "minimize"):
@@ -227,7 +265,7 @@ class Strategy:
                                        % (self.id, name))
 
     @property
-    def form(self):
+    def form(self) -> str:
         """heuristic, a constraint's form (limit, scored), assumption, or draft
         (name, kind and prose only - awaiting /strategy)."""
         if self.kind == "assumption":
@@ -241,17 +279,17 @@ class Strategy:
         return "draft"
 
     @property
-    def scored(self):
+    def scored(self) -> bool:
         """Whether the solver reads this strategy at all (assumptions and drafts it does not)."""
         return self.form in ("heuristic", "limit", "scored")
 
     @property
-    def pending(self):
+    def pending(self) -> bool:
         """A draft: the /strategy skill has not inferred its frontmatter yet."""
         return self.form == "draft"
 
     @property
-    def expressions(self):
+    def expressions(self) -> str:
         parts = []
         for label, expr in (("when", self.when), ("require", self.require),
                             ("bonus", self.bonus), ("penalty", self.penalty)):
@@ -260,7 +298,7 @@ class Strategy:
         return "; ".join(parts)
 
     @property
-    def need(self):
+    def need(self) -> bool:
         """A heuristic guarded on the six's own state: the solver charges what it
         misses (weight x (norm - 1)) instead of paying what it has. Guards on red
         or the map - red's matchup keys included - leave it a reward."""
@@ -269,7 +307,7 @@ class Strategy:
                         and n not in compute.RED_MATCHUP
                         for n in self.when.names))
 
-    def to_dict(self):
+    def to_dict(self) -> StrategyRecord:
         return {"id": self.id, "name": self.name, "kind": self.kind, "form": self.form,
                 "pending": self.pending, "need": self.need,
                 "category": self.category, "direction": self.direction,
@@ -282,13 +320,14 @@ class Strategy:
                 "params": self.params, "body": self.body}
 
 
-def load(directory=None):
+def load(directory: str | None = None) -> list[Strategy]:
     """Every strategy file, validated, ordered constraints (limits, scored) then
     heuristics, then assumptions; drafts sit last within their kind."""
     directory = directory or strategies_dir()
     if not os.path.isdir(directory):
         raise CatalogError("no strategies directory at %s" % directory)
-    out, ids = [], set()
+    out: list[Strategy] = []
+    ids: set[str] = set()
     for name in sorted(os.listdir(directory)):
         if not name.endswith(".md") or name in NOT_STRATEGIES:
             continue
@@ -323,13 +362,13 @@ def load(directory=None):
     return out
 
 
-def parse_weights(items):
+def parse_weights(items: Mapping[str, Any] | Iterable[object] | None) -> dict[str, float]:
     """`id:value` strings (a query's repeated `weight` parameter) or a mapping
     -> {id: weight}, each clamped to the file's 0..10; malformed entries are
     dropped. What a board's sliders send."""
     pairs = items.items() if isinstance(items, dict) else \
         (str(x).split(":", 1) for x in (items or []) if ":" in str(x))
-    out = {}
+    out: dict[str, float] = {}
     for hid, value in pairs:
         try:
             out[str(hid).strip()] = min(10.0, max(0.0, float(value)))
@@ -338,7 +377,7 @@ def parse_weights(items):
     return out
 
 
-def weighted(catalog, weights):
+def weighted(catalog: list[Strategy], weights: Mapping[str, float]) -> list[Strategy]:
     """The catalog with the heuristics named in `weights` carrying those
     weights instead of their files' - shallow copies, so the files and the
     loaded catalog stay as they are. Only a heuristic has a weight to set:
@@ -354,7 +393,7 @@ def weighted(catalog, weights):
     return out
 
 
-def scores(catalog):
+def scores(catalog: Iterable[Strategy]) -> bool:
     """Whether the playbook has any term that scores: a heuristic, a scored
     constraint or a soft limit. A playbook of hard limits and prose alone
     ties every legal six at zero - the board then says "unscored" rather
@@ -363,17 +402,27 @@ def scores(catalog):
                for h in catalog)
 
 
-def counts(catalog):
+def counts(catalog: Iterable[Strategy]) -> dict[str, int]:
     """Strategies per kind: {"constraint": n, "heuristic": n, "assumption": n}."""
     return {k: sum(1 for h in catalog if h.kind == k) for k in KINDS}
 
 
-def playbook_name(directory=None):
+def playbook_name(directory: str | None = None) -> str:
     """How the database names a playbook: its folder, relative to the repo."""
     return os.path.relpath(directory or strategies_dir(), ROOT).replace(os.sep, "/")
 
 
-def mirror(cx, catalog, directory=None):
+class Mirrored(TypedDict):
+    """What mirror() stored: strategies per kind, the total and the table."""
+    constraint: int
+    heuristic: int
+    assumption: int
+    total: int
+    tables: list[str]
+
+
+def mirror(cx: "psycopg.Connection", catalog: list[Strategy],
+           directory: str | None = None) -> Mirrored:
     """Reload the strategies table from the files (whole truth), each row
     naming the playbook it came from."""
     from db.data.authored import AUTHORED
@@ -391,10 +440,12 @@ def mirror(cx, catalog, directory=None):
              ", ".join("%s=%s" % kv for kv in sorted(h.params.items())) or None,
              h.body, playbook_name(directory), source_id))
     cx.commit()
-    return dict(counts(catalog), total=len(catalog), tables=["strategies"])
+    kinds = counts(catalog)
+    return Mirrored(constraint=kinds["constraint"], heuristic=kinds["heuristic"],
+                    assumption=kinds["assumption"], total=len(catalog), tables=["strategies"])
 
 
-def render(catalog):
+def render(catalog: Iterable[Strategy]) -> str:
     lines = []
     for h in catalog:
         head = "%-10s %-10s %-28s %-9s" % (h.kind, h.form, h.id, h.category)
@@ -410,12 +461,11 @@ def render(catalog):
     return "\n".join(lines)
 
 
-def write_docs(catalog, path=DOCS_PATH):
+def write_docs(catalog: list[Strategy], path: str = DOCS_PATH) -> str | None:
     """The catalog and the vocabulary, generated into docs/inference.md
     between its <!-- generated:catalog --> markers - from the shipped
     playbook only: while another folder is in force the docs keep describing
     the shipped one, and this returns None."""
-    from db.psql.schema import embed
     if strategies_dir() != SHIPPED_DIR:
         return None
     kinds = counts(catalog)
@@ -441,10 +491,10 @@ def write_docs(catalog, path=DOCS_PATH):
                     h.direction, h.metric, reg.get(h.metric, ""), h.weight,
                     ", a need" if h.need else "",
                     "; when `%s`" % h.when.source if h.when else ""))
-            elif h.form == "limit":
+            elif h.form == "limit" and h.require is not None:     # a limit has one
                 out.append("`require %s`%s%s" % (
                     h.require.source, " (soft, penalty `%s`)" % h.penalty.source
-                    if h.soft else " (hard)",
+                    if h.soft and h.penalty is not None else " (hard)",
                     "; when `%s`" % h.when.source if h.when else ""))
             elif h.form == "draft":
                 out.append("*draft* - name, kind and prose only; `/strategy` infers the rest")

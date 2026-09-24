@@ -10,7 +10,8 @@ import subprocess
 
 import pytest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+from db import ROOT
+
 DOCS = os.path.join(ROOT, "docs")
 SKILLS = os.path.join(ROOT, ".claude", "skills")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
@@ -210,12 +211,12 @@ def test_the_schema_sections_match_the_live_database(db, copy_of):
 
 
 def test_embed_replaces_only_the_marked_section(tmp_path):
-    from db.psql import schema
+    from db import embed
     path = tmp_path / "doc.md"
     path.write_text("# T\n\nkeep\n\n<!-- generated:x -->\nold\n<!-- /generated:x -->"
                     "\n\nalso keep\n")
-    schema.embed(str(path), "x", "new\nlines")
+    embed(str(path), "x", "new\nlines")
     assert path.read_text() == ("# T\n\nkeep\n\n<!-- generated:x -->\nnew\nlines\n"
                                 "<!-- /generated:x -->\n\nalso keep\n")
-    with pytest.raises(schema.SchemaError, match="no y markers"):
-        schema.embed(str(path), "y", "z")
+    with pytest.raises(ValueError, match="no y markers"):
+        embed(str(path), "y", "z")

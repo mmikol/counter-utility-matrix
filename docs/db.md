@@ -47,7 +47,7 @@ db/
 
 | file | purpose |
 | --- | --- |
-| `__init__.py` | What the whole layer agrees on, declared once: where the repo, the caches and the mirror live, and the scope every rates snapshot is pinned to - console, controller, Americas. |
+| `__init__.py` | What the whole layer agrees on, declared once: where the repo, the caches and the mirror live, and the scope every rates snapshot is pinned to - console, controller, Americas. `embed` rewrites one generated section of a markdown file, for every layer that generates docs. |
 | `data/fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `set_max_age`: the freshness policy - a build keeps every cached page, a refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `prepare_cache`: the cache directory a tool hands a pull. |
 | `data/names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. |
 | `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `python -m db.sentry --once` is one pass from a shell. |

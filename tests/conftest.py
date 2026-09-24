@@ -15,16 +15,15 @@ import os
 
 import pytest
 
+from db import DEFAULT_DB_DIR
+
 
 def _dsn():
     if os.environ.get("COUNTRIX_NO_DATABASE"):
         return None            # what CI sees: no cluster, the db-bound tests skip
     local = os.environ.get("COUNTRIX_LOCAL_SERVER")
-    if not local and not os.environ.get("DATABASE_URL"):
-        default = os.path.join(os.path.dirname(os.path.dirname(
-            os.path.abspath(__file__))), "db", "psql", "cluster")
-        if os.path.isdir(default):
-            local = default
+    if not local and not os.environ.get("DATABASE_URL") and os.path.isdir(DEFAULT_DB_DIR):
+        local = DEFAULT_DB_DIR
     if local:
         import pgserver
 

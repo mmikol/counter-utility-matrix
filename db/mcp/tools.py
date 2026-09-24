@@ -15,7 +15,7 @@ import sys
 
 import psycopg
 
-from db import CACHE_DIRS, ROOT, psql
+from db import CACHE_DIRS, ROOT, embed, psql
 from db.data import fetch
 from db.mcp.server import Tool, ToolError, audited
 from db.psql import schema
@@ -362,7 +362,7 @@ def write_tool_docs(path=None):
                                             if spec.get("description") else ""))
         out.append("| `%s` | %s | %s |" % (name, description.replace("|", "\\|"),
                                           "<br>".join(args) if args else "none"))
-    schema.embed(path, "tools", "\n".join(out))
+    embed(path, "tools", "\n".join(out))
     return path
 
 

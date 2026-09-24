@@ -4,9 +4,8 @@ and the generated documentation.
     read_migrations, apply   the files in order, and applying them
     applied, pending         the ledger against the files on disk
     drop_all, rebuild        drop every table and reapply every migration
-    generate_docs, embed     the ERD and data dictionary of docs/db.md from
-                             the live schema; embed rewrites one generated
-                             section of a markdown file
+    generate_docs            the ERD and data dictionary of docs/db.md from
+                             the live schema
 """
 
 import glob
@@ -15,7 +14,7 @@ import re
 
 import psycopg
 
-from db import ROOT
+from db import ROOT, embed
 
 MIGRATIONS_DIR = os.path.join(ROOT, "db", "psql", "migrations")
 
@@ -132,20 +131,6 @@ def _migration_tables():
             if m.group(1) in out:
                 out[m.group(1)] = (out[m.group(1)][0], m.group(2).replace("''", "'").strip())
     return out
-
-
-def embed(path, name, text):
-    """Replace the generated section `name` of a markdown file - the text between
-    <!-- generated:name --> and <!-- /generated:name --> - keeping the rest."""
-    with open(path, encoding="utf-8") as handle:
-        doc = handle.read()
-    start, end = "<!-- generated:%s -->" % name, "<!-- /generated:%s -->" % name
-    if start not in doc or end not in doc:
-        raise SchemaError("%s has no %s markers" % (path, name))
-    head = doc[:doc.index(start) + len(start)]
-    tail = doc[doc.index(end):]
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(head + "\n" + text.strip("\n") + "\n" + tail)
 
 
 def generate_docs(connection, path=None):
