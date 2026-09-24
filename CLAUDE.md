@@ -42,8 +42,7 @@ the `db` fixture - except `test_health_reports_the_catalog_and_the_database`,
 which calls `default_dsn()` and boots the cluster even under
 `COUNTRIX_NO_DATABASE=1`. The suite targets `db/psql/cluster` whenever that
 folder exists; `DATABASE_URL` or `./docker-db <command>` points at another
-Postgres. CI sets no variable: it has no cluster and no pgserver. An exported
-`COUNTRIX_READ_ONLY=0` fails the suite, which pins the board read-only.
+Postgres. CI sets no variable: it has no cluster and no pgserver.
 
 The solver spawns `max(6, min(cores, 12))` worker processes (12 here) in any
 process that calls `engine.board()` without a catalog of its own: `ui.board`

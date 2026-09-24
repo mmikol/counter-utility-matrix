@@ -15,6 +15,7 @@ raises is answered by db.web.failure: a Refusal 400 with its message,
 anything else 500 with its type and message, the traceback on stderr.
 """
 
+import argparse
 import html
 import json
 import os
@@ -49,30 +50,48 @@ if TYPE_CHECKING:
 type Reply = tuple[dict[str, Any], int]
 type Query = dict[str, list[str]]
 
-PORT = int(os.environ.get("COUNTRIX_UI_PORT", "8017"))
-
-# The inference layer runs in-process unless a service is named: in the
-# compose stack the `inference` container serves it (inference/serve.py).
-INFERENCE_URL = os.environ.get("INFERENCE_URL", "").rstrip("/")
-# the board's one write - storing a heuristic's weight - goes to the data
-# layer's `tune` tool: over HTTP to the MCP server when a URL is set (the
-# compose stack), in-process through the same registry otherwise. READ_ONLY
-# below is what decides whether that write is offered at all.
-MCP_URL = os.environ.get("COUNTRIX_MCP_URL", "").rstrip("/")
-MCP_TOKEN = os.environ.get("COUNTRIX_MCP_TOKEN", "")
 STORE_REASON = "stored from the board's slider"
-# The board writes nothing unless told it may: a weight set on the playbook tab
-# rides with the session's own requests and never reaches a strategy file.
-# COUNTRIX_READ_ONLY=0 brings back the store button and its one POST.
-READ_ONLY = os.environ.get("COUNTRIX_READ_ONLY", "1").lower() not in ("0", "no", "false")
-# The repository the header links to; override when the repo moves.
-REPO_URL = os.environ.get("COUNTRIX_REPO_URL", "https://github.com/mmikol/countrix")
 GITHUB_MARK = ("<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='true'><path fill='currentColor' d='M8 0C3.58 0 0 3.58 0 8"  # noqa: E501
                "c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94"  # noqa: E501
                "-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2"  # noqa: E501
                "-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0"  # noqa: E501
                " 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95"  # noqa: E501
                ".29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z'/></svg>")  # noqa: E501
+
+
+# --- the settings -------------------------------------------------------------
+#
+# Each is read when it is used, so a change in the environment holds from the
+# next request. Where the board listens is read once, by command_line().
+
+# The inference layer runs in-process unless a service is named: in the
+# compose stack the `inference` container serves it (inference/serve.py).
+def inference_url() -> str:
+    return os.environ.get("INFERENCE_URL", "").rstrip("/")
+
+
+# the board's one write - storing a heuristic's weight - goes to the data
+# layer's `tune` tool: over HTTP to the MCP server when a URL is set (the
+# compose stack), in-process through the same registry otherwise. read_only()
+# below is what decides whether that write is offered at all.
+def mcp_url() -> str:
+    return os.environ.get("COUNTRIX_MCP_URL", "").rstrip("/")
+
+
+def mcp_token() -> str:
+    return os.environ.get("COUNTRIX_MCP_TOKEN", "")
+
+
+# The board writes nothing unless told it may: a weight set on the playbook tab
+# rides with the session's own requests and never reaches a strategy file.
+# COUNTRIX_READ_ONLY=0 brings back the store button and its one POST.
+def read_only() -> bool:
+    return os.environ.get("COUNTRIX_READ_ONLY", "1").lower() not in ("0", "no", "false")
+
+
+# The repository the header links to; override when the repo moves.
+def repo_url() -> str:
+    return os.environ.get("COUNTRIX_REPO_URL", "https://github.com/mmikol/countrix")
 
 
 def dsn() -> str:
@@ -83,7 +102,7 @@ def remote(
         path: str, query: Mapping[str, str | list[str]] | None = None,
         payload: dict[str, Any] | None = None) -> Reply:
     """Forward to the inference service -> (json, status)."""
-    url = INFERENCE_URL + path
+    url = inference_url() + path
     if query:
         url += "?" + urlencode(query, doseq=True)
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
@@ -132,7 +151,7 @@ def api_infer(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
     draft = parse_board(query)
     # a malformed weight is refused here, never forwarded
     weights = catalog_module.parse_weights(query.get("weights", []))
-    if INFERENCE_URL:
+    if inference_url():
         forward = board_query(draft)
         if weights:
             forward["weights"] = ["%s:%g" % kv for kv in sorted(weights.items())]
@@ -146,9 +165,10 @@ def mcp_call(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any] 
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                        "params": {"name": name, "arguments": arguments}}).encode("utf-8")
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if MCP_TOKEN:
-        headers["Authorization"] = "Bearer " + MCP_TOKEN
-    request = urllib.request.Request(MCP_URL, data=body, headers=headers)
+    token = mcp_token()
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    request = urllib.request.Request(mcp_url(), data=body, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             reply = json.loads(response.read().decode("utf-8"))
@@ -187,7 +207,7 @@ def api_weight(payload: dict[str, Any]) -> Reply:
         return {"error": "the weight must be within 0..10"}, 400
     arguments = {"id": hid, "field": "weight", "value": weight, "reason": STORE_REASON,
                  "by": "the board"}
-    if MCP_URL:
+    if mcp_url():
         text, change, failed = mcp_call("tune", arguments)
         if failed:
             return {"error": text}, 400
@@ -198,7 +218,7 @@ def api_weight(payload: dict[str, Any]) -> Reply:
 
 
 def api_strategies() -> Reply:
-    if INFERENCE_URL:
+    if inference_url():
         return remote("/strategies")
     # a playbook that does not load is the server's fault: a 500, as on the service
     catalog = catalog_module.load()
@@ -292,7 +312,7 @@ def view_board() -> str:
             "<script src='/static/comps.js'></script>"
             "<script src='/static/playbook.js'></script>"
             "<script src='/static/board.js'></script>"
-            % (REPO_URL, GITHUB_MARK, TEAM_SIZE, MAX_BANS, "true" if READ_ONLY else "false"))
+            % (repo_url(), GITHUB_MARK, TEAM_SIZE, MAX_BANS, "true" if read_only() else "false"))
 
 
 # --- the math page -------------------------------------------------------------
@@ -371,7 +391,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "origin not allowed"}, 403)
         if not (self.headers.get("Content-Type") or "").startswith("application/json"):
             return self._json({"error": "a JSON body is required"}, 415)
-        if READ_ONLY:
+        if read_only():
             return self._json({"error": "this board does not write: a weight applies to your"
                                         " session only"}, 403)
         try:
@@ -418,14 +438,21 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as error:  # noqa: BLE001  # the request boundary
             return self._failed(path, error)
 
-def main() -> None:
-    import argparse
+
+def command_line(argv: list[str] | None = None) -> argparse.Namespace:
+    """The command line. Where the board listens defaults to COUNTRIX_UI_HOST
+    and COUNTRIX_UI_PORT, both read when the board starts."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=os.environ.get("COUNTRIX_UI_HOST", "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=PORT)
-    args = parser.parse_args()
+    parser.add_argument("--port", type=int,
+                        default=int(os.environ.get("COUNTRIX_UI_PORT", "8017")))
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = command_line(argv)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
-    workers = 0 if INFERENCE_URL else inference_engine.warm()   # in-process boards split too
+    workers = 0 if inference_url() else inference_engine.warm()   # in-process boards split too
     print("Countrix: http://%s:%d%s" % (
         args.host, args.port, " (%d solver workers)" % workers if workers else ""))
     server.serve_forever()

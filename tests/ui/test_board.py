@@ -164,7 +164,8 @@ def test_every_stylesheet_class_is_used_by_the_page():
     assert [c for c in classes if not re.search(r"\b%s\b" % re.escape(c), sources)] == []
 
 
-def test_the_page_is_a_shell_over_static_files():
+def test_the_page_is_a_shell_over_static_files(monkeypatch):
+    monkeypatch.delenv("COUNTRIX_READ_ONLY", raising=False)
     body = board.view_board()
     assert "/static/board.css" in body and "/static/board.js" in body
     order = [body.index("/static/%s.js" % n) for n in ("comps", "playbook", "board")]
@@ -235,7 +236,7 @@ def test_the_page_is_a_shell_over_static_files():
     # the two pills, pinned top-right
     links = header[header.index("<span class='links'>"):]
     assert "href='/math'" in links
-    assert board.REPO_URL in links
+    assert board.repo_url() in links
     assert "href='/tests'" in links            # the checks, beside the math
     assert links.rstrip().endswith("GitHub</a></span>")
     # a team's clear button empties that team only
@@ -243,9 +244,9 @@ def test_the_page_is_a_shell_over_static_files():
     # the suggestions fill blue's empty slots alone
     suggestions = script[script.index("function paintSuggestions"):script.index("function showTab")]
     assert "el('blueslots')" in suggestions and "el('redslots')" not in suggestions
-    # writes nothing by default; pinned so an exported COUNTRIX_READ_ONLY
-    # cannot decide an unrelated assertion
-    assert board.READ_ONLY is True, "run the suite without COUNTRIX_READ_ONLY set"
+    # writes nothing by default: the test clears COUNTRIX_READ_ONLY itself, so
+    # an exported one cannot decide an unrelated assertion
+    assert board.read_only() is True
     assert "var TEAM = 6, BANS = 5, READ_ONLY = true;" in body
     data, ctype = board.static_file("board.js")
     assert ctype.startswith("application/javascript") and b"function paint" in data
@@ -298,7 +299,7 @@ def test_storing_a_weight_is_a_tune_call_over_the_door(monkeypatch):
             return "no strategy 'no-such'", None, True
         return "tuned %s: weight 1 -> %s\n- log line" % (arguments["id"], arguments["value"]), \
             {"id": arguments["id"], "field": "weight", "old": 1.0, "new": "9.99"}, False
-    monkeypatch.setattr(board, "MCP_URL", "http://data:8020/mcp")
+    monkeypatch.setenv("COUNTRIX_MCP_URL", "http://data:8020/mcp")
     monkeypatch.setattr(board, "mcp_call", fake_mcp)
     data, code = board.api_weight({"id": "healing-floor", "weight": "9.994"})
     assert code == 200 and data["line"] == "tuned healing-floor: weight 1 -> 9.99"
@@ -331,7 +332,7 @@ def test_storing_a_weight_locally_runs_the_tune_tool_in_process(db, dsn, tmp_pat
         if name.endswith(".md"):
             shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
     heuristic = next(h for h in catalog.load(FIXTURE_PLAYBOOK) if h.kind == "heuristic")
-    monkeypatch.setattr(board, "MCP_URL", "")
+    monkeypatch.delenv("COUNTRIX_MCP_URL", raising=False)
     monkeypatch.setattr(board, "tool_context", lambda: Sandbox(dsn=dsn))
     monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))   # the playbook in force
     data, code = board.api_weight({"id": heuristic.id, "weight": 7.25})

@@ -96,7 +96,7 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
         calls.append((path, query, payload))
         return {"forwarded": True}, 200
 
-    monkeypatch.setattr(board, "INFERENCE_URL", "http://inference:8019")
+    monkeypatch.setenv("INFERENCE_URL", "http://inference:8019")
     monkeypatch.setattr(board, "remote", fake_remote)
     assert board.api_infer(None, {"map": ["Ilios"], "red": ["Zarya"], "blue": []}) == (
         {"forwarded": True}, 200)
@@ -114,7 +114,7 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
 
 
 def test_board_reports_an_unreachable_inference_service(monkeypatch):
-    monkeypatch.setattr(board, "INFERENCE_URL", "http://127.0.0.1:9")
+    monkeypatch.setenv("INFERENCE_URL", "http://127.0.0.1:9")
     data, code = board.remote("/health")
     assert code == 502 and "unreachable" in data["error"]
 
