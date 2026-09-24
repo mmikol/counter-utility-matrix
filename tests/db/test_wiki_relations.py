@@ -229,7 +229,7 @@ def test_synergies_pull_from_the_cache(sandbox):
         " from synergies s join sources src using (source_id)").fetchall()
     assert data["tables"] == ["synergies"] and data["synergies"] == len(rows) > 100
     assert data["mutual"] == sum(1 for row in rows if row[2] == 2) > 0
-    assert data["unmatched"] == []
+    assert data["unmatched"] == [] and data["missing"] == []
 
     pairs = [frozenset(row[:2]) for row in rows]
     assert len(set(pairs)) == len(pairs) and all(len(pair) == 2 for pair in pairs)

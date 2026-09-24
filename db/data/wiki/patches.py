@@ -5,9 +5,13 @@ released at capture time. Runs before the rates pulls so their snapshots
 have patches to link to.
 """
 
+from collections.abc import Callable
+
+import psycopg
+import requests
 
 from db import psql
-from db.data import fetch
+from db.data import PullSummary, fetch
 from db.data.wiki import WIKI, cargo_query
 
 CARGO_TABLE = "Patches"
@@ -15,7 +19,16 @@ CARGO_TABLE = "Patches"
 CARGO_FIELDS = ("_pageName=name", "date", "platform", "source")
 
 
-def run(connection, cache_dir=None, session=None, log=print):
+class PatchesSummary(PullSummary):
+    patches: int
+    skipped: int
+    latest: str | None
+
+
+def run(connection: psycopg.Connection, cache_dir: str | None = None,
+        session: requests.Session | None = None,
+        log: Callable[[str], None] = print) -> PatchesSummary:
+    """Upsert every dated patch from the Patches cargo table."""
     session = fetch.session(session)
     rows = cargo_query(session, CARGO_TABLE, CARGO_FIELDS, cache_dir)
 

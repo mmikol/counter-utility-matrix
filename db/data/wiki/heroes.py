@@ -17,7 +17,7 @@ import requests
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
-from db.data.wiki import WIKI, cargo_query, fetch_wikitext, kit_store
+from db.data.wiki import WIKI, cargo_query, fetch_articles, kit_store
 from db.data.wiki.hero_articles import Supplement, parse_announcement, supplement_kits
 from db.data.wiki.kit_rows import parse_rows
 from db.data.wiki.kit_store import KitCounts
@@ -48,15 +48,9 @@ def _announce_heroes(
     hero's id to `hero_ids`, which the kit and ability lookups that follow
     read; the rest stay unknown."""
     stored: list[str] = []
-    missing: list[str] = []
-    for hero_name in sorted(names):
-        if hero_name.lower() in hero_ids:
-            continue
-        try:
-            text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
-        except fetch.FetchError as error:
-            missing.append("%s: %s" % (hero_name, error))
-            continue
+    articles, missing = fetch_articles(
+        session, sorted(name for name in names if name.lower() not in hero_ids), cache_dir, log)
+    for hero_name, text in articles.items():
         found = parse_announcement(text)
         if not found:
             continue
@@ -106,7 +100,7 @@ def run(
 
     articles = Supplement({}, 0, [])
     if supplement:
-        articles = supplement_kits(session, by_hero, cache_dir)
+        articles = supplement_kits(session, by_hero, cache_dir, log)
         log("supplemented stats: %d  (fields Cargo does not expose)" % articles.stats)
 
     cursor = connection.cursor()

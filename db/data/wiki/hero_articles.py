@@ -11,13 +11,13 @@ release day.
 import contextlib
 import datetime
 import re
+from collections.abc import Callable
 from typing import NamedTuple, TypedDict
 
 import requests
 
-from db.data import fetch
 from db.data.names import ability_key
-from db.data.wiki import fetch_wikitext, markup
+from db.data.wiki import fetch_articles, markup
 from db.data.wiki.kit_rows import HeroKit, StatValue
 
 
@@ -104,12 +104,9 @@ RETIRED_BLOCK_RE = re.compile(r"\(old\)\s*$", re.I)
 REF_RE = re.compile(r"<ref\b[^>]*/>|<ref\b[^>]*>.*?</ref>", re.I | re.S)
 
 
-def supplement_from_wikitext(
-        session: requests.Session, hero_name: str,
-        cache_dir: str | None) -> tuple[ExtraStats, HeroProfile | None]:
-    """One hero page -> ({ability key: {stat: value}}, its HeroProfile or None).
-    A page that will not fetch raises; supplement_kits records it as missing."""
-    text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
+def supplement_from_wikitext(text: str) -> tuple[ExtraStats, HeroProfile | None]:
+    """One hero's article -> ({ability key: {stat: value}}, its HeroProfile or
+    None)."""
     extra: ExtraStats = {}
     for block in markup.find_templates(text, r"Ability[ _]details"):
         params = markup.parse_params(block)
@@ -135,22 +132,19 @@ class Supplement(NamedTuple):
 
 
 def supplement_kits(
-        session: requests.Session, by_hero: dict[str, HeroKit],
-        cache_dir: str | None) -> Supplement:
+        session: requests.Session, by_hero: dict[str, HeroKit], cache_dir: str | None,
+        log: Callable[[str], None]) -> Supplement:
     """Read every hero's article, merge the stats it adds into the kit in
-    place where Cargo left them empty, and keep the hero's pools."""
+    place where Cargo left them empty, and keep the hero's pools. A hero whose
+    article will not fetch keeps its Cargo kit and is recorded as missing."""
+    articles, missing = fetch_articles(session, sorted(by_hero), cache_dir, log)
     profiles: dict[str, HeroProfile] = {}
     stats = 0
-    missing: list[str] = []
-    for hero_name, kit in sorted(by_hero.items()):
-        try:
-            extra, profile = supplement_from_wikitext(session, hero_name, cache_dir)
-        except fetch.FetchError as error:
-            missing.append("%s: %s" % (hero_name, error))
-            continue
+    for hero_name, text in articles.items():
+        extra, profile = supplement_from_wikitext(text)
         if profile is not None:
             profiles[hero_name] = profile
-        for entry in kit.entries():
+        for entry in by_hero[hero_name].entries():
             for code, value in extra.get(ability_key(entry["name"]), {}).items():
                 if code not in entry["stats"]:
                     entry["stats"][code] = value

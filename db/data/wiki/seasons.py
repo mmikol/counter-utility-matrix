@@ -14,10 +14,14 @@ is restamped with its season.
 """
 
 import re
+from collections.abc import Callable
 from datetime import date
 
+import psycopg
+import requests
+
 from db import psql
-from db.data import fetch
+from db.data import PullSummary, fetch
 from db.data.wiki import WIKI, WikiError, fetch_wikitext, markup
 
 # --- extract: markup -> Python ---------------------------------------------
@@ -83,14 +87,31 @@ def parse_seasons(text):
 
 # --- store ---------------------------------------------------------------------
 
-def run(connection, cache_dir=None, session=None, log=print):
+class SeasonsSummary(PullSummary):
+    seasons: int
+    latest: str
+    latest_started: str
+    stamped: int
+    upcoming: list[str]
+
+
+def run(connection: psycopg.Connection, cache_dir: str | None = None,
+        session: requests.Session | None = None,
+        log: Callable[[str], None] = print) -> SeasonsSummary:
+    """Reload the seasons that have started and restamp every rates snapshot
+    with its season, in one transaction."""
     session = fetch.session(session)
-    seasons = []
+    seasons: list[tuple[str, date | None, str]] = []
+    # A subpage that will not fetch fails the pull whole, not through
+    # fetch_articles: the table is reloaded and every snapshot restamped, so
+    # a missing era would stamp its snapshots with an earlier era's season.
+    # fetch_wikitext already serves the cached copy when the network fails.
     for page in parse_subpages(fetch_wikitext(session, SEASON_PAGE, cache_dir)):
         found = parse_seasons(fetch_wikitext(session, page, cache_dir))
         seasons.extend((name, started, page) for name, started in found)
     today = psql.now().date()
-    started = sorted((s for s in seasons if s[1] and s[1] <= today), key=lambda s: s[1])
+    started = sorted(((name, start, page) for name, start, page in seasons
+                      if start is not None and start <= today), key=lambda s: s[1])
     upcoming = [name for name, start, _ in seasons if not start or start > today]
     if not started:
         raise WikiError("%s: no season with a start date" % SEASON_PAGE)

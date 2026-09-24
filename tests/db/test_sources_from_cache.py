@@ -151,7 +151,7 @@ STAGES_BY_MAP = """
 def test_wiki_maps_store_each_modes_stages(shared):
     ctx, connection = shared
     text, data = tools.run_tool(ctx, "pull_maps")
-    assert "maps_with_stages" in text
+    assert "maps_with_stages" in text and data["missing"] == []
     stages = {}
     for code, name, names in connection.execute(STAGES_BY_MAP):
         stages.setdefault(code, {})[name] = names
@@ -214,7 +214,7 @@ def test_wiki_maps_patches_and_playstyles_pull_from_the_cache(ctx):
 def test_wiki_counters_pull_from_the_cache_and_stamp_no_snapshot(ctx, snapshots, db):
     text, data = tools.run_tool(ctx, "pull_counters")
     assert text.startswith("pull_counters: counters stored") and data["counters"] > 100
-    assert data["tables"] == ["counters"] and data["unmatched"] == []
+    assert data["tables"] == ["counters"] and data["unmatched"] == [] and data["missing"] == []
     assert data["articles"] >= 40 and data["cells"] > data["no_verdict"] > 0
     assert 0 < data["rated"] < data["cells"]
     # a hero in no edge is one no article wrote about, its own included
@@ -233,6 +233,7 @@ def test_wiki_seasons_and_synergies_pull_from_the_cache(ctx, snapshots):
     text, data = tools.run_tool(ctx, "pull_synergies")
     assert text.startswith("pull_synergies: pairs stored") and data["synergies"] > 100
     assert 0 < data["mutual"] < data["synergies"] and data["unmatched"] == []
+    assert data["missing"] == []
 
 
 @needs_caches

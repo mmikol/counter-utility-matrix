@@ -7,9 +7,13 @@ whole truth about styles.
 """
 
 import re
+from collections.abc import Callable
+
+import psycopg
+import requests
 
 from db import psql
-from db.data import fetch
+from db.data import PullSummary, fetch
 from db.data.wiki import WIKI, WikiError, fetch_wikitext, markup
 
 # --- extract: markup -> Python ---------------------------------------------
@@ -37,7 +41,16 @@ def parse_playstyles(text):
 
 # --- store ---------------------------------------------------------------------
 
-def run(connection, cache_dir=None, session=None, log=print):
+class PlaystylesSummary(PullSummary):
+    playstyles: list[str]
+    links: int
+    unmatched: list[str]
+
+
+def run(connection: psycopg.Connection, cache_dir: str | None = None,
+        session: requests.Session | None = None,
+        log: Callable[[str], None] = print) -> PlaystylesSummary:
+    """Reload the playstyles and the heroes listed under each."""
     session = fetch.session(session)
     playstyles = parse_playstyles(fetch_wikitext(session, COMPOSITION_PAGE, cache_dir))
 

@@ -7,10 +7,14 @@ Hybrid article supplies the two phases every Hybrid map plays.
 """
 
 import re
+from collections.abc import Callable
+
+import psycopg
+import requests
 
 from db import psql
-from db.data import fetch
-from db.data.wiki import WIKI, WikiError, fetch_wikitext, markup
+from db.data import ArticlePullSummary, fetch
+from db.data.wiki import WIKI, WikiError, fetch_articles, fetch_wikitext, markup
 
 # --- extract: markup -> Python ---------------------------------------------
 
@@ -163,14 +167,27 @@ def stages_of(code, text, phases):
 MAPS_PAGE = "Maps"
 
 
-def run(connection, cache_dir=None, session=None, log=print):
+class MapsSummary(ArticlePullSummary):
+    modes: int
+    maps: int
+    combinations: int
+    stages: int
+    maps_with_stages: dict[str, int]
+
+
+def run(connection: psycopg.Connection, cache_dir: str | None = None,
+        session: requests.Session | None = None,
+        log: Callable[[str], None] = print) -> MapsSummary:
+    """Upsert the modes, the maps and their combinations from the Maps
+    article, and each map's stages from its own article."""
     session = fetch.session(session)
 
     modes = parse_modes_and_maps(fetch_wikitext(session, MAPS_PAGE, cache_dir))
 
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())
-    map_ids, combinations = {}, 0
+    map_ids: dict[str, int] = {}
+    combinations = 0
     for code, name, maps in modes:
         cursor.execute(
             # Upserted, never deleted: map_meta snapshots hang off maps, and
@@ -180,7 +197,7 @@ def run(connection, cache_dir=None, session=None, log=print):
             " source_id = EXCLUDED.source_id, cao = now() RETURNING mode_id",
             (code, name, source_id),
         )
-        mode_id = cursor.fetchone()[0]
+        mode_id = psql.scalar(cursor)
         for map_name in maps:
             if map_name not in map_ids:
                 cursor.execute(
@@ -190,7 +207,7 @@ def run(connection, cache_dir=None, session=None, log=print):
                     " RETURNING map_id",
                     (map_name, source_id),
                 )
-                map_ids[map_name] = cursor.fetchone()[0]
+                map_ids[map_name] = psql.scalar(cursor)
             cursor.execute(
                 "INSERT INTO map_modes (map_id, mode_id, source_id)"
                 " VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
@@ -203,10 +220,14 @@ def run(connection, cache_dir=None, session=None, log=print):
     # a map in two modes takes its stages from the first
     codes = {map_name: code for code, _, maps in reversed(modes)
              for map_name in maps}
-    stage_rows, staged = 0, {}
-    for map_name, map_id in map_ids.items():
-        stages = stages_of(codes[map_name], fetch_wikitext(
-            session, map_name.replace(" ", "_"), cache_dir), phases)
+    # a map whose article will not fetch keeps the stages it had: map_stages
+    # is upserted, never deleted
+    articles, missing = fetch_articles(session, map_ids, cache_dir, log)
+    stage_rows = 0
+    staged: dict[str, int] = {}
+    for map_name, text in articles.items():
+        map_id = map_ids[map_name]
+        stages = stages_of(codes[map_name], text, phases)
         if stages:
             staged[codes[map_name]] = staged.get(codes[map_name], 0) + 1
             log("  %-22s %s" % (map_name, " > ".join(stages)))
@@ -223,5 +244,5 @@ def run(connection, cache_dir=None, session=None, log=print):
     connection.commit()
     return {"modes": len(modes), "maps": len(map_ids),
             "combinations": combinations, "stages": stage_rows,
-            "maps_with_stages": staged,
+            "maps_with_stages": staged, "missing": missing,
             "tables": ["game_modes", "maps", "map_modes", "map_stages"]}

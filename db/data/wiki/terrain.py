@@ -9,15 +9,14 @@ has about that stage. Both tables are reloaded wholesale.
 
 import re
 from collections.abc import Callable, Mapping
-from typing import TypedDict
 
 import psycopg
 import requests
 from psycopg.sql import SQL
 
 from db import psql
-from db.data import fetch
-from db.data.wiki import WIKI, fetch_wikitext, markup
+from db.data import ArticlePullSummary, fetch
+from db.data.wiki import WIKI, fetch_articles, markup
 from db.data.wiki.maps import parse_stretches
 
 # --- extract: article -> the text about the ground -------------------------
@@ -293,16 +292,14 @@ def per_thousand(mentions: int, words: int) -> float:
 
 # --- store ---------------------------------------------------------------------
 
-class TerrainSummary(TypedDict):
+class TerrainSummary(ArticlePullSummary):
     maps: int
     without_text: list[str]
-    missing: list[str]
     rows: int
     words: int
     stages: int
     stages_no_text: int
     stage_rows: int
-    tables: list[str]
 
 
 def _store(
@@ -341,14 +338,11 @@ def run(
 
     rows, words_read, stage_rows, stages_read = 0, 0, 0, 0
     without_text: list[str] = []
-    missing: list[str] = []
+    articles, missing = fetch_articles(session, [name for _, name in maps], cache_dir, log)
     for map_id, name in maps:
-        try:
-            article = fetch_wikitext(session, name.replace(" ", "_"), cache_dir)
-        except fetch.FetchError as error:
-            missing.append("%s: %s" % (name, error))
-            log("  %-22s %s" % (name, error))
+        if name not in articles:
             continue
+        article = articles[name]
         text = terrain_text(article)
         words = word_count(text)
         if words < MIN_WORDS:

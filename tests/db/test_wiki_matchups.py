@@ -257,7 +257,7 @@ def test_counters_pull_from_the_cache(sandbox):
     rows = sandbox.execute(
         "select c.hero_id, c.countered_by_id, src.code from counters c"
         " join sources src using (source_id)").fetchall()
-    assert data["tables"] == ["counters"] and data["unmatched"] == []
+    assert data["tables"] == ["counters"] and data["unmatched"] == [] and data["missing"] == []
     assert {row[2] for row in rows} == {"wiki"}
 
     edges = [row[:2] for row in rows]

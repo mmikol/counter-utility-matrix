@@ -6,13 +6,15 @@ import datetime
 import os
 import re
 
-import pytest
 import requests
 
 import db
-from db.data.fetch import FetchError
-from db.data.wiki.hero_articles import parse_announcement, supplement_from_wikitext
-from db.data.wiki.kit_rows import ability_kind
+from db.data.wiki.hero_articles import (
+    parse_announcement,
+    supplement_from_wikitext,
+    supplement_kits,
+)
+from db.data.wiki.kit_rows import AbilityEntry, HeroKit, ability_kind
 from db.data.wiki.measurements import parse_measurements
 
 # --- the ability vocabulary ----------------------------------------------------------
@@ -80,7 +82,7 @@ KIT_ARTICLE = """{{Ability details
 def test_an_unfetchable_hero_page_is_reported_rather_than_read_as_empty(tmp_path, instant_wiki):
     """Every per-entity wiki fetch keeps one contract: the failure is recorded
     by name, so a pull that read nothing cannot look like a pull that found
-    nothing. supplement_from_wikitext raises and supplement_kits records it."""
+    nothing. The hero whose article fetches is still read."""
     class Down:
         def get(self, *a, **kw):
             raise requests.ConnectionError("the wiki is unreachable")
@@ -88,13 +90,25 @@ def test_an_unfetchable_hero_page_is_reported_rather_than_read_as_empty(tmp_path
         def close(self):
             pass
 
-    with pytest.raises(FetchError):
-        supplement_from_wikitext(Down(), "Mizuki", str(tmp_path))
+    def kit(name):
+        return HeroKit([], [AbilityEntry(name=name, mode=None, input_key=None, keywords="",
+                                         description="", stats={}, kind=db.KIND_ABILITY,
+                                         display_name=name)], [])
 
-
-def test_supplement_reads_heal_and_skips_a_retired_block(tmp_path):
     (tmp_path / "Mizuki.wikitext").write_text(KIT_ARTICLE, encoding="utf-8")
-    extra, _profile = supplement_from_wikitext(None, "Mizuki", str(tmp_path))
+    by_hero = {"Mizuki": kit("Healing Kasa"), "Freja": kit("Quick Dash")}
+    added = supplement_kits(Down(), by_hero, str(tmp_path), lambda line: None)
+    [line] = added.missing
+    assert line.startswith("Freja: ") and "the wiki is unreachable" in line
+    assert by_hero["Freja"].abilities[0]["stats"] == {}
+    # Mizuki's article adds the heal Cargo leaves empty, and the area
+    assert added.stats == 2 and set(by_hero["Mizuki"].abilities[0]["stats"]) == {"heal", "aoe"}
+    assert added.profiles == {}                     # the article has no infobox
+
+
+def test_supplement_reads_heal_and_skips_a_retired_block():
+    extra, profile = supplement_from_wikitext(KIT_ARTICLE)
+    assert profile is None
     # "(old)" shares the live block's key and comes last: it overwrote it once
     assert set(extra) == {"healing kasa"}
     stats = {code: value for code, (value, _raw) in extra["healing kasa"].items()}

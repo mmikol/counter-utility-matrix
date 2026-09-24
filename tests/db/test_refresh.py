@@ -165,6 +165,19 @@ def test_an_article_that_fails_is_asked_for_once(instant_wiki):
     assert session.calls == 1
 
 
+def test_an_article_that_will_not_fetch_is_recorded_and_the_rest_are_read(tmp_path, instant_wiki):
+    # the title goes to the cache as it is: its name folds spaces and punctuation
+    (tmp_path / "King_s_Row.wikitext").write_text("{{Infobox map}}", encoding="utf-8")
+    session, logged = FakeSession(fail=True), []
+    articles, missing = wiki.fetch_articles(session, ["King's Row", "Hanaoka"], str(tmp_path),
+                                            logged.append)
+    assert articles == {"King's Row": "{{Infobox map}}"}
+    [line] = missing
+    assert line.startswith("Hanaoka: ") and "source down" in line
+    assert session.calls == 1                       # the uncached one, asked for once
+    assert logged == ["  %-22s %s" % ("Hanaoka", line[len("Hanaoka: "):])]
+
+
 def test_seconds_until_the_next_daily_run():
     now = datetime(2026, 9, 13, 14, 0, 0)
     assert refresh.seconds_until("05:00", now) == 15 * 3600

@@ -15,15 +15,14 @@ under 120 characters. The table is reloaded wholesale.
 
 import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from typing import TypedDict
 
 import psycopg
 import requests
 
 from db import psql
-from db.data import fetch
+from db.data import ArticlePullSummary, fetch
 from db.data.names import index, name_key
-from db.data.wiki import WIKI, WikiError, fetch_wikitext, markup
+from db.data.wiki import WIKI, WikiError, fetch_articles, markup
 
 # --- extract: markup -> Python ---------------------------------------------
 
@@ -237,13 +236,12 @@ def pair_up(claims_by_hero: Mapping[str, list[tuple[str, str]]],
 
 # --- store ---------------------------------------------------------------------
 
-class SynergiesSummary(TypedDict):
+class SynergiesSummary(ArticlePullSummary):
     synergies: int
     mutual: int
     articles: int
     unpaired: list[str]
     unmatched: list[str]
-    tables: list[str]
 
 
 def run(connection: psycopg.Connection, cache_dir: str | None = None,
@@ -254,13 +252,8 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
     cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
     released: dict[str, int] = dict(cursor.fetchall())
 
-    claims: dict[str, list[tuple[str, str]]] = {}
-    missing: list[str] = []
-    for name in released:
-        try:
-            claims[name] = parse_synergies(fetch_wikitext(session, name, cache_dir))
-        except fetch.FetchError as error:
-            missing.append("%s: %s" % (name, error))
+    articles, missing = fetch_articles(session, released, cache_dir, log)
+    claims = {name: parse_synergies(text) for name, text in articles.items()}
     if not any(claims.values()):
         raise WikiError("no hero article has a synergy claim")
     pairs, unmatched = pair_up(claims, index(released))
@@ -287,5 +280,5 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
         % (len(pairs), mutual, sum(1 for c in claims.values() if c), len(unpaired)))
     return {"synergies": len(pairs), "mutual": mutual,
             "articles": sum(1 for c in claims.values() if c),
-            "unpaired": unpaired, "unmatched": unmatched + missing,
+            "unpaired": unpaired, "unmatched": unmatched, "missing": missing,
             "tables": ["synergies"]}

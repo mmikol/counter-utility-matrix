@@ -26,10 +26,12 @@ The article HTML sits behind a bot challenge; the only open path is the
 MediaWiki endpoint below, which returns JSON (Cargo) and raw wikitext and
 rate-limits. This module is that client, run on db.data.fetch's request
 loop and page cache, and the `sources` row its pages become.
+fetch_articles is how a pull reads one article per entity: an article that
+will not fetch is recorded by name and the rest are read.
 """
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Sequence
 
 import requests
 
@@ -140,3 +142,21 @@ def fetch_wikitext(session: requests.Session, title: str, cache_dir: str | None)
         session, WIKI_API,
         {"action": "parse", "page": title, "prop": "wikitext", "format": "json"},
         ARTICLE_POLICY, lambda response: _wikitext(response, title)))
+
+
+def fetch_articles(
+        session: requests.Session, titles: Iterable[str], cache_dir: str | None,
+        log: Callable[[str], None]) -> tuple[dict[str, str], list[str]]:
+    """({title: wikitext} for each title that fetches, in order, ['title:
+    error'] for each that raises FetchError - a WikiError, or a request that
+    failed), each failure logged as it happens. Every per-article loop reads
+    through this one guard."""
+    articles: dict[str, str] = {}
+    missing: list[str] = []
+    for title in titles:
+        try:
+            articles[title] = fetch_wikitext(session, title, cache_dir)
+        except FetchError as error:
+            missing.append("%s: %s" % (title, error))
+            log("  %-22s %s" % (title, error))
+    return articles, missing

@@ -61,7 +61,9 @@ db/
 Each source package owns the whole path from page to table. Its
 `__init__.py` names the endpoints, the `sources` row its pages become and
 what its modules share: for the wiki, the client that talks to the
-MediaWiki endpoint; for Blizzard, `attr`, a tag's attribute as text. Each
+MediaWiki endpoint and `fetch_articles`, through which every pull that reads
+one article per hero or map records an article that will not fetch and
+reads the rest; for Blizzard, `attr`, a tag's attribute as text. Each
 domain module is one `run(connection, cache_dir, session, log)` the tools
 call: fetch (cached), extract the values from the markup, normalise them,
 store them, and return a `PullSummary`.

@@ -25,15 +25,15 @@ reloaded wholesale: one row means countered_by_id answers hero_id.
 import re
 import unicodedata
 from collections.abc import Callable, Mapping
-from typing import NamedTuple, TypedDict
+from typing import NamedTuple
 
 import psycopg
 import requests
 
 from db import psql
-from db.data import fetch
+from db.data import ArticlePullSummary, fetch
 from db.data.names import index, name_key
-from db.data.wiki import WIKI, WikiError, fetch_wikitext, synergies
+from db.data.wiki import WIKI, WikiError, fetch_articles, synergies
 
 # --- extract: markup -> Python ---------------------------------------------
 
@@ -445,7 +445,7 @@ def combine(readings_by_hero: Mapping[str, list[tuple[str, Reading]]],
 
 # --- store ---------------------------------------------------------------------
 
-class CountersSummary(TypedDict):
+class CountersSummary(ArticlePullSummary):
     counters: int
     articles: int
     cells: int
@@ -455,7 +455,6 @@ class CountersSummary(TypedDict):
     unwritten: list[str]
     no_edge: list[str]
     unmatched: list[str]
-    tables: list[str]
 
 
 def run(connection: psycopg.Connection, cache_dir: str | None = None,
@@ -466,13 +465,7 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
     cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
     released: dict[str, int] = dict(cursor.fetchall())
 
-    articles: dict[str, str] = {}
-    missing: list[str] = []
-    for name in released:
-        try:
-            articles[name] = fetch_wikitext(session, name, cache_dir)
-        except fetch.FetchError as error:
-            missing.append("%s: %s" % (name, error))
+    articles, missing = fetch_articles(session, released, cache_dir, log)
     known = {name_key(name): Known(name, pronoun(articles.get(name, ""))) for name in released}
     readings = {name: parse_matchups(text, name, known) for name, text in articles.items()}
     edges, contradicted, unmatched = combine(readings, index(released))
@@ -503,5 +496,5 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
             "unwritten": sorted(name for name in released if not readings.get(name)),
             "no_edge": sorted(name for name, hero_id in released.items()
                               if hero_id not in in_an_edge),
-            "unmatched": unmatched + missing,
+            "unmatched": unmatched, "missing": missing,
             "tables": ["counters"]}
