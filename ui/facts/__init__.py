@@ -1,6 +1,8 @@
 """The UI LAYER's facts: everything the database knows about a board.
 
     model       the World - the whole database loaded into memory, per request
+    tables      the load - every table read into a World, the maps' styles
+                and each hero's best maps
     kit         a kit piece's stat rows and the combat numbers read off them;
                 the one reader of the wiki's prose
     records     the typed records a Hero, a Map and the World hand on

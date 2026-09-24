@@ -140,7 +140,7 @@ def test_platform_is_console_and_input_follows_from_it(rows):
 
 def test_a_maps_styles_are_derived_not_stored(rows):
     # the style vocabulary is the wiki's hero tags; what a map rewards is
-    # computed from them and the per-map rates at load (ui.facts.model), and
+    # computed from them and the per-map rates at load (ui.facts.tables), and
     # a comp's shape is compute.EXPECTED_SHAPE - neither is a table
     tables = {r[0] for r in rows("select tablename from pg_tables where schemaname = 'public'")}
     assert not tables & {"map_playstyle", "comp_archetypes"}

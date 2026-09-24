@@ -41,6 +41,7 @@ ui/
     math.html      the math page's article
   facts/           everything the database knows about a board
     model.py       the World: the database in memory, per request
+    tables.py      the load: every table read into a World, the maps' styles, the best maps
     kit.py         a kit piece's stat rows and the combat numbers read off them
     records.py     the typed records a Hero, a Map and the World hand on
     compute.py     the metrics registry: every number, one function each
@@ -192,20 +193,9 @@ misread stat is fixed in this file and needs no re-pull.
 
 ### `model.py` - the World
 
-`load(cx)` reads every table into one object, once per request: the
-heroes (role, subrole, health/shield/armor, the kit - weapons with their
-firing configs, abilities, perks, every stat as a measurement with unit
-and condition - keywords, the latest and previous rates, the per-map and
-per-tier rates, counters both ways, playstyles), the maps
-(mode, stages), the meta snapshots and the patches newer than the
-capture, synergies and partners, the catalog's shape. `map_styles` then
-derives each map's styles: for a playstyle, the mean over the released
-heroes tagged with it - each weighted 1/(its tag count) - of the hero's
-win rate on the map minus its overall win rate, z-scored across the maps.
-`style_top` is the highest, ties by name; `style_margin` is the top minus
-the runner-up. `best_maps` derives each hero's best maps: the three with
-the largest map win rate minus overall win rate, only where positive,
-ties by map name. `Hero.derive_scalars()` derives the hero's numbers from weapons, abilities
+The World holds what `tables.load` read. A map's `style_top` is the
+highest of its styles, ties by name; `style_margin` is the top minus the
+runner-up. `Hero.derive_scalars()` derives the hero's numbers from weapons, abilities
 and passives; ultimates add tools only, perks nothing. dps: the held
 weapon, sustained, reload in. burst: the biggest single hit, a headshot
 where one counts. hps and peak heal: healing onto teammates, per second
@@ -214,8 +204,26 @@ falloff; unknown stays out. Then mobility and crowd-control tools,
 hitscan, flight, anti-heal, cleanse, barrier, effective HP - so the
 metrics read fields, not SQL. `resolve(map, red, blue, bans)` turns names into objects
 through the same name matching the data layer uses, and refuses a banned
-pick, an unknown hero, or a hero on both teams. A test in `tests/ui`
-insists every data table is read here: a table nothing reads is not data.
+pick, an unknown hero, or a hero on both teams.
+
+### `tables.py` - the load
+
+`load(cx)` reads every table into one World, once per request, from an
+open psycopg connection it never opens itself: the heroes (role, subrole,
+health/shield/armor, the kit - weapons with their firing configs,
+abilities, perks, every stat as a measurement with unit and condition -
+keywords, the latest and previous rates, the per-map and per-tier rates,
+counters both ways, playstyles), the maps (mode, stages, terrain), the
+meta snapshots and the patches newer than the capture, synergies and
+partners, the catalog's shape. One read step fills each part, and `load`
+runs them in the order they rely on. `map_styles` then derives each map's
+styles: for a playstyle, the mean over the released heroes tagged with
+it - each weighted 1/(its tag count) - of the hero's win rate on the map
+minus its overall win rate, z-scored across the maps. `best_maps` derives
+each hero's best maps: the three with the largest map win rate minus
+overall win rate, only where positive, ties by map name. A test in
+`tests/ui` insists every data table is read here: a table nothing reads
+is not data.
 
 ### `compute.py` - the metrics registry
 

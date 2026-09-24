@@ -129,7 +129,7 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   set too.
 - A new strategy file is cited as a ``- `id` `` line in `inference/README.md`.
 - A new table carries `source_id` and `cao`, has rows, is exported to
-  `db/raw` (`export_csv`) and is named in `ui/facts/model.py` (a test greps
+  `db/raw` (`export_csv`) and is named in `ui/facts/tables.py` (a test greps
   its source); regenerate the schema sections of docs/db.md. Its migration
   also wants a `schema.DOC_DOMAIN` entry keyed by filename, or docs/db.md
   files it under foundation - no test catches that one.

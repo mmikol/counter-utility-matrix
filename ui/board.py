@@ -29,7 +29,7 @@ from db.mcp.server import LOCAL_HOSTS
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
 from ui.facts import engine as facts_engine
-from ui.facts import model
+from ui.facts import tables
 from ui.facts.compute import (
     MAX_BANS,
     SIDED_MODES,
@@ -95,7 +95,7 @@ def esc(x):
 # --- JSON endpoints ---------------------------------------------------------
 
 def api_roster(cx):
-    world = model.load(cx)
+    world = tables.load(cx)
     heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
                "portrait": h.portrait, "status": h.status,
                "release_date": str(h.release_date) if h.release_date else None}
@@ -109,7 +109,7 @@ def api_roster(cx):
 
 def api_facts(cx, query):
     map_name, red, blue, bans, side = parse_board(query)
-    world = model.load(cx)
+    world = tables.load(cx)
     try:
         fs = facts_engine.generate(world, map_name, red, blue, bans, side)
     except ValueError as error:
@@ -128,7 +128,7 @@ def api_infer(cx, query):
         if weights:
             query["weights"] = ["%s:%g" % kv for kv in sorted(weights.items())]
         return remote("/board", query)
-    world = model.load(cx)
+    world = tables.load(cx)
     try:
         b = inference_engine.board(world, map_name, red, blue, bans, side, weights=weights)
     except ValueError as error:

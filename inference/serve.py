@@ -25,7 +25,7 @@ import psycopg
 from db import psql
 from inference import catalog as catalog_module
 from inference import engine
-from ui.facts import model
+from ui.facts import tables
 from ui.facts.compute import parse_board
 
 PORT = int(os.environ.get("COUNTRIX_INFERENCE_PORT", "8019"))
@@ -47,7 +47,7 @@ def handle_infer(cx: psycopg.Connection, query: Query) -> Answer:
     infers whatever blue holds and honours the `top` it was given. The MCP tool
     of the same name draws the line in the same place."""
     map_name, red, blue, bans, side = parse_board(query)
-    world = model.load(cx)
+    world = tables.load(cx)
     try:
         pool, top = engine.clamp_search(_first(query, "pool"),
                                         _first(query, "top"))
@@ -60,7 +60,7 @@ def handle_infer(cx: psycopg.Connection, query: Query) -> Answer:
 
 def handle_evaluate(cx: psycopg.Connection, query: Query) -> Answer:
     map_name, red, blue, bans, side = parse_board(query)
-    world = model.load(cx)
+    world = tables.load(cx)
     try:
         result = engine.evaluate(world, map_name, red, blue, bans=bans, side=side)
     except ValueError as error:
@@ -72,7 +72,7 @@ def handle_board(cx: psycopg.Connection, query: Query) -> Answer:
     """Both seats and the current comp - what the board's two displays show."""
     map_name, red, blue, bans, side = parse_board(query)
     weights = catalog_module.parse_weights(query.get("weights", []))
-    world = model.load(cx)
+    world = tables.load(cx)
     try:
         pool, _ = engine.clamp_search(_first(query, "pool"))
         b = engine.board(world, map_name, red, blue, bans, side, pool_size=pool,

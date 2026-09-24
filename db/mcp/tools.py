@@ -23,7 +23,7 @@ from db.data import fetch
 from db.mcp.server import Tool, ToolError, audited
 from db.psql import schema
 from inference import catalog, derive, engine, reach, tune
-from ui.facts import compute, model
+from ui.facts import compute, tables
 from ui.facts import engine as facts_engine
 
 # A tool's answer: its text, and the same as a JSON object for a structured reply.
@@ -489,7 +489,7 @@ BOARD = {
       " the map pool with modes - the vocabulary the board tools accept.")
 def roster(ctx: Context) -> Reply:
     with ctx.connect() as cx:
-        world = model.load(cx)
+        world = tables.load(cx)
     heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
                "pool": h.pool, "portrait": h.portrait, "status": h.status,
                "release_date": str(h.release_date) if h.release_date else None}
@@ -515,7 +515,7 @@ def facts(
         ctx: Context, map: str | None = None, red: Sequence[str] = (), blue: Sequence[str] = (),
         bans: Sequence[str] = (), side: str = "", format: str = "lines") -> Reply:
     with ctx.connect() as cx:
-        world = model.load(cx)
+        world = tables.load(cx)
     try:
         fs = facts_engine.generate(world, map, list(red), list(blue), list(bans),
                                    side)
@@ -553,7 +553,7 @@ def infer(
         bans: Sequence[str] = (), side: str = "", top: int = 5, pool: int = 6,
         compact: bool = False) -> Reply:
     with ctx.connect() as cx:
-        world = model.load(cx)
+        world = tables.load(cx)
     try:
         pool, top = engine.clamp_search(pool, top)
         result = engine.infer(world, map, list(red), list(blue), top=top,
@@ -598,7 +598,7 @@ def evaluate(
     # blue has no default: the schema marks it required and the engine takes a
     # full six, so an empty one was never a call worth reaching the engine
     with ctx.connect() as cx:
-        world = model.load(cx)
+        world = tables.load(cx)
     try:
         result = engine.evaluate(world, map, list(red), list(blue), bans=list(bans),
                                  side=side)
@@ -615,7 +615,7 @@ def evaluate(
       ["hero"])
 def reach_tool(ctx: Context, hero: str) -> Reply:   # _tool: inference.reach holds the bare name
     with ctx.connect() as cx:
-        world = model.load(cx)
+        world = tables.load(cx)
     try:
         found = reach.search(world, hero)
     except ValueError as error:
@@ -653,7 +653,7 @@ def board(
         bans: Sequence[str] = (), side: str = "", pool: int = 6,
         weights: dict[str, Any] | None = None) -> Reply:
     with ctx.connect() as cx:
-        world = model.load(cx)
+        world = tables.load(cx)
     try:
         pool, _ = engine.clamp_search(pool)
         b = engine.board(world, map, list(red), list(blue), list(bans), side,
