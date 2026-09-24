@@ -12,7 +12,7 @@ subscription; no API key. `/refresh` also runs headless, driven by
 
 **Say:** "start the app", "is it up?", "get it ready before the game".
 
-**Does:** runs `python orchestrator.py up` and reads the verdict. `READY`
+**Does:** runs `.venv/bin/python orchestrator.py up` and reads the verdict. `READY`
 means the data layer answers with no pending migrations and a populated
 database, the inference engine sees the strategies, the board serves the
 roster; it reports the URLs and the rates' capture date. `NOT READY`
@@ -105,8 +105,9 @@ strategy encodes the game, not a lobby's habits.
 ## `/refresh` - the agents' run
 
 **Say:** "refresh everything", "update and re-infer", "get it ready for
-tonight" - or nothing: `python orchestrator.py agents` runs it headless,
-and `python orchestrator.py` runs it after bringing the stack up.
+tonight" - or nothing: `.venv/bin/python orchestrator.py agents` runs it
+headless, and `.venv/bin/python orchestrator.py` runs it after bringing
+the stack up.
 
 **Does, in order:** `db_status`, `strategies` and `tuning_log` for where
 things stand; the data refreshed - `sync_all` with `refresh: true` when

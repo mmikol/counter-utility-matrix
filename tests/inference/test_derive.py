@@ -1,6 +1,7 @@
 """Deriving a draft's frontmatter from its prose: the prompt, the model's
 answer stored through tune.complete, the one retry with the catalog's
-objection, and a run without a signed-in CLI."""
+objection, a run without a signed-in CLI, and the headless recipe the
+orchestrator shares."""
 
 import os
 
@@ -87,6 +88,23 @@ def test_derive_without_a_signed_in_cli_leaves_drafts_pending(catalog_copy, monk
     assert "not signed in" in result["skipped"]
     assert "not signed in" in derive.derive_rendered(result)
     assert next(h for h in catalog.load(catalog_copy) if h.id == "heal-line").pending
+
+
+def test_the_headless_recipe_drops_the_session_and_reads_a_signed_out_cli(monkeypatch):
+    """The three pieces orchestrator.py's agents run shares: an environment
+    with no CLAUDE* key, the signed-out sentinels, and a missing CLI refused
+    as unavailable."""
+    monkeypatch.setenv("CLAUDECODE", "1")
+    env = derive.clean_env()
+    assert "CLAUDECODE" not in env and env["PATH"] == os.environ["PATH"]
+    assert derive.not_signed_in("Not logged in - Please run /login")
+    assert derive.not_signed_in("run /login first")
+    assert not derive.not_signed_in("rate limited")
+    monkeypatch.setattr(derive, "cli", lambda: None)
+    with pytest.raises(derive.CliUnavailableError, match="set COUNTRIX_CLAUDE"):
+        derive.require_cli()
+    monkeypatch.setattr(derive, "cli", lambda: "/x/claude")
+    assert derive.require_cli() == "/x/claude"
 
 
 def test_derive_counts_drafts_past_the_cap_apart_from_why_it_stopped(catalog_copy, monkeypatch):

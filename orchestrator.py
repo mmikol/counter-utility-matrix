@@ -14,14 +14,15 @@
     python orchestrator.py down       stop everything (the database volume stays)
 
 The agents run on the host, on the subscription (the claude CLI, signed in
-once); without the CLI the run still brings the stack up and says so. Nothing
-beyond the standard library, db's ROOT and inference.derive. Exit code 0 means
-everything answered.
+once); without the CLI the run still brings the stack up and says so. It
+imports the standard library, db's ROOT and inference.derive, the headless
+claude recipe; run it with .venv/bin/python, since inference.derive loads
+psycopg. Exit code 0 means everything answered.
 """
 
 import json
 import os
-import subprocess
+import subprocess  # nosec B404  # docker compose and the claude CLI, argv lists, never a shell
 import sys
 import time
 import urllib.error
@@ -29,6 +30,7 @@ import urllib.request
 from typing import Any, TypedDict
 
 from db import ROOT
+from inference import derive
 
 URLS = {"data": "http://localhost:8020/health",
         "inference": "http://localhost:8019/health",
@@ -307,10 +309,7 @@ AGENT_TOOLS = ",".join("mcp__%s__%s" % (server, name)
 def agents_command(claude: str | None = None) -> list[str]:
     """The headless run: Claude Code in print mode on the /refresh skill, with
     the stack's MCP tools allowed and nothing else."""
-    from inference import derive
-    binary = claude or derive.cli()
-    if not binary:
-        raise RuntimeError("no claude CLI on this machine (set COUNTRIX_CLAUDE)")
+    binary = claude or derive.require_cli()
     return [binary, "-p", "/refresh", "--output-format", "text",
             "--mcp-config", os.path.join(ROOT, ".mcp.json"), "--strict-mcp-config",
             "--allowedTools", AGENT_TOOLS, "--tools", "", "--max-turns", "80",
@@ -323,16 +322,16 @@ def agents() -> int:
     print("agents: Claude Code, headless, on the /refresh skill (minutes)...")
     try:
         command = agents_command()
-    except RuntimeError as error:
+    except derive.CliUnavailableError as error:
         return report(False, [str(error)])
-    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
+    env = derive.clean_env()
     env.update({k: v for k, v in dotenv().items() if k not in env})   # the token, for .mcp.json
     env.setdefault("MCP_TOOL_TIMEOUT", AGENT_TOOL_TIMEOUT_MS)
     env.setdefault("MCP_TIMEOUT", AGENT_TOOL_TIMEOUT_MS)
-    done = subprocess.run(command, cwd=ROOT, env=env, text=True, capture_output=True,
-                          timeout=4 * 3600)
+    done = subprocess.run(  # nosec B603  # argv from agents_command: the resolved claude binary and literal flags
+        command, cwd=ROOT, env=env, text=True, capture_output=True, timeout=4 * 3600)
     said = (done.stdout.strip() + "\n" + done.stderr.strip()).strip()
-    if done.returncode != 0 and ("Not logged in" in said or "/login" in said):
+    if done.returncode != 0 and derive.not_signed_in(said):
         print("agents: skipped - the claude CLI is not signed in; run `%s login` once on"
               " this machine (the stack is up; drafts stay pending)" % command[0])
         return 0
@@ -347,7 +346,6 @@ def run() -> int:
     code = up()
     if code:
         return code
-    from inference import derive
     if derive.available():
         code = agents()
         if code:

@@ -12,6 +12,12 @@ at most MAX_PER_RUN drafts; the rest wait for the next, counted as deferred.
     derive()                 every draft in inference/strategies/
     derive(["heal-line"])    one
     available()              whether the claude CLI is on this machine
+    require_cli()            the claude CLI, or CliUnavailableError
+    clean_env()              the environment a nested claude -p runs in
+    not_signed_in(said)      whether the CLI's output says it is signed out
+
+The last three are the headless recipe; orchestrator.py's agents run uses
+them too.
 
 Runs where the claude CLI is signed in - the host. `load_authored` and
 `orchestrator.py up` call it when drafts exist; inside the compose stack the CLI
@@ -90,6 +96,25 @@ def cli() -> str | None:
 def available() -> bool:
     """Whether the claude CLI is on this machine."""
     return cli() is not None
+
+
+def require_cli() -> str:
+    """The claude CLI to run; CliUnavailableError when there is none."""
+    binary = cli()
+    if not binary:
+        raise CliUnavailableError("no claude CLI on this machine (set COUNTRIX_CLAUDE)")
+    return binary
+
+
+def clean_env() -> dict[str, str]:
+    """This process's environment without its CLAUDE* keys, so a nested
+    claude -p inherits no session."""
+    return {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
+
+
+def not_signed_in(said: str) -> bool:
+    """Whether the CLI's output says it is not signed in."""
+    return "Not logged in" in said or "/login" in said
 
 
 def vocabulary() -> str:
@@ -191,21 +216,18 @@ def parse(output: str) -> tuple[dict[str, object], str]:
 def run_cli(text: str, timeout: float = TIMEOUT) -> str:
     """Ask claude -p from a neutral directory (no project settings, no MCP
     servers) with no session inherited -> the answer text."""
-    binary = cli()
-    if not binary:
-        raise RuntimeError("no claude CLI on this machine (set COUNTRIX_CLAUDE)")
-    env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
+    binary = require_cli()
     argv = [binary, "-p", "--output-format", "text", "--no-session-persistence",
             "--strict-mcp-config", "--tools", "", "--max-turns", "2"]
     try:
         done = subprocess.run(  # nosec B603  # argv list, no shell; the prompt goes on stdin
-            argv, input=text, capture_output=True, text=True, timeout=timeout, env=env,
-            cwd=tempfile.gettempdir())
+            argv, input=text, capture_output=True, text=True, timeout=timeout,
+            env=clean_env(), cwd=tempfile.gettempdir())
     except OSError as error:
         raise RuntimeError("could not run the claude CLI: %s" % error) from error
     if done.returncode != 0:
         said = (done.stdout.strip() + " " + done.stderr.strip()).strip()[-300:]
-        if "Not logged in" in said or "/login" in said:
+        if not_signed_in(said):
             raise CliUnavailableError("the claude CLI is not signed in: run `%s login` once on"
                                  " this machine" % binary)
         raise RuntimeError("claude -p failed (%d): %s" % (done.returncode, said))

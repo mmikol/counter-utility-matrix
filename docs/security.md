@@ -136,8 +136,8 @@ audit log says about the last minute - calls, refusals, crashes, any
 client past the rate limit, and any line that is not an audit entry. The
 scan folds Unicode to one shape and strips zero-width characters first,
 so a word broken by an invisible character still reads as the word. Its
-report is `db/raw/sentry.json`, and `python orchestrator.py status`
-prints it. `python -m db.sentry --once` runs one pass from a shell and
+report is `db/raw/sentry.json`, and `.venv/bin/python orchestrator.py
+status` prints it. `python -m db.sentry --once` runs one pass from a shell and
 exits non-zero when something is wrong.
 
 ## What remains yours
