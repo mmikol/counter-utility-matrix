@@ -25,7 +25,8 @@ from typing import NamedTuple
 
 from db import Refusal
 from inference import scale
-from inference.scoring import Candidate, Objective, Shape, legal_shapes
+from inference.scoring import Candidate, Objective
+from inference.shapes import Shape, legal_shapes
 from inference.strategy import Strategy
 from ui.facts.model import ROLES, Hero, Map, World
 
@@ -100,8 +101,9 @@ class Solver(Objective):
     def shapes(self) -> list[Shape]:
         """(tanks, damage, supports) triples the queue and the shape-only hard
         limits allow, that can still seat the locked picks."""
-        counts = {r: len(v) for r, v in self._locked_by_role.items()}
-        return legal_shapes(self.catalog, counts)
+        locked = self._locked_by_role
+        return legal_shapes(self.catalog, Shape(
+            len(locked["tank"]), len(locked["damage"]), len(locked["support"])))
 
     def prior(self, h: Hero) -> float:
         """The ranking that cut the pools before the playbook ranked them

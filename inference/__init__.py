@@ -14,8 +14,9 @@
     catalog       reads the playbook's files into strategies, orders, mirrors
                   and documents them
     expr          the safe expression language the frontmatter uses
-    scoring       the objective: what one six scores on one board, and the legal
-                  shapes
+    scoring       the objective: what one six scores on one board
+    shapes        the legal shapes: the role counts a six may take around the
+                  locked picks
     scale         the board's one scale: the seeded reference sample and field
                   every heuristic is normalised against, and each hero's standing
     solver        searches compositions under the constraints and heuristics;

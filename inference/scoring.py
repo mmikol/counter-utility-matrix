@@ -1,13 +1,12 @@
 """The objective: what one six scores on one board under the playbook.
 
-    score           STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS: limits prune
-                    (soft ones charge), heuristics normalise and weigh, scored
-                    constraints add; assumptions are the agent's. A `when` reading
-                    only the enemy, the map and the world is settled once per board,
-                    not once per candidate. A heuristic guarded on the six's own
-                    state is a need: see Objective.score().
-    legal_shapes    the (tanks, damage, supports) triples the queue and the hard
-                    shape limits allow, around whatever picks are locked
+    STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS
+
+Limits prune (soft ones charge), heuristics normalise and weigh, scored
+constraints add; assumptions are the agent's. A `when` reading only the
+enemy, the map and the world is settled once per board, not once per
+candidate. A heuristic guarded on the six's own state is a need: see
+Objective.score(). The legal shapes live in inference.shapes.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -16,14 +15,11 @@ from typing import Literal, NamedTuple, NotRequired, TypedDict
 from inference.expr import Expr, Scope, Value, scope
 from inference.strategy import BOARD_SECTIONS, Strategy
 from ui.facts import compute
-from ui.facts.draft import MAX_TANKS, TEAM_SIZE
-from ui.facts.model import ROLES, Hero, Map, World
+from ui.facts.model import Hero, Map, World
 from ui.facts.team import NUMBER_TYPES, MetricBag, MetricValue, number, team_metrics
 
 CONFIDENCE_KEY = "\x00confidence"   # a rule's scale bounds, beside its own
 NEED_BUDGET = 2.0                 # the most one guarded state can cost
-
-SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size", "team.open_slots"}
 
 # the namespaces that do not change across the candidates of one board
 STATIC_SECTIONS = BOARD_SECTIONS
@@ -32,13 +28,6 @@ STATIC_SECTIONS = BOARD_SECTIONS
 # section.
 Bounds = dict[str, tuple[float, float]]         # id, or id + CONFIDENCE_KEY -> low, high
 Namespace = dict[str, MetricBag]
-
-
-class Shape(NamedTuple):
-    """A six's count per role."""
-    tanks: int
-    damage: int
-    supports: int
 
 
 class MetricKey(NamedTuple):
@@ -459,47 +448,3 @@ class Objective:
                             "weighted": weighted, "metric": r.expressions,
                             "when": r.when.source if r.when else None})
         return total
-
-
-# --- the legal shapes ------------------------------------------------------------
-
-def legal_shapes(catalog: Iterable[Strategy],
-                 locked_counts: Mapping[str, int] | None = None) -> list[Shape]:
-    """(tanks, damage, supports) triples the queue allows - at most MAX_TANKS
-    tanks, whatever the playbook holds - and the catalog's shape-only hard
-    limits allow (a playbook's own rule of form, 2-2-2 say), optionally only
-    those that can still seat the picks counted per role. The board carries
-    the full list so the roster can refuse a pick no legal six could seat."""
-    locked_counts = locked_counts or dict.fromkeys(ROLES, 0)
-    limits = _shape_limits(catalog)
-    out: list[Shape] = []
-    for t in range(MAX_TANKS + 1):
-        for d in range(TEAM_SIZE + 1 - t):
-            s = TEAM_SIZE - t - d
-            if (t < locked_counts["tank"] or d < locked_counts["damage"]
-                    or s < locked_counts["support"]):
-                continue
-            if _shape_allowed(t, d, s, limits):
-                out.append(Shape(t, d, s))
-    return out
-
-
-def _shape_limits(catalog: Iterable[Strategy]) -> list[tuple[Strategy, Expr]]:
-    """The catalog's hard limits that read only a six's shape, each with its
-    require."""
-    return [(h, h.require) for h in catalog
-            if h.form == "limit" and not h.soft and h.require
-            and set(h.require.names) <= SHAPE_KEYS
-            and (h.when is None or set(h.when.names) <= SHAPE_KEYS)]
-
-
-def _shape_allowed(t: int, d: int, s: int, limits: Sequence[tuple[Strategy, Expr]]) -> bool:
-    """Whether a (tanks, damage, supports) triple meets every shape limit whose
-    `when` holds on it."""
-    stub = scope({"team": {"tanks": t, "damage": d, "supports": s,
-                           "size": TEAM_SIZE, "open_slots": 0}})
-    for h, require in limits:
-        stub["params"] = h.params_section
-        if (h.when is None or bool(h.when.evaluate(stub))) and not bool(require.evaluate(stub)):
-            return False
-    return True

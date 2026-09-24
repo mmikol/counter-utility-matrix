@@ -21,7 +21,8 @@ import random
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 
-from inference.scoring import CONFIDENCE_KEY, Bounds, Candidate, MetricKey, Objective, legal_shapes
+from inference.scoring import CONFIDENCE_KEY, Bounds, Candidate, MetricKey, Objective
+from inference.shapes import legal_shapes
 from ui.facts import compute
 from ui.facts.model import ROLES, Hero
 from ui.facts.team import number

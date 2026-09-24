@@ -22,7 +22,8 @@ from inference import catalog as catalog_module
 from inference import parallel, supersede
 from inference.plan import Seats, momentum, plan
 from inference.result import Alternative, Board, Pick, Result, ResultKind, Seat
-from inference.scoring import Candidate, legal_shapes
+from inference.scoring import Candidate
+from inference.shapes import legal_shapes
 from inference.solver import Solved, Solver, Swept, evaluate_comp
 from inference.strategy import Strategy
 from ui.facts import board_facts, compute

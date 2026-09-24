@@ -126,13 +126,13 @@ def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
     means no triple the solver would search seats a third tank, and the
     board says so in a form the script can read."""
     from inference import engine
-    from inference.scoring import legal_shapes
+    from inference.shapes import Shape, legal_shapes
     cat = catalog.load(FIXTURE_PLAYBOOK)
     shapes = legal_shapes(cat)
     assert shapes and all(t + d + s == 6 for t, d, s in shapes)
     assert (2, 2, 2) in shapes and all(t <= 2 for t, _, _ in shapes)
     assert (3, 2, 1) not in shapes
-    seated = legal_shapes(cat, {"tank": 2, "damage": 3, "support": 0})
+    seated = legal_shapes(cat, Shape(tanks=2, damage=3, supports=0))
     assert seated and all(t == 2 and d >= 3 for t, d, _ in seated)
     b = engine.board(world, Draft("King's Row", ("Zarya",), ("Ana",)), catalog=cat)
     assert b.shapes == [list(s) for s in shapes]
@@ -238,7 +238,7 @@ def test_a_board_on_the_synthetic_world_holds_every_seat(synthetic_world, scratc
     no countered case."""
     from inference import engine
     from inference.result import Momentum
-    from inference.scoring import legal_shapes
+    from inference.shapes import legal_shapes
     b = engine.board(synthetic_world, Draft("Harbor Gate", ("Anvil",), ("Balm",), side="attack"),
                      catalog=scratch_playbook)
     assert b.blue.kind == "infer" and b.blue.side == "attack"

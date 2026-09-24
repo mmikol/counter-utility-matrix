@@ -281,8 +281,9 @@ def test_a_roster_with_fewer_legal_sixes_than_the_reference_is_sampled_whole(syn
     import itertools
 
     from inference import scale, scoring
+    from inference.shapes import legal_shapes
     playbook = catalog.load(FIXTURE_PLAYBOOK)
-    shapes = set(scoring.legal_shapes(playbook))
+    shapes = set(legal_shapes(playbook))
 
     def shape(six):
         return tuple(sum(1 for h in six if h.role == r) for r in ("tank", "damage", "support"))
