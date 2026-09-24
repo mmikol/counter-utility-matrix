@@ -16,7 +16,9 @@ including the hero pages and the wiki articles (kits, synergies, counters)
 that only change with a patch; it runs when
 the wiki cache is older than COUNTRIX_REFRESH_FULL_DAYS (7). Either
 way a page that fails keeps its cached copy, so a flaky source degrades
-to yesterday's numbers rather than an empty table. The `refresher`
+to yesterday's numbers rather than an empty table, and the pull's reply
+lists it under stale: its first line, which the log keeps, ends with the
+count, and sync_all's with the pulls that read one. The `refresher`
 container runs this loop.
 """
 

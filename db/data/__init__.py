@@ -22,12 +22,15 @@ The MCP pull tools (door/mcp) import and call them. Nothing here is an entry
 point of its own.
 """
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class PullSummary(TypedDict):
-    """What every run() returns; each pull's summary adds its own counts."""
+    """What every run() returns; each pull's summary adds its own counts.
+    stale is not run()'s to fill: the door fills it from the PullContext
+    with each page whose refetch failed and whose cached copy was read."""
     tables: list[str]
+    stale: NotRequired[list[str]]
 
 
 class ArticlePullSummary(PullSummary):

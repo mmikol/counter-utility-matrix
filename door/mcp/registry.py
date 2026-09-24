@@ -75,7 +75,8 @@ class NoSuchToolError(KeyError):
 REFRESH: Properties = {
     "refresh": {"type": "boolean",
                 "description": "fetch every page again instead of reading the cache; a page"
-                               " that fails to fetch keeps its cached copy"}}
+                               " that fails to fetch keeps its cached copy and is listed"
+                               " under stale"}}
 
 
 class Registry:

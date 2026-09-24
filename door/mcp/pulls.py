@@ -38,9 +38,11 @@ type PullFn = Callable[..., PullSummary]
 
 
 def _summary(title: str, summary: PullSummary) -> ToolReply:
-    """A pull's reply: its headline over one line per count (the tables it
-    wrote left out), and the summary itself as the payload."""
-    lines = [title]
+    """A pull's reply: its headline, which ends in the count of pages read
+    from the stale cache when there are any, over one line per count (the
+    tables it wrote left out), and the summary itself as the payload."""
+    stale = summary.get("stale")
+    lines = [title + ("; stale: %d" % len(stale) if stale else "")]
     for key, value in summary.items():
         if key == "tables":
             continue
@@ -78,12 +80,15 @@ def list_sources(ctx: Context) -> ToolReply:
 
 def _pull(ctx: Context, source: str, fn: PullFn, refresh: bool, **options: bool) -> PullSummary:
     """One pull against the database, reading through the source's page cache
-    and logging to the context's log -> the summary its run() returns."""
+    and logging to the context's log -> the summary its run() returns, with
+    the pages it read from the stale cache under stale."""
     # refresh: every cached page counts as stale and is fetched again; the
-    # cached copy survives a failed fetch (see db.data.fetch.cached)
+    # cached copy survives a failed fetch and is listed (see fetch.cached)
     pull = fetch.PullContext(ctx.cache(source), log=ctx.log, max_age=0 if refresh else None)
     with ctx.connect() as cx:
-        return fn(cx, pull, **options)
+        summary = fn(cx, pull, **options)
+    summary["stale"] = pull.stale
+    return summary
 
 
 def _pull_call(
@@ -240,5 +245,8 @@ def sync_all(ctx: Context, refresh: bool = False) -> ToolReply:
     ctx.log("=== load_authored ===")
     results["load_authored"] = ctx.call("load_authored").data
     results["export_csv"] = ctx.call("export_csv").data
-    return ToolReply("sync_all: %d pulls + strategies mirror + export done" % len(pulls),
-                     results)
+    stale = [spec.name for spec in pulls if results[spec.name].get("stale")]
+    text = "sync_all: %d pulls + strategies mirror + export done" % len(pulls)
+    if stale:
+        text += "; stale: %s" % ", ".join(stale)
+    return ToolReply(text, results)

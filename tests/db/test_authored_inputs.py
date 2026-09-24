@@ -86,7 +86,7 @@ def test_pull_counters_runs_the_wikis_matchups(monkeypatch, tmp_path):
     text, data = ctx.call("pull_counters")
     assert seen == {"connection": "cx", "cache_dir": ctx.caches["wiki"]}
     assert text.splitlines()[0] == "pull_counters: counters stored"
-    assert data == {"counters": 3, "unwritten": ["Freja"], "tables": ["counters"]}
+    assert data == {"counters": 3, "unwritten": ["Freja"], "tables": ["counters"], "stale": []}
 
 
 def test_a_pull_hands_run_its_sources_cache_and_the_context_log(monkeypatch, tmp_path):
@@ -107,6 +107,24 @@ def test_a_pull_hands_run_its_sources_cache_and_the_context_log(monkeypatch, tmp
     assert seen["pull"].max_age == 0               # refresh: every cached page is stale
     ctx.call("pull_rates")
     assert seen["pull"].max_age is None            # a build keeps every cached page
+
+
+def test_a_stale_page_is_named_in_the_pull_reply(monkeypatch, tmp_path):
+    """A page whose refetch failed and whose cached copy was read reaches the
+    reply's data under stale, and its count ends the headline the refresher
+    logs."""
+    from db.data.blizzard import meta
+
+    def run(connection, pull):
+        pull.stale.append("rates_x.html: gone")
+        return {"snapshots": 1, "tables": ["meta_snapshots"]}
+    monkeypatch.setattr(meta, "run", run)
+    ctx = Offline(dsn="postgresql://nowhere", caches={"blizzard": str(tmp_path / "blizzard")},
+                  log=lambda line: None)
+    text, data = ctx.call("pull_rates", refresh=True)
+    assert text.splitlines()[0] == "pull_rates: snapshot stored; stale: 1"
+    assert data["stale"] == ["rates_x.html: gone"]
+    assert "  stale            rates_x.html: gone" in text.splitlines()
 
 
 def test_counterpick_is_gone_from_the_data_layer():

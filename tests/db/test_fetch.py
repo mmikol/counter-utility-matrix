@@ -92,14 +92,23 @@ def test_refresh_refetches_a_stale_page_and_rewrites_the_cache(tmp_path):
     assert not fetch.is_stale(str(tmp_path / "k.html"), None)
 
 
-def test_a_failed_refetch_keeps_the_cached_copy(tmp_path, capsys):
+def test_a_failed_refetch_keeps_the_cached_copy(tmp_path):
+    """The stale copy is read, named in the pull's stale and warned of in its
+    log; with nothing cached the failure surfaces and nothing is listed."""
     write_aged(tmp_path / "k.html", "yesterday")
     twice = fetch.RequestPolicy(attempts=2, backoff=0, delay=0)
-    pull = fetch.PullContext(str(tmp_path), session=FakeSession(fail=True), max_age=0)
+    lines = []
+    pull = fetch.PullContext(str(tmp_path), session=FakeSession(fail=True), log=lines.append,
+                             max_age=0)
     assert fetch.cached_get(pull, "u", "k", policy=twice) == "yesterday"
-    assert "keeping the cached copy" in capsys.readouterr().err
+    [stale] = pull.stale
+    assert stale.startswith("k.html: u failed after 2 attempts") and "source down" in stale
+    [line] = lines
+    assert line.startswith("warning: u failed after 2 attempts")
+    assert line.endswith("; keeping the cached copy from 48h ago (k.html)")
     with pytest.raises(fetch.FetchError):         # nothing cached: the failure surfaces
         fetch.cached_get(pull, "u", "other", policy=INSTANT)
+    assert len(pull.stale) == 1
 
 
 def test_attempts_count_every_request_the_first_included():

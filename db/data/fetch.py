@@ -17,8 +17,9 @@ every source.
                      the freshness, max_age. None keeps a page forever (a
                      build from the caches), 0 refetches every page (the
                      refresh); a page that fails to refetch keeps its cached
-                     copy, so a flaky source degrades to yesterday's numbers,
-                     never to an empty table
+                     copy and is listed in the context's stale, so a flaky
+                     source degrades to yesterday's numbers, never to an
+                     empty table, and the pull says so
     prepare_cache    the cache directory a tool hands a pull
 
 Each source package (blizzard, wiki) names its own endpoints
@@ -97,11 +98,16 @@ class PullContext:
     """What a pull runs with: the page cache it reads through (None reads
     none), the session it fetches on, where its progress lines go, and the
     seconds a cached page stays fresh - None keeps a page forever (a build
-    from the caches), 0 refetches every page (a refresh)."""
+    from the caches), 0 refetches every page (a refresh).
+
+    stale holds 'name: error' for each page whose refetch failed and whose
+    cached copy was read instead. The context stays frozen: only the list's
+    contents change."""
     cache_dir: str | None
     session: requests.Session = dataclasses.field(default_factory=session)
     log: Log = to_stderr
     max_age: float | None = None
+    stale: list[str] = dataclasses.field(default_factory=list)
 
 
 def _age(path: str) -> float:
@@ -128,11 +134,13 @@ def _write_cache(path: str, text: str) -> None:
         handle.write(text)
 
 
-def _keep_stale(path: str, error: Exception) -> str:
-    """A refetch failed: fall back to the cached copy, saying so."""
-    age = _age(path) / SECONDS_PER_HOUR
-    sys.stderr.write("warning: %s; keeping the cached copy from %.0fh ago (%s)\n"
-                     % (error, age, os.path.basename(path)))
+def _keep_stale(pull: PullContext, path: str, error: Exception) -> str:
+    """A refetch failed: fall back to the cached copy, record it in the pull's
+    stale and say so in its log."""
+    name = os.path.basename(path)
+    pull.stale.append("%s: %s" % (name, error))
+    hours = _age(path) / SECONDS_PER_HOUR
+    pull.log("warning: %s; keeping the cached copy from %.0fh ago (%s)" % (error, hours, name))
     return _read_cache(path)
 
 
@@ -179,8 +187,9 @@ def cached(pull: PullContext, name: str, produce: Callable[[], str]) -> str:
 
     A copy younger than the pull's max_age is read and nothing is asked for.
     Otherwise produce() runs and its text is written. When it fails with a
-    FetchError, the stale copy is kept, and the failure surfaces only when
-    there is none. Without a cache_dir it only produces.
+    FetchError, the stale copy is kept and named in the pull's stale, and
+    the failure surfaces only when there is none. Without a cache_dir it only
+    produces.
     """
     if not pull.cache_dir:
         return produce()
@@ -191,7 +200,7 @@ def cached(pull: PullContext, name: str, produce: Callable[[], str]) -> str:
         text = produce()
     except FetchError as error:
         if os.path.exists(path):
-            return _keep_stale(path, error)
+            return _keep_stale(pull, path, error)
         raise
     _write_cache(path, text)
     return text
