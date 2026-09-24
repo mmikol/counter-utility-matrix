@@ -184,7 +184,8 @@ def test_every_playbook_write_mirrors_the_catalog_once(tmp_path, monkeypatch):
 def test_add_strategy_stores_a_soft_limit_with_a_numeric_penalty(tmp_path, monkeypatch):
     """The door declares its strategy fields from the rule that checks them,
     so the numeric penalty the skill and the prompt promise a soft limit
-    passes the schema, and a category sets the file's like any field."""
+    passes the schema, a category sets the file's like any field, and who
+    asked reaches the log line as it does through tune."""
     for name in catalog.strategy_files(FIXTURE_PLAYBOOK):
         shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
     monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))
@@ -197,10 +198,22 @@ def test_add_strategy_stores_a_soft_limit_with_a_numeric_penalty(tmp_path, monke
     _, added = Offline(dsn="postgresql://nowhere").call(
         "add_strategy", id="tank-cap", name="Tank cap", kind="constraint",
         body="At most two tanks.", reason="a test", require="team.tanks <= 2", soft=True,
-        penalty=2, category="shape")
-    assert added["form"] == "limit"
+        penalty=2, category="shape", by="a headless agent")
+    assert added["form"] == "limit" and added["line"].endswith("[a headless agent]")
     stored = next(h for h in catalog.load() if h.id == "tank-cap")
     assert stored.soft and stored.penalty.source == "2" and stored.category == "shape"
+
+
+def test_the_tuning_log_tool_refuses_fewer_than_one_line(tmp_path, monkeypatch):
+    for name in catalog.strategy_files(FIXTURE_PLAYBOOK):
+        shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
+    ctx = tools.Context(dsn="postgresql://nowhere")
+    for lines in (0, -3):
+        with pytest.raises(Refusal, match="lines is 1 or more"):
+            ctx.call("tuning_log", lines=lines)
+    assert ctx.call("tuning_log", lines=1)[0] == "no tuning yet"
 
 
 def test_a_board_tool_hands_its_function_one_draft(tmp_path, monkeypatch):

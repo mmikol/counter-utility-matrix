@@ -50,6 +50,8 @@ from inference.strategy import (
 
 MAX_PROSE = 20000          # characters in a strategy's prose
 MAX_SENTENCES = 3          # a strategy's prose is three sentences at most
+MAX_BY = 40                # characters of who asked, in a log line
+BY_SESSION = "claude-code-session"    # who asked, when the caller does not say
 _SENTENCE_END = re.compile(r"[.!?](?:[\"')\]`]*)(?:\s|$)")
 
 type Pairs = Sequence[tuple[str, LineValue]]
@@ -239,7 +241,11 @@ def _commit(directory: str, hid: str, text: str,
     the line). `what` words the change from the loaded strategy; it is a
     callable because a pair's text can hold an expression's %, which a
     %-template would misread. A file the catalog never reads, the markdown
-    beside the playbook, is refused before anything is written."""
+    beside the playbook, is refused before anything is written. The reason
+    and who asked are folded onto one line, as str.split() splits - every
+    break str.splitlines() knows included - so neither opens a second log
+    line; who asked is cut to MAX_BY characters, and a blank one is
+    BY_SESSION."""
     loaded = validate(directory, hid, text)
     strategy = next((h for h in loaded if h.id == hid), None)
     if strategy is None:
@@ -247,6 +253,7 @@ def _commit(directory: str, hid: str, text: str,
     with open(os.path.join(directory, hid + ".md"), "w", encoding="utf-8") as handle:
         handle.write(text)
     _document(directory, loaded)
+    by = " ".join(by.split())[:MAX_BY] or BY_SESSION
     line = "- %s `%s` %s (%s) [%s]" % (_stamp(), hid, what(strategy),
                                       " ".join(reason.split()), by)
     _log(_where(directory)[1], line)
@@ -257,7 +264,7 @@ def _commit(directory: str, hid: str, text: str,
 
 def tune(
         hid: str, field: str, value: object, reason: str, directory: str | None = None,
-        by: str = "claude-code-session") -> Change:
+        by: str = BY_SESSION) -> Change:
     """Apply one change -> the field's old and new text and the log line."""
     directory = _where(directory)[0]
     _reason(reason, "a tuning change needs a reason")
@@ -273,7 +280,7 @@ def tune(
 
 def complete(
         hid: str, fields: Mapping[str, object] | None, reason: str,
-        directory: str | None = None, by: str = "claude-code-session") -> Completion:
+        directory: str | None = None, by: str = BY_SESSION) -> Completion:
     """Set several frontmatter fields at once - what /strategy infers for a
     draft - validated as a whole, logged as one line -> the form it took and
     each field's text."""
@@ -320,7 +327,7 @@ def _check_new(hid: str, name: str, kind: str, body: str) -> None:
 
 def add(hid: str, name: str, kind: str, body: str, fields: Mapping[str, object] | None,
         reason: str, *, directory: str | None = None,
-        by: str = "claude-code-session") -> Addition:
+        by: str = BY_SESSION) -> Addition:
     """A new strategy file from its name, kind, prose and (inferred) fields,
     validated through the catalog before it exists and logged with its reason
     -> its form, path and log line. The file opens in category general; a
@@ -345,10 +352,11 @@ def add(hid: str, name: str, kind: str, body: str, fields: Mapping[str, object] 
 
 
 def log_tail(n: int = 20, log_path: str | None = None) -> list[str]:
-    """The last n lines of the log beside the playbook in force."""
+    """The last n lines of the log beside the playbook in force; none for n
+    below 1."""
     log_path = log_path or _where(None)[1]
     if not os.path.exists(log_path):
         return []
     with open(log_path, encoding="utf-8") as handle:
         lines = [line.rstrip("\n") for line in handle if line.startswith("- ")]
-    return lines[-n:]
+    return lines[-n:] if n > 0 else []

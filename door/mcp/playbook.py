@@ -13,7 +13,7 @@ rule that checks them, so the door admits what a file may hold.
 
 import os
 
-from db import ROOT
+from db import ROOT, Refusal
 from door.mcp.registry import Context, tool
 from door.mcp.schema import Properties, Property, ToolReply
 from door.mcp.server import Resource, ResourceText
@@ -77,6 +77,13 @@ STRATEGY_FIELDS: Properties = {
     name: _property(field) for name, field in FIELDS.items() if name not in ("name", "kind")}
 
 
+# who asked, for the log line: the three writers take it alike, so a
+# headless agent names itself whichever it calls
+BY: Properties = {
+    "by": {"type": "string", "description": "who asked, for the log line (default %s;"
+                                           " the board says so)" % tune.BY_SESSION}}
+
+
 def _remirror(ctx: Context) -> None:
     """A playbook write's database half: the strategies table reloaded from
     the files the write changed."""
@@ -94,13 +101,12 @@ def _remirror(ctx: Context) -> None:
         "field": {"type": "string", "description": " | ".join((*TUNABLE, "params.NAME"))},
         "value": {"description": "the new value: a number, a boolean, or an expression"},
         "reason": {"type": "string", "description": "why, in a sentence"},
-        "by": {"type": "string", "description": "who asked, for the log line (default"
-                                               " claude-code-session; the board says so)"}},
+        **BY},
     ["id", "field", "value", "reason"])
 def tune_tool(      # _tool: inference.tune holds the bare name
         ctx: Context, id: str, field: str, value: object, reason: str,
-        by: str = "claude-code-session") -> ToolReply:
-    change = tune.tune(id, field, value, reason, by=str(by or "claude-code-session")[:40])
+        by: str = tune.BY_SESSION) -> ToolReply:
+    change = tune.tune(id, field, value, reason, by=by)
     _remirror(ctx)
     return ToolReply("tuned %s: %s %s -> %s\n%s" % (
         change["id"], change["field"], change["old"], change["new"], change["line"]), change)
@@ -120,12 +126,12 @@ def tune_tool(      # _tool: inference.tune holds the bare name
         "kind": _property(FIELDS["kind"]),
         "body": {"type": "string", "description": "the prose: what it means and why"},
         "reason": {"type": "string", "description": "why it was added, in a sentence"},
-        **STRATEGY_FIELDS},
+        **BY, **STRATEGY_FIELDS},
     ["id", "name", "kind", "body", "reason"])
 def add_strategy(
         ctx: Context, id: str, name: str, kind: str, body: str, reason: str,
-        **fields: object) -> ToolReply:
-    added = tune.add(id, name, kind, body, fields, reason)
+        by: str = tune.BY_SESSION, **fields: object) -> ToolReply:
+    added = tune.add(id, name, kind, body, fields, reason, by=by)
     _remirror(ctx)
     note = ("\nstored as a DRAFT: the solver ignores it until /strategy infers its frontmatter"
             if added["form"] == "draft" else "")
@@ -141,10 +147,12 @@ def add_strategy(
     {
         "id": {"type": "string"},
         "reason": {"type": "string", "description": "how the fields follow from the prose"},
-        **STRATEGY_FIELDS},
+        **BY, **STRATEGY_FIELDS},
     ["id", "reason"])
-def infer_strategy(ctx: Context, id: str, reason: str, **fields: object) -> ToolReply:
-    done = tune.complete(id, fields, reason)
+def infer_strategy(
+        ctx: Context, id: str, reason: str, by: str = tune.BY_SESSION,
+        **fields: object) -> ToolReply:
+    done = tune.complete(id, fields, reason, by=by)
     _remirror(ctx)
     return ToolReply("%s is now %s: %s\n%s" % (id, done["form"], ", ".join(
         "%s=%s" % kv for kv in done["set"].items()), done["line"]), done)
@@ -168,8 +176,10 @@ def derive_strategies(ctx: Context, ids: list[str] | None = None) -> ToolReply:
 @tool(
     "tuning_log", "The audit trail of every change to the strategies'"
     " frontmatter, newest last.",
-    {"lines": {"type": "integer", "description": "how many (default 20)"}})
+    {"lines": {"type": "integer", "description": "how many, 1 or more (default 20)"}})
 def tuning_log(ctx: Context, lines: int = 20) -> ToolReply:
+    if lines < 1:
+        raise Refusal("lines is 1 or more")
     tail = tune.log_tail(lines)
     return ToolReply("\n".join(tail) or "no tuning yet", {"lines": tail})
 

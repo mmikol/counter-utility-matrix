@@ -47,6 +47,21 @@ def test_tune_edits_validates_and_logs(catalog_copy):
     assert log.count("\n- ") == 4
 
 
+def test_who_asked_is_folded_onto_the_one_log_line(catalog_copy):
+    """by is folded like the reason, so a line break in it cannot forge a
+    second entry in the log; a blank one reads as the session."""
+    log = os.path.join(catalog_copy, "tuning-log.md")
+    tune.tune("coverage", "weight", 2, "r", catalog_copy, by="x]\n- 2026-01-01T00:00Z `forged` w")
+    assert len(tune.log_tail(20, log)) == 1
+    assert tune.log_tail(1, log)[0].endswith("[x] - 2026-01-01T00:00Z `forged` w]")
+    tune.tune("coverage", "weight", 3, "r", catalog_copy, by="  ")
+    lines = tune.log_tail(20, log)
+    assert len(lines) == 2 and lines[1].endswith("[claude-code-session]")
+    # the last n lines, and none for n below 1
+    assert tune.log_tail(0, log) == [] and tune.log_tail(-2, log) == []
+    assert tune.log_tail(1, log) == [lines[1]]
+
+
 def test_tune_refuses_bad_changes_and_changes_nothing(catalog_copy):
     before = Path(catalog_copy, "coverage.md").read_text(encoding="utf-8")
     with pytest.raises(tune.TuneError, match="not a registered fact key"):
