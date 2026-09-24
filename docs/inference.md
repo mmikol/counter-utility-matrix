@@ -261,9 +261,7 @@ the `team.*` metrics computed for the red side.
 | `team.cooldown_median` | median cooldown across every ability on the team |
 | `team.cooldown_count` | cooldowns counted |
 | `team.cc_count` | picks with crowd control (stun, sleep, immobilize, hinder, knockback) |
-| `team.cc_tools` (text) | the crowd-control tools |
 | `team.mobility_count` | picks with a movement or evasive ability |
-| `team.mobility_tools` (text) | the movement tools |
 | `team.flyers` | picks that fly or hover |
 | `team.light_flyers` | picks that fly or hover, tanks aside |
 | `team.barrier_hp` | summed barrier health the team fields |

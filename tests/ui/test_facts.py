@@ -54,6 +54,10 @@ def test_team_facts_appear_per_side_and_matchup_only_with_both(world):
     assert fs.find("team.tanks", "red")
     fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"])
     assert fs.find("team.coverage", "blue") and fs.find("matchup.net_edges")
+    # the crowd-control line names every blue pick that carries a tool, read off the picks
+    (cc,) = fs.find("team.cc_count", "blue")
+    tooled = [h for h in (world.hero("Ana"), world.hero("Reinhardt")) if h.cc_tools]
+    assert tooled and all("%s: " % h.name in cc.text for h in tooled)
     loser, winner = _an_edge(world)                # whichever match-up the wiki states
     fs = engine.generate(world, "King's Row", [loser], [winner])
     assert any("%s is answered by blue %s" % (loser, winner) in f.text for f in fs.facts)
@@ -90,6 +94,15 @@ def test_metrics_cover_the_registry_exactly(world):
     for key in compute.TEXT_METRICS:
         prefix, name = key.split(".")
         assert name in ns[prefix if prefix != "enemy" else "team"]
+    # the solver builds its bag lean: every key a strategy can name reads the same there
+    blue = [world.hero("Ana"), world.hero("Reinhardt")]
+    red = [world.hero("Zarya"), world.hero("Pharah")]
+    full = compute.team_metrics(world, blue, m, red)
+    lean = compute.team_metrics(world, blue, m, red, lean=True)
+    for key in compute.registry():
+        if key.startswith("team."):
+            name = key.split(".", 1)[1]
+            assert lean[name] == full[name], key
 
 
 def test_metrics_without_a_map_fall_back_honestly(world):

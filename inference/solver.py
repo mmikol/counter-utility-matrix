@@ -201,8 +201,8 @@ class Solver:
 
     # --- namespace and scoring -----------------------------------------------
 
-    def namespace(self, heroes: Sequence[Hero], lean: bool = True) -> Namespace:
-        team = compute.team_metrics(self.world, heroes, self.m, self.red, lean=lean)
+    def namespace(self, heroes: Sequence[Hero]) -> Namespace:
+        team = compute.team_metrics(self.world, heroes, self.m, self.red, lean=True)
         ns = dict(self.static)
         ns["team"] = team
         ns["matchup"] = compute.matchup_metrics(team, self.red_t)

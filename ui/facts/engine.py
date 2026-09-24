@@ -705,11 +705,14 @@ def _team_facts(fs: FactSet, world: World, team: str, heroes: Sequence[Hero], t:
             % (label, t["cooldown_median"], t["cooldown_count"],
                "high-uptime brawl tempo" if t["cooldown_median"] <= 8 else
                "cooldown-bound; pick your fights"), "s", also=("team.cooldown_count",))
+    cc_tools = ["%s: %s" % (h.name, ", ".join(h.cc_tools)) for h in heroes if h.cc_tools]
     add("cc_count", "%s crowd control: %s%s" % (
-        label, _count(t["cc_count"]), "; " + "; ".join(t["cc_tools"]) if t["cc_tools"] else ""))
+        label, _count(t["cc_count"]), "; " + "; ".join(cc_tools) if cc_tools else ""))
+    mobility_tools = ["%s: %s" % (h.name, ", ".join(h.mobility_tools))
+                      for h in heroes if h.mobility_tools]
     add("mobility_count", "%s engage/escape tools: %s%s" % (
         label, _count(t["mobility_count"]),
-        "; " + "; ".join(t["mobility_tools"]) if t["mobility_tools"] else ""))
+        "; " + "; ".join(mobility_tools) if mobility_tools else ""))
     if t["flyers"]:
         add("flyers", "%s vertical threats: %s fly" % (label, _count(t["flyers"])))
     if t["barrier_hp"]:

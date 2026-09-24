@@ -265,7 +265,7 @@ prints them as the vocabulary a strategy may reference):
 | `world.*` | `heal_bench`, `hps_bench`, `roster_size` |
 
 `team_metrics(world, heroes, map, enemies)` computes a team's numbers
-(with `lean=True` for the solver, which skips the descriptive strings);
+(with `lean=True` for the solver, which leaves the answered-by lists empty);
 `matchup_metrics(blue, red)`, `map_metrics(map, side, ban_count=...)` and
 `world_metrics(world)` the rest; `namespace(...)` bundles them as the
 `team`, `enemy`, `matchup`, `map` and `world` sections a strategy's

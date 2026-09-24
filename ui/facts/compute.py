@@ -93,9 +93,7 @@ TEAM_METRICS = OrderedDict([
     ("cooldown_median", "median cooldown across every ability on the team"),
     ("cooldown_count", "cooldowns counted"),
     ("cc_count", "picks with crowd control (stun, sleep, immobilize, hinder, knockback)"),
-    ("cc_tools", "the crowd-control tools"),
     ("mobility_count", "picks with a movement or evasive ability"),
-    ("mobility_tools", "the movement tools"),
     ("flyers", "picks that fly or hover"),
     ("light_flyers", "picks that fly or hover, tanks aside"),
     ("barrier_hp", "summed barrier health the team fields"),
@@ -263,8 +261,10 @@ def expected_picks(world, m, *, revealed=(), banned=(), shape=None):
 
 
 def team_metrics(world, heroes, m=None, enemies=(), lean=False):
-    """Every TEAM_METRICS key for these picks, on this map, vs these enemies.
-    lean=True leaves the name lists empty (the solver never reads them)."""
+    """Every TEAM_METRICS key for these picks, on this map, vs these enemies,
+    and the underscored name maps the facts engine words. lean=True leaves
+    those maps empty: no strategy can name them, so the solver never reads
+    them."""
     heroes = list(heroes)
     n = len(heroes)
     t = {}
@@ -362,11 +362,7 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["cooldown_median"] = _median(cds)
     t["cooldown_count"] = len(cds)
     t["cc_count"] = sum(1 for h in heroes if h.cc_tools)
-    t["cc_tools"] = [] if lean else ["%s: %s" % (h.name, ", ".join(h.cc_tools))
-                                     for h in heroes if h.cc_tools]
     t["mobility_count"] = sum(1 for h in heroes if h.mobility_tools)
-    t["mobility_tools"] = [] if lean else ["%s: %s" % (h.name, ", ".join(h.mobility_tools))
-                                           for h in heroes if h.mobility_tools]
     t["flyers"] = sum(1 for h in heroes if h.flyer)
     t["light_flyers"] = sum(1 for h in heroes if h.flyer and h.role != "tank")
     t["barrier_hp"] = sum(h.barrier_hp for h in heroes)
@@ -569,8 +565,7 @@ def namespace(world, m, red, blue, side="", *, ban_count):
 TEXT_METRICS = {
     "team.subroles", "team.shape_flags", "team.style_counts", "team.style_top",
     "team.style_lean", "team.weakest", "team.squishies", "team.burst_hero",
-    "team.cc_tools", "team.mobility_tools", "team.isolated", "team.pairs",
-    "team.max_ban_hero", "team.unanswered", "team.exposed",
+    "team.isolated", "team.pairs", "team.max_ban_hero", "team.unanswered", "team.exposed",
     "matchup.style_lean_red",
     "map.style_top", "map.mode", "map.side",
 }
