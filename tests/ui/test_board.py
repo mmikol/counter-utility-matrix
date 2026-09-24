@@ -128,6 +128,7 @@ def test_storing_a_weight_is_a_tune_call_over_the_door(monkeypatch):
     assert code == 400 and "no strategy" in data["error"]
     for bad in ({"id": "../escape", "weight": 2}, {"id": "healing-floor", "weight": "x"},
                 {"id": "healing-floor", "weight": 11}, {"id": "healing-floor", "weight": [2]},
+                {"id": "healing-floor", "weight": "nan"},
                 {}, None):
         assert board.api_weight(bad)[1] == 400
     assert len(calls) == 2                                   # the refusals never knocked

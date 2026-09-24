@@ -160,13 +160,20 @@ def test_the_markdown_beside_the_playbook_is_no_strategy_to_add_or_tune(catalog_
 
 
 def test_frontmatter_cannot_be_injected_through_a_field_or_a_value(catalog_copy):
+    """Every line break the loader splits on is refused, a trailing one
+    included, and so is every number that is not finite, a bool where an
+    expression goes and the params block where one dial goes."""
+    before = Path(catalog_copy, "coverage.md").read_text(encoding="utf-8")
     for field, value in (("params.A\nweight: 99\nB", 1), ("params.lower", 1),
                          ("when", "1 == 1\nweight: 99"), ("bonus", "---\nx"),
-                         ("bonus", "x" * 501)):
+                         ("bonus", "x" * 501), ("when", "1 == 1\u2028weight: 9"),
+                         ("category", "general\x85weight: 9"), ("when", "team.tanks >= 1\n"),
+                         ("params.A", float("inf")), ("params.A", float("nan")),
+                         ("params.A", "1 == 1"),
+                         ("weight", float("nan")), ("penalty", True), ("params", {"A": 1})):
         with pytest.raises(tune.TuneError):
             tune.tune("coverage", field, value, "r", directory=catalog_copy)
-    text = Path(catalog_copy, "coverage.md").read_text(encoding="utf-8")
-    assert "weight: 99" not in text
+    assert Path(catalog_copy, "coverage.md").read_text(encoding="utf-8") == before
     with pytest.raises(tune.TuneError, match=r"within 0\.\.10"):
         tune.tune("coverage", "weight", 11, "r", directory=catalog_copy)
     Path(catalog_copy, "heavy.md").write_text(
@@ -175,6 +182,32 @@ def test_frontmatter_cannot_be_injected_through_a_field_or_a_value(catalog_copy)
         encoding="utf-8")
     with pytest.raises(CatalogError, match=r"within 0\.\.10"):
         catalog.load(catalog_copy)
+
+
+def test_add_refuses_a_name_or_a_category_that_closes_the_frontmatter(catalog_copy):
+    """add writes the name into its header and sets the category like any
+    other field: both keep the one-line rule, and a refusal leaves no file."""
+    for name, fields in (("N\n---\n", None), ("N", {"category": "general\n---\n"})):
+        with pytest.raises(tune.TuneError, match="one line of text"):
+            tune.add("closes-early", name, "assumption", "One.", fields, "r",
+                     directory=catalog_copy)
+        assert not os.path.exists(os.path.join(catalog_copy, "closes-early.md"))
+    added = tune.add("files-itself", "Files itself", "assumption", "One.",
+                     {"category": "shape"}, "r", directory=catalog_copy)
+    assert next(h for h in catalog.load(catalog_copy) if h.id == "files-itself").category == "shape"
+    assert Path(added["path"]).read_text(encoding="utf-8").count("category:") == 1
+
+
+def test_a_soft_limit_takes_a_numeric_penalty(catalog_copy):
+    """The number the prompt, the skill and the docs promise a soft limit's
+    penalty is the number every writer accepts."""
+    Path(catalog_copy, "tank-cap.md").write_text(
+        "---\nname: Tank cap\nkind: constraint\n---\n# Tank cap\n\nAt most two tanks.\n",
+        encoding="utf-8")
+    done = tune.complete("tank-cap", {"require": "team.tanks <= 2", "soft": True, "penalty": 2},
+                         "r", directory=catalog_copy)
+    assert done["form"] == "limit" and done["set"]["penalty"] == "2"
+    assert next(h for h in catalog.load(catalog_copy) if h.id == "tank-cap").soft
 
 
 def test_a_file_whose_frontmatter_never_closes_is_refused():

@@ -124,9 +124,7 @@ STRATEGY_FIELDS: Properties = {
 def add_strategy(
         ctx: Context, id: str, name: str, kind: str, body: str, reason: str,
         **fields: object) -> ToolReply:
-    # the schema admits category only as a string
-    category = str(fields.pop("category", "general"))
-    added = tune.add(id, name, kind, body, fields, reason, category=category)
+    added = tune.add(id, name, kind, body, fields, reason)
     _remirror(ctx)
     note = ("\nstored as a DRAFT: the solver ignores it until /strategy infers its frontmatter"
             if added["form"] == "draft" else "")

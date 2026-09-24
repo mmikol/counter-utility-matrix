@@ -20,7 +20,7 @@ from db.data.authored import AUTHORED
 from db.psql import now, register_source
 from facts import compute
 from inference.frontmatter import FrontmatterError, parse_frontmatter
-from inference.strategy import FORMS, KINDS, CatalogError, Strategy
+from inference.strategy import FORMS, KINDS, WEIGHT_RANGE, CatalogError, Strategy, finite_number
 
 SHIPPED_DIR = os.path.join(ROOT, "inference", "strategies")
 # the id is the filename, so no id may name a path (docs/security.md)
@@ -96,23 +96,22 @@ def load(directory: str | None = None) -> list[Strategy]:
 
 def parse_weights(items: Mapping[str, object] | Iterable[object] | None) -> dict[str, float]:
     """`id:value` strings (a query's repeated `weight` parameter) or a mapping
-    -> {id: weight}, each clamped to the file's 0..10. What a board's sliders
-    send. An entry that is not id:value, or a value that is not a number, is
-    a Refusal, which the board, the service and the board tool answer as the
+    -> {id: weight}, each clamped to the file's WEIGHT_RANGE. What a board's
+    sliders send. An entry that is not id:value, or a value that is not a
+    finite number (strategy.finite_number: nan and inf are not), is a
+    Refusal, which the board, the service and the board tool answer as the
     caller's error."""
     if isinstance(items, Mapping):
         pairs = [(str(hid), value) for hid, value in items.items()]
     else:
         pairs = [_weight_entry(item) for item in items or []]
+    low, high = WEIGHT_RANGE
     out = {}
     for hid, value in pairs:
-        if not isinstance(value, (int, float, str)):
+        weight = finite_number(value)
+        if weight is None:
             raise Refusal("weight %r for %r is not a number" % (value, hid))
-        try:
-            weight = float(value)
-        except ValueError:
-            raise Refusal("weight %r for %r is not a number" % (value, hid)) from None
-        out[hid.strip()] = min(10.0, max(0.0, weight))
+        out[hid.strip()] = min(high, max(low, weight))
     return out
 
 

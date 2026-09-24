@@ -108,7 +108,7 @@ heuristic in the playbook tab) override a weight for one board at a time -
 `weights=<id>:<0..10>` on `/board`, `weights` on the `board` tool - and
 the file is untouched until the slider's *store*, which is a `tune` call;
 every result names the weights it was scored under. A value is clamped to
-0..10; an entry that is not `id:value`, or a value that is not a number,
+0..10; an entry that is not `id:value`, or a value that is not a finite number,
 is refused as the caller's error. One path changes a
 file, logged in `strategies/tuning-log.md` with a reason and who asked:
 **`tune`**, one validated frontmatter edit - `weight` (0..10),

@@ -40,6 +40,7 @@ from facts import board_facts, tables
 from facts.draft import Draft, Query, board_query, is_sided, parse_board
 from inference import catalog as catalog_module
 from inference import engine, parallel, supersede
+from inference.strategy import finite_number
 from ui import pages
 
 STORE_REASON = "stored from the board's slider"
@@ -184,13 +185,10 @@ def api_weight(payload: Mapping[str, object] | None) -> web.Reply:
     hid = str(payload.get("id") or "")
     if not catalog_module.ID_RE.fullmatch(hid):
         return web.Reply({"error": "no such heuristic"}, 400)
-    raw = payload.get("weight")
-    try:
-        if not isinstance(raw, (int, float, str)):
-            raise TypeError(raw)
-        weight = round(float(raw), 2)
-    except (TypeError, ValueError):
+    number = finite_number(payload.get("weight"))
+    if number is None:
         return web.Reply({"error": "the weight must be a number"}, 400)
+    weight = round(number, 2)
     if not 0.0 <= weight <= 10.0:
         return web.Reply({"error": "the weight must be within 0..10"}, 400)
     arguments = {

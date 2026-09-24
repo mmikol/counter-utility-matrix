@@ -42,13 +42,22 @@ it into an assumption when nothing measurable captures it.
 
 `params:` (an indented block of NAME: number) are the dials an expression
 reads as params.NAME - tuning is editing the file.
+
+Each field keeps one rule, which FIELDS names and checked_value applies: a
+line of text or an expression is one line as the loader splits lines,
+within its length cap; a choice is one of its choices; the weight is a
+finite number within 0..10; soft is true or false; a param is NAME: a
+finite number. The loader reads every file through these checks, and every
+writer (inference.tune) checks a value by them before a file changes.
 """
 
+import math
+import re
 from collections.abc import Mapping
-from typing import Literal, TypedDict
+from typing import Literal, NamedTuple, TypedDict
 
 from facts import compute
-from inference.expr import Expr, ExprError, Section, compile_expr
+from inference.expr import ExprError, Section, compile_expr
 from inference.frontmatter import Frontmatter, Scalar
 
 # a strategy's kind, as its frontmatter names it, and its form, as its fields make it
@@ -58,9 +67,57 @@ KINDS: tuple[Kind, ...] = ("constraint", "heuristic", "assumption")
 # load() sorts by this index within a kind, so draft sits last for a
 # heuristic draft as well as a constraint one
 FORMS: tuple[Form, ...] = ("limit", "scored", "heuristic", "assumption", "draft")
+DIRECTIONS = ("maximize", "minimize")      # which end of a heuristic's metric is good
 
 # the namespaces one board settles for every candidate six
 BOARD_SECTIONS = ("enemy", "map", "world", "params")
+
+WEIGHT_RANGE = (0.0, 10.0)
+MAX_NAME = 120             # characters in a strategy's name and its category
+MAX_TEXT = 500             # characters in any other line or expression
+PARAM_RE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
+
+# how a field's value is checked: one line of text, one of a few choices, a
+# number within WEIGHT_RANGE, true or false, an expression, or the params block
+type FieldKind = Literal["line", "choice", "number", "flag", "expression", "params"]
+# what one frontmatter line holds once checked, and what any field holds
+type LineValue = str | float | bool
+type FieldValue = LineValue | dict[str, float]
+
+
+class Field(NamedTuple):
+    """One frontmatter field: how its value is checked, what it means (the
+    door's schema says so), a choice's choices, and how many characters a
+    line or an expression holds."""
+    kind: FieldKind
+    meaning: str
+    choices: tuple[str, ...] = ()
+    limit: int = MAX_TEXT
+
+
+# every field a strategy file may set, in the order the door lists them
+FIELDS: dict[str, Field] = {
+    "name": Field("line", "what the strategy is called, one line", limit=MAX_NAME),
+    "kind": Field("choice", "constraint, heuristic or assumption", KINDS),
+    "category": Field(
+        "line", "the group the catalog files it under (default general)", limit=MAX_NAME),
+    "metric": Field("line", "heuristics: a numeric key from `metrics`"),
+    "direction": Field("choice", "heuristics: which end of the metric is good", DIRECTIONS),
+    "weight": Field("number", "0..10; 1-4 is the working range"),
+    "confidence": Field(
+        "line", "heuristics: a numeric metric that scales the term by how strongly its"
+        " premise holds"),
+    "when": Field("expression", "a guard expression; optional"),
+    "require": Field("expression", "constraints: a limit expression"),
+    "soft": Field("flag", "with require: charge `penalty` instead of discarding"),
+    "bonus": Field("expression", "constraints: an expression added while `when` holds"),
+    "penalty": Field(
+        "expression", "constraints: an expression, or with soft a number, subtracted"),
+    "params": Field("params", "NAME: number dials the expressions read as params.NAME"),
+}
+# the fields a writer sets one at a time; a dial is params.NAME
+TUNABLE = tuple(field for field in FIELDS if field not in ("name", "params"))
+FIELD_RULE = "field must be one of %s or params.NAME" % ", ".join(TUNABLE)
 
 
 class CatalogError(ValueError):
@@ -69,29 +126,123 @@ class CatalogError(ValueError):
     file: str | None = None         # the strategy file at fault, when one is
 
 
-def _text(value: Scalar | dict[str, Scalar]) -> str | None:
-    """A field that names something: None when unset or blank, else its text."""
-    return str(value) if value else None
+# --- the rule each field keeps ---------------------------------------------------
 
-
-def _weight(hid: str, value: Scalar | dict[str, Scalar]) -> float:
-    """A weight: a number within 0..10, where a blank one reads 0."""
-    value = value or 0.0
-    if not isinstance(value, (int, float, str)):
-        raise CatalogError("%s: weight must be a number" % hid)
+def finite_number(value: object) -> float | None:
+    """An int, a float or the text of one - never a bool - as a finite
+    float; None for anything else, inf and nan included."""
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
     try:
-        weight = float(value)
-    except ValueError:
-        raise CatalogError("%s: weight must be a number" % hid) from None
-    if not 0.0 <= weight <= 10.0:
-        raise CatalogError("%s: weight must be within 0..10" % hid)
-    return weight
+        number = float(value)
+    except (ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) else None
 
 
-def _compiled(meta: Frontmatter, key: str) -> Expr | None:
-    """The expression the frontmatter sets under key, or None."""
-    return compile_expr(str(meta[key])) if key in meta else None
+def field_text(value: LineValue) -> str:
+    """A value as a frontmatter line writes it: true or false, a whole float
+    without its point, anything else as str() gives it."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
+
+def _line(field: str, value: object, limit: int) -> str:
+    """A line or an expression: a str, or a finite number as its text. It
+    holds no break that str.splitlines() - and so parse_frontmatter - splits
+    on, a trailing one included, does not open a fence, and is at most limit
+    characters."""
+    text: str | None = None
+    if isinstance(value, str):
+        text = value
+    elif isinstance(value, (int, float)) and finite_number(value) is not None:
+        text = field_text(value)
+    if (text is None or "".join(text.splitlines()) != text
+            or text.lstrip().startswith("---") or len(text) > limit):
+        raise CatalogError("%s is one line of text under %d characters" % (field, limit))
+    return text
+
+
+def _choice[C: str](field: str, value: object, choices: tuple[C, ...]) -> C:
+    """One of the field's choices, as the choices spell it."""
+    for choice in choices:
+        if value == choice:
+            return choice
+    raise CatalogError("%s must be one of %s" % (field, "/".join(choices)))
+
+
+def _number(field: str, value: object) -> float:
+    """A finite number within WEIGHT_RANGE."""
+    number = finite_number(value)
+    if number is None:
+        raise CatalogError("%s must be a number" % field)
+    if not WEIGHT_RANGE[0] <= number <= WEIGHT_RANGE[1]:
+        raise CatalogError("%s must be within %g..%g" % (field, *WEIGHT_RANGE))
+    return number
+
+
+def _flag(field: str, value: object) -> bool:
+    """A bool: 1 and the text 'true' are refused."""
+    if not isinstance(value, bool):
+        raise CatalogError("%s must be true or false" % field)
+    return value
+
+
+def _param(name: str, value: object) -> float:
+    """One dial: NAME in capitals, and a finite number. An int stays an int,
+    so the file, the mirror and the docs read it as written."""
+    if not PARAM_RE.match(name):
+        raise CatalogError("a param is NAME: capitals, digits, underscores")
+    number = finite_number(value)
+    if number is None:
+        raise CatalogError("a param must be a finite number")
+    return value if isinstance(value, int) else number
+
+
+def _params(value: object) -> dict[str, float]:
+    """The params block: a mapping of dials."""
+    if not isinstance(value, Mapping):
+        raise CatalogError("params is a block of NAME: number")
+    return {str(name): _param(str(name), number) for name, number in value.items()}
+
+
+def checked_value(field: str, value: object) -> FieldValue:
+    """The value a writer sets under field, by the rule its kind keeps in
+    FIELDS - the rule the loader reads the file by - else a CatalogError with
+    the bare rule. params.NAME is one dial."""
+    if field.startswith("params."):
+        return _param(field[len("params."):], value)
+    spec = FIELDS.get(field)
+    if spec is None:
+        raise CatalogError(FIELD_RULE)
+    if spec.kind == "choice":
+        return _choice(field, value, spec.choices)
+    if spec.kind == "number":
+        return _number(field, value)
+    if spec.kind == "flag":
+        return _flag(field, value)
+    if spec.kind == "params":
+        return _params(value)
+    return _line(field, value, spec.limit)
+
+
+def _given(meta: Frontmatter, field: str) -> Scalar | dict[str, Scalar]:
+    """What the frontmatter sets under field; None when it is unset - absent,
+    null, blank, or the empty mapping a bare `key:` reads as."""
+    value = meta.get(field)
+    return None if value is None or value == "" or value == {} else value
+
+
+def _text(meta: Frontmatter, field: str) -> str | None:
+    """A line or an expression the frontmatter sets, checked; None when unset."""
+    value = _given(meta, field)
+    return None if value is None else _line(field, value, FIELDS[field].limit)
+
+
+# --- the strategy -----------------------------------------------------------------
 
 class StrategyRecord(TypedDict):
     """A strategy as the tools, the service and the board serve it."""
@@ -111,7 +262,7 @@ class StrategyRecord(TypedDict):
     require: str | None
     bonus: str | None
     penalty: str | None
-    params: dict[str, Scalar]
+    params: dict[str, float]
     body: str
 
 
@@ -121,35 +272,32 @@ class Strategy:
 
     def __init__(self, hid: str, meta: Frontmatter, body: str, raw: str, path: str) -> None:
         self.id, self.body, self.raw, self.path = hid, body, raw, path
-        self.name = str(meta.get("name") or hid.replace("-", " "))
-        kind = meta.get("kind")
-        if not isinstance(kind, str) or kind not in KINDS:
-            raise CatalogError("%s: kind must be one of %s" % (hid, "/".join(KINDS)))
-        self.kind: Kind = kind
-        self.category = str(meta.get("category") or "general")
-        self.direction = _text(meta.get("direction"))
-        self.metric = _text(meta.get("metric"))
-        self.weight = _weight(hid, meta.get("weight", 1.0))
-        self.soft = bool(meta.get("soft", False))
-        # A metric that says how strongly this rule's own premise holds. It scales
-        # the term through the same reference bounds the metric uses, so a rule
-        # whose premise is barely true contributes barely anything. Declared, not
-        # coded: nothing here knows which metric any rule names.
-        confidence = meta.get("confidence")
-        self.confidence = None if confidence is None else str(confidence)
-        params = meta.get("params") or {}
-        if not isinstance(params, dict):
-            raise CatalogError("%s: params is a block of NAME: number" % hid)
-        self.params: dict[str, Scalar] = dict(params)
-        self.params_section = Section({k: 0 if v is None else v
-                                       for k, v in self.params.items()})
         try:
-            self.when = _compiled(meta, "when")
-            self.require = _compiled(meta, "require")
-            self.bonus = _compiled(meta, "bonus")
-            self.penalty = _compiled(meta, "penalty")
-        except ExprError as error:
+            self.name = _text(meta, "name") or hid.replace("-", " ")
+            self.kind: Kind = _choice("kind", meta.get("kind"), KINDS)
+            self.category = _text(meta, "category") or "general"
+            self.metric = _text(meta, "metric")
+            direction = _given(meta, "direction")
+            self.direction = None if direction is None else _choice(
+                "direction", direction, DIRECTIONS)
+            # an absent weight reads 1, a blank one 0
+            self.weight = _number("weight", meta.get("weight", 1.0) or 0.0)
+            # A metric that says how strongly this rule's own premise holds. It
+            # scales the term through the same reference bounds the metric uses,
+            # so a rule whose premise is barely true contributes barely anything.
+            # Declared, not coded: nothing here knows which metric any rule names.
+            self.confidence = _text(meta, "confidence")
+            self.when = compile_expr(_text(meta, "when"))
+            self.require = compile_expr(_text(meta, "require"))
+            soft = _given(meta, "soft")
+            self.soft = soft is not None and _flag("soft", soft)
+            self.bonus = compile_expr(_text(meta, "bonus"))
+            self.penalty = compile_expr(_text(meta, "penalty"))
+            params = _given(meta, "params")
+            self.params = {} if params is None else _params(params)
+        except (CatalogError, ExprError) as error:
             raise CatalogError("%s: %s" % (hid, error)) from error
+        self.params_section = Section(dict(self.params))
         self._check()
 
     def _check(self) -> None:
@@ -165,7 +313,7 @@ class Strategy:
     def _check_heuristic(self, known: Mapping[str, str]) -> None:
         if self.kind != "heuristic" or not (self.metric or self.direction):
             return
-        if self.direction not in ("maximize", "minimize"):
+        if self.direction not in DIRECTIONS:
             raise CatalogError("%s: a heuristic needs direction maximize|minimize" % self.id)
         if not self.metric or self.metric not in known:
             raise CatalogError("%s: metric %r is not a registered fact key"
@@ -188,9 +336,10 @@ class Strategy:
         """What each kind may not carry."""
         if self.kind == "assumption" and (self.metric or self.expressions):
             raise CatalogError("%s: an assumption carries nothing to score" % self.id)
-        if self.kind == "heuristic" and (self.require is not None or self.bonus is not None):
+        if self.kind == "heuristic" and any(
+                expr is not None for expr in (self.require, self.bonus, self.penalty)):
             raise CatalogError("%s: a heuristic weighs a metric;"
-                               " require/bonus belong to a constraint"
+                               " require/bonus/penalty belong to a constraint"
                                % self.id)
         if self.kind == "constraint" and self.metric:
             raise CatalogError("%s: a constraint has no metric; that is a heuristic" % self.id)

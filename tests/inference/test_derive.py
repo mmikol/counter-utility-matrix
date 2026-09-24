@@ -136,12 +136,29 @@ def test_the_deriver_accepts_only_a_strategys_fields():
         derive.parse('{"fields": {"kind": "constraint"}, "reason": "r"}')
     parsed = derive.parse('{"fields": {"kind": "assumption"}, "reason": "r"}')
     assert parsed[0] == {"kind": "assumption"}
-    with pytest.raises(Refusal, match="params must be"):
-        derive.parse('{"fields": {"params": {"A": "1 == 1"}}, "reason": "r"}')
     fields, reason = derive.parse('{"fields": {"weight": 2, "params": {"A": 1.5}}, "reason": "r"}')
     assert fields == {"weight": 2, "params": {"A": 1.5}} and reason == "r"
     with pytest.raises(Refusal, match="does not parse"):     # an objection, not a crash
         derive.parse('{"fields": {"weight": 2,}}')
+
+
+def test_a_dial_that_is_no_finite_number_is_sent_back_as_the_objection(catalog_copy):
+    """JSON reads Infinity and NaN as numbers. tune.complete checks every
+    params.NAME by the rule the loader keeps, so the answer is refused, the
+    refusal goes back once, and the second answer is stored."""
+    _draft(catalog_copy)
+    answers = iter(['{"fields": {"bonus": "min(team.antiheal, 1) * params.A",'
+                    ' "params": {"A": Infinity}}, "reason": "r"}',
+                    '{"fields": {"bonus": "min(team.antiheal, 1) * params.A",'
+                    ' "params": {"A": 1.5}}, "reason": "r"}'])
+    seen = []
+    def runner(text):
+        seen.append(text)
+        return next(answers)
+    result = derive.derive(directory=catalog_copy, runner=runner, log=lambda m: None)
+    assert len(seen) == 2 and "a param must be a finite number" in seen[1]
+    assert result["derived"][0]["set"]["params.A"] == "1.5" and not result["failed"]
+    assert next(h for h in catalog.load(catalog_copy) if h.id == "heal-line").params == {"A": 1.5}
 
 
 def test_a_fault_past_the_answer_is_raised_and_never_sent_back_as_an_objection(

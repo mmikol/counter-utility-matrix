@@ -37,16 +37,15 @@ from db import Refusal
 from facts import compute
 from inference import catalog as catalog_module
 from inference import tune
-from inference.strategy import Form, Strategy
+from inference.strategy import MAX_NAME, TUNABLE, Form, Strategy
 
 CLI_CANDIDATES = ("claude",                                   # on PATH, any OS
                   os.path.expanduser("~/.local/bin/claude"))    # the native installer's default
 TIMEOUT = 300
 MAX_PER_RUN = 10            # drafts completed per run
 PROSE_CAP = 8000            # characters of a draft's prose shown to the model
-FIELDS = {
-    "metric", "direction", "weight", "when", "require", "soft", "bonus", "penalty",
-    "params", "kind", "category"}
+# what an answer may set: every field a writer sets, and the params block
+FIELDS = frozenset((*TUNABLE, "params"))
 DERIVED_BY = "claude -p (derive)"     # who asked, in the tuning log's line
 
 
@@ -176,24 +175,18 @@ name: %s
 kind: %s
 prose:
 %s
-""" % (fields, anchors, vocabulary(), draft.name[:120], draft.kind, draft.body[:PROSE_CAP])
+""" % (fields, anchors, vocabulary(), draft.name[:MAX_NAME], draft.kind, draft.body[:PROSE_CAP])
     if objection:
         text += ("\nYour previous answer was refused by the catalog: %s"
                  "\nFix it and answer with the JSON object again.\n" % objection)
     return text
 
 
-def _is_params(value: object) -> bool:
-    """NAME: number pairs, a bool not counted as a number."""
-    return isinstance(value, dict) and all(
-        isinstance(k, str) and isinstance(v, (int, float)) and not isinstance(v, bool)
-        for k, v in value.items())
-
-
 def parse(output: str) -> tuple[dict[str, object], str]:
     """The JSON object in the model's answer -> (fields, reason). An answer
     the catalog cannot take is a Refusal, which derive() sends back once as
-    the objection."""
+    the objection. The values are tune.complete's to check, by the rule the
+    loader keeps: a params that is not NAME: finite number is refused there."""
     m = re.search(r"\{.*\}", output, re.S)
     if not m:
         raise Refusal("no JSON object in the answer: %r" % output[:200])
@@ -209,9 +202,6 @@ def parse(output: str) -> tuple[dict[str, object], str]:
         raise Refusal("the answer sets fields a strategy does not have: %s" % sorted(unknown))
     if "kind" in fields and fields["kind"] != "assumption":
         raise Refusal("a draft keeps its kind unless it turns out to be an assumption")
-    params = fields.get("params")
-    if params is not None and not _is_params(params):
-        raise Refusal("params must be NAME: number")
     return fields, str(data.get("reason") or "derived from the prose")[:500]
 
 

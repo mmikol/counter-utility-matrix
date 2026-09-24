@@ -222,7 +222,14 @@ def test_a_constraint_is_a_limit_or_scored_and_an_assumption_is_prose(tmp_path):
                 "---\nname: b\nkind: rule\nrequire: team.tanks <= 2\n---\nx\n",
                 "---\nname: b\nkind: assumption\nrequire: team.tanks <= 2\n---\nx\n",
                 "---\nname: b\nkind: goal\ndirection: maximize\nmetric: team.tanks\n---\nx\n",
-                "---\nname: b\nkind: strategy\n---\nx\n"):
+                "---\nname: b\nkind: strategy\n---\nx\n",
+                # a penalty belongs to a constraint, with a metric or without one
+                "---\nname: b\nkind: heuristic\npenalty: 1\n---\nx\n",
+                "---\nname: b\nkind: heuristic\ndirection: maximize\nmetric: team.tanks\n"
+                "penalty: 1\n---\nx\n",
+                # a dial is NAME: a finite number
+                "---\nname: b\nkind: constraint\nbonus: params.X\nparams:\n  X: inf\n---\nx\n",
+                "---\nname: b\nkind: constraint\nbonus: params.x\nparams:\n  x: 1\n---\nx\n"):
         with pytest.raises(CatalogError):
             load_one(bad)
 
@@ -237,7 +244,8 @@ def test_weights_override_a_heuristic_for_one_board_and_never_the_file():
     assert catalog.parse_weights({"a": "3.5"}) == {"a": 3.5}
     # a malformed weight is refused, never dropped
     for malformed, said in ((["nonsense"], "id:value"), (["d:x"], "not a number"),
-                            ({"e": None}, "not a number")):
+                            ({"e": None}, "not a number"), (["d:nan"], "not a number"),
+                            (["e:inf"], "not a number")):
         with pytest.raises(Refusal, match=said):
             catalog.parse_weights(malformed)
     cat = catalog.load(FIXTURE_PLAYBOOK)
