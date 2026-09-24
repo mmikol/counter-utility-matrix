@@ -298,6 +298,34 @@ class Superseded(Refusal):
     caller has already asked for the board it wants."""
 
 
+class Latest:
+    """Latest wins, per client: each board request takes a ticket under its
+    client's name, and a ticket is superseded as soon as a newer one is taken
+    under the same name. A server hands the ticket to board() as
+    Brief.superseded, so a board the page has already moved past stops at
+    its next round instead of holding the pool."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._newest: dict[str, int] = {}
+
+    def take(self, client: str) -> Callable[[], bool]:
+        """A new ticket for `client`: a check that turns true once another
+        is taken under the same name."""
+        with self._lock:
+            mine = self._newest.get(client, 0) + 1
+            self._newest[client] = mine
+
+        def superseded() -> bool:
+            with self._lock:
+                return self._newest[client] != mine
+        return superseded
+
+
+# the page's boards, one lane per client, in whichever server solves them
+LATEST = Latest()
+
+
 class Watch:
     """One board's check against being superseded, and every future its
     searches submitted. Each round of each search calls check(): once the

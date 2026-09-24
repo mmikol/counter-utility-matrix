@@ -11,10 +11,10 @@ current blue picks as they stand. The records are result.py's, the prose
 plan.py's and the process pool parallel.py's.
 """
 
-import threading
 import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from concurrent.futures.process import BrokenProcessPool
+from math import comb
 from typing import NamedTuple
 
 from db import Refusal
@@ -26,7 +26,15 @@ from inference.result import Alternative, Board, Pick, Result
 from inference.scoring import Candidate, legal_shapes
 from inference.solver import Solved, Solver, Swept, evaluate_comp
 from ui.facts import board_facts, compute
-from ui.facts.draft import TEAM_SIZE, Draft, check_tanks, check_team_size, is_sided, opposite
+from ui.facts.draft import (
+    MAX_TANKS,
+    TEAM_SIZE,
+    Draft,
+    check_tanks,
+    check_team_size,
+    is_sided,
+    opposite,
+)
 from ui.facts.factset import FactSet
 from ui.facts.model import ROLES, Hero, Map, World
 
@@ -37,15 +45,36 @@ class SearchBounds(NamedTuple):
     top: int
 
 
+# the legal sixes one search may enumerate: a candidate holds about 1 KB while the
+# field is ranked, so this is about 540 MB of the inference container's 2 GiB
+FIELD_BUDGET = 500_000
+
+
+def field_size(pool: int) -> int:
+    """The legal sixes a search over `pool` candidates per role enumerates
+    with nothing locked and no shape limit but the queue's tanks: the sum
+    over the queue's shapes of the product of C(pool, need) per role."""
+    return sum(
+        comb(pool, t) * comb(pool, d) * comb(pool, TEAM_SIZE - t - d)
+        for t in range(MAX_TANKS + 1) for d in range(TEAM_SIZE - t + 1))
+
+
+# the most candidates per role whose field fits the budget: 10, 411,825 sixes
+POOL_CEILING = max(p for p in range(2, 13) if field_size(p) <= FIELD_BUDGET)
+
+
 def clamp_search(pool: str | float | None = None,
                  top: str | float | None = None) -> SearchBounds:
-    """Bounds on the search: pool 2..12 candidates per role, top 1..20
-    alternatives. Every door that takes the two from a caller - the MCP tools
-    and the HTTP service - passes them through here, so the search is bounded
-    by one definition. Junk raises Refusal, which every door answers as the
-    caller's error."""
+    """Bounds on the search: pool 2..POOL_CEILING candidates per role, top
+    1..20 alternatives. The pool is bounded by the field it would enumerate,
+    not by a round number: pool 12 is 1,345,960 legal sixes, which ran the
+    inference container out of memory. Every door that takes the two from a
+    caller - the MCP tools and the HTTP service - passes them through here,
+    so the search is bounded by one definition. Junk raises Refusal, which
+    every door answers as the caller's error."""
     try:
-        return SearchBounds(max(2, min(int(pool or 6), 12)), max(1, min(int(top or 5), 20)))
+        return SearchBounds(max(2, min(int(pool or 6), POOL_CEILING)),
+                            max(1, min(int(top or 5), 20)))
     except (TypeError, ValueError) as error:
         raise Refusal("pool and top must be numbers: %s" % error) from error
 
@@ -64,34 +93,6 @@ class Brief(NamedTuple):
     weights: Mapping[str, float] | None = None
     countered: bool = True
     superseded: Callable[[], bool] | None = None
-
-
-class Latest:
-    """Latest wins, per client: each board request takes a ticket under its
-    client's name, and a ticket is superseded as soon as a newer one is taken
-    under the same name. A server hands the ticket to board() as
-    Brief.superseded, so a board the page has already moved past stops at
-    its next round instead of holding the pool."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._newest: dict[str, int] = {}
-
-    def take(self, client: str) -> Callable[[], bool]:
-        """A new ticket for `client`: a check that turns true once another
-        is taken under the same name."""
-        with self._lock:
-            mine = self._newest.get(client, 0) + 1
-            self._newest[client] = mine
-
-        def superseded() -> bool:
-            with self._lock:
-                return self._newest[client] != mine
-        return superseded
-
-
-# the page's boards, one lane per client, in whichever server solves them
-LATEST = Latest()
 
 
 def _order(heroes: Iterable[Hero]) -> list[str]:

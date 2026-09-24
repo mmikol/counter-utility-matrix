@@ -38,16 +38,28 @@ def test_the_wire_refuses_a_team_of_seven_and_cuts_only_the_bans():
 def test_both_doors_bound_the_search_with_one_clamp():
     """A caller naming pool or top reaches the same bounds through the service
     as through the MCP tools: the engine owns the definition."""
-    from inference.engine import clamp_search
+    from inference.engine import POOL_CEILING, clamp_search
     assert clamp_search(None, None) == (6, 5)                  # the defaults
     assert clamp_search(0, 0) == (6, 5)                        # falsy reads as unset
     assert clamp_search(1, 0.5) == (2, 1)
-    assert clamp_search(99, 99) == (12, 20)
+    assert clamp_search(99, 99) == (POOL_CEILING, 20)
     assert clamp_search("8", "3") == (8, 3)                    # a query string is text
     for junk in ("x", [1], object()):                          # a refusal, not a crash
         with pytest.raises(Refusal, match="must be numbers"):
             clamp_search(junk)
     assert clamp_search([], []) == (6, 5)                      # empty is unset, like None
+
+
+def test_the_pool_is_bounded_by_the_field_it_would_enumerate():
+    """pool=12, the clamp's old maximum, ran the inference container out of
+    memory: 1,345,960 legal sixes at about a kilobyte each against 2 GiB. The
+    clamp caps the pool at the most candidates per role whose field fits the
+    budget, and the default pool is far inside it."""
+    from inference import engine
+    assert engine.field_size(6) == 13_101 and engine.field_size(12) == 1_345_960
+    pool, _ = engine.clamp_search(12)
+    assert engine.field_size(pool) <= engine.FIELD_BUDGET < engine.field_size(pool + 1)
+    assert pool == engine.POOL_CEILING == 10
 
 
 @pytest.mark.invariant

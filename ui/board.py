@@ -171,7 +171,7 @@ def api_infer(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
     # the page reads no countered case; a newer board from this page supersedes this one
     client = (query.get("client") or [""])[0]
     brief = inference_engine.Brief(weights=weights, countered=False,
-                                   superseded=inference_engine.LATEST.take(client))
+                                   superseded=parallel.LATEST.take(client))
     return inference_engine.board(world, draft, brief=brief).to_dict(), 200
 
 

@@ -68,7 +68,7 @@ def handle_board(cx: psycopg.Connection, query: Query) -> Answer:
     newer board from the same `client` (one lane when none is named)
     supersedes this one, which then answers 400."""
     draft = parse_board(query)
-    superseded = engine.LATEST.take(_first(query, "client") or "")
+    superseded = parallel.LATEST.take(_first(query, "client") or "")
     world = tables.load(cx)
     weights = catalog_module.parse_weights(query.get("weights", []))
     pool, _ = engine.clamp_search(_first(query, "pool"))

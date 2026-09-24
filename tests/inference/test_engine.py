@@ -262,7 +262,7 @@ def test_a_newer_board_from_the_same_client_supersedes_the_older_one(
     the older one under the same name only, and a board whose ticket is
     superseded stops before its first search, in this process too."""
     from inference import engine, parallel
-    latest = engine.Latest()
+    latest = parallel.Latest()
     first, elsewhere = latest.take("tab-1"), latest.take("tab-2")
     assert not first() and not elsewhere()
     second = latest.take("tab-1")
