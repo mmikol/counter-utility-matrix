@@ -9,7 +9,7 @@ stats, the missing abilities and the maps come from the wiki.
 
 import re
 from datetime import datetime
-from typing import TypedDict
+from typing import NamedTuple
 
 import psycopg
 from bs4 import BeautifulSoup, Tag
@@ -25,19 +25,22 @@ PAGE_POLICY = fetch.RequestPolicy(attempts=3)
 
 # --- extract: markup -> Python ---------------------------------------------
 
-class Subrole(TypedDict):
+class Subrole(NamedTuple):
+    """A subrole on the roster page and the passive it grants."""
     code: str
     role_code: str
     name: str
     passive_description: str
 
 
-class RoleIcons(TypedDict):
+class RoleIcons(NamedTuple):
+    """The icons the site's role and subrole filters draw."""
     roles: dict[str, str]           # code -> icon url
     subroles: dict[str, str]
 
 
-class RosterHero(TypedDict):
+class HeroCard(NamedTuple):
+    """A hero card on the roster page; portrait_url is None without one."""
     slug: str
     name: str
     role_code: str
@@ -45,13 +48,15 @@ class RosterHero(TypedDict):
     portrait_url: str | None
 
 
-class AbilityText(TypedDict):
+class AbilityText(NamedTuple):
+    """An ability slide of a hero page, at its carousel position."""
     name: str
     description: str
     position: int
 
 
-class PerkText(TypedDict):
+class PerkText(NamedTuple):
+    """A perk of a hero page: its tier, and its place within the tier."""
     tier_id: int
     name: str
     description: str
@@ -88,21 +93,21 @@ def parse_subroles(soup: BeautifulSoup) -> dict[str, Subrole]:
         if len(spans) != 2:
             continue
         code = attr(div, "data-subrole")
-        subroles[code] = {
-            "code": code,
-            "role_code": attr(div, "data-role"),
+        subroles[code] = Subrole(
+            code=code,
+            role_code=attr(div, "data-role"),
             # The label span reads "Tactician: ".
-            "name": spans[0].get_text(strip=True).rstrip(":").strip(),
-            "passive_description": node_text(spans[1]),
-        }
+            name=spans[0].get_text(strip=True).rstrip(":").strip(),
+            passive_description=node_text(spans[1]),
+        )
     if not subroles:
         raise BlizzardError("no subroles found on the heroes page")
     return subroles
 
 
 def parse_icons(soup: BeautifulSoup) -> RoleIcons:
-    """{'roles': {code: url}, 'subroles': {code: url}} - the icons the site's
-    own role and subrole filters draw. The board draws the role ones."""
+    """RoleIcons(roles={code: url}, subroles={code: url}) - the icons the
+    site's own role and subrole filters draw. The board draws the role ones."""
     roles: dict[str, str] = {}
     subroles: dict[str, str] = {}
     for option in soup.select("option.role[data-role]"):
@@ -117,12 +122,12 @@ def parse_icons(soup: BeautifulSoup) -> RoleIcons:
         icon = card.find("blz-card")
         if isinstance(icon, Tag) and icon.get("icon") and card.get("data-role"):
             roles.setdefault(attr(card, "data-role"), attr(icon, "icon"))
-    return {"roles": roles, "subroles": subroles}
+    return RoleIcons(roles=roles, subroles=subroles)
 
 
-def parse_roster(soup: BeautifulSoup) -> list[RosterHero]:
+def parse_roster(soup: BeautifulSoup) -> list[HeroCard]:
     """Every hero card: slug, name, role, subrole, portrait."""
-    heroes: list[RosterHero] = []
+    heroes: list[HeroCard] = []
     for card in soup.select("a.hero-card"):
         heading = card.find("h2", attrs={"slot": "heading"})
         href = attr(card, "href") if card.has_attr("href") else ""
@@ -130,15 +135,15 @@ def parse_roster(soup: BeautifulSoup) -> list[RosterHero]:
             raise BlizzardError("hero card missing a name or link: %r" % card.get("id"))
         portrait = card.find("blz-image", class_="heroCardPortrait")
         heroes.append(
-            {
-                "slug": href.rstrip("/").rsplit("/", 1)[-1],
-                "name": heading.get_text(strip=True),
-                "role_code": attr(card, "data-role"),
-                "subrole_code": attr(card, "data-subrole"),
-                "portrait_url": (attr(portrait, "src")
-                                 if isinstance(portrait, Tag) and portrait.has_attr("src")
-                                 else None),
-            }
+            HeroCard(
+                slug=href.rstrip("/").rsplit("/", 1)[-1],
+                name=heading.get_text(strip=True),
+                role_code=attr(card, "data-role"),
+                subrole_code=attr(card, "data-subrole"),
+                portrait_url=(attr(portrait, "src")
+                              if isinstance(portrait, Tag) and portrait.has_attr("src")
+                              else None),
+            )
         )
     if not heroes:
         raise BlizzardError("no hero cards found on the heroes page")
@@ -164,11 +169,11 @@ def parse_abilities(soup: BeautifulSoup, slug: str) -> list[AbilityText]:
         if heading is None or description is None:
             raise BlizzardError("%s: ability slide %d is malformed" % (slug, position))
         abilities.append(
-            {
-                "name": heading.get_text(strip=True),
-                "description": node_text(description),
-                "position": position,
-            }
+            AbilityText(
+                name=heading.get_text(strip=True),
+                description=node_text(description),
+                position=position,
+            )
         )
     return abilities
 
@@ -199,12 +204,12 @@ def parse_perks(soup: BeautifulSoup, slug: str) -> list[PerkText]:
             if heading is None or description is None:
                 raise BlizzardError("%s: malformed %s perk" % (slug, tier_code))
             perks.append(
-                {
-                    "tier_id": PERK_TIERS[tier_code],
-                    "name": heading.get_text(strip=True),
-                    "description": node_text(description),
-                    "position": position,
-                }
+                PerkText(
+                    tier_id=PERK_TIERS[tier_code],
+                    name=heading.get_text(strip=True),
+                    description=node_text(description),
+                    position=position,
+                )
             )
 
     if len(perks) != 4:
@@ -218,7 +223,7 @@ ROLE_NAMES = {"tank": "Tank", "damage": "Damage", "support": "Support"}
 
 
 def _store(
-        cursor: psycopg.Cursor, subroles: dict[str, Subrole], heroes: list[RosterHero],
+        cursor: psycopg.Cursor, subroles: dict[str, Subrole], heroes: list[HeroCard],
         abilities_by_slug: dict[str, list[AbilityText]], perks_by_slug: dict[str, list[PerkText]],
         icons: RoleIcons, cao: datetime) -> None:
     """Upsert the roles, subroles, heroes and each hero's abilities and perks."""
@@ -233,12 +238,12 @@ def _store(
             " icon_url = coalesce(EXCLUDED.icon_url, roles.icon_url),"
             " source_id = EXCLUDED.source_id, cao = now()"
             " RETURNING role_id",
-            (code, ROLE_NAMES[code], icons["roles"].get(code), source_id),
+            (code, ROLE_NAMES[code], icons.roles.get(code), source_id),
         )
         role_ids[code] = psql.scalar(cursor)
 
     subrole_ids: dict[str, int] = {}
-    for subrole in sorted(subroles.values(), key=lambda s: (s["role_code"], s["code"])):
+    for subrole in sorted(subroles.values(), key=lambda s: (s.role_code, s.code)):
         cursor.execute(
             "INSERT INTO subroles (role_id, code, name, passive_description,"
             " icon_url, source_id) VALUES (%s, %s, %s, %s, %s, %s)"
@@ -249,15 +254,15 @@ def _store(
             " source_id = EXCLUDED.source_id, cao = now()"
             " RETURNING subrole_id",
             (
-                role_ids[subrole["role_code"]],
-                subrole["code"],
-                subrole["name"],
-                subrole["passive_description"],
-                icons["subroles"].get(subrole["code"]),
+                role_ids[subrole.role_code],
+                subrole.code,
+                subrole.name,
+                subrole.passive_description,
+                icons.subroles.get(subrole.code),
                 source_id,
             ),
         )
-        subrole_ids[subrole["code"]] = psql.scalar(cursor)
+        subrole_ids[subrole.code] = psql.scalar(cursor)
 
     for hero in heroes:
         cursor.execute(
@@ -270,17 +275,17 @@ def _store(
             " source_id = EXCLUDED.source_id, cao = now()"
             " RETURNING hero_id",
             (
-                hero["slug"],
-                hero["name"],
-                role_ids[hero["role_code"]],
-                subrole_ids[hero["subrole_code"]],
-                hero["portrait_url"],
+                hero.slug,
+                hero.name,
+                role_ids[hero.role_code],
+                subrole_ids[hero.subrole_code],
+                hero.portrait_url,
                 source_id,
             ),
         )
         hero_id = psql.scalar(cursor)
 
-        for ability in abilities_by_slug.get(hero["slug"], ()):
+        for ability in abilities_by_slug.get(hero.slug, ()):
             cursor.execute(
                 # Upserting by name means a RENAMED ability collides with its
                 # own old row on (hero_id, position) and fails the stage. That
@@ -292,10 +297,10 @@ def _store(
                 " description = EXCLUDED.description,"
                 " position = EXCLUDED.position,"
                 " source_id = EXCLUDED.source_id, cao = now()",
-                (hero_id, ability["name"], ability["description"],
-                 ability["position"], source_id),
+                (hero_id, ability.name, ability.description,
+                 ability.position, source_id),
             )
-        for perk in perks_by_slug.get(hero["slug"], ()):
+        for perk in perks_by_slug.get(hero.slug, ()):
             cursor.execute(
                 "INSERT INTO perks (hero_id, tier_id, name, description, position,"
                 " source_id) VALUES (%s, %s, %s, %s, %s, %s)"
@@ -304,8 +309,8 @@ def _store(
                 " description = EXCLUDED.description,"
                 " position = EXCLUDED.position,"
                 " source_id = EXCLUDED.source_id, cao = now()",
-                (hero_id, perk["tier_id"], perk["name"], perk["description"],
-                 perk["position"], source_id),
+                (hero_id, perk.tier_id, perk.name, perk.description,
+                 perk.position, source_id),
             )
 
 
@@ -334,21 +339,21 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummar
     perks_by_slug: dict[str, list[PerkText]] = {}
     missing: list[str] = []
     for index, hero in enumerate(heroes, start=1):
-        slug = hero["slug"]
+        slug = hero.slug
         # only the fetch sits in the try: a changed page's BlizzardError fails the pull
         try:
             page = cached_get(pull, "%s/heroes/%s/" % (BASE_URL, slug), cache_key(slug),
                               policy=PAGE_POLICY)
         except fetch.FetchError as error:
             # the hero is still stored from the roster; its text stays as it was
-            missing.append("%s: %s" % (hero["name"], error))
-            pull.log("  [%2d/%d] %-18s %s" % (index, len(heroes), hero["name"], error))
+            missing.append("%s: %s" % (hero.name, error))
+            pull.log("  [%2d/%d] %-18s %s" % (index, len(heroes), hero.name, error))
             continue
         soup = BeautifulSoup(page, "html.parser")
         abilities_by_slug[slug] = parse_abilities(soup, slug)
         perks_by_slug[slug] = parse_perks(soup, slug)
         pull.log("  [%2d/%d] %-18s %d abilities, %d perks" % (
-            index, len(heroes), hero["name"],
+            index, len(heroes), hero.name,
             len(abilities_by_slug[slug]), len(perks_by_slug[slug])))
 
     cursor = connection.cursor()
@@ -359,7 +364,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummar
         "subroles": len(subroles),
         "abilities": sum(len(a) for a in abilities_by_slug.values()),
         "perks": sum(len(p) for p in perks_by_slug.values()),
-        "portraits": sum(1 for h in heroes if h["portrait_url"]),
+        "portraits": sum(1 for h in heroes if h.portrait_url),
         "missing": missing,
         "tables": ["roles", "subroles", "heroes", "abilities", "perks"],
     }

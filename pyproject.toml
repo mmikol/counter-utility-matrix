@@ -17,7 +17,7 @@ extend-exclude = ["db/psql/cluster", "db/raw", ".cache-*"]
 # function is deliberate and says so: `# noqa: PLC0415  # <why>`.
 # Every function carries full type annotations (mypy holds it, below), and a
 # record that crosses a module boundary is a dataclass, NamedTuple or
-# TypedDict, not a bare dict or tuple.
+# TypedDict, not a bare dict or tuple. CLAUDE.md's Style says which.
 select = ["E", "W", "F", "I", "B", "BLE", "C4", "SIM", "UP", "N", "RUF", "PIE", "PLC0415"]
 ignore = ["UP031", "UP032", "RUF001", "RUF002", "RUF003", "RUF012"]
 

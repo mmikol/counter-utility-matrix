@@ -11,7 +11,7 @@ release day.
 import contextlib
 import datetime
 import re
-from typing import NamedTuple, TypedDict
+from typing import NamedTuple
 
 from db.data.fetch import PullContext
 from db.data.names import ability_key
@@ -19,14 +19,16 @@ from db.data.wiki import fetch_articles, markup
 from db.data.wiki.kits.kit_rows import HeroKit, StatValue
 
 
-class HeroProfile(TypedDict):
+class HeroProfile(NamedTuple):
     """A hero's pools from its infobox, each None when it gives none."""
     health: int | None
     shield: int | None
     armor: int | None
 
 
-class Announcement(TypedDict):
+class Announcement(NamedTuple):
+    """An upcoming hero's role, subrole, health and release day, from its
+    article; health and the day are None where the article gives none."""
     role: str
     subrole: str
     health: int | None

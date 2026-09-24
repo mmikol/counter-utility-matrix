@@ -11,6 +11,7 @@ import requests
 import db
 from db.data import fetch
 from db.data.wiki.kits.hero_articles import (
+    Announcement,
     parse_announcement,
     supplement_from_wikitext,
     supplement_kits,
@@ -57,12 +58,11 @@ release in [[Season/2026|Season 5]] on October 6, 2026, which will make him the 
 
 def test_an_upcoming_article_yields_the_announcement_and_a_released_one_does_not():
     found = parse_announcement(UPCOMING)
-    assert found == {"role": "support", "subrole": "survivor", "health": 250,
-                     "release_date": datetime.date(2026, 10, 6)}
+    assert found == Announcement("support", "survivor", 250, datetime.date(2026, 10, 6))
     assert parse_announcement(UPCOMING.replace("{{Upcoming}}", "")) is None     # released
     assert parse_announcement(UPCOMING.replace("| role = Support", "")) is None  # no role, no row
     undated = parse_announcement(UPCOMING.replace("on October 6, 2026", "soon"))
-    assert undated and undated["release_date"] is None
+    assert undated and undated.release_date is None
 
 
 # --- the article supplement ------------------------------------------------------------

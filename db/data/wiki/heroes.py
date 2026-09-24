@@ -54,11 +54,11 @@ def _announce_heroes(
         if not found:
             continue
         cursor.execute("SELECT s.subrole_id, r.role_id FROM subroles s JOIN roles r USING (role_id)"
-                       " WHERE r.code = %s AND s.code = %s", (found["role"], found["subrole"]))
+                       " WHERE r.code = %s AND s.code = %s", (found.role, found.subrole))
         row = cursor.fetchone()
         if row is None:
             pull.log("announced hero %s: subrole %s/%s not on the roster yet, skipped" % (
-                hero_name, found["role"], found["subrole"]))
+                hero_name, found.role, found.subrole))
             continue
         subrole_id, role_id = row
         slug = re.sub(r"[^a-z0-9]+", "-", hero_name.lower()).strip("-")
@@ -69,13 +69,13 @@ def _announce_heroes(
             " health = coalesce(EXCLUDED.health, heroes.health), cao = now()"
             " RETURNING hero_id",
             (
-                slug, hero_name, role_id, subrole_id, found["health"], found["release_date"],
+                slug, hero_name, role_id, subrole_id, found.health, found.release_date,
                 source_id))
         hero_ids[hero_name.lower()] = psql.scalar(cursor)
         stored.append(hero_name)
         pull.log("announced hero stored: %s (%s, %s%s)" % (
-            hero_name, found["role"], found["subrole"],
-            ", releases %s" % found["release_date"] if found["release_date"] else ""))
+            hero_name, found.role, found.subrole,
+            ", releases %s" % found.release_date if found.release_date else ""))
     return stored, articles.missing
 
 

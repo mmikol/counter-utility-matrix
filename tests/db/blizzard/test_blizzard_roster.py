@@ -9,6 +9,10 @@ from db.data import fetch
 from db.data.blizzard import BlizzardError
 from db.data.blizzard import heroes as blizzard_heroes
 from db.data.blizzard.heroes import (
+    AbilityText,
+    HeroCard,
+    RoleIcons,
+    Subrole,
     node_text,
     parse_abilities,
     parse_icons,
@@ -77,10 +81,10 @@ def test_node_text_reads_the_words_and_takes_the_images_out_of_the_tree():
 def test_a_subrole_is_its_label_and_its_passive():
     # the one-span div is no subrole; the passive's icon is dropped
     assert parse_subroles(soup(ROSTER)) == {
-        "tactician": {"code": "tactician", "role_code": "support", "name": "Tactician",
-                      "passive_description": "Ult charge builds faster."},
-        "flanker": {"code": "flanker", "role_code": "damage", "name": "Flanker",
-                    "passive_description": "Health packs heal more."},
+        "tactician": Subrole(code="tactician", role_code="support", name="Tactician",
+                             passive_description="Ult charge builds faster."),
+        "flanker": Subrole(code="flanker", role_code="damage", name="Flanker",
+                           passive_description="Health packs heal more."),
     }
 
 
@@ -93,21 +97,19 @@ def test_a_filter_icon_beats_the_card_icon():
     # bare, single- and double-quoted url() all read; all-heroes is no role,
     # a styleless option draws nothing, and a role with no filter icon falls
     # back to its cards' icon
-    assert parse_icons(soup(ROSTER)) == {
-        "roles": {"tank": "tank.svg", "damage": "damage.svg", "support": "support.svg"},
-        "subroles": {"flanker": "flanker.png"},
-    }
+    assert parse_icons(soup(ROSTER)) == RoleIcons(
+        roles={"tank": "tank.svg", "damage": "damage.svg", "support": "support.svg"},
+        subroles={"flanker": "flanker.png"},
+    )
 
 
 def test_a_hero_card_gives_the_slug_its_link_ends_in():
     # with or without a trailing slash; no portrait is None
     assert parse_roster(soup(ROSTER)) == [
-        {
-            "slug": "ana", "name": "Ana", "role_code": "support", "subrole_code": "tactician",
-            "portrait_url": "ana.png"},
-        {
-            "slug": "tracer", "name": "Tracer", "role_code": "damage", "subrole_code": "flanker",
-            "portrait_url": None},
+        HeroCard(slug="ana", name="Ana", role_code="support", subrole_code="tactician",
+                 portrait_url="ana.png"),
+        HeroCard(slug="tracer", name="Tracer", role_code="damage", subrole_code="flanker",
+                 portrait_url=None),
     ]
 
 
@@ -152,10 +154,9 @@ HERO = CAROUSEL + PERKS + STADIUM
 
 def test_a_hero_page_gives_its_abilities_in_carousel_order():
     assert parse_abilities(soup(HERO), "ana") == [
-        {
-            "name": "Biotic Rifle", "description": "Long-range rifle that heals allies.",
-            "position": 0},
-        {"name": "Sleep Dart", "description": "Puts an enemy to sleep.", "position": 1},
+        AbilityText(name="Biotic Rifle", description="Long-range rifle that heals allies.",
+                    position=0),
+        AbilityText(name="Sleep Dart", description="Puts an enemy to sleep.", position=1),
     ]
 
 
@@ -174,9 +175,9 @@ def test_a_malformed_hero_page_is_refused_by_name(page, reason):
 
 def test_stadium_powers_are_not_read_as_perks():
     perks = parse_perks(soup(HERO), "ana")
-    assert [(p["tier_id"], p["position"], p["name"]) for p in perks] == [
+    assert [(p.tier_id, p.position, p.name) for p in perks] == [
         (1, 1, "Shrike"), (1, 2, "Speed Serum"), (2, 1, "Headhunter"), (2, 2, "Biotic Bounce")]
-    assert perks[0]["description"] == "Sleep Dart recharges faster."
+    assert perks[0].description == "Sleep Dart recharges faster."
 
 
 @pytest.mark.parametrize("page, reason", [

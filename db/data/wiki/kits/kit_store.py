@@ -364,7 +364,7 @@ def store(
         cursor.execute(
             "UPDATE heroes SET health = %s, shield = %s, armor = %s"
             " WHERE hero_id = %s",
-            (profile["health"], profile["shield"], profile["armor"], hero_id),
+            (profile.health, profile.shield, profile.armor, hero_id),
         )
         tally.health += cursor.rowcount
 
