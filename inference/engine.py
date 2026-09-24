@@ -37,6 +37,7 @@ from inference.solver import (
 )
 from ui.facts import compute
 from ui.facts import engine as facts_engine
+from ui.facts.compute import text
 from ui.facts.draft import TEAM_SIZE, is_sided, opposite
 from ui.facts.engine import Fact, FactSet
 from ui.facts.model import ROLES, Hero, Map, World
@@ -268,7 +269,7 @@ def _fill(result: Result, cand: Candidate, fs: FactSet, solver: Solver) -> None:
     result.facts = fs
     result.considered = solver.considered
     team = cand.ns["team"]
-    result.playstyle = team["style_lean"] or team["style_top"] or ""
+    result.playstyle = text(team["style_lean"]) or text(team["style_top"])
     locked = set(result.locked)
     for h in sorted(cand.heroes, key=lambda h: (ROLES.index(h.role), h.name)):
         why, evidence = _reasons(fs, h.name, h.name in locked)
@@ -686,7 +687,7 @@ def _plan(world: World, m: Map | None, side: str, bans: Sequence[str],
     if red_h:
         n = len(red_h)
         theirs = compute.team_metrics(world, red_h, m, [])
-        red_lean = theirs["style_lean"] or theirs["style_top"] or ""
+        red_lean = text(theirs["style_lean"]) or text(theirs["style_top"])
         them = "Their %d pick%s%s (%s)" % (n, "" if n == 1 else "s",
                                             " so far" if n < TEAM_SIZE else "",
                                             ", ".join(h.name for h in red_h))

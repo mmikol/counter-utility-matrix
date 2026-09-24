@@ -46,7 +46,7 @@ class Section:
     compute fills every key it declares with a number, a name or a list,
     never None."""
 
-    def __init__(self, values: dict[str, object]) -> None:
+    def __init__[V](self, values: dict[str, V]) -> None:
         self.__dict__ = values
 
     def __getattr__(self, key: str) -> int:
@@ -207,7 +207,7 @@ class Expr:
 
     # --- evaluation ----------------------------------------------------------
 
-    def evaluate(self, namespace: Mapping[str, dict[str, object]] | Scope) -> Value:
+    def evaluate[V](self, namespace: Mapping[str, dict[str, V]] | Scope) -> Value:
         """Evaluate against {"team": {...}, ...}; a Scope is used as is."""
         scope = namespace if isinstance(namespace, Scope) else Scope(
             (k, Section(v)) for k, v in namespace.items())
@@ -232,7 +232,7 @@ _RULES: dict[type[ast.AST], Callable[..., Iterable[ast.AST]]] = {
 _GLOBALS: dict[str, object] = dict(FUNCTIONS, __builtins__={})
 
 
-def scope(namespace: Mapping[str, dict[str, object]]) -> Scope:
+def scope[V](namespace: Mapping[str, dict[str, V]]) -> Scope:
     """A reusable Scope for many evaluations over one candidate; the caller
     sets its `params` slot per strategy."""
     return Scope((k, Section(v)) for k, v in namespace.items())

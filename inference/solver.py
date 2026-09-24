@@ -35,9 +35,9 @@ from typing import Any
 from inference.catalog import BOARD_SECTIONS, Strategy
 from inference.expr import Expr, Scope, Value, scope
 from ui.facts import compute
-from ui.facts.compute import ROLE_COUNT
+from ui.facts.compute import MetricBag, number
 from ui.facts.draft import TEAM_SIZE
-from ui.facts.model import Hero, Map, World
+from ui.facts.model import ROLES, Hero, Map, World
 
 REFERENCE_SIZE = 1200
 PARTNER_POINTS = 0.5              # a locked partner's worth when ranking a pool
@@ -56,13 +56,12 @@ SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size",
 # the namespaces that do not change across the candidates of one board
 STATIC_SECTIONS = BOARD_SECTIONS
 
-# The shapes the search passes around. A metric bag holds numbers, names and
-# lists, and a contribution's keys vary with its strategy's form; both are
-# the payload's JSON as score() and compute build it.
+# The shapes the search passes around. A namespace is the metric bags by
+# section; a contribution's keys vary with its strategy's form, and it is
+# the payload's JSON as score() builds it.
 Shape = tuple[int, int, int]                    # tanks, damage, supports
 Bounds = dict[str, tuple[float, float]]         # id, or id + CONFIDENCE_KEY -> low, high
 Tally = dict[int, list[int]]                    # hero id -> [summed millionths, sixes]
-MetricBag = dict[str, Any]
 Namespace = dict[str, MetricBag]
 Contribution = dict[str, Any]
 # one heuristic's frozen scale for the scoring loop: the strategy, its low and
@@ -244,7 +243,7 @@ class Solver:
                     gate = held[slot] = when is None or bool(when.evaluate(sc))
             if gate:
                 value = ns.get(section, _EMPTY).get(key)
-                keep(float(value) if value else 0.0)
+                keep(float(number(value)) if value else 0.0)
             else:
                 keep(None)
         cand.raw = raw
@@ -254,9 +253,9 @@ class Solver:
                 confidence.append(None)
                 continue
             value = ns.get(spec[0], _EMPTY).get(spec[1])
-            confidence.append(float(value) if value else 0.0)
+            confidence.append(float(number(value)) if value else 0.0)
         cand.confidence = confidence
-        cand.tiebreak = ns["team"]["map_win_mean"]
+        cand.tiebreak = number(ns["team"]["map_win_mean"])
         return cand
 
     @staticmethod
@@ -298,7 +297,7 @@ class Solver:
         by_role = {r: sorted((h for h in self.world.heroes.values()    # by id: the draw must
                               if h.role == r and h.released),          # not hang on a
                              key=lambda h: h.id)                       # query's row order
-                   for r in ROLE_COUNT}
+                   for r in ROLES}
         shapes = legal_shapes(self.catalog)
         # bans can empty a role past what a shape needs; drawing one then raises
         shapes = [(t, d, s) for t, d, s in shapes
@@ -331,9 +330,9 @@ class Solver:
         """
         section, key = spec
         if section == "map":
-            over = [compute.map_metrics(m, self.side, ban_count=len(self.banned)).get(key)
-                    for m in self.world.maps.values()]
-            over = [float(v) for v in over if v is not None]
+            readings = [compute.map_metrics(m, self.side, ban_count=len(self.banned)).get(key)
+                        for m in self.world.maps.values()]
+            over = [float(number(v)) for v in readings if v is not None]
             return (min(over), max(over)) if over else (0.0, 0.0)
         seen = [value for c in prepared if (value := c.confidence[index]) is not None]
         return (min(seen), max(seen)) if seen else (0.0, 0.0)
@@ -390,7 +389,7 @@ class Solver:
         board, and a scale that moved with either would make a current comp and
         the optimal it is a share of two different numbers."""
         ranked: dict[str, list[Hero]] = {}
-        for role in ROLE_COUNT:
+        for role in ROLES:
             # not filtered by the bans, on purpose, exactly as sample() is not:
             # this field is half the population that fixes the scale, and a ban
             # that moved it would move the score of an unchanged six. Bans keep
@@ -600,7 +599,7 @@ class Solver:
         """(tanks, damage, supports) triples the shape-only hard limits
         allow, that can still seat the locked picks."""
         return legal_shapes(self.catalog, {r: sum(1 for h in self.locked if h.role == r)
-                                           for r in ROLE_COUNT})
+                                           for r in ROLES})
 
     def prior(self, h: Hero) -> float:
         """The ranking that cut the pools before the playbook ranked them
@@ -617,7 +616,7 @@ class Solver:
     def pools(self) -> dict[str, list[Hero]]:
         locked_ids = {h.id for h in self.locked} | self.banned
         pools: dict[str, list[Hero]] = {}
-        for role in ROLE_COUNT:
+        for role in ROLES:
             heroes = [h for h in self.world.heroes.values()      # announced heroes wait
                       if h.role == role and h.released and h.id not in locked_ids]
             heroes.sort(key=self._pool_key)
@@ -639,7 +638,7 @@ class Solver:
         bans, so no two of these are the same set. Lazy: a slice of the search
         builds candidates for its own positions and walks past the rest."""
         pools = self.pools()
-        locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLE_COUNT}
+        locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLES}
         for t, d, s in self.shapes():
             need = {"tank": t - len(locked_by_role["tank"]),
                     "damage": d - len(locked_by_role["damage"]),
@@ -784,15 +783,15 @@ class Solver:
         confining the draw is what makes a couple of dozen starts enough."""
         locked_ids = {h.id for h in self.locked}
         by_role = {r: [h for h in roster if h.role == r and h.id not in locked_ids]
-                   for r in ROLE_COUNT}
-        locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLE_COUNT}
-        shape = {r: sum(1 for h in leader.heroes if h.role == r) for r in ROLE_COUNT}
+                   for r in ROLES}
+        locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLES}
+        shape = {r: sum(1 for h in leader.heroes if h.role == r) for r in ROLES}
         rng = random.Random("restart|%s|%s" % (self.m.id if self.m else 0, self.side))
         best = leader
         for _ in range(n):
             heroes: list[Hero] = []
             short = False                     # a role with too few heroes for the shape
-            for role in ROLE_COUNT:
+            for role in ROLES:
                 need = shape[role] - len(locked_by_role[role])
                 if not 0 <= need <= len(by_role[role]):
                     short = True
@@ -883,7 +882,7 @@ def legal_shapes(catalog: Iterable[Strategy],
     2-2-2) - optionally only those that can still seat the picks counted per
     role. The board carries the full list so the roster can refuse a pick no
     legal six could seat."""
-    locked_counts = locked_counts or dict.fromkeys(ROLE_COUNT, 0)
+    locked_counts = locked_counts or dict.fromkeys(ROLES, 0)
     shape_constraints = [(h, h.require) for h in catalog
                          if h.form == "limit" and not h.soft and h.require
                          and set(h.require.names) <= SHAPE_KEYS
