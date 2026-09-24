@@ -252,7 +252,7 @@ class Solver(Objective):
 
     def _climb(self, seed: Candidate, roster: Sequence[Hero],
                 known: dict[frozenset[int], Candidate]) -> Candidate:
-        """Single-slot swaps from one six until none improves it."""
+        """Single-slot swaps from one six until none ranks above it."""
         locked_ids = {h.id for h in self.locked}
         current = seed
         while True:
@@ -266,7 +266,7 @@ class Solver(Objective):
                     heroes = list(current.heroes)
                     heroes[index] = other
                     cand = self._try(heroes, known)
-                    if cand is not None and cand.score > best.score + 1e-9:
+                    if cand is not None and _beats(cand, best):
                         best = cand
             if best is current:
                 return current
@@ -300,7 +300,7 @@ class Solver(Objective):
             if cand is None:
                 continue
             cand = self._climb(cand, roster, known)
-            if cand.score > best.score + 1e-9:
+            if _beats(cand, best):
                 best = cand
         return best
 
@@ -314,7 +314,7 @@ class Solver(Objective):
             best = current
             for heroes in _two_swaps(current, roster, locked_ids):
                 cand = self._try(heroes, known)
-                if cand is not None and cand.score > best.score + 1e-9:
+                if cand is not None and _beats(cand, best):
                     best = cand
             if best is current:
                 return current
@@ -352,9 +352,20 @@ class Solver(Objective):
                 heroes = list(seed.heroes)
                 heroes[i], heroes[j] = a, b
                 cand = self._try(heroes, known)
-                if cand is not None and cand.score > best.score + 1e-9:
+                if cand is not None and _beats(cand, best):
                     best = cand
         return best
+
+
+def _beats(cand: Candidate, best: Candidate) -> bool:
+    """Whether a six ranks above another in the order rank() sorts by: score,
+    then tie-break, then names. A search that moved on score alone stood still
+    wherever sixes tie - everywhere, under a playbook that scores nothing - and
+    never met the better tie-break a swap away, so a fill that kept the
+    optimal's own picks came back a different six."""
+    if cand.score != best.score:
+        return cand.score > best.score
+    return Solver._rank_key(cand) < Solver._rank_key(best)
 
 
 def _two_swaps(current: Candidate, roster: Sequence[Hero],

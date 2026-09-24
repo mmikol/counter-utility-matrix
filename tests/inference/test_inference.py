@@ -1081,6 +1081,22 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
 
 
 @pytest.mark.invariant
+def test_the_fill_is_the_optimal_whenever_the_optimal_holds_every_lock(world):
+    """Locking a hero of the optimal six leaves the optimal six the best one
+    that keeps the lock, so the fill must find it again. Under the shipped
+    playbook every six scores zero and only the tie-break tells them apart: a
+    search that moved on score alone stood still there, and locking Reinhardt
+    on King's Row came back with Mizuki for Juno."""
+    from inference import engine
+    shipped = catalog.load()
+    for map_name in ("King's Row", "Ilios"):
+        best = engine.infer(world, map_name, [], [], catalog=shipped)
+        for hero in best.blue:
+            fill = engine.infer(world, map_name, [], [hero], catalog=shipped)
+            assert fill.blue == best.blue, (map_name, hero, fill.blue)
+
+
+@pytest.mark.invariant
 def test_a_ban_does_not_rescale_the_board(world):
     """The reference sample fixes every heuristic's [lo, hi], so it must not
     depend on the bans: banning a hero on neither team would otherwise move the
