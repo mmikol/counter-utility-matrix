@@ -8,21 +8,20 @@ python -m door.mcp call NAME [JSON-ARGS]  run one tool and print its text"""
 import json
 import sys
 from collections.abc import Callable
-from typing import cast
 
 from db import Refusal, psql
-from door.mcp import http, stdio, tools
-from door.mcp.lifecycle import DbStatus
+from door.mcp import http, lifecycle, stdio, tools
 from door.mcp.server import Server
 
 
 def _status(ctx: tools.Context) -> Callable[[], dict[str, object]]:
     """The data container's /health: the database's state and counts, or
-    degraded with the reason when the database is out of reach."""
+    degraded with the reason when the database is out of reach. It reads
+    the database directly, not through the door - a read writes nothing -
+    so a healthcheck leaves no audit line."""
     def status() -> dict[str, object]:
         try:
-            # the tool is named, so its payload is the one db_status builds
-            found = cast(DbStatus, ctx.call("db_status").data)
+            found = lifecycle.read_status(ctx)
             return {"status": "ok", "state": found["state"],
                     "table_count": found["table_count"],
                     "pending_migrations": found["pending_migrations"],

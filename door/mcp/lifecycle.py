@@ -35,9 +35,10 @@ class Snapshot(TypedDict):
 
 
 class DbStatus(TypedDict):
-    """db_status's payload: the database (its password left out), how ready
-    it is, its tables and row counts, the rates snapshots it holds and the
-    migrations it has not seen. The data container's /health reads it."""
+    """The database (its password left out), how ready it is, its tables and
+    row counts, the rates snapshots it holds and the migrations it has not
+    seen: db_status's payload, and what the data container's /health reads
+    through read_status."""
     dsn: str
     state: schema.State
     table_count: int
@@ -52,11 +53,10 @@ COUNTED = (
     "heroes", "abilities", "maps", "hero_meta", "map_meta", "counters", "synergies", "strategies")
 
 
-@tool(
-    "db_status", "Which database the tools are pointed at, its state (empty,"
-    " stale, unfilled or current - what the containers wait on), its table and"
-    " row counts, and the rates snapshots it holds.")
-def db_status(ctx: Context) -> ToolReply:
+def read_status(ctx: Context) -> DbStatus:
+    """The database the context points at, read directly: a read, so it
+    goes around the door and leaves no audit line. db_status words it, and
+    the data container's /health reads it on every healthcheck."""
     with ctx.connect() as cx:
         ready = schema.state(cx)
         tables = schema.table_count(cx)
@@ -66,16 +66,26 @@ def db_status(ctx: Context) -> ToolReply:
             counts = _counts(cx)
             snaps = _snapshots(cx)
         missing = schema.pending(cx) if tables else []
-    dsn = re.sub(r"//[^@/]*@", "//", ctx.dsn)
-    newest = max((s["captured"] for s in snaps), default=None)
+    return DbStatus(
+        dsn=re.sub(r"//[^@/]*@", "//", ctx.dsn), state=ready, table_count=tables, counts=counts,
+        snapshots=snaps, newest_capture=max((s["captured"] for s in snaps), default=None),
+        pending_migrations=missing)
+
+
+@tool(
+    "db_status", "Which database the tools are pointed at, its state (empty,"
+    " stale, unfilled or current - what the containers wait on), its table and"
+    " row counts, and the rates snapshots it holds.")
+def db_status(ctx: Context) -> ToolReply:
+    status = read_status(ctx)
+    newest, missing = status["newest_capture"], status["pending_migrations"]
     text = "database: %s\nstate: %s\ntables: %d\n%s\nsnapshots: %d%s%s" % (
-        dsn, ready, tables, "\n".join("  %-16s %d" % kv for kv in counts.items()),
-        len(snaps), ", newest capture %s" % newest if newest else "",
+        status["dsn"], status["state"], status["table_count"],
+        "\n".join("  %-16s %d" % kv for kv in status["counts"].items()),
+        len(status["snapshots"]), ", newest capture %s" % newest if newest else "",
         "\nPENDING MIGRATIONS (rebuild): %s" % ", ".join(missing)
         if missing else "")
-    return ToolReply(text, DbStatus(
-        dsn=dsn, state=ready, table_count=tables, counts=counts, snapshots=snaps,
-        newest_capture=newest, pending_migrations=missing))
+    return ToolReply(text, status)
 
 
 def _counts(cx: psycopg.Connection) -> dict[str, int]:

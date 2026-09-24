@@ -78,7 +78,8 @@ calls per client address per minute (the limit is per address, not per
 claimed session id) and answers 429 past that, and - when
 `COUNTRIX_MCP_TOKEN` is set in `.env` - requires
 `Authorization: Bearer <token>` on every call (the session sends it from
-`.mcp.json`; `/health` stays open for the healthchecks). Every tool call is
+`.mcp.json`; `/health` stays open for the healthchecks, and reads the
+database's state directly, leaving no audit line). Every tool call is
 one line in the audit log `db/raw/audit.jsonl`: when, transport (`stdio`,
 `http` or `in-process`, the last being the refresher's and the shell's
 direct calls), client, tool, each argument's name with its size or, for a

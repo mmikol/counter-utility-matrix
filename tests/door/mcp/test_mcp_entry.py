@@ -8,7 +8,7 @@ import json
 import pytest
 
 from db import Refusal, psql
-from door.mcp import tools
+from door.mcp import lifecycle, tools
 from door.mcp.__main__ import _status, main
 
 
@@ -39,8 +39,10 @@ def test_the_entry_point_calls_a_tool(capsys, dsn, monkeypatch):
 def test_health_is_degraded_when_the_database_is_out_of_reach_and_crashes_otherwise(
         tmp_path, monkeypatch):
     """The data container's /health answers degraded for every way the database
-    can be out of reach, and nothing else: a bug in the tool still surfaces."""
-    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
+    can be out of reach, and nothing else: a bug in the read still surfaces.
+    It reads the database directly, so a healthcheck leaves no audit line."""
+    path = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(path))
     status = _status(tools.Context(dsn="postgresql://nobody@127.0.0.1:9/nowhere"))
     reply = status()
     assert reply["status"] == "degraded" and reply["error"]
@@ -51,11 +53,12 @@ def test_health_is_degraded_when_the_database_is_out_of_reach_and_crashes_otherw
     reply = _status(tools.Context())()
     assert reply["status"] == "degraded" and "no embedded cluster" in reply["error"]
 
-    def broken(ctx, name, /, **arguments):
-        raise RuntimeError("a bug in db_status")
-    monkeypatch.setattr(tools.Context, "call", broken)
+    def broken(ctx):
+        raise RuntimeError("a bug in read_status")
+    monkeypatch.setattr(lifecycle, "read_status", broken)
     with pytest.raises(RuntimeError, match="a bug"):
         status()
+    assert not path.exists()
 
 
 def test_an_in_process_call_is_validated_against_the_tools_schema(tmp_path, monkeypatch):

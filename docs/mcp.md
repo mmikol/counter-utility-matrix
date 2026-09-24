@@ -49,8 +49,9 @@ surface over HTTP (`http.py`) with a `Mcp-Session-Id`
 per client, the Host-and-Origin guard all three servers share
 (`db/web.py`), `GET /health` for the containers' healthchecks - the
 database's state (`db.psql.schema.state`: empty, stale, unfilled or
-current) and its counts, or degraded when it is out of reach - and `405`
-on a bare `GET /mcp`. The methods:
+current) and its counts, or degraded when it is out of reach, read
+directly and not through a tool, so a healthcheck leaves no audit line -
+and `405` on a bare `GET /mcp`. The methods:
 `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`,
 `resources/read`, `resources/templates/list`, and an empty
 `prompts/list`. It logs to stderr, since stdout is the wire.
@@ -119,7 +120,7 @@ The servers and the transports are above, the tool reference below.
 | `registry.py` | The one registry every family declares its tools into (`REGISTRY`, its decorator `tool`). A `ToolSpec` is a tool as registered: name, description, JSON schema, function, its family - the module the function is defined in - and for a pull the source it reads. `Registry` lists the tools family by family in `FAMILIES`' order, whichever family imports first, refuses a name twice and derives the pulls; `run` is the audited in-process call, `write_docs` the tool reference below. `Context` is where a call lands - the database, the page caches, the log - and carries the registry, through which one tool calls another. |
 | `tools.py` | Every family imported, so the registry is whole. It re-exports `REGISTRY`, `Context`, `Log`, `NoSuchToolError` and `StrategyResources` for the servers, the refresher, the shell and the board; the in-process call is `Context.call`. |
 | `pulls.py` | `list_sources`, the ten `pull_*` tools in dependency order (one source and domain each, each stated once through `pull_tool`), `load_authored`, `sync_all`. |
-| `lifecycle.py` | The database's life: `db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, and read-only `query`, which says when it cut rows. |
+| `lifecycle.py` | The database's life: `db_status` over `read_status`, which `/health` reads without the door, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, and read-only `query`, which says when it cut rows. |
 | `boards.py` | `BOARD`, the five properties every board tool takes, and `board_tool`, which registers a tool over them and hands its function the one `Draft` they name. |
 | `facts.py` | The facts layer through the door: `roster` and the board tool `facts`. |
 | `solver.py` | The inference layer through the door: the board tools `infer`, `evaluate` and `board`, and `reach`. |
