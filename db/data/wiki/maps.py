@@ -70,7 +70,7 @@ def parse_modes_and_maps(text: str) -> list[Mode]:
             if link:
                 maps.append(link.group(1).strip())
 
-        modes.append(Mode(code, MODE_NAMES[code], maps))
+        modes.append(Mode(code=code, name=MODE_NAMES[code], maps=maps))
 
     if not modes:
         raise WikiError("Maps: no mode galleries found in Standard Play")

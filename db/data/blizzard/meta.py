@@ -55,9 +55,8 @@ def parse_rows(html: str) -> list[RateRow]:
         name = cells.get("name")
         if not name:
             continue
-        stats.append(
-            RateRow(name, cells.get("winrate"), cells.get("pickrate"), cells.get("banrate"))
-        )
+        stats.append(RateRow(name=name, win_rate=cells.get("winrate"),
+                             pick_rate=cells.get("pickrate"), ban_rate=cells.get("banrate")))
     if not stats:
         raise RatesError("data table held no hero rows")
     return stats

@@ -377,7 +377,7 @@ def _cohesion(world: World, heroes: list[Hero]) -> MetricBag:
         for b in heroes[i + 1:]:
             edge = world.synergy(a.id, b.id)
             if edge:
-                pairs.append(SynergyPair(a.name, b.name, edge.score or 0))
+                pairs.append(SynergyPair(first=a.name, second=b.name, score=edge.score or 0))
                 adjacency[a.id].add(b.id)
                 adjacency[b.id].add(a.id)
     possible = n * (n - 1) // 2

@@ -108,8 +108,9 @@ class Column:
     ratings: tuple[str, ...]
 
 
-SYNERGY = Column("synergy", 2, "synergy", ("synergy_rating",))
-MATCHUP = Column("match", 1, "matchup", ("rating", "risk"))
+SYNERGY = Column(heading="synergy", position=2, parameter="synergy",
+                 ratings=("synergy_rating",))
+MATCHUP = Column(heading="match", position=1, parameter="matchup", ratings=("rating", "risk"))
 
 
 def _table_rows(table: str, heading: str, position: int) -> Iterator[tuple[str, str]]:

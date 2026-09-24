@@ -56,7 +56,7 @@ _EMPTY: MetricBag = {}
 def _split_key(key: str | None) -> MetricKey:
     """A dotted metric key -> (namespace, key)."""
     section, _, name = (key or "").partition(".")
-    return MetricKey(section, name)
+    return MetricKey(section=section, key=name)
 
 
 def _not_a_number(value: MetricValue | None) -> float:

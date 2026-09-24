@@ -65,7 +65,7 @@ def read_migrations() -> list[Migration]:
     migrations = []
     for path in sorted(glob.glob(os.path.join(MIGRATIONS_DIR, "*.sql"))):
         with open(path, encoding="utf-8") as handle:
-            migrations.append(Migration(path, handle.read()))
+            migrations.append(Migration(path=path, sql=handle.read()))
     if not migrations:
         raise SchemaError("no migrations found in %s/" % MIGRATIONS_DIR)
     return migrations
@@ -180,7 +180,7 @@ class TableOrigin(NamedTuple):
     prose: str
 
 
-NO_ORIGIN = TableOrigin("", "")      # a table no migration's text creates
+NO_ORIGIN = TableOrigin(migration="", prose="")      # a table no migration's text creates
 
 
 def table_prose(text: str) -> dict[str, str]:
@@ -210,7 +210,7 @@ def _migration_tables() -> dict[str, TableOrigin]:
     out: dict[str, TableOrigin] = {}
     for migration in read_migrations():
         for table, prose in table_prose(migration.sql).items():
-            out[table] = TableOrigin(migration.name, prose)
+            out[table] = TableOrigin(migration=migration.name, prose=prose)
         # a later COMMENT ON TABLE rewrites the prose: a statement in an applied
         # migration is never edited, so this is how a stored description is
         # corrected
@@ -236,7 +236,8 @@ def _foreign_keys(connection: psycopg.Connection) -> list[ForeignKey]:
         " ORDER BY 1, 2, 5, 3, 4").fetchall()
     # a column under two keys (its own, and part of a composite) is documented
     # by the narrower one; the composite still draws its edge in the diagram
-    return [ForeignKey(c, col, p, pc) for c, col, p, pc, _ in rows]
+    return [ForeignKey(child=child, column=column, parent=parent, parent_column=parent_column)
+            for child, column, parent, parent_column, _ in rows]
 
 
 def _columns(connection: psycopg.Connection, table: str) -> list[Column]:
@@ -245,7 +246,8 @@ def _columns(connection: psycopg.Connection, table: str) -> list[Column]:
         "SELECT column_name, data_type, is_nullable FROM information_schema.columns"
         " WHERE table_schema='public' AND table_name=%s ORDER BY ordinal_position",
         (table,)).fetchall()
-    return [Column(name, data_type, nullable == "YES") for name, data_type, nullable in rows]
+    return [Column(name=name, data_type=data_type, nullable=nullable == "YES")
+            for name, data_type, nullable in rows]
 
 
 def _edges(fks: list[ForeignKey], keep: Callable[[str], bool]) -> list[str]:

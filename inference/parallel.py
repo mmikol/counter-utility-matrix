@@ -207,7 +207,8 @@ class Verdict(NamedTuple):
 def _verdict(cand: Candidate) -> Verdict:
     """A candidate as the pool ships it: who is in it, what it scored, how it
     breaks a tie. Everything else is rebuilt where it is needed."""
-    return Verdict(tuple(h.id for h in cand.heroes), cand.score, cand.tiebreak)
+    return Verdict(ids=tuple(h.id for h in cand.heroes), score=cand.score,
+                   tiebreak=cand.tiebreak)
 
 
 def _revive(world: World, verdict: Verdict) -> Candidate:

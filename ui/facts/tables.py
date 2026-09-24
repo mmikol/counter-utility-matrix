@@ -12,6 +12,7 @@ here: a test greps this module's source for each one.
 """
 
 import statistics
+from typing import SupportsFloat
 
 import psycopg
 from psycopg.rows import TupleRow
@@ -240,7 +241,12 @@ def _read_perks(cx: Connection, w: World) -> None:
             select p.hero_id, p.name, a.name from perk_ability_effects e
             join perks p using(perk_id) join abilities a using(ability_id)
             order by p.hero_id, p.position, a.position"""):
-        w.heroes[hid].perk_effects.append(PerkEffect(perk, ability))
+        w.heroes[hid].perk_effects.append(PerkEffect(perk=perk, ability=ability))
+
+
+def _rate(value: SupportsFloat | None) -> float | None:
+    """A stored rate as a float; None where the capture publishes none."""
+    return float(value) if value is not None else None
 
 
 def _read_rates(cx: Connection, w: World) -> None:
@@ -251,7 +257,7 @@ def _read_rates(cx: Connection, w: World) -> None:
             from hero_meta m join competitive_tiers t on t.tier_id = m.tier_id
             where m.snapshot_id = %s""" % LATEST_BLIZZARD):
         h = w.heroes[hid]
-        rates = Rates(*(float(x) if x is not None else None for x in (win, pick, ban)))
+        rates = Rates(win=_rate(win), pick=_rate(pick), ban=_rate(ban))
         if tier == "all":
             h.win, h.pick, h.ban = rates
         else:
@@ -340,7 +346,7 @@ def _read_provenance(cx: Connection, w: World) -> None:
                 select distinct on (source_id, queue) snapshot_id from meta_snapshots
                 order by source_id, queue, captured_at desc)
             order by ms.captured_at desc""")]
-    w.newer_patches = [Patch(n, str(r)) for n, r in _rows(cx, """
+    w.newer_patches = [Patch(name=n, released=str(r)) for n, r in _rows(cx, """
             select p.name, p.released from patches p
             where p.released > (select coalesce(max(pp.released), '1900-01-01')
                 from meta_snapshots ms join patches pp using(patch_id))

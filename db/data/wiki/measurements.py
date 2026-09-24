@@ -231,6 +231,9 @@ def parse_measurements(value_text: str | None,
                     value=None, numerator=None, denominator=None, window=None,
                     condition=text_condition, text=text))
                 continue
-            for reading in _measure(text, text_condition, default_unit):
-                measurements.append(Measurement(*reading, text))
+            readings = _measure(text, text_condition, default_unit)
+            for value, numerator, denominator, window, reading_condition in readings:
+                measurements.append(Measurement(
+                    value=value, numerator=numerator, denominator=denominator,
+                    window=window, condition=reading_condition, text=text))
     return measurements

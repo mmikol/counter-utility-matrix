@@ -189,7 +189,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.now:
         ok, _ = refresh_once(ctx, full=args.full or None, full_days=full_days)
         return 0 if ok else 1
-    run_forever(ctx, Schedule(args.at, args.max_age_hours, full_days))
+    run_forever(ctx, Schedule(at=args.at, max_age_hours=args.max_age_hours,
+                              full_days=full_days))
 
 
 if __name__ == "__main__":

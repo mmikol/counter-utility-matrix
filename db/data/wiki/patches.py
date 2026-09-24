@@ -36,8 +36,9 @@ def dated_patches(rows: list[dict[str, str]]) -> tuple[list[Patch], int]:
         if not name or not released:
             skipped += 1
             continue
-        patches.append(Patch(name, released, row.get("platform") or None,
-                             row.get("source") or None))
+        patches.append(Patch(name=name, released=released,
+                             platform=row.get("platform") or None,
+                             url=row.get("source") or None))
     return patches, skipped
 
 

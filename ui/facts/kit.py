@@ -174,7 +174,8 @@ class Kit:
     def flat(self, code: str) -> list[Figure]:
         """The rows in hit points: not a rate, not a percent."""
         return [
-            Figure(s.value, s.condition, s.text) for s in self.stats.get(code, ())
+            Figure(value=s.value, condition=s.condition, text=s.text)
+            for s in self.stats.get(code, ())
             if s.value is not None and s.unit_den is None and s.unit_num != "percent"]
 
     @property

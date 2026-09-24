@@ -75,8 +75,8 @@ def clamp_search(pool: str | float | None = None,
     so the search is bounded by one definition. Junk raises Refusal, which
     every door answers as the caller's error."""
     try:
-        return SearchBounds(max(2, min(int(pool or 6), POOL_CEILING)),
-                            max(1, min(int(top or 5), 20)))
+        return SearchBounds(pool_size=max(2, min(int(pool or 6), POOL_CEILING)),
+                            top=max(1, min(int(top or 5), 20)))
     except (TypeError, ValueError) as error:
         raise Refusal("pool and top must be numbers: %s" % error) from error
 

@@ -9,4 +9,4 @@ from db import Source
 
 # The sources row of the strategies table. Nothing is downloaded: the "url"
 # is the playbook's folder. No other table may carry this source.
-AUTHORED = Source("user", "The playbook", "inference/strategies/")
+AUTHORED = Source(code="user", name="The playbook", url="inference/strategies/")

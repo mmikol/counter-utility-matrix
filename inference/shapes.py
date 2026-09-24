@@ -21,7 +21,7 @@ class Shape(NamedTuple):
     supports: int
 
 
-NO_PICKS = Shape(0, 0, 0)
+NO_PICKS = Shape(tanks=0, damage=0, supports=0)
 
 
 def legal_shapes(catalog: Iterable[Strategy], locked: Shape = NO_PICKS) -> list[Shape]:
@@ -38,7 +38,7 @@ def legal_shapes(catalog: Iterable[Strategy], locked: Shape = NO_PICKS) -> list[
             if t < locked.tanks or d < locked.damage or s < locked.supports:
                 continue
             if _shape_allowed(t, d, s, limits):
-                out.append(Shape(t, d, s))
+                out.append(Shape(tanks=t, damage=d, supports=s))
     return out
 
 

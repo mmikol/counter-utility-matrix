@@ -103,7 +103,8 @@ class Solver(Objective):
         limits allow, that can still seat the locked picks."""
         locked = self._locked_by_role
         return legal_shapes(self.catalog, Shape(
-            len(locked["tank"]), len(locked["damage"]), len(locked["support"])))
+            tanks=len(locked["tank"]), damage=len(locked["damage"]),
+            supports=len(locked["support"])))
 
     def prior(self, h: Hero) -> float:
         """The ranking that cut the pools before the playbook ranked them

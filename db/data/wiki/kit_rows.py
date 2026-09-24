@@ -106,7 +106,7 @@ def _stats(fields: Mapping[str, str]) -> dict[str, StatValue]:
             continue
         value = markup.html_to_text(raw)
         if value:
-            stats[STAT_ALIASES.get(key, key)] = StatValue(value, raw)
+            stats[STAT_ALIASES.get(key, key)] = StatValue(text=value, raw=raw)
     return stats
 
 

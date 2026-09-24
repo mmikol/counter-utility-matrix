@@ -399,7 +399,7 @@ def parse_matchups(text: str, hero: str,
     {name_key: Known}: a template names its rows by key, and the prose is read
     by the roster's name and the pronoun."""
     known = known or {}
-    unknown = Known(None, None)
+    unknown = Known(name=None, pronoun=None)
     readings = []
     for other, cell in synergies.section_rows(text, synergies.MATCHUP):
         key = synergies.RENAMED.get(name_key(other), name_key(other))
@@ -464,7 +464,8 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> CountersSumm
 
     articles = fetch_articles(pull.session, released, pull.cache_dir, pull.log)
     known = {
-        name_key(name): Known(name, pronoun(articles.found.get(name, ""))) for name in released}
+        name_key(name): Known(name=name, pronoun=pronoun(articles.found.get(name, "")))
+        for name in released}
     readings = {name: parse_matchups(text, name, known) for name, text in articles.found.items()}
     edges, contradicted, unmatched = combine(readings, index(released))
     if not edges:

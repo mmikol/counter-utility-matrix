@@ -38,7 +38,7 @@ def parse_playstyles(text: str) -> list[Playstyle]:
         body = markup.section_body(text, match.end())
         heroes = [link.strip() for link in markup.LINK_RE.findall(body)]
         if heroes:
-            playstyles.append(Playstyle(name.lower(), name, heroes))
+            playstyles.append(Playstyle(code=name.lower(), name=name, heroes=heroes))
 
     if not playstyles:
         raise WikiError("%s: no '<name> heroes' sections found" % COMPOSITION_PAGE)
