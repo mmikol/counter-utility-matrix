@@ -219,7 +219,7 @@ class Expr:
         except TypeError as error:            # e.g. a text metric in arithmetic
             raise ExprError("%r: %s" % (self.source, error)) from error
         except (RecursionError, MemoryError, OverflowError) as error:
-            raise ExprError("%r: %s" % (self.source, type(error).__name__)) from error
+            raise ExprError("%r: %s: %s" % (self.source, type(error).__name__, error)) from error
 
 
 # each node type the whitelist admits, and the rule that checks it
