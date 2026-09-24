@@ -92,8 +92,8 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   registry, and `compute.registry()` gathers them. The facts engine words
   them as facts, the solver scores the same functions, and the catalog
   validates a strategy's `metric` against the registry, so the number on the
-  board and the number the solver maximises cannot drift. `ui/facts` is a shared library: `inference/` and
-  the door's `facts`, `solver`, `boards` and `playbook` modules import it.
+  board and the number the solver maximises cannot drift. `ui/facts` is a shared library: `inference/`,
+  the door's `facts`, `solver`, `boards` and `playbook` modules and `scripts/reach.py` import it.
 - **Facts are numbered.** `FactSet` numbers facts F1.. and the playbook's
   record S1.. in emission order; a solver contribution cites a fact by metric
   key (`also=` on `FactSet.add`). Adding a fact renumbers every later id.
