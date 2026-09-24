@@ -1,5 +1,5 @@
-"""The UI layer through the door: the roster - every hero and map the board
-tools accept - and a board's facts. Each call loads a World from the
+"""The facts layer through the door: the roster - every hero and map the
+board tools accept - and a board's facts. Each call loads a World from the
 database the context points at, and neither tool writes.
 """
 
@@ -59,7 +59,7 @@ def _announced(hero: RosterHero) -> str:
 
 
 @board_tool(
-    "facts", "The UI LAYER: every fact the database holds about a board -"
+    "facts", "The FACTS LAYER: every fact the database holds about a board -"
     " independent facts per named hero and for the map, joint facts per"
     " team once it has picks (shape, effective HP, damage and healing"
     " floors, range, tempo, cohesion, coverage...), and matchup facts"

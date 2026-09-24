@@ -134,16 +134,19 @@ slider, 0 to 10; a scored constraint keeps the weight in its file.</p>
 <pre class='eq'>sources → db/data (fetch) → db/psql (the database) → facts/ (FACTS of a board)
                                                                   &darr;
                    inference/strategies (STRATEGIES) → inference/solver (ARGMAX) → the board</pre>
-<p><b>The data layer</b> (<code>db/</code>): the sources in one Postgres schema, with the MCP
-tools as the one door. A sentry watches the strategy files, the database's free text and the
-audit log.</p>
+<p><b>The data layer</b> (<code>db/</code>): the sources in one Postgres schema.</p>
+<p><b>The facts layer</b> (<code>facts/</code>): the World, the metrics registry and the
+FactSet - every table turned into numbered facts, each metric defined once for the board and the
+solver alike.</p>
 <p><b>The inference layer</b> (<code>inference/</code>): the playbook and the solver.
 Expressions are compiled once and whitelisted. The solver runs no model and opens no connection;
 serve.py reads the World per request, and derive.py asks the claude CLI for a draft's frontmatter.</p>
-<p><b>The board</b> (<code>ui/</code>): the facts of one board and the inference layer's answer
-at each stage of a draft. It never calls a language model.</p>
+<p><b>The door</b> (<code>door/</code>): the MCP tools, the one way in for a write, and the
+sentry over the strategy files, the database's free text and the audit log.</p>
+<p><b>The board</b> (<code>ui/</code>): the facts layer's facts of one board and the inference
+layer's answer at each stage of a draft. It never calls a language model.</p>
 <p><b>Claude</b>: runs when you ask. It refreshes the sources, derives a strategy's mathematics
 from its prose, and tunes weights. <code>/comp</code> is the same solver in chat.</p>
 <p class='legend'><code>docs/architecture.md</code>, <code>docs/db.md</code>,
-<code>docs/inference.md</code>.</p>
+<code>docs/facts.md</code>, <code>docs/inference.md</code>.</p>
 </article>

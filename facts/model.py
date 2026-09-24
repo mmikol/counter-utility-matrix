@@ -1,7 +1,7 @@
 """The World: the whole database in memory - the heroes, the maps, the
 relations between them and the names they resolve by. facts.tables.load
-builds one from Postgres on every request, so the UI layer always reads what
-the data layer stored. A hero's kit pieces and the numbers read off their
+builds one from Postgres on every request, so the facts layer always reads
+what the data layer stored. A hero's kit pieces and the numbers read off their
 rows are facts.kit's; the records a Hero, a Map and the World hand on are
 facts.records'.
 """

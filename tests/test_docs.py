@@ -1,8 +1,9 @@
 """Every link resolves, every skill names real tools and only strategies the
 playbook holds, the root overview and every package map name what they hold,
-only the door calls the playbook's writers, every shallow indent sits on a
-four-column stop, and the sections db_docs generates match what the code
-generates today. Pure, except the schema check."""
+only the door calls the playbook's writers, each layer imports only the
+layers below it, every shallow indent sits on a four-column stop, and the
+sections db_docs generates match what the code generates today. Pure,
+except the schema check."""
 
 import ast
 import json
@@ -114,6 +115,44 @@ def test_only_the_door_calls_the_playbook_writers():
         if calls and not relative.startswith("door/mcp/") and relative != "inference/derive.py":
             outside.append(relative)
     assert not outside, outside
+
+
+# the layers, bottom up: each imports only the ones before it
+LAYERS = ("db", "facts", "inference", "door")
+FIRST_PARTY = {*LAYERS, "ui", "scripts", "tests", "orchestrator"}
+
+
+def _first_party_imports(tree):
+    """The first-party packages a module imports, deferred imports included:
+    the first dotted part of every import and of every absolute from-import."""
+    names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names |= {alias.name.split(".")[0] for alias in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            names.add(node.module.split(".")[0])
+    return names & FIRST_PARTY
+
+
+def test_each_layer_imports_only_the_layers_below_it():
+    """docs/architecture.md's layering: db <- facts <- inference <- door, each
+    importing only the layers below it, a deferred import as much as one at
+    the top. ui/, scripts/ and orchestrator.py stand over them and may import
+    any layer."""
+    snippet = "import db.psql\nfrom ui.board import x\ndef f():\n    from door import refresh\n"
+    assert _first_party_imports(ast.parse(snippet)) == {"db", "ui", "door"}
+    upward = []
+    for rank, package in enumerate(LAYERS):
+        below = set(LAYERS[:rank + 1])
+        for base, dirs, files in os.walk(os.path.join(ROOT, package)):
+            dirs[:] = [d for d in dirs if d != "__pycache__"]
+            for name in sorted(n for n in files if n.endswith(".py")):
+                path = os.path.join(base, name)
+                with open(path, encoding="utf-8") as handle:
+                    tree = ast.parse(handle.read(), path)
+                upward += ["%s: %s" % (os.path.relpath(path, ROOT), above)
+                           for above in sorted(_first_party_imports(tree) - below)]
+    assert not upward, upward
 
 
 def test_every_shallow_indent_sits_on_a_four_column_stop():

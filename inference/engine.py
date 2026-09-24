@@ -4,7 +4,7 @@
                        side="attack"))
 
 returns the optimal six around the locked picks, each pick with the facts
-that justify it (the board the UI layer would show for map + red + the
+that justify it (the facts the board would show for map + red + the
 six), the score broken down per strategy, and the alternatives.
 board() does it for both seats - blue's absolute optimal, red around
 its revealed ones, on opposite sides of a sided map - and scores the

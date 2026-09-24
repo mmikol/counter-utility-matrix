@@ -78,10 +78,11 @@ portraits remain their owners'.
 ## Documentation
 
 - [docs/architecture.md](docs/architecture.md) - the three layers, the folders, the root files, the diagrams, the scope
-- [docs/db.md](docs/db.md) - the DATA LAYER: the sources, the tools, the schema, the refresh, the mirror
-- [docs/ui.md](docs/ui.md) - the UI LAYER: the board, its endpoints, the facts behind it
+- [docs/db.md](docs/db.md) - the DATA LAYER: the sources, the schema, the refresh, the mirror
+- [docs/facts.md](docs/facts.md) - the FACTS LAYER: the World, the metrics registry, the FactSet
 - [docs/inference.md](docs/inference.md) - the INFERENCE LAYER: the strategy files, the solver, the tuning loop, the deriver, the catalog
+- [docs/ui.md](docs/ui.md) - the board: its endpoints, its pages, its look
 - [docs/skills.md](docs/skills.md) - the skills a Claude Code session runs here
-- [docs/mcp.md](docs/mcp.md) - the two MCP servers and every tool they expose
+- [docs/mcp.md](docs/mcp.md) - the door (`door/`): the two MCP servers and every tool they expose
 - [docs/security.md](docs/security.md) - the threat model and what stands in the way
 - [docs/deploy.md](docs/deploy.md) - the DEPLOYMENT: there is none today, and what the containers would need

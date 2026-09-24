@@ -1,18 +1,19 @@
 # The DATA LAYER - `db/`
 
-Pull every source, clean it, store it in Postgres, and serve the tools
-that do so. This layer owns `DATA = HEROES ∪ MAPS ∪ META`: the tables a
-board's facts are derived from. Every row carries a `source_id`, and that
-is the only distinction drawn between what was measured, what was judged
-and what was written by hand. Only the strategies are written by hand.
+Pull every source, clean it and store it in Postgres. This layer owns
+`DATA = HEROES ∪ MAPS ∪ META`: the tables a board's facts are derived
+from. Every row carries a `source_id`, and that is the only distinction
+drawn between what was measured, what was judged and what was written by
+hand. Only the strategies are written by hand.
 
-**One door.** The MCP tools in `mcp/` are the only way to drive
-the layer, and the only way in for a write. A Claude Code session calls
-them over MCP, the `refresher` container calls them in-process, Docker's
-entrypoint calls them to build the database, and a shell calls them the
-same way. Reads are not gated: the UI and inference layers open their own
-connection through `db.psql.default_dsn()`, which is what lets the board
-load a World per request:
+**One door.** The MCP tools in `door/mcp/` ([mcp.md](mcp.md)) are the
+only way to drive the layer, and the only way in for a write. A Claude
+Code session calls them over MCP, the `refresher` container calls them
+in-process, Docker's entrypoint calls them to build the database, and a
+shell calls them the same way. Reads are not gated: the facts and
+inference layers and the board open their own connection through
+`db.psql.default_dsn()`, which is what lets the board load a World per
+request:
 
 ```bash
 .venv/bin/python -m door.mcp list                        # the tools
@@ -28,10 +29,7 @@ The root's `orchestrator.py` drives the same tools for the whole stack.
 ```
 db/
   __init__.py        where things live, and the scope; the package's map
-  refresh.py         the daily refresh (the refresher container's process)
-  sentry.py          the guard (the sentry container's process)
   web.py             what the three HTTP servers share, and the MCP client
-  mcp/               the MCP server and the tools - the one door
   data/              the sources, page to table
     blizzard/        overwatch.blizzard.com
     wiki/            overwatch.fandom.com
@@ -53,8 +51,6 @@ db/
 | `data/__init__.py` | `PullSummary`, what every source's `run()` returns: the tables it wrote, beside its own counts. `ArticlePullSummary` adds `missing`, the articles or pages that would not fetch, for a pull that reads one per entity. |
 | `data/fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `cached`: the cache sequence every source reads through - the fresh copy, else a new one written, else the stale copy. `request`: one page under a `RequestPolicy` - its attempts, backoff, timeout and the pause after a page - retried while attempts remain. `max_age`: the freshness policy for a block - a build keeps every cached page, a refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `PullContext`: what a pull's `run()` takes beside its connection - the page cache, the session and the log, stderr unless the caller names another, since over stdio stdout is the MCP wire. `prepare_cache`: the cache directory a tool hands a pull. |
 | `data/names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. |
-| `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `.venv/bin/python -m door.sentry --once` is one pass from a shell. |
-| `refresh.py` | The clock: the daily refresh below, and the full one once the wiki cache is a week old. |
 | `web.py` | What the three HTTP servers - the MCP door, the inference service and the board - share. `LocalServer` answers to the local names (`LOCAL_HOSTS`) and any host it is started with (`--allow-host`); `Handler` checks every request's `Host` and `Origin` against them before any route runs (`request_allowed`) and answers 403 otherwise, so a page rebound to the address by DNS is refused on every method, reads included. It sends JSON and static bytes, and logs one line on stderr for a request that failed and for each of its `timed` routes, the solves, with the seconds it took. Every route of the board and the inference service answers a `Reply`, a JSON object and its status; `failure` is the one to a request that raised: a `Refusal` is 400 with its message; anything else is 500 with the error's type and message, and its traceback goes to stderr, never to the caller. The MCP door draws the same line in JSON-RPC's words. `call_tool` is one `tools/call` over the door's HTTP transport, read into a `CallReply` - the text, the structured payload and whether it is an error: the tool's refusal, the door turning the call away, or no server answering - for the board's one write and `orchestrator.py`. Stdlib only, besides `Refusal`, so the MCP server that stands on it stays dependency-free. |
 
 ### `data/` - one package per source
@@ -89,28 +85,6 @@ and return a `PullSummary`.
 | | `measurements.py` | a stat value ("75 over 0.59 seconds", "10 - 20 meters", a yes/no glyph) into value, unit, window and condition. |
 | | `weapons.py` | the wiki's one-entry-per-firing-mode list grouped into weapons and their configs. |
 | | `modifiers.py` | what a buff scales and who it lands on, recovered from the value's wording and the ability's keywords. |
-
-### `mcp/` - the door
-
-The servers, the transport and the full tool reference are in
-[mcp.md](mcp.md).
-
-| file | purpose |
-| --- | --- |
-| `server.py` | The protocol: JSON-RPC 2.0 answered from a server's tools and resources, whichever transport carries it - `initialize`, `tools/list`, `tools/call`, `resources/*`, each response a typed record. Dependency-free, like the four modules below, so the door has nothing to audit but its own few hundred lines. |
-| `stdio.py` | The stdio transport `.mcp.json` launches: one message a line on stdin, each answer a line on stdout. |
-| `http.py` | The Streamable HTTP transport (`POST /mcp`, `GET /health`): the bearer token, the body and batch caps, and the rate limit per client address. |
-| `schema.py` | A tool as the protocol serves it: its arguments as JSON Schema (`ToolSchema`, a `Property` per argument), its reply (`ToolReply`: text, and the same as JSON), and the `Tool` that checks every call against the schema before the tool runs. |
-| `audit.py` | The audit line every call leaves in `db/raw/audit.jsonl`, through any door, in-process too; the sentry reads it. |
-| `registry.py` | The one registry every family declares its tools into (`REGISTRY`, its decorator `tool`). A `ToolSpec` is a tool as registered: name, description, JSON schema, function, its family - the module the function is defined in - and for a pull the source it reads. `Registry` lists the tools family by family in `FAMILIES`' order, whichever family imports first, refuses a name twice and derives the pulls; `run` is the audited in-process call, `write_docs` the tool reference in [mcp.md](mcp.md). `Context` is where a call lands - the database, the page caches, the log - and carries the registry, through which one tool calls another. |
-| `tools.py` | Every family imported, so the registry is whole; the `Context` the servers, the refresher and the board use, and `run_tool`, the in-process call. |
-| `pulls.py` | `list_sources`, the ten `pull_*` tools in dependency order (one source and domain each, each stated once through `pull_tool`), `load_authored`, `sync_all`. |
-| `lifecycle.py` | The database's life: `db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, and read-only `query`, which says when it cut rows. |
-| `boards.py` | `BOARD`, the five properties every board tool takes, and `board_tool`, which registers a tool over them and hands its function the one `Draft` they name. |
-| `facts.py` | The UI layer through the door: `roster` and the board tool `facts`. |
-| `solver.py` | The inference layer through the door: the board tools `infer`, `evaluate` and `board`, and `reach`. |
-| `playbook.py` | `metrics`, the vocabulary a strategy may reference, `strategies`, the tools that write the playbook (`tune`, `add_strategy`, `infer_strategy`, `derive_strategies`), each reloading the mirror after the write, and `tuning_log`. The strategies are also served as `strategy://` resources. |
-| `__main__.py` | `.venv/bin/python -m door.mcp` serves over stdio (what `.mcp.json` launches); `--http HOST:PORT` serves over HTTP (the `data` container); `list` and `call NAME [JSON]` are the shell. |
 
 ### `psql/` - the database
 
@@ -169,7 +143,8 @@ wait on.
 
 ## Keeping it fresh
 
-The `refresher` container refreshes the database once a day, so the board
+The `refresher` container runs the door's clock, `door/refresh.py`
+([mcp.md](mcp.md)), which refreshes the database once a day, so the board
 is ready when a game starts. The daily refresh refetches what moves day to
 day - the wiki's seasons and the rates (a new dated snapshot) - then
 re-mirrors the strategies and re-exports `raw/`.

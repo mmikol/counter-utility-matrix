@@ -1,6 +1,6 @@
 """The door over all three layers: an MCP server whose tools are the data
 layer's pulls - every source fetched, cleaned and stored in Postgres - and
-the tools the UI and inference layers expose through it: the facts, the
+the tools the facts and inference layers expose through it: the facts, the
 solver and the playbook. Every write to Postgres or the playbook runs under
 one of them, the sentry's quarantine rename aside.
 
@@ -27,7 +27,7 @@ one of them, the sentry's quarantine rename aside.
                  mirror, the generated docs, read-only query
     boards       the five properties a board tool takes, and board_tool,
                  which hands its function the one Draft they name
-    facts        the UI layer: roster and a board's facts
+    facts        the facts layer: roster and a board's facts
     solver       the inference layer: infer, evaluate, reach and board
     playbook     the metric vocabulary, the strategies and the tools that
                  write them, the tuning log, the strategy:// resources

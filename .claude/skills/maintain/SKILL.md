@@ -68,18 +68,18 @@ or the user points at, and leave a report.
    grep per name. Prefer deleting to documenting.
 
 5. **Simplicity and organisation.** The layout is the three layers at the
-   root (`db/`, `ui/`, `inference/`), tests mirroring them, docs in
-   `docs/`, skills in `.claude/skills/`, and one entry point
-   (`orchestrator.py`). A new file should have an obvious home and a
-   docstring that says what it does; a module over a few hundred lines or
-   a function over a screen is a smell to name, not necessarily to fix.
-   Every write to the playbook or the database goes through a tool that
-   validates and logs it, the sentry's quarantine rename aside - no new
-   side doors. The strategy files are the one input a user writes: every
-   table but `strategies` is filled by a pull or derived at load, and none
-   carries the `user` source. The
-   pulls read Blizzard's site and the wiki, nothing else: no third-party
-   site or API.
+   root (`db/`, `facts/`, `inference/`), the board over them (`ui/`), the
+   door over all three (`door/`), each importing only what is below it,
+   tests mirroring them, docs in `docs/`, skills in `.claude/skills/`, and
+   one entry point (`orchestrator.py`). A new file should have an obvious
+   home and a docstring that says what it does; a module over a few hundred
+   lines or a function over a screen is a smell to name, not necessarily to
+   fix. Every write to the playbook or the database goes through a tool
+   that validates and logs it, the sentry's quarantine rename aside - no
+   new side doors. The strategy files are the one input a user writes:
+   every table but `strategies` is filled by a pull or derived at load, and
+   none carries the `user` source. The pulls read Blizzard's site and the
+   wiki, nothing else: no third-party site or API.
 
 6. **Security posture.** `docs/security.md` lists the measures; check
    that what it describes is still what the code does (the allowlist in

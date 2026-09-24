@@ -9,7 +9,7 @@ call the refresher, the shell and the board make.
                  dependency order, load_authored, sync_all
     lifecycle    the database's life: db_status, db_init, db_migrate,
                  db_rebuild, export_csv, db_docs, and read-only query
-    facts        the UI layer: roster and a board's facts
+    facts        the facts layer: roster and a board's facts
     solver       the inference layer: infer, evaluate, reach and board
     playbook     the playbook: metrics, strategies, tune, add_strategy,
                  infer_strategy, derive_strategies, tuning_log, and the

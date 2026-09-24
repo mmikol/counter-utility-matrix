@@ -2,15 +2,15 @@
 
 One set of tools, served over the
 [Model Context Protocol](https://modelcontextprotocol.io) by the door
-over all three layers (`door/mcp/`): the data layer's pulls, the UI
+over all three layers (`door/mcp/`): the data layer's pulls, the facts
 layer's facts, and the inference layer's solver and playbook. A Claude
 Code session calls them as MCP tools; the board, the refresher, Docker's
 entrypoint and the shell call the same functions in-process. The door
 gates every write: a write to Postgres or the playbook runs under one of
 its tools, and the sentry's quarantine rename of a bad strategy file
-(`door/sentry.py`) is the one write outside it, so a session and the board
-see the same numbers. Reading is direct: the UI and inference layers
-`SELECT` over their own connection.
+(`door/sentry.py`) is the one write outside it, so a session and the
+board see the same numbers. Reading is direct: the facts and inference
+layers and the board `SELECT` over their own connection.
 
 ## The two servers
 
@@ -91,6 +91,41 @@ read the playbook without a tool call: `strategy://<id>` is one file (its
 frontmatter and prose, `text/markdown`), and `strategy://tuning-log` is
 the audit trail of every change to them.
 
+## The package - `door/`
+
+`door/` stands over all three layers: it imports `db`, `facts` and
+`inference`, and none of them imports it (`tests/test_docs.py` holds the
+direction). Beside the MCP server it holds the two daemons that run on a
+clock: the refresher, which calls the door's tools, and the sentry, which
+watches what the tools cannot.
+
+| file | purpose |
+| --- | --- |
+| `mcp/` | The MCP server and its tools, below. |
+| `refresh.py` | The clock: the daily refresh ([db.md](db.md) has its schedule and settings), and the full one once the wiki cache is a week old. |
+| `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied. Its report, `db/raw/sentry.json`, is what `orchestrator.py status` prints; `.venv/bin/python -m door.sentry --once` is one pass from a shell. |
+
+### `mcp/` - the server and its tools
+
+The servers and the transports are above, the tool reference below.
+
+| file | purpose |
+| --- | --- |
+| `server.py` | The protocol: JSON-RPC 2.0 answered from a server's tools and resources, whichever transport carries it - `initialize`, `tools/list`, `tools/call`, `resources/*`, each response a typed record. Dependency-free, like the four modules below, so the door has nothing to audit but its own few hundred lines. |
+| `stdio.py` | The stdio transport `.mcp.json` launches: one message a line on stdin, each answer a line on stdout. |
+| `http.py` | The Streamable HTTP transport (`POST /mcp`, `GET /health`): the bearer token, the body and batch caps, and the rate limit per client address. |
+| `schema.py` | A tool as the protocol serves it: its arguments as JSON Schema (`ToolSchema`, a `Property` per argument), its reply (`ToolReply`: text, and the same as JSON), and the `Tool` that checks every call against the schema before the tool runs. |
+| `audit.py` | The audit line every call leaves in `db/raw/audit.jsonl`, through any door, in-process too; the sentry reads it. |
+| `registry.py` | The one registry every family declares its tools into (`REGISTRY`, its decorator `tool`). A `ToolSpec` is a tool as registered: name, description, JSON schema, function, its family - the module the function is defined in - and for a pull the source it reads. `Registry` lists the tools family by family in `FAMILIES`' order, whichever family imports first, refuses a name twice and derives the pulls; `run` is the audited in-process call, `write_docs` the tool reference below. `Context` is where a call lands - the database, the page caches, the log - and carries the registry, through which one tool calls another. |
+| `tools.py` | Every family imported, so the registry is whole; the `Context` the servers, the refresher and the board use, and `run_tool`, the in-process call. |
+| `pulls.py` | `list_sources`, the ten `pull_*` tools in dependency order (one source and domain each, each stated once through `pull_tool`), `load_authored`, `sync_all`. |
+| `lifecycle.py` | The database's life: `db_status`, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, and read-only `query`, which says when it cut rows. |
+| `boards.py` | `BOARD`, the five properties every board tool takes, and `board_tool`, which registers a tool over them and hands its function the one `Draft` they name. |
+| `facts.py` | The facts layer through the door: `roster` and the board tool `facts`. |
+| `solver.py` | The inference layer through the door: the board tools `infer`, `evaluate` and `board`, and `reach`. |
+| `playbook.py` | `metrics`, the vocabulary a strategy may reference, `strategies`, the tools that write the playbook (`tune`, `add_strategy`, `infer_strategy`, `derive_strategies`), each reloading the mirror after the write, and `tuning_log`. The strategies are also served as `strategy://` resources. |
+| `__main__.py` | `.venv/bin/python -m door.mcp` serves over stdio (what `.mcp.json` launches); `--http HOST:PORT` serves over HTTP (the `data` container); `list` and `call NAME [JSON]` are the shell. |
+
 ## The tools
 
 <!-- generated:tools -->
@@ -119,7 +154,7 @@ the audit trail of every change to them.
 | `db_docs` | Regenerate the generated sections of the docs: the ERD and data dictionary in docs/db.md from the live schema, the catalog and vocabulary in docs/inference.md from the strategies files, the tool reference in docs/mcp.md. | none |
 | `query` | Run read-only SQL against the database (one SELECT, WITH, EXPLAIN, SHOW, TABLE or VALUES statement, first 200 rows). Every table is documented in the data dictionary in docs/db.md. | `sql` *required* (string): the statement |
 | `roster` | Every hero with role, subrole, health pool, portrait and status (released, or announced with its release day - shown, never picked), plus the map pool with modes - the vocabulary the board tools accept. | none |
-| `facts` | The UI LAYER: every fact the database holds about a board - independent facts per named hero and for the map, joint facts per team once it has picks (shape, effective HP, damage and healing floors, range, tempo, cohesion, coverage...), and matchup facts once both teams have picks. Numbered F1.. for citation. | `map` (string): map name (any spelling)<br>`red` (array): the enemy team's revealed heroes<br>`blue` (array): your team's locked heroes<br>`bans` (array): the match's bans, up to five (each team's two and the lobby's), all optional; neither team can pick them<br>`side` (attack \| defense \| ): blue's side on an Escort or Hybrid map (red gets the other); ignored on Control, Push, Flashpoint<br>`format` (lines \| json): lines (default) or json |
+| `facts` | The FACTS LAYER: every fact the database holds about a board - independent facts per named hero and for the map, joint facts per team once it has picks (shape, effective HP, damage and healing floors, range, tempo, cohesion, coverage...), and matchup facts once both teams have picks. Numbered F1.. for citation. | `map` (string): map name (any spelling)<br>`red` (array): the enemy team's revealed heroes<br>`blue` (array): your team's locked heroes<br>`bans` (array): the match's bans, up to five (each team's two and the lobby's), all optional; neither team can pick them<br>`side` (attack \| defense \| ): blue's side on an Escort or Hybrid map (red gets the other); ignored on Control, Push, Flashpoint<br>`format` (lines \| json): lines (default) or json |
 | `infer` | The INFERENCE LAYER: the optimal six for this board under the markdown strategies in inference/strategies/ (players assumed to play optimally). Locked blue picks are kept; the rest is searched. Returns the comp, per-pick reasons with fact citations, the strategy score breakdown, and alternatives. | `map` (string): map name (any spelling)<br>`red` (array): the enemy team's revealed heroes<br>`blue` (array): your team's locked heroes<br>`bans` (array): the match's bans, up to five (each team's two and the lobby's), all optional; neither team can pick them<br>`side` (attack \| defense \| ): blue's side on an Escort or Hybrid map (red gets the other); ignored on Control, Push, Flashpoint<br>`top` (integer): alternatives to return (default 5)<br>`pool` (integer): candidates per role the search keeps (default 6)<br>`compact` (boolean): true: a reply small enough to carry under a playbook of hundreds. The structured payload then has its own keys: map, side, red, blue, score, terms (how many scoring terms the full reply carries), idle, silent (applying, metric not varying on this board) and largest (the 15 heaviest terms, each an id and its weighted value) |
 | `evaluate` | Score a FULL blue six against the strategies without searching: the breakdown per strategy, constraint violations, and how it ranks against the optimum. | `map` (string): map name (any spelling)<br>`red` (array): the enemy team's revealed heroes<br>`blue` *required* (array): your team's locked heroes<br>`bans` (array): the match's bans, up to five (each team's two and the lobby's), all optional; neither team can pick them<br>`side` (attack \| defense \| ): blue's side on an Escort or Hybrid map (red gets the other); ignored on Control, Push, Flashpoint |
 | `reach` | Can the playbook ever pick this hero? A board that suits it - one of its maps, a red it answers, the match's bans spent on the rivals holding its seat - on which it is in the optimal six; with none, the closest it came. A hero that cannot be reached is one the facts or the strategies cannot see. | `hero` *required* (string): a released hero (any spelling) |

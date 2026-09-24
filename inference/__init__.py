@@ -23,7 +23,7 @@
                   players are assumed to play optimally
     engine        infer(), evaluate() and board(): the API over the solver
     result        the Result and Board records and their citations into the
-                  facts the UI layer generated
+                  facts the facts layer generated
     plan          the game plan and the verdict in prose
     parallel      the process pool the board splits its searches across
     supersede     latest wins: a board a newer request replaced stops at its

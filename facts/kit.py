@@ -6,8 +6,8 @@ db/data/wiki/kits/measurements.py stores each wiki stat as measurements
 derives a kit piece's combat numbers from both at read time - a reload
 worded beside a firing rate, a figure that is a sum and not one hit, a
 percent worth its published cap - so a fix to how a wording is read is a
-code change here and needs no re-pull. The rest of the facts package reads the measurements and
-the keywords, never the prose.
+code change here and needs no re-pull. The rest of the facts package reads
+the measurements and the keywords, never the prose.
 """
 
 import math

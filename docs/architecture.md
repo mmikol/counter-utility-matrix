@@ -1,7 +1,10 @@
 # How it fits together
 
-Three layers over one database, each a folder at the root, each with its
-own document in `docs/`.
+Three layers over one database, each a folder at the root with its own
+document in `docs/`: `db/` (DATA), `facts/` (FACTS) and `inference/`
+(STRATEGIES and the argmax). `ui/` is the board over them, and `door/`
+stands over all three. Imports run db <- facts <- inference <- door <- ui,
+and `tests/test_docs.py` holds that.
 
 ```
 DATA           = HEROES ∪ MAPS ∪ META              the tables, as pulled and set
@@ -24,9 +27,11 @@ Code on your subscription, before a game, never during one.
 
 | folder | what it is | read |
 | --- | --- | --- |
-| `db/` | **DATA LAYER** - `data/` and `psql/` pull every source, clean it and store it, with the schema, its migrations and the embedded cluster. A wiki stat is stored as measurements beside its original text (`data/wiki/kits/measurements.py`); the UI layer's `facts/kit.py` reads a kit's combat numbers off both at read time, so a misread wording is fixed there and needs no re-pull. `mcp/` and `sentry` stand over all three layers rather than inside this one: the door serves the UI layer's facts and the inference layer's solver through the same tools, and the guard watches the playbook beside the database. The door gates every write, the sentry's quarantine rename aside; the other two layers read Postgres directly, over `db.psql.default_dsn()` | [db.md](db.md) |
-| `ui/` | **UI LAYER** - the board (map, sides, bans, red and blue rosters) and the facts behind it: the World, the metrics registry, the FactSet. `facts/` is the FACTS kernel the other two layers import - the solver, the deriver and the door read the numbers the board shows - and `board.py`, `pages.py` and `static/` are the only presentation code | [ui.md](ui.md) |
+| `db/` | **DATA LAYER** - `data/` and `psql/` pull every source, clean it and store it, with the schema, its migrations and the embedded cluster. A wiki stat is stored as measurements beside its original text (`data/wiki/kits/measurements.py`); the facts layer's `facts/kit.py` reads a kit's combat numbers off both at read time, so a misread wording is fixed there and needs no re-pull. The bottom of the import graph: it imports nothing above it, and the layers over it read Postgres directly, over `db.psql.default_dsn()` | [db.md](db.md) |
+| `facts/` | **FACTS LAYER** - everything the database knows about a board: the World (the database in memory), the metrics registry, the FactSet. It imports only `db`; the solver, the deriver, the door and the board read the same numbers through it | [facts.md](facts.md) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints, heuristics and assumptions in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
+| `door/` | **THE DOOR** over all three layers - `mcp/`, the MCP server and its tools, under which every write runs, the sentry's quarantine rename aside; `refresh.py`, the clock that runs the tools daily and weekly; `sentry.py`, the guard over the playbook, the database's free text and the door's audit log | [mcp.md](mcp.md) |
+| `ui/` | **THE BOARD** - the page (map, sides, bans, red and blue rosters) over the facts layer's facts and the inference layer's answer: `board.py`, `pages.py` and `static/`, the only presentation code | [ui.md](ui.md) |
 | `tests/` | one folder per layer (`tests/db`, `tests/facts`, `tests/inference`, `tests/door`, and `tests/ui` for the board; `tests/db` holds the Blizzard and wiki tests in `blizzard/` and `wiki/`, `tests/door` the door's in `mcp/` beside the refresher's and the sentry's), the root files' tests beside them (`test_docs.py`, and `test_orchestrator.py` with its `_verdict`, `_agents` and `_http` siblings), `synthetic.py`, a World of twelve invented heroes and three maps built by hand and served fresh to each test by the `synthetic_world` fixture in `tests/conftest.py`, which the metric, derivation, facts, solver and board tests work their expected values from with no database, and `tests/fixtures/playbook/`, the reference playbook every kind and form of strategy is proven against while `inference/strategies/` holds the user's assumptions (its rules were emptied on purpose and are being rebuilt by hand; `inference/README.md` is the record). `.venv/bin/python -m pytest -q` runs them, skipping what needs a built database when there is none | |
 | `.claude/skills/` | what a Claude Code session can do here: `/up`, `/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`, `/refresh`, `/maintain`; and `/desloppify`, the cleanup harness's own skill, as `update-skill` writes it (CLAUDE.md) | [skills.md](skills.md) |
 | `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
@@ -57,7 +62,7 @@ flowchart LR
         INF["INFERENCE<br/>the strategies mirror"]
     end
 
-    subgraph USER["UI LAYER - facts/ + ui/board.py"]
+    subgraph USER["FACTS LAYER - facts/, and the board - ui/board.py"]
         WORLD["World<br/>the database in memory,<br/>per request"]
         FACTS["FactSet<br/>F1.. hero · map · meta ·<br/>team · matchup<br/>S1.. the playbook's record"]
         BOARD["the board<br/>map + red/blue rosters"]
@@ -86,19 +91,19 @@ code that writes lives with what it writes - the pulls in `db/data`, the
 `strategies` table in `inference.catalog.mirror`, the playbook's files in
 `inference.tune` (`tune`, `add`, `complete`), which `inference/derive.py`
 also calls inside a `derive_strategies` or `load_authored` run the door
-started. The UI layer reads, turns every table into facts, and defines
-every metric once (`facts/team.py` the team's, `facts/compute.py`
+started. The facts layer reads, turns every table into facts, and
+defines every metric once (`facts/team.py` the team's, `facts/compute.py`
 the rest, and `compute.registry()` gathers them), so the number on the
-board and the number the solver scores are the same function; its one
-write, a heuristic's weight stored from the board, is off by default
-(`COUNTRIX_READ_ONLY`) and, when turned on, is a `tune` call through the
-door. The inference layer reads the tables through the World
+board and the number the solver scores are the same function. The
+board's one write, a heuristic's weight stored from its slider, is off by
+default (`COUNTRIX_READ_ONLY`) and, when turned on, is a `tune` call
+through the door. The inference layer reads the tables through the World
 (`facts.tables.load`, once per request on the service's `/board`,
 `/infer` and `/evaluate`), and its health check counts the heroes
 directly.
 
-The equation divides the layers. The data layer owns DATA. The UI layer's
-fact engine owns FACTS: per domain, the independent facts (a selection's
+The equation divides the layers. The data layer owns DATA. The facts
+layer owns FACTS: per domain, the independent facts (a selection's
 own row - a hero's kit, rates and style; the map's mode and styles; the
 meta's vintage) and the dependent ones (that selection joined with
 others: the hero on this map, against each enemy, beside each ally, the

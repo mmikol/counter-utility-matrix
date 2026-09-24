@@ -1,4 +1,4 @@
-"""The data layer's door speaks the protocol: the real server spawned over
+"""The door speaks the protocol: the real server spawned over
 stdio, and the server's dispatch - the schema check every call passes, a
 refusal answered as the caller's error, a fault as the server's, the
 strategy resources, and the audit line a call leaves even when the log

@@ -1,6 +1,6 @@
-"""The UI LAYER's board: a map selector and a red and a blue roster,
-organised and styled like the game's hero select, over the facts engine
-and the inference layer.
+"""The board: a map selector and a red and a blue roster, organised and
+styled like the game's hero select, over the facts layer and the inference
+layer.
 
     python -m ui.board            # serves http://localhost:8017
 

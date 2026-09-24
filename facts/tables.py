@@ -1,5 +1,5 @@
 """The load: every data table read into one World, fresh on each request, so
-the UI layer always reads what the data layer stored.
+the facts layer always reads what the data layer stored.
 
     world = tables.load(cx)
 

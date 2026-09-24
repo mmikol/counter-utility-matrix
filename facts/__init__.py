@@ -1,5 +1,6 @@
-"""The FACTS kernel: everything the database knows about a board, which
-the board, the inference layer, the door and the reach recorder read.
+"""The FACTS LAYER: everything the database knows about a board, which
+the board, the inference layer, the door and the reach recorder read. It
+imports only db.
 
     model           the World - the whole database loaded into memory, per
                     request

@@ -69,31 +69,33 @@ playbook in force, relative to the repo root, and is read on every call.
 
 ## Architecture
 
-Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
-`inference/` (STRATEGIES and the argmax).
+Three layers over one database, each a folder at the root: `db/` (DATA),
+`facts/` (FACTS), `inference/` (STRATEGIES and the argmax). `ui/` is the
+board over them, and `door/` stands over all three. Imports run
+db <- facts <- inference <- door <- ui.
 
 - **One door for writes.** Every write to Postgres or the playbook runs
   under a tool. Each family module (`pulls`, `lifecycle`, `facts`, `solver`,
-  `playbook` in `door/mcp/`) declares its tools with `@tool(...)` into the one
-  `REGISTRY` (`door/mcp/registry.py`), which lists them in `FAMILIES`' order,
-  and `door/mcp/tools.py` imports every family. A call arrives over stdio, HTTP or in-process
-  (`tools.run_tool`), is checked against the tool's schema by the same
-  `Tool` wrapper on every path, and is audited to `db/raw/audit.jsonl` -
-  except the sentry, which renames a bad strategy file to
-  `.md.quarantined` outside the door. The code that writes lives with what
-  it writes - the pulls in `db/data`, the strategies table in
-  `inference.catalog.mirror`, the playbook's files in `inference.tune` -
-  and only the tools call it. Reads bypass the door: `ui/`
-  and `inference/` connect through `db.psql.default_dsn()` -
-  `DATABASE_URL`, else the embedded pgserver cluster, which starts on
-  first touch.
+  `playbook` in `door/mcp/`) declares its tools with `@tool(...)` into the
+  one `REGISTRY` (`door/mcp/registry.py`), which lists them in `FAMILIES`'
+  order, and `door/mcp/tools.py` imports every family. A call arrives over
+  stdio, HTTP or in-process (`tools.run_tool`), is checked against the
+  tool's schema by the same `Tool` wrapper on every path, and is audited to
+  `db/raw/audit.jsonl` - except the sentry, which renames a bad strategy
+  file to `.md.quarantined` outside the door. The code that writes lives
+  with what it writes - the pulls in `db/data`, the strategies table in
+  `inference.catalog.mirror`, the playbook's files in `inference.tune` - and
+  only the tools call it. Reads bypass the door: the board, `facts/` and
+  `inference/` read through `db.psql.default_dsn()` - `DATABASE_URL`, else
+  the embedded pgserver cluster, which starts on first touch.
 - **One definition per metric.** `facts/team.py` defines every team
   metric and `facts/compute.py` the matchup, map and world ones, each in a
   registry, and `compute.registry()` gathers them. The facts engine words
   them as facts, the solver scores the same functions, and the catalog
   validates a strategy's `metric` against the registry, so the number on the
-  board and the number the solver maximises cannot drift. `facts/` is a shared library: `inference/`,
-  the door's `facts`, `solver`, `boards` and `playbook` modules and `scripts/reach.py` import it.
+  board and the number the solver maximises cannot drift. `facts/` is a
+  shared library: `inference/`, the door's `facts`, `solver`, `boards` and
+  `playbook` modules, the board and `scripts/reach.py` import it.
 - **Facts are numbered.** `FactSet` numbers facts F1.. and the playbook's
   record S1.. in emission order; a solver contribution cites a fact by metric
   key (`also=` on `FactSet.add`). Adding a fact renumbers every later id.
@@ -152,6 +154,11 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   `inference/derive.py`, which completes drafts inside a run the door
   started. A new call site elsewhere fails the test; route it through a
   tool.
+- Each layer imports only the layers below it: `db/` imports nothing above
+  it, `facts/` only `db/`, `inference/` `db/` and `facts/`, `door/` all
+  three; `ui/`, `scripts/` and `orchestrator.py` import any of them. An
+  upward import, deferred or not, fails
+  `test_each_layer_imports_only_the_layers_below_it`.
 - A line indented 1 to 16 columns sits on a multiple of 4, docstring maps
   and SQL in strings included, and a continuation hangs 4 columns in after
   a bracket that ends its line (8 for a def's parameters). One line off the
