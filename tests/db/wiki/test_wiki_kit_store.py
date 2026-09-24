@@ -58,7 +58,7 @@ def test_the_store_reloads_the_kit_tables_and_fills_what_blizzard_loaded():
                 "Nobody": HeroProfile(health=1, shield=None, armor=None)}
     tally, unknown = kit_store.store(cursor, by_hero, profiles, {"anvil": 1}, SOURCE)
     assert unknown == ["All heroes"]
-    assert tally.counts() == {
+    assert tally == {
         "weapons": 1, "configs": 1, "stats": 4, "classified": 2, "added": 1,
         "abilities_with_stats": 2, "modifiers": 1, "perks_announced": 0,
         "perks_with_stats": 1, "perk_links": 1, "health": 1}
@@ -110,9 +110,8 @@ def test_an_announced_heros_perks_get_rows_and_a_stored_weapon_is_not_counted_tw
         ("SELECT status FROM heroes", [("announced",)])])
     tally, unknown = kit_store.store(cursor, {"Doctrine": doctrine}, {}, {"doctrine": 9}, SOURCE)
     assert unknown == []
-    counts = tally.counts()
-    assert (counts["weapons"], counts["configs"]) == (0, 0)
-    assert counts["perks_announced"] == 3 and counts["perks_with_stats"] == 2
+    assert (tally["weapons"], tally["configs"]) == (0, 0)
+    assert tally["perks_announced"] == 3 and tally["perks_with_stats"] == 2
     assert cursor.written("INSERT INTO perks") == [
         (9, 1, "Litany", "", 1, SOURCE), (9, 1, "Vigil", "", 2, SOURCE),
         (9, 2, "Canticle", "", 1, SOURCE)]
@@ -127,6 +126,6 @@ def test_a_hero_blizzard_has_perks_for_keeps_them():
         ('SELECT "code", "kind_id" FROM "ability_kinds"', KINDS),
         ("SELECT name, perk_id FROM perks", [("Shield Bash", 21)])])
     tally, _ = kit_store.store(cursor, {"Anvil": kit}, {}, {"anvil": 1}, SOURCE)
-    assert tally.perks_announced == 0 and tally.perks_with_stats == 1
+    assert tally["perks_announced"] == 0 and tally["perks_with_stats"] == 1
     assert not cursor.written("SELECT status FROM heroes") and not cursor.written(
         "INSERT INTO perks")

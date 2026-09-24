@@ -112,7 +112,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext, *,
     connection.commit()
 
     return KitsSummary(
-        **stored.tally.counts(), cargo_rows=len(rows), supplemented=articles.stats,
+        **stored.tally, cargo_rows=len(rows), supplemented=articles.stats,
         missing=articles.missing + unlisted.missing, unknown_heroes=stored.unknown_heroes,
         announced=announced,
         tables=["abilities", "ability_stats", "ability_modifiers", "weapons",

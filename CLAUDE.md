@@ -259,11 +259,11 @@ db <- facts <- inference <- door <- ui.
   not an ad-hoc dict or tuple. A TypedDict is a shape that is or becomes
   JSON, or holds optional keys; a NamedTuple is a row a parser or a query
   yields, which a reader may unpack; a dataclass is the rest -
-  configuration, a mutable tally, or a record that must not act as a tuple
-  (keyword-only, or carrying a check or a derived field). `Any` is for
-  arbitrary JSON. mypy holds the annotations in CI (`[tool.mypy]` in
-  pyproject.toml, `warn_unused_ignores` among them); the tests need none
-  and are not checked.
+  configuration, a mutable tally that never becomes JSON, or a record that
+  must not act as a tuple (keyword-only, or carrying a check or a derived
+  field). `Any` is for arbitrary JSON. mypy holds the annotations in CI
+  (`[tool.mypy]` in pyproject.toml, `warn_unused_ignores` among them); the
+  tests need none and are not checked.
 - A type alias is a PEP 695 `type` statement, never a bare assignment; a
   recursive one names itself unquoted. It is defined in one module and
   imported everywhere else; `test_every_type_alias_is_a_type_statement`
