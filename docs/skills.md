@@ -184,15 +184,15 @@ no per-map rates has no style. Nothing is written by hand:
 **Say:** "maintain", "clean up", "check the repo", "is everything
 current" - or nothing, after a batch of changes, before a commit.
 
-**Does, in order:** lint and the tests three ways, under the coverage bar
-(with the database, as CI runs them with none, inside the image), and
-GitHub's own run read after a push; the documentation current - the
-generated sections through `db_docs`, the hand-written ones read against
-what changed; a grep for stale names, paths and counts, with `db_status`
-and `strategies` as the truth for the numbers; a pass for dead code and
-duplicated definitions; the layout and the one-door rule held; the
-security posture checked against `docs/security.md` and one sentry pass.
-Then a report of under fifteen lines and a proposed commit.
+**Does, in order:** lint, the types and the tests three ways, under the
+coverage bar (with the database, as CI runs them with none, inside the
+image), and GitHub's own run read after a push; the documentation
+current - the generated sections through `db_docs`, the hand-written ones
+read against what changed; a grep for stale names, paths and counts, with
+`db_status` and `strategies` as the truth for the numbers; a pass for dead
+code and duplicated definitions; the layout and the one-door rule held;
+the security posture checked against `docs/security.md` and one sentry
+pass. Then a report of under fifteen lines and a proposed commit.
 
 **The backlog:** the skill keeps `pm/backlog.md` current - an item that
 landed moves to done with its commit, what a check suggests is added,

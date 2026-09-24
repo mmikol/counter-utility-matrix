@@ -34,7 +34,9 @@ from db import DEFAULT_DB_DIR, RAW_DIR, Source
 try:
     import pgserver
 except ImportError:     # the image and CI filter it out of requirements.txt
-    pgserver = None     # type: ignore[assignment]
+    # the ignore is used where pgserver is installed (it ships types) and
+    # unused in CI, where it is not
+    pgserver = None     # type: ignore[assignment, unused-ignore]
 
 # Every way the database can be out of reach, which a health endpoint reports
 # as degraded: the connection and its queries (psycopg.Error); no pgserver

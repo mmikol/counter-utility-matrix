@@ -11,9 +11,10 @@ or the user points at, and leave a report.
 
 ## The checks, in order
 
-1. **Lint and tests, three ways.** From the repo root:
+1. **Lint, types and tests, three ways.** From the repo root:
 
-       .venv/bin/ruff check db ui inference tests orchestrator.py
+       .venv/bin/ruff check db ui inference tests scripts orchestrator.py
+       .venv/bin/python -m mypy db ui inference orchestrator.py scripts
        .venv/bin/python -m pytest -q -p no:cacheprovider --cov
        COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -p no:cacheprovider \
            --cov --cov-fail-under=78

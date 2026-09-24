@@ -3,8 +3,8 @@
 # CI never builds the database: a build scrapes Blizzard and the wiki, slow and
 # unkind to the sources on every push. Tests marked `invariant` skip themselves
 # when db/psql/cluster is absent (tests/conftest.py; COUNTRIX_NO_DATABASE=1
-# reproduces that locally), so what runs here is ruff plus every test that needs
-# no database, and CI holds that suite to 78% coverage. The runs with a
+# reproduces that locally), so what runs here is ruff, mypy and every test that
+# needs no database, and CI holds that suite to 78% coverage. The runs with a
 # database - the local one and `orchestrator.py test` inside the image -
 # enforce the 75% pyproject.toml sets.
 
@@ -33,6 +33,9 @@ jobs:
 
       - name: Lint (ruff)
         run: python -m ruff check db ui inference tests scripts orchestrator.py
+
+      - name: Types (mypy)
+        run: python -m mypy db ui inference orchestrator.py scripts
 
       - name: Tests (db-bound tests skip without a built cluster)
         run: >-

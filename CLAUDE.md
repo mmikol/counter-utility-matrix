@@ -17,6 +17,7 @@ doc per layer. This file is what a session needs before it changes code.
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 .venv/bin/ruff check db ui inference tests scripts orchestrator.py    # the paths CI lints
+.venv/bin/python -m mypy db ui inference orchestrator.py scripts     # the types CI checks
 
 .venv/bin/python -m pytest -q -p no:cacheprovider --cov              # full suite, 75% bar, needs the built database
 COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=78   # as CI runs it
@@ -196,9 +197,11 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 
 - `%`-formatting, never f-strings or `.format()` (ruff's UP031/UP032 are off
   for this).
-- Public functions carry full type annotations, and records that cross a
-  module boundary are dataclasses or TypedDicts rather than ad-hoc dicts and
-  tuples. This replaces the older seams-only rule; code is converging on it.
+- Every function and method carries full type annotations, and a record
+  that crosses a module boundary is a dataclass, NamedTuple or TypedDict,
+  not an ad-hoc dict or tuple. `Any` is for arbitrary JSON. mypy holds the
+  annotations in CI (`[tool.mypy]` in pyproject.toml, `warn_unused_ignores`
+  among them); the tests need none and are not checked.
 - Every module opens with a docstring saying what it does. Test names are
   declarative sentences (`test_the_overview_names_everything_at_the_root`);
   side effects are stubbed with `monkeypatch`, not mocks.
