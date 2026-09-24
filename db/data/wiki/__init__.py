@@ -1,9 +1,13 @@
 """overwatch.fandom.com - the Overwatch Wiki: page to table.
 
     heroes         hero kits via the Cargo Abilities table: weapons and
-                   firing configs, abilities, perks, stats, keywords
+                   firing configs, abilities, perks, stats, keywords; the
+                   announced heroes
     kit_rows       a Cargo Abilities row -> a typed weapon, ability or perk
                    entry of one hero's kit
+    hero_articles  a hero's article -> the stats Cargo lacks, the health
+                   pool, an announcement
+    kit_store      the kits into the tables
     maps           maps, game modes and stages from the Maps article
     patches        game versions from the Patches cargo table
     playstyles     the team-composition playstyles (dive, brawl, poke)

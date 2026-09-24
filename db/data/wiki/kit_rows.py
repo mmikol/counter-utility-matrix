@@ -50,6 +50,10 @@ class HeroKit(NamedTuple):
     abilities: list[AbilityEntry]
     perks: list[PerkEntry]
 
+    def entries(self) -> list[KitEntry]:
+        """Every entry of the kit: the weapons, the abilities, the perks."""
+        return [*self.weapons, *self.abilities, *self.perks]
+
 
 # Columns that describe the ability rather than measure it.
 NON_STAT_FIELDS = frozenset(

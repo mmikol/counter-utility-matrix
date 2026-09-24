@@ -1,9 +1,9 @@
-"""Unit tests: the pure functions the pulls lean on. No database, no
-network - every lesson here was paid for once already."""
+"""Unit tests: the pure functions the pulls lean on - the measurement, name
+and map readers. No database, no network - every lesson here was paid for
+once already."""
 
 import pytest
 
-from db.data.fetch import FetchError
 from db.data.names import name_key
 from db.data.wiki import WikiError
 from db.data.wiki.maps import parse_phases, parse_stages, parse_stretches, stages_of
@@ -197,103 +197,3 @@ def test_a_maps_stages_follow_its_mode():
     # a Push map stays whole
     assert stages_of("push", FIXTURE, phases) == []
     assert stages_of("push", ESCORT_NAMED, phases) == []
-
-
-# --- an announced hero, from its article ----------------------------------------------
-
-UPCOMING = """{{Upcoming}}
-{{Infobox character
-| name = Doctrine
-| role = Support
-| sub-role = Survivor
-| health = 250
-}}
-'''Doctrine''' is a [[Sub-Roles#Survivor|Survivor]] [[Roles#Support|Support]] hero. He is set to
-release in [[Season/2026|Season 5]] on October 6, 2026, which will make him the 54th hero.
-"""
-
-
-def test_an_upcoming_article_yields_the_announcement_and_a_released_one_does_not():
-    import datetime
-
-    from db.data.wiki.heroes import parse_announcement
-    found = parse_announcement(UPCOMING)
-    assert found == {"role": "support", "subrole": "survivor", "health": 250,
-                     "release_date": datetime.date(2026, 10, 6)}
-    assert parse_announcement(UPCOMING.replace("{{Upcoming}}", "")) is None     # released
-    assert parse_announcement(UPCOMING.replace("| role = Support", "")) is None  # no role, no row
-    undated = parse_announcement(UPCOMING.replace("on October 6, 2026", "soon"))
-    assert undated and undated["release_date"] is None
-
-
-# --- the article supplement ------------------------------------------------------------
-
-KIT_ARTICLE = """{{Ability details
-| ability_name = Healing Kasa
-| heal = {{tt|90|3.6 every 0.04 seconds}} (1st bounce)<br>{{tt|30|1.2 every 0.04 seconds}} (self)%s
-| aoe = 3 meters
-}}
-{{Ability details
-| ability_name = Healing Kasa (old)
-| heal = 45
-| aoe = 9 meters
-}}
-""" % ('<ref name = "video">2026-02-16,[https://example.org/watch?v=1 How to play].'
-       " ''YouTube''</ref>")
-
-
-def test_the_ability_vocabulary_is_one_list():
-    """The codes db.ABILITY_KINDS names are the rows 002_heroes.sql seeds, in
-    the same order, so the writer, the reader and the table cannot drift."""
-    import os
-    import re
-
-    import db
-    from db.data.wiki.kit_rows import ability_kind
-    path = os.path.join(db.ROOT, "db", "psql", "migrations", "002_heroes.sql")
-    with open(path, encoding="utf-8") as handle:
-        sql = handle.read()
-    block = sql[sql.index("INSERT INTO ability_kinds"):sql.index("AS v(kind_id, code)")]
-    seeded = re.findall(r"\(\s*\d+\s*,\s*'([a-z]+)'\s*\)", block)
-    assert tuple(seeded) == db.ABILITY_KINDS
-    # and the wiki's ability_type maps onto that vocabulary and nothing else
-    for base_type, code in (("Weapon;;Hip Fire", db.KIND_WEAPON),
-                            ("Ultimate Ability", db.KIND_ULTIMATE),
-                            ("Passive", db.KIND_PASSIVE),
-                            ("Ability", db.KIND_ABILITY),
-                            ("", db.KIND_ABILITY)):
-        assert ability_kind(base_type) == code
-    assert all(ability_kind(t) in db.ABILITY_KINDS
-               for t in ("weapon", "WEAPON x", "an ultimate", "a passive", "anything"))
-
-
-def test_an_unfetchable_hero_page_is_reported_rather_than_read_as_empty(tmp_path, instant_wiki):
-    """Every per-entity wiki fetch keeps one contract: the failure is recorded
-    by name, so a pull that read nothing cannot look like a pull that found
-    nothing. supplement_from_wikitext raises and run() collects it."""
-    import requests
-
-    from db.data.wiki.heroes import supplement_from_wikitext
-
-    class Down:
-        def get(self, *a, **kw):
-            raise requests.ConnectionError("the wiki is unreachable")
-
-        def close(self):
-            pass
-
-    with pytest.raises(FetchError):
-        supplement_from_wikitext(Down(), "Mizuki", str(tmp_path))
-
-
-def test_supplement_reads_heal_and_skips_a_retired_block(tmp_path):
-    from db.data.wiki.heroes import supplement_from_wikitext
-    (tmp_path / "Mizuki.wikitext").write_text(KIT_ARTICLE, encoding="utf-8")
-    extra, _profile = supplement_from_wikitext(None, "Mizuki", str(tmp_path))
-    # "(old)" shares the live block's key and comes last: it overwrote it once
-    assert set(extra) == {"healing kasa"}
-    stats = {code: value for code, (value, _raw) in extra["healing kasa"].items()}
-    assert stats == {"heal": "90 (1st bounce); 30 (self)", "aoe": "3 meters"}
-    rows = parse_measurements(stats["heal"], "hp")
-    assert [(m[0], m[1], m[4]) for m in rows] == [
-        (90.0, "hp", "1st bounce"), (30.0, "hp", "self")]
