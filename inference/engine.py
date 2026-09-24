@@ -277,16 +277,21 @@ def _fill(result: Result, cand: Candidate, fs: FactSet, solver: Solver) -> None:
     # cite the team/matchup fact behind each contribution
     by_id = {h.id: h for h in result.catalog}
     for c in result.contributions:
-        strategy = by_id.get(c["id"])
-        keys = ([strategy.metric] if strategy and strategy.kind == "heuristic" and strategy.metric
-                else [])
-        for e in ((strategy.require, strategy.bonus, strategy.penalty, strategy.when)
-                  if strategy else ()):
-            if e is not None:
-                keys += [n for n in e.names if n.startswith(("team.", "matchup."))]
-        fact = _cited_fact(fs, keys)
+        fact = _cited_fact(fs, _metric_keys(by_id.get(c["id"])))
         if fact is not None:
             c["fact"], c["text"] = fact.id, fact.text
+
+
+def _metric_keys(strategy: Strategy | None) -> list[str]:
+    """The metrics a contribution's fact can state: a heuristic's own, then
+    every team and matchup key its expressions read."""
+    if strategy is None:
+        return []
+    keys = [strategy.metric] if strategy.kind == "heuristic" and strategy.metric else []
+    for e in (strategy.require, strategy.bonus, strategy.penalty, strategy.when):
+        if e is not None:
+            keys += [n for n in e.names if n.startswith(("team.", "matchup."))]
+    return keys
 
 
 def _cited_fact(fs: FactSet, keys: Iterable[str]) -> Fact | None:
@@ -516,21 +521,23 @@ def _momentum(cur: Result, red_cur: Result, countered: Result | None,
                    if n is not None and m is not None and n + m > 0 else None)
     short = lambda why: "unscored: " + why.split(": ", 1)[-1]   # noqa: E731
     if (blue_why and cur.blue) or (red_why and red_cur.blue):   # one seat scores, the other waits
-        # a seat's share is set exactly where it has picks and nothing waits
-        sides = ["blue %d / 100 of its optimal" % n if n is not None else
-                 "blue " + short(blue_why) if blue_why and cur.blue else "no blue picks yet",
+        # a seat with picks has its share, unless its reason for none waits
+        sides = ["no blue picks yet" if not cur.blue else
+                 "blue %d / 100 of its optimal" % n if n is not None else
+                 "blue " + short(blue_why),
+                 "no red picks revealed yet" if not red_cur.blue else
                  "red %d / 100 of its best counter" % m if m is not None else
-                 "red " + short(red_why) if red_why and red_cur.blue else
-                 "no red picks revealed yet"]
+                 "red " + short(red_why)]
         out["verdict"] = "; ".join(sides)
-    elif n is None and m is None:
-        out["verdict"] = "no picks yet on either side"
-    elif n is None and m is not None:
-        out["verdict"] = ("red has revealed picks and blue has none:"
-                          " red %d / 100 of its best counter" % m)
-    elif m is None and n is not None:
-        out["verdict"] = "no red picks revealed yet: blue %d / 100 of its optimal" % n
-    elif n is not None and m is not None:
+    elif n is None or m is None:
+        if m is not None:
+            out["verdict"] = ("red has revealed picks and blue has none:"
+                              " red %d / 100 of its best counter" % m)
+        elif n is not None:
+            out["verdict"] = "no red picks revealed yet: blue %d / 100 of its optimal" % n
+        else:
+            out["verdict"] = "no picks yet on either side"
+    else:
         gap = n - m
         if abs(gap) < 5:
             out["verdict"] = "even - blue %d, red %d" % (n, m)
