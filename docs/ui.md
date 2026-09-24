@@ -100,7 +100,15 @@ of state - the map, the side, the bans, the red picks, the blue picks -
 in `localStorage`, so a reload mid-game keeps the board. A click on a
 portrait toggles that hero on that team (a banned hero cannot be picked;
 a hero on one team cannot be on the other); a change debounces, then
-fetches facts and the board together.
+fetches facts and the board together. A board request names the page
+(`client`, drawn once per page load), so the server stops a board the
+page has moved past, and the page aborts the older request. A request that
+fails says so where its answer would have gone - the facts tab, the blue
+seat, the strip - blanks the badges and the plan, keeps nothing of the
+last board, and is tried again when the page comes back into view or
+the network returns. A roster that fails to load is said in the warning
+box and asked for again, waiting twice as long each time up to half a
+minute; nothing else is drawn before it.
 
 **The rosters.** One tile renderer draws the red roster, the blue roster
 and the ban picker, so all three read as the same hero select: portrait
@@ -129,37 +137,43 @@ or on its slot un-bans it; at five, the rest dim.
 **The comps panel** answers at every stage of a draft. On top, the game
 plan in prose: the ground, the side, what to play, what red's picks mean
 and which of the six answer them, the family to stay in, and what it
-rests on. Below, two seats. Blue's optimal counter to current picks
-(left) is solved against red's revealed picks - or their likely starting
-comp until they reveal one - and never against blue's own picks. Red's
-most likely starting comp (right) is a two-two-two filled slot by slot
-with the hero the map's pick rates and the wiki's synergies make
-likeliest, past the bans; static for the board, no strategy read. Neither
-seat carries a score: each is its side's reference. Under a seat's cards
-sit the search's numbers (candidates, seconds, the lean), the strategies
-satisfied - one bar per strategy, headed by the count met, greyed where
-one did not apply - and the alternatives.
+rests on. Below, two seats. Blue's (left) shows the six the plan
+describes: from one to five picks, *your picks, the rest filled*; at six,
+*your six*; and below it blue's *optimal vs red's picks* (*vs red's likely
+six* before red reveals one), which blue's own picks never constrain -
+before any blue pick, the optimal alone. Red's most likely starting comp
+(right) is a two-two-two filled slot by slot with the hero the map's pick
+rates and the wiki's synergies make likeliest, past the bans; static for
+the board, no strategy read, and only a new map, side or ban sends it back
+to *searching*. Neither seat carries a score. Under
+a six's cards sit the search's numbers (candidates, seconds, the lean),
+the strategies satisfied - one bar per strategy, headed by the count met,
+greyed where one did not apply - and the alternatives.
 
 **The scores** are the picks'. The badge above each picker is that seat's
 comp as a share of its own optimal - blue's picks against blue's optimal,
 red's against red's best counter to your picks (solved for that scale,
-not shown); before any pick the badge shows the suggested six's 100. The
-*fight odds* strip above the boxes is two bars stacked on one track,
-blue's over red's: with both seats scored each bar is its side's share -
-a side still drafting read through its fill, on both sides alike - over
-the two shares' sum, a split of 100, the share in the tooltip; with
-one seat scored, its share alone; empty until a seat has a figure. Not a
-fitted probability. When nothing can be a share of anything - the
-playbook holds no heuristic, scored constraint or soft limit, or none
-applies to this board yet - a seat reads *unscored*, one word, the
-engine's reason in the badge's tooltip. Each box has a *clear*; *clear
-all* in the header empties the map, the side, the bans and both teams,
-and leaves the weights.
+not shown); a seat still drafting reads the share the best six from its
+picks reaches, as the strip reads it, and says so in the tooltip; before
+any pick the badge shows the suggested six's 100. The *fight odds* strip
+above the boxes is two bars stacked on one track, blue's over red's: with
+both seats scored each bar is its side's share - a side still drafting
+read through its fill, on both sides alike - over the two shares' sum, a
+split of 100, the share in the tooltip; with one seat scored, its share
+alone; while neither bar has a figure, the engine's verdict sits under
+them. Not a fitted probability. When nothing can be a share of anything -
+the playbook holds no heuristic, scored constraint or soft limit, or none
+applies to this board yet - a seat reads *unscored*, one word, picks or
+not, the engine's reason in the badge's and the bar's tooltip. Each box
+has a *clear*; *clear all* in the header empties the map, the side, the
+bans and both teams, and leaves the weights.
 
 **The suggestions.** Blue's empty slots carry the fill - the best six
 that keeps what you have locked, the optimal six before any pick - each a
 click from locking; a tile shows the hero alone, its reasons in the
-tooltip and on the comps tab.
+tooltip and on the comps tab. A filled slot's tooltip is the reason this
+board gives its hero - blue's from the fill or the six, red's from their
+current comp.
 
 **The facts panel** filters by text and by scope and says how many it
 holds beside the filter ("12 of 464 facts" under a filter); the tab
@@ -175,7 +189,8 @@ exact figure, the file's weight as the inferred default, a reset. A
 setting is kept in the browser, rides with every board request as
 `weights=<id>:<value>`, is applied by the solver for that board only (each
 result names the `weights` it was scored under) and never touches the
-file. By default that is the whole story: the board is read-only, there
+file. A setting whose heuristic the catalog no longer holds has no row to
+clear it from, so it is dropped when the playbook loads. By default that is the whole story: the board is read-only, there
 is no *store* button and `POST /api/weight` answers 403. With
 `COUNTRIX_READ_ONLY=0` the button returns, and *store* -
 `POST /api/weight` `{id, weight}` - becomes a `tune` call: over HTTP at

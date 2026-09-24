@@ -168,7 +168,8 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .plan { padding:12px 14px; margin-bottom:10px; border-radius:10px; border:1px solid var(--line); background:linear-gradient(170deg,#1b2436 0%,#161a24 70%); }
 .plan .lbl, .momentum .lbl { font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted); }
 .plan .text { margin-top:6px; line-height:1.55; font-size:13.5px; }
-.momentum { display:flex; align-items:center; gap:16px; padding:10px 14px; margin:14px 0 0; border-radius:10px; border:1px solid var(--line); background:#151a24; }
+.momentum { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; padding:10px 14px; margin:14px 0 0; border-radius:10px; border:1px solid var(--line); background:#151a24; }
+.momentum .verdict { flex:1 0 100%; color:var(--muted); font-size:12px; }   /* why neither bar has a figure */
 .momentum .lbl { flex:0 0 auto; }
 .momentum .mbars { flex:1; display:grid; grid-template-columns:44px 1fr 74px; gap:5px 10px; align-items:center; }   /* the two bars stacked on one track width */
 .momentum .mbar { display:contents; }
@@ -188,6 +189,7 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .seats .comp { grid-template-columns:repeat(3,1fr); }
 .seats .bars { grid-template-columns:1fr; }
 .inf-head { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+.inf-six + .inf-six { margin-top:16px; padding-top:12px; border-top:1px solid var(--line); }   /* blue's six above its optimal */
 .seat .meta { margin:10px 0 0; }
 .inf-head h3 { margin:0; font-size:24px; color:var(--gold); }
 .comp { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin:12px 0; }

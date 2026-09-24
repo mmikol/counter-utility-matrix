@@ -12,7 +12,9 @@ var bansOpen = false;                        /* the ban picker starts collapsed 
 
 function currentMap() { return ROSTER ? ROSTER.maps.filter(function (x) { return x.name === st.map; })[0] : null; }
 
-function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+/* text for markup and for either kind of quoted attribute: a map named King's
+   Row must not close a single-quoted title */
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 if (!st.weights || typeof st.weights !== 'object') st.weights = {};   /* a state saved before the sliders */
 function save() { try { localStorage.setItem('owdb-board2', JSON.stringify(st)); } catch (e) {} }
 function hero(name) { return ROSTER.byName[name]; }
@@ -124,7 +126,16 @@ function paintBans() {
   el('bans').className = 'bans' + (bansOpen ? ' open' : '') + (st.bans.length >= BANS ? ' maxed' : '');
 }
 
+/* a filled slot's tooltip: the reason the board gives its hero - blue's fill
+   or six, red's current comp - and none while no board has answered */
+function pickReason(team, name) {
+  var d = INF, r = !d || d.error ? null : team === 'blue' ? (d.fill || d.current) : d.red_current;
+  var p = r && r.picks ? r.picks.filter(function (x) { return x.hero === name; })[0] : null;
+  return p ? p.why : '';
+}
+
 function paint() {
+  if (!ROSTER) return;                  /* the slots and rosters are built when the roster loads */
   paintBans();
   ['red', 'blue'].forEach(function (team) {
     var other = team === 'red' ? 'blue' : 'red';
@@ -132,8 +143,8 @@ function paint() {
     for (var i = 0; i < TEAM; i++) {
       var name = st[team][i], s = slots[i];
       if (name) { var h = hero(name); s.className = 'slot full'; s.setAttribute('data-h', name);
-        s.innerHTML = portrait(h) + "<span class='nm'>" + esc(name) + '</span>'; }
-      else { s.className = 'slot'; s.removeAttribute('data-h'); s.innerHTML = "<span class='idx'>" + (i + 1) + '</span>'; }
+        s.title = pickReason(team, name); s.innerHTML = portrait(h) + "<span class='nm'>" + esc(name) + '</span>'; }
+      else { s.className = 'slot'; s.removeAttribute('data-h'); s.title = ''; s.innerHTML = "<span class='idx'>" + (i + 1) + '</span>'; }
     }
     var have = roleCounts(team), capped = {}, caps = {};
     ROLES.forEach(function (role) { caps[role] = roleCap(team, role); capped[role] = caps[role] !== null && have[role] >= caps[role]; });
@@ -191,13 +202,19 @@ function qs() {
 }
 
 var pending = null, seq = 0, FACTS = null, INF = null;
+var STALE = false;         /* the last refresh failed: the next focus or reconnect retries it */
+var solve = null;          /* the board request in flight, aborted when a newer one is sent */
+var redKey = null;         /* the map, side and bans red's likely six was last drawn for */
+/* this page's name on its board requests: the server stops a board this page
+   has moved past, and serves every other page's in its own lane */
+var CLIENT = Math.random().toString(36).slice(2, 10);
 /* one switch for every figure the solver owns */
 function solving(on) {
   document.body.classList.toggle('solving', !!on);
   ['bluescore', 'redscore'].forEach(function (id) {
     var node = el(id);
     if (!node) return;
-    if (on) { node.dataset.was = node.textContent; node.textContent = '…'; }
+    if (on) { if (node.textContent !== '…') node.dataset.was = node.textContent; node.textContent = '…'; }
     else if (node.textContent === '…' && node.dataset.was !== undefined) { node.textContent = node.dataset.was; }
   });
   if (on) {
@@ -217,34 +234,65 @@ function solving(on) {
   }
 }
 
+/* the facts tab when its request fails: the reason in place of the rows, so
+   the last board's facts never stand in for this one's */
+function factsFailed(why) {
+  FACTS = null;
+  el('factbody').innerHTML = "<tr><td class='src'>" + esc(why) + '</td></tr>';
+  el('factsn').textContent = '';
+}
+
+/* the comps tab when no board came back: the page says so everywhere the
+   board would have answered, and keeps nothing of the last one */
+function boardFailed() {
+  STALE = true; redKey = null;
+  solving(false);
+  INF = null; paint();
+  el('inf-blue').innerHTML = "<div class='warnbox'>the board is not answering</div>";
+  el('inf-red').innerHTML = ''; el('plan').innerHTML = '';
+  el('momentum').innerHTML = "<span class='lbl'>fight odds</span><span class='legend'>the board is not answering</span>";
+  ['bluescore', 'redscore'].forEach(function (id) { el(id).textContent = ''; el(id).title = ''; });
+}
+
 function refresh() {
+  if (!ROSTER) return;                  /* nothing is drawn before the roster loads */
   clearTimeout(pending);
   pending = setTimeout(function () {
     var mine = ++seq, q = qs();
     fetch('/api/facts?' + q).then(function (r) { return r.json(); }).then(function (d) {
       if (mine !== seq) return;
-      if (d.error) { flash(d.error); return; }
+      if (d.error) { factsFailed(d.error); return; }
       FACTS = d; renderFacts();
-    }).catch(function () { flash('the database is not answering'); });
+    }).catch(function () {
+      if (mine !== seq) return;
+      STALE = true; factsFailed('the board is not answering');
+    });
     /* the search is seconds of work, so everything it feeds says so until it
        lands: the two seats, the odds bar, the scores, the plan and the filled
        slots. Without this the board shows the last board's numbers while it
-       thinks, which reads as an answer. */
+       thinks, which reads as an answer. Red's likely six changes only with
+       the map, the side and the bans, so a pick leaves it standing */
     solving(true);
     el('inf-blue').innerHTML = "<p class='legend searching'>searching both seats…</p>";
-    el('inf-red').innerHTML = "<p class='legend searching'>searching…</p>";
-    fetch('/api/board?' + q).then(function (r) { return r.json(); }).then(function (d) {
-      if (mine !== seq) return;
-      solving(false);
-      INF = d; renderInf();
-    }).catch(function () {
-      if (mine !== seq) return;
-      solving(false);
-      el('inf-blue').innerHTML = "<p class='legend'>inference is not answering</p>";
-      el('inf-red').innerHTML = '';
-    });
+    var key = [st.map, st.side].concat(st.bans).join('|');
+    if (key !== redKey) el('inf-red').innerHTML = "<p class='legend searching'>searching…</p>";
+    if (solve) solve.abort();           /* the older request; this one's arrival stops its board */
+    solve = window.AbortController ? new AbortController() : null;
+    fetch('/api/board?' + q + (q ? '&' : '') + 'client=' + CLIENT, solve ? { signal: solve.signal } : {})
+      .then(function (r) { return r.json(); }).then(function (d) {
+        if (mine !== seq) return;
+        solving(false);
+        STALE = !!d.error; redKey = d.error ? null : key;
+        INF = d; renderInf();
+      }).catch(function () {
+        if (mine !== seq) return;       /* an aborted request is an older one */
+        boardFailed();
+      });
   }, 200);
 }
+/* a failed refresh is tried again when the page comes back into view or the
+   network comes back */
+['online', 'focus'].forEach(function (ev) { window.addEventListener(ev, function () { if (STALE) refresh(); }); });
 
 var SCOPES = ['meta', 'bans', 'map', 'hero', 'team', 'matchup', 'playbook'];
 var scopeOn = { meta: true, bans: true, map: true, hero: true, team: true, matchup: true, playbook: true };
@@ -268,9 +316,9 @@ function renderFacts() {
 }
 
 /* the empty blue slots carry the solver's suggestions: the optimal six before
-   any pick, then the best six that keeps the locked ones - a click locks one.
-   The tile shows the hero alone; its reasons ride in the hover title and in
-   the comps tab */
+   any pick, then the fill - the best six that keeps the locked ones - and a
+   click locks one. The tile shows the hero alone; its reasons ride in the
+   hover title and on the comps tab, which draws the same six */
 function paintSuggestions() {
   var slots = el('blueslots').children, d = INF;
   var src = !d || d.error ? null : (st.blue.length ? d.fill : d.blue);
@@ -291,7 +339,8 @@ function showTab(name) {
   try { localStorage.setItem('owdb-tab', name); } catch (e) {}
 }
 
-fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
+/* the board once the roster has loaded: every tile, slot and control hangs off it */
+function start(d) {
   ROSTER = d; ROSTER.byName = {};
   d.heroes.forEach(function (h) { ROSTER.byName[h.name] = h; });
   el('mapsel').innerHTML = "<option value=''>MAP UNKNOWN / ANY</option>" + d.maps.map(function (m) { return "<option value=\"" + esc(m.name) + "\">" + esc(m.name) + '</option>'; }).join('');
@@ -299,17 +348,37 @@ fetch('/api/roster').then(function (r) { return r.json(); }).then(function (d) {
   st.red = st.red.filter(known); st.blue = st.blue.filter(known); st.bans = st.bans.filter(known);
   if (!d.maps.some(function (m) { return m.name === st.map; })) st.map = '';
   buildTeam('red'); buildTeam('blue'); buildBanPicker(); paint();
-  if (d.newer_patches && d.newer_patches.length) { var w = el('vintage'); w.style.display = 'block';
-    w.textContent = d.newer_patches.length + ' patch(es) since the rates were captured (newest ' + d.newer_patches[0][0] + ') - run pull_rates'; }
+  var w = el('vintage'), newer = d.newer_patches || [];     /* the patches, or nothing: boot's failure note goes */
+  w.style.display = newer.length ? 'block' : 'none';
+  w.textContent = newer.length ? newer.length + ' patch(es) since the rates were captured (newest ' + newer[0][0] + ') - run pull_rates' : '';
   el('mapsel').onchange = function () { st.map = this.value; save(); paint(); refresh(); };
   el('filter').oninput = renderFacts;
   var chips = el('chips'); chips.innerHTML = SCOPES.map(function (s) { return "<button class='chip on' data-scope='" + s + "'>" + s + '</button>'; }).join('');
   chips.onclick = function (e) { var c = e.target.closest('.chip'); if (!c) return; var s = c.getAttribute('data-scope');
     scopeOn[s] = !scopeOn[s]; c.classList.toggle('on', scopeOn[s]); renderFacts(); };
-  fetch('/api/strategies').then(function (r) { return r.json(); }).then(renderPlaybook);
+  loadPlaybook();
   showTab((function () { try { return localStorage.getItem('owdb-tab'); } catch (e) { return null; } })());
   el('clearall').onclick = function () {   /* back to nothing: map, side, bans, both teams - the weights stay */
     st = { map: '', red: [], blue: [], bans: [], side: '', weights: st.weights || {} }; save(); paint(); refresh();
   };
   refresh();
-});
+}
+
+/* the roster, asked for until it comes: a failure says so in the warning box
+   and tries again, waiting twice as long each time up to half a minute */
+var bootWait = 1000;
+function boot() {
+  fetch('/api/roster').then(function (r) {
+    return r.json().then(function (d) {
+      if (!r.ok || d.error || !d.heroes) throw new Error(d.error || 'HTTP ' + r.status);
+      return d;
+    });
+  }).then(start, function (e) {
+    var w = el('vintage');
+    w.style.display = 'block';
+    w.textContent = 'the board is not answering (' + (e && e.message ? e.message : e) + ') - trying again in ' + Math.round(bootWait / 1000) + 's';
+    setTimeout(boot, bootWait);
+    bootWait = Math.min(bootWait * 2, 30000);
+  });
+}
+boot();

@@ -123,70 +123,93 @@ function wireBars(root) {
   });
 }
 
-/* what a current comp's figure means - the badge's tooltip: the 0-100 share
-   (`normalized`) of its own seat's optimal; the raw sum is never shown */
-function meaning(d) {
-  var n = typeof d.normalized === 'number' ? Math.round(d.normalized) : null;
-  if (n === null) return '';
-  if (d.seat === 'red') return 'their picks reach ' + n + '% of their best counter to yours';
-  return 'your picks reach ' + n + '% of the best six for this board';
+/* what a seat's figure means - the badge's tooltip: its share of its own
+   seat's optimal, `n` of 100 - the picks' own for a full six, the best six
+   they reach for a half-drafted one; the raw sum is never shown */
+function meaning(d, n) {
+  var whose = d.seat === 'red' ? 'their' : 'your';
+  var of = d.seat === 'red' ? 'their best counter to yours' : 'the best six for this board';
+  return (d.partial ? 'the best six from ' + whose + ' picks reaches ' : whose + ' picks reach ') +
+    n + '% of ' + of;
 }
 
 /* the comps panel: the game plan, the fight odds strip above the boxes, the two
    seats side by side and the badge above each picker */
 function renderInf() {
   var d = INF;
-  if (!d || d.error) { el('inf-blue').innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; el('inf-red').innerHTML = ''; el('momentum').innerHTML = ''; el('plan').innerHTML = ''; el('bluescore').textContent = ''; el('redscore').textContent = ''; return; }
+  if (!d || d.error) {
+    el('inf-blue').innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>';
+    el('inf-red').innerHTML = ''; el('momentum').innerHTML = ''; el('plan').innerHTML = '';
+    ['bluescore', 'redscore'].forEach(function (id) { el(id).textContent = ''; el(id).title = ''; });
+    paint();                              /* the last board's suggestions go with it */
+    return;
+  }
   var text = (d.plan || '').split('\n'), basis = text.length && text[text.length - 1].indexOf('Based on:') === 0 ? text.pop() : '';
   el('plan').innerHTML = "<span class='lbl'>game plan</span><div class='text'>" + text.map(esc).join('<br>') + '</div>' + (basis ? "<div class='basis'>" + esc(basis) + '</div>' : '');
   var mo = d.momentum || {};
-  /* the strip is two bars, blue's and red's, empty until a seat has a figure.
-     With both seats scored the bars are the odds - each share over the two
-     shares' sum, a split of 100 - and the tooltip keeps the share; with one
-     seat scored its bar is its share alone; a seat that cannot be scored
-     reads the word, its reason in the badge's tooltip */
+  /* the strip is two bars, blue's and red's. With both seats scored the bars
+     are the odds - each share over the two shares' sum, a split of 100 - and
+     the tooltip keeps the share; with one seat scored its bar is its share
+     alone; a seat that cannot be scored reads the word, picks or not, its
+     reason in the tooltip. While neither bar has a figure the engine's
+     verdict says why under them */
   var bar = function (side, value, res) {
-    var odds = mo.odds ? mo.odds[side] : null;
-    var word = res && res.blue && res.blue.length && res.scoring === false ? 'unscored'
+    var odds = mo.odds ? mo.odds[side] : null, unscored = !!res && res.scoring === false;
+    var word = unscored ? 'unscored'
              : odds !== null ? odds + '%'
              : typeof value === 'number' ? value + ' / 100' : '';
-    var tip = typeof value === 'number' ? side + ' ' + value + ' / 100 of its optimal' : '';
+    var tip = unscored ? res.unscored || ''
+            : typeof value === 'number' ? side + ' ' + value + ' / 100 of its optimal' : '';
     return "<span class='mbar " + side + "' title='" + esc(tip) + "'><span class='side'>" + side + "</span><span class='trk'><span class='fill' style='width:" +
       (odds !== null ? odds : typeof value === 'number' ? value : 0) + "%'></span></span><span class='val'>" + word + '</span></span>';
   };
-  el('momentum').innerHTML = "<span class='lbl' title='each side\'s comp as a share of the best six it could field here'>fight odds</span>" +
-    "<span class='mbars'>" + bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current) + '</span>';
-  /* neither seat carries a score: red's is what they are likely to field, from
-     the map and the meta alone, and blue's is the reference every comp is
-     measured against; the picks' scores are the badges above the pickers */
+  var figureless = typeof mo.blue !== 'number' && typeof mo.red !== 'number';
+  el('momentum').innerHTML = "<span class='lbl' title='each side&#39;s comp as a share of the best six it could field here'>fight odds</span>" +
+    "<span class='mbars'>" + bar('blue', mo.blue, d.current) + bar('red', mo.red, d.red_current) + '</span>' +
+    (figureless && mo.verdict ? "<span class='verdict'>" + esc(mo.verdict) + '</span>' : '');
+  /* neither seat carries a score. Red's is what they are likely to field, from
+     the map and the meta alone. Blue's shows the six the plan describes - the
+     fill around one to five picks, the picks themselves at six - above the
+     optimal, which blue's own picks never constrain; before any pick, the
+     optimal alone. The picks' scores are the badges above the pickers */
   renderResult(d.expected, el('inf-red'), 'red - most likely starting comp' + (d.map ? ' on ' + d.map : ''));
-  renderResult(d.blue, el('inf-blue'), 'blue - optimal counter to current picks' + (d.side ? ', on ' + d.side : ''));
-  /* the badge above each seat's picks and picker always carries a figure: the
-     current comp's share while the seat holds picks, else the suggested six's -
-     this seat's optimal, 100 by definition - or "unscored" with the reason */
-  var figure = function (r) { return r.scoring === false ? 'unscored' : typeof r.normalized === 'number' ? Math.round(r.normalized) + ' / 100' : ''; };
-  var badge = function (cur, optimal, who) {
-    var held = cur && cur.blue && cur.blue.length, r = held ? cur : optimal;
-    if (!r) return ['', ''];
-    var why = r.scoring === false ? (r.unscored || '')
-            : held ? meaning(cur)
-            : 'no ' + who + ' picks yet: the suggested six is this seat\'s optimal, 100';
-    return [figure(r), why];
+  var held = d.current && d.current.blue ? d.current.blue.length : 0;
+  var revealed = d.red_current && d.red_current.blue ? d.red_current.blue.length : 0;
+  var ours = d.fill ? resultHTML(d.fill, 'blue - your picks, the rest filled')
+           : held >= TEAM ? resultHTML(d.current, 'blue - your six') : '';
+  el('inf-blue').innerHTML = ours + resultHTML(d.blue, 'blue - optimal vs red\'s ' + (revealed ? 'picks' : 'likely six') + (d.side ? ', on ' + d.side : ''));
+  wireBars(el('inf-blue'));
+  /* the badge above each picker: "unscored", with the engine's reason,
+     whenever the seat's current comp cannot be a share of anything - picks
+     or not; before any pick the suggested six's 100, the seat's optimal by
+     definition; else the picks' share of the seat's optimal, a half-drafted
+     seat read through the best six its picks reach, as the fight odds read it */
+  var badge = function (cur, share, who) {
+    if (!cur) return ['', ''];
+    if (cur.scoring === false) return ['unscored', cur.unscored || ''];
+    if (!(cur.blue && cur.blue.length)) return ['100 / 100', 'no ' + who + ' picks yet: the suggested six is this seat\'s optimal, 100'];
+    var n = typeof share === 'number' ? share : typeof cur.normalized === 'number' ? Math.round(cur.normalized) : null;
+    return n === null ? ['partial', 'no share yet for ' + who + '\'s picks'] : [n + ' / 100', meaning(cur, n)];
   };
-  var b = badge(d.current, d.blue, 'blue'), r = badge(d.red_current, d.red, 'red');
+  var b = badge(d.current, mo.blue, 'blue'), r = badge(d.red_current, mo.red, 'red');
   el('bluescore').textContent = b[0]; el('bluescore').title = b[1];
   el('redscore').textContent = r[0]; el('redscore').title = r[1];
-  if (d.shapes && d.shapes.length && JSON.stringify(d.shapes) !== JSON.stringify(SHAPES)) { SHAPES = d.shapes; paint(); return; }
-  paintSuggestions();
+  if (d.shapes && d.shapes.length) SHAPES = d.shapes;   /* what the roster dims */
+  paint();                    /* the dimmed tiles, the suggestions and each filled slot's reason */
 }
 
 /* a count with thousands separators: 14,101 candidates */
 function commas(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
-/* one seat: its title, the six as cards, the search's numbers, the strategies
-   met and the alternatives - a seat is a reference, so it carries no score */
+/* one seat's six in its container - a seat is a reference, so it carries no score */
 function renderResult(d, container, title) {
-  if (!d || d.error) { container.innerHTML = "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>'; return; }
-  var out = "<div class='inf-head'><h3>" + esc(title) + '</h3></div>';
+  container.innerHTML = resultHTML(d, title);
+  wireBars(container);          // the tabs and the filter live on the new nodes
+}
+/* a six: its title, the six as cards, the search's numbers, the strategies
+   met and the alternatives */
+function resultHTML(d, title) {
+  if (!d || d.error) return "<div class='warnbox'>" + esc(d ? d.error : 'no result') + '</div>';
+  var out = "<div class='inf-six'><div class='inf-head'><h3>" + esc(title) + '</h3></div>';
   out += "<div class='comp'>";
   d.picks.forEach(function (p) {
     var h = hero(p.hero) || { name: p.hero, portrait: p.portrait };
@@ -204,6 +227,5 @@ function renderResult(d, container, title) {
     out += "<div class='alts'><b>alternatives</b><ol>" +
       d.alternatives.map(function (a) { return '<li>' + esc(a.blue.join(', ')) + '</li>'; }).join('') + '</ol></div>';
   }
-  container.innerHTML = out;
-  wireBars(container);          // the tabs and the filter live on the new nodes
+  return out + '</div>';
 }

@@ -31,7 +31,7 @@ function storeWeight(id, value, button) {
       flash(d.line || ('stored ' + id + ' at ' + value));
       if (st.weights) delete st.weights[id];
       save();
-      fetch('/api/strategies').then(function (r) { return r.json(); }).then(renderPlaybook);
+      loadPlaybook();
       refresh();
     })
     .catch(function (e) { flash('not stored: ' + e); button.disabled = false; button.textContent = 'store'; });
@@ -46,8 +46,24 @@ function setWeight(id, value, inferred) {
    heuristics, assumptions - each headed with its count, an empty group saying
    so; a card's left edge carries its kind's colour */
 var KINDS = [['constraint', 'constraints'], ['heuristic', 'heuristics'], ['assumption', 'assumptions']];
+/* the catalog, fetched and drawn; a request that fails draws the failure */
+function loadPlaybook() {
+  fetch('/api/strategies').then(function (r) { return r.json(); }).then(renderPlaybook,
+    function () { renderPlaybook(null); });
+}
+/* a slider setting whose heuristic the catalog no longer holds - renamed,
+   removed, or a scored rule now - has no row to clear it from, and would ride
+   with every request: it is dropped. Only a catalog that answered prunes */
+function pruneWeights(d) {
+  var live = {};
+  d.strategies.forEach(function (h) { if (h.form === 'heuristic') live[h.id] = true; });
+  var stale = Object.keys(st.weights || {}).filter(function (id) { return !live[id]; });
+  stale.forEach(function (id) { delete st.weights[id]; });
+  if (stale.length) save();
+}
 function renderPlaybook(d) {
   if (!d || !d.strategies) { el('playbook').innerHTML = "<div class='warnbox'>" + esc(d && d.error ? d.error : 'the strategies are not answering') + '</div>'; return; }
+  pruneWeights(d);
   /* anchors first: one per group with its count, so a long playbook is a click
      from any kind; each scrolls its group into view */
   var out = "<nav class='pbnav'>" + KINDS.map(function (k) {

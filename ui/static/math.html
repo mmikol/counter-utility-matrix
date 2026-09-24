@@ -101,9 +101,9 @@ back is what found them.</p>
 you can see</i>, not against every red they might pick. Before red reveals anything the board
 answers their most likely starting comp, drawn from the map's pick rates; each pick they show
 re-solves against what is now known. It is a best reply to present information and changes as
-that information does. The <i>if countered optimally</i> row is the hedge: it scores your six
-against red's best reply to it, so a comp that wins only while red plays badly shows up
-there.</p>
+that information does. The hedge is the <i>if countered optimally</i> case the
+<code>board</code> tool reports: it scores your six against red's best reply to it, so a comp
+that wins only while red plays badly shows up there. The board page does not solve it.</p>
 <p id='reach'><b>Reach.</b> The weights are meant to make a hero common or rare, never
 impossible. What is established is narrower: 51 of the 53 released heroes have a board on
 which they are in the optimal six, within a match's five bans, and each such board is a proof.
@@ -120,9 +120,11 @@ strategy is read, and it does not change when red reveals a pick.</p>
 
 pick(h, map)   the hero's pick rate on this map (overall with no map set)
 partners(h, S) heroes already on the six the synergy table pairs h with</pre>
-<p id='counter'><b>Blue's optimal counter to current picks</b>: solved against red's revealed
-picks, or their likely comp until they reveal one, on this map, side and bans; never against
-blue's own picks. The suggestion tiles are a second solve that keeps your locked picks. Red's
+<p id='counter'><b>Blue's optimal counter</b>: solved against red's revealed picks, or their
+likely comp until they reveal one, on this map, side and bans; never against blue's own
+picks. Once blue picks, its seat shows blue's six above the optimal: from one to five picks,
+the picks with the rest filled by a second solve that keeps them - the six the suggestion
+tiles offer; at six, the six itself. The game plan describes that six. Red's
 optimal is solved as the scale for red's score and not shown.</p>
 <p id='weights'><b>The weights.</b> A heuristic's weight is the slider under its card. It stays
 in your browser and rides with every request until reset; the file's weight is the default.
