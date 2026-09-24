@@ -108,10 +108,10 @@ class Registry:
         joined = cls()
         for family in families:
             for spec in family:
-                joined.add(spec)
+                joined.register(spec)
         return joined
 
-    def add(self, spec: ToolSpec) -> None:
+    def register(self, spec: ToolSpec) -> None:
         # a name registered twice is a programmer's error, raised at import
         if spec.name in self._specs:
             raise ValueError("tool %r is registered twice" % spec.name)
@@ -128,7 +128,7 @@ class Registry:
                             required=list(required), additionalProperties=False)
 
         def decorate(fn: ToolFn) -> ToolFn:
-            self.add(ToolSpec(name, description, schema, fn, source))
+            self.register(ToolSpec(name, description, schema, fn, source))
             return fn
         return decorate
 

@@ -8,6 +8,7 @@ and sync_all runs them in it. A session, the refresher or a shell (`python
 -m db.mcp call`) decides what to pull and when, and reads the summary back.
 """
 
+import functools
 import os
 from collections.abc import Callable, Mapping
 from typing import TypedDict
@@ -86,6 +87,13 @@ def _pull(ctx: Context, source: str, fn: PullFn, refresh: bool, **options: bool)
         return fn(cx, pull, **options)
 
 
+def _pull_call(
+        headline: str, source: str, fn: PullFn, ctx: Context, /, refresh: bool = False,
+        **options: bool) -> ToolReply:
+    """A pull tool's call: the pull, and its summary under the headline."""
+    return _summary(headline, _pull(ctx, source, fn, refresh, **options))
+
+
 def pull_tool(
         name: str, description: str, *, source: str, stored: str,
         properties: Properties = REFRESH) -> Callable[[PullFn], PullFn]:
@@ -94,9 +102,8 @@ def pull_tool(
     and replies under the headline "<name>: <stored>". The function is
     returned as it is."""
     def decorate(fn: PullFn) -> PullFn:
-        def call(ctx: Context, refresh: bool = False, **options: bool) -> ToolReply:
-            return _summary("%s: %s" % (name, stored), _pull(ctx, source, fn, refresh, **options))
-        tool(name, description, properties, source=source)(call)
+        tool(name, description, properties, source=source)(
+            functools.partial(_pull_call, "%s: %s" % (name, stored), source, fn))
         return fn
     return decorate
 

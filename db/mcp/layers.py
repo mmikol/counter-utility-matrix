@@ -9,6 +9,7 @@ context points at, and none of these tools writes. This module is where
 the door imports ui/facts and the solver.
 """
 
+import functools
 import json
 from collections.abc import Callable, Mapping, Sequence
 from typing import TypedDict
@@ -61,6 +62,12 @@ def _draft(arguments: dict[str, object]) -> Draft:
                  side=str(arguments.pop("side", "")))
 
 
+def _board_call(fn: BoardFn, ctx: Context, /, **arguments: object) -> ToolReply:
+    """A board tool's call: its function handed the one Draft BOARD's
+    arguments name, then the rest of them."""
+    return fn(ctx, _draft(arguments), **arguments)
+
+
 def board_tool(
         name: str, description: str, properties: Properties | None = None,
         required: Sequence[str] = ()) -> Callable[[BoardFn], BoardFn]:
@@ -68,9 +75,8 @@ def board_tool(
     first, then its own, and the function called with the one Draft they name
     and the rest of the arguments. The function is returned as it is."""
     def decorate(fn: BoardFn) -> BoardFn:
-        def call(ctx: Context, **arguments: object) -> ToolReply:
-            return fn(ctx, _draft(arguments), **arguments)
-        tool(name, description, dict(BOARD, **(properties or {})), required)(call)
+        tool(name, description, dict(BOARD, **(properties or {})), required)(
+            functools.partial(_board_call, fn))
         return fn
     return decorate
 
