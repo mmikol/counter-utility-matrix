@@ -360,16 +360,19 @@ CONNECT_TRIES = 60          # one a second: a database container starting up
 def main() -> int:
     """Print the state for docker-entrypoint.sh, and the pending migrations
     on stderr when it is stale. A database that never answers is a line on
-    stderr and exit 1, which ends the container under `set -e`."""
+    stderr with the last try's error and exit 1, which ends the container
+    under `set -e`."""
+    last: psycopg.OperationalError | None = None
     for _ in range(CONNECT_TRIES):
         try:
             cx = psycopg.connect(psql.default_dsn())
             break
-        except psycopg.OperationalError:
+        except psycopg.OperationalError as error:
+            last = error
             time.sleep(1)
     else:
-        sys.stderr.write("the database never became reachable (%d tries, a second apart)\n"
-                         % CONNECT_TRIES)
+        sys.stderr.write("the database never became reachable (%d tries, a second apart): %s\n"
+                         % (CONNECT_TRIES, last))
         return 1
     with cx:
         found = state(cx)

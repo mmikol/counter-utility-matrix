@@ -222,6 +222,7 @@ def test_the_probe_exits_one_when_the_database_never_answers(monkeypatch, capsys
     assert schema.main() == 1
     captured = capsys.readouterr()
     assert captured.out == "" and "never became reachable" in captured.err
+    assert "port 9" in captured.err                    # the last try's own error
 
 
 def test_a_query_cell_arrives_as_json():
