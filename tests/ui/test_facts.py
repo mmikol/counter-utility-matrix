@@ -260,6 +260,9 @@ def test_the_whole_database_becomes_facts(world, rows):
     unread = [t for (t,) in rows("select tablename from pg_tables where schemaname='public'")
               if t != "schema_migrations" and not re.search(r"\b%s\b" % t, src)]
     assert unread == [], unread
+    # every modifier reaches its hero: the load joins it to the hero that owns it
+    modifiers = sum(len(h.modifiers) for h in world.heroes.values())
+    assert modifiers == rows("select count(*) from ability_modifiers")[0][0]
     fs = engine.generate(world, "King's Row", ["Zarya"], ["Ana"])
     keys = {f.key for f in fs.facts}
     assert {"hero.perk_effect", "playbook.catalog"} <= keys, keys

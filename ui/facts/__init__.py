@@ -3,6 +3,7 @@
     model       the World - the whole database loaded into memory, per request
     kit         a kit piece's stat rows and the combat numbers read off them;
                 the one reader of the wiki's prose
+    records     the typed records a Hero, a Map and the World hand on
     compute     the metrics - pure functions over a World, shared with the
                 inference layer's solver so both compute the same numbers
     engine      the FactSet - every fact, numbered F1.., for a map and two

@@ -42,6 +42,7 @@ ui/
   facts/           everything the database knows about a board
     model.py       the World: the database in memory, per request
     kit.py         a kit piece's stat rows and the combat numbers read off them
+    records.py     the typed records a Hero, a Map and the World hand on
     compute.py     the metrics registry: every number, one function each
     engine.py      the FactSet: the numbered facts for a board
 ```

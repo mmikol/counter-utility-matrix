@@ -13,6 +13,7 @@ from collections import defaultdict
 from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON
 from db.data.names import name_key
 from ui.facts.kit import Kit, Stat, dual_rate
+from ui.facts.records import Modifier
 
 ROLES = ("tank", "damage", "support")
 
@@ -572,15 +573,11 @@ def load(cx) -> World:
             from ability_stats s join stat_keys k using(stat_key_id)
             order by s.ability_stat_id"""):
         abilities[aid].stats[code].append(Stat(code, value, un, ud, dv, cond, text))
-    for aid, affects, applies, magnitude, unit in _rows(cx, """
-            select ability_id, affects, applies_to, magnitude, unit
-            from ability_modifiers"""):
-        kit = abilities[aid]
-        for hero in w.heroes.values():
-            if kit in hero.abilities:
-                hero.modifiers.append((kit.name, affects, applies, float(magnitude),
-                                       unit))
-                break
+    for hid, name, affects, applies, magnitude, unit in _rows(cx, """
+            select a.hero_id, a.name, m.affects, m.applies_to, m.magnitude, m.unit
+            from ability_modifiers m join abilities a using(ability_id)
+            order by m.modifier_id"""):
+        w.heroes[hid].modifiers.append(Modifier(name, affects, applies, float(magnitude), unit))
 
     configs = {}
     for cid, hid, wname, cname, wtype, kw, slot in _rows(cx, """
@@ -631,9 +628,7 @@ def load(cx) -> World:
             select m.hero_id, t.code, m.win_rate, m.pick_rate, m.ban_rate
             from hero_meta m join competitive_tiers t on t.tier_id = m.tier_id
             where m.snapshot_id = %s""" % LATEST_BLIZZARD):
-        h = w.heroes.get(hid)
-        if h is None:
-            continue
+        h = w.heroes[hid]
         rates = tuple(float(x) if x is not None else None for x in (win, pick, ban))
         if tier == "all":
             h.win, h.pick, h.ban = rates
@@ -643,7 +638,7 @@ def load(cx) -> World:
             select m.hero_id, m.win_rate from hero_meta m
             join competitive_tiers t on t.tier_id = m.tier_id
             where t.code = 'all' and m.snapshot_id = %s""" % PREVIOUS_BLIZZARD):
-        if hid in w.heroes and win is not None:
+        if win is not None:
             w.heroes[hid].prev_win = float(win)
 
     for mid, name, mode in _rows(cx, """
@@ -658,20 +653,18 @@ def load(cx) -> World:
             select m.hero_id, m.map_id, m.win_rate, m.pick_rate, m.ban_rate from map_meta m
             join competitive_tiers t on t.tier_id = m.tier_id
             where t.code = 'all' and m.snapshot_id = %s""" % LATEST_BLIZZARD):
-        if hid in w.heroes and mid in w.maps and win is not None:
+        if win is not None:
             w.heroes[hid].map_rates[mid] = (float(win), float(pick) if pick is not None else None)
             if ban is not None:
                 w.heroes[hid].map_bans[mid] = float(ban)
     best_maps(w)
     for mid, feature, rate in _rows(cx, "select map_id, feature, per_thousand from map_terrain"):
-        if mid in w.maps:
-            w.maps[mid].terrain[feature] = float(rate)
+        w.maps[mid].terrain[feature] = float(rate)
     map_terrain(w)
     for mid, stage, feature, rate, mentions in _rows(cx, """
             select s.map_id, s.name, t.feature, t.per_thousand, t.mentions
             from stage_terrain t join map_stages s using(stage_id)"""):
-        if mid in w.maps:
-            w.maps[mid].stage_terrain.setdefault(stage, {})[feature] = (float(rate), mentions)
+        w.maps[mid].stage_terrain.setdefault(stage, {})[feature] = (float(rate), mentions)
     stage_terrain(w)
 
     for loser, winner in _rows(cx, "select hero_id, countered_by_id from counters"):
