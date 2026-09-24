@@ -149,9 +149,9 @@ def api_roster(cx: psycopg.Connection[TupleRow]) -> Reply:
 
 
 def api_facts(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
-    map_name, red, blue, bans, side = parse_board(query)
+    draft = parse_board(query)
     world = tables.load(cx)
-    return board_facts.generate(world, map_name, red, blue, bans, side).to_dict(), 200
+    return board_facts.generate(world, draft).to_dict(), 200
 
 
 def api_infer(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:

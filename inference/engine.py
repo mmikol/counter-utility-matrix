@@ -36,7 +36,7 @@ from inference.solver import (
     legal_shapes,
 )
 from ui.facts import board_facts, compute
-from ui.facts.draft import TEAM_SIZE, is_sided, opposite
+from ui.facts.draft import TEAM_SIZE, Draft, is_sided, opposite
 from ui.facts.factset import Fact, FactSet
 from ui.facts.model import ROLES, Hero, Map, World
 from ui.facts.team import team_metrics, text
@@ -313,6 +313,13 @@ def _order(heroes: Iterable[Hero]) -> list[str]:
     return [h.name for h in sorted(heroes, key=lambda h: (ROLES.index(h.role), h.name))]
 
 
+def _board_facts(world: World, result: Result, side: str) -> FactSet:
+    """The facts of the board a result stands on: its map, both sides as it
+    names them, its bans, and the side."""
+    return board_facts.generate(world, Draft(result.map_name, tuple(result.red),
+                                             tuple(result.blue), tuple(result.bans), side))
+
+
 def _side(m: Map | None, side: str) -> str:
     if side not in ("", "attack", "defense"):
         raise Refusal("side must be attack or defense, got %r" % side)
@@ -360,8 +367,7 @@ def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
                          % seat)
     best = ranked[0]
     result.blue = _order(best.heroes)
-    fs = board_facts.generate(world, result.map_name, result.red, result.blue, result.bans,
-                              side)
+    fs = _board_facts(world, result, side)
     _fill(result, best, fs, solver)
     result.alternatives = [{"blue": _order(c.heroes), "score": round(c.score, 3)}
                            for c in ranked[1:top + 1]]
@@ -391,8 +397,7 @@ def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
     target, field, rank, solver = evaluate_comp(world, m, red_h, blue_h, bans_h, side,
                                                 catalog=catalog, pool_size=pool_size,
                                                 swept=swept)
-    fs = board_facts.generate(world, result.map_name, result.red, result.blue, result.bans,
-                              side)
+    fs = _board_facts(world, result, side)
     _fill(result, target, fs, solver)
     result.rank = rank
     result.alternatives = [{"blue": _order(c.heroes), "score": round(c.score, 3)}
@@ -438,8 +443,7 @@ def current(world: World, blue_result: Result, map_name: str | None = None,
     result.best = blue_result.score
     cand = solver.prepare(Candidate(blue_h))
     solver.score(cand)
-    fs = board_facts.generate(world, result.map_name, result.red, result.blue, result.bans,
-                              side)
+    fs = _board_facts(world, result, side)
     _fill(result, cand, fs, solver)
     result.seconds = time.time() - started
     return result

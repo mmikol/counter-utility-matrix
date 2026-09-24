@@ -13,6 +13,7 @@ from inference.engine import BrokenProcessPool
 from inference.expr import Expr, ExprError
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts import board_facts, compute
+from ui.facts.draft import Draft
 from ui.facts.team import team_metrics
 
 # --- the expression language (pure) --------------------------------------
@@ -232,7 +233,7 @@ def test_infer_keeps_locked_picks_and_the_open_queue_shape(world):
     assert r.considered > 100 and r.score > 0
     assert any(p["hero"] == "Ana" and p["locked"] for p in r.picks)
     # every pick cites facts the board for (map, red, the five) shows
-    assert r.facts.blue == r.blue
+    assert r.facts.draft.blue == tuple(r.blue)
     ids = {f.id for f in r.facts.facts}
     for p in r.picks:
         assert p["evidence"] and set(p["evidence"]) <= ids
@@ -292,7 +293,7 @@ def test_infer_never_drafts_a_banned_hero(world):
                      bans=["Widowmaker", "Bastion", "Reinhardt"])
     assert not {"Widowmaker", "Bastion", "Reinhardt"} & set(r.blue)
     assert r.bans == ["Widowmaker", "Bastion", "Reinhardt"] and "banned" in r.rendered()
-    assert r.facts.bans == r.bans
+    assert r.facts.draft.bans == tuple(r.bans)
     with pytest.raises(Refusal, match="banned this match"):
         engine.infer(world, None, ["Zarya"], ["Ana"], bans=["Zarya"])
 
@@ -717,14 +718,14 @@ def test_the_plan_names_the_stages_the_facts_hold_and_no_other(world, kings_row_
 
     def plan(name):
         r = copy.copy(blue_r)
-        r.facts = board_facts.generate(world, name)
+        r.facts = board_facts.generate(world, Draft(name))
         return engine._plan(world, world.map(name), "", [], [], r).split("\n")[0]
     assert "Well has the environmental hazards." in plan("Ilios")
     assert "Lighthouse" not in plan("Ilios") and "Ruins" not in plan("Ilios")
     # three stages at most: the largest, told in play order
     suravasa = world.map("Suravasa")
     r = copy.copy(blue_r)
-    r.facts = board_facts.generate(world, "Suravasa")
+    r.facts = board_facts.generate(world, Draft("Suravasa"))
     assert not r.facts.find("map.stage_terrain")
     for stage, z in zip(suravasa.stages[:4], (1.0, 4.0, 3.0, 2.0), strict=True):
         r.facts.add("map", "Suravasa", "map.stage_terrain", stage, source="stage_terrain",
@@ -734,7 +735,7 @@ def test_the_plan_names_the_stages_the_facts_hold_and_no_other(world, kings_row_
     assert suravasa.stages[0] not in engine._plan(world, suravasa, "", [], [], r)
     # no stage fact: Oasis has stages and no text of theirs, Dorado no stages
     for name in ("Oasis", "Dorado", "Colosseo"):
-        assert not board_facts.generate(world, name).find("map.stage_terrain")
+        assert not board_facts.generate(world, Draft(name)).find("map.stage_terrain")
         assert " has the " not in plan(name), name
         assert not any(stage in plan(name) for stage in world.map(name).stages), name
 
@@ -814,7 +815,7 @@ def test_a_metric_printed_inside_another_fact_cites_that_fact(world):
     line; a rule on either cites that fact, not its guard's."""
     from inference import engine
     six = ["Reinhardt", "Sigma", "Ashe", "Cassidy", "Ana", "Kiriko"]
-    fs = board_facts.generate(world, "King's Row", ["Zarya"], six, [], "attack")
+    fs = board_facts.generate(world, Draft("King's Row", ("Zarya",), tuple(six), side="attack"))
     for metric, line in (("team.range_max", "team.range_median"), ("team.melee", "team.hitscan"),
                          ("team.cleanse", "team.invuln"), ("team.dps_count", "team.dps_floor"),
                          ("matchup.exposure_share", "matchup.coverage_share")):
@@ -829,7 +830,7 @@ def test_an_announced_hero_is_described_but_never_picked(world):
     if not early:
         pytest.skip("no announced hero in the database")
     h = early[0]
-    fs = board_facts.generate(world, None, [], [h.name])          # the facts may describe it
+    fs = board_facts.generate(world, Draft(blue=(h.name,)))       # the facts may describe it
     assert fs.find("hero.announced", h.name)
     with pytest.raises(Refusal, match="announced, not yet playable"):
         engine.infer(world, None, [], [h.name])                    # a pick may not

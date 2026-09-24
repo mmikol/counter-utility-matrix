@@ -1,7 +1,7 @@
 """A board's facts: everything the database holds about it, as a numbered
 FactSet.
 
-    generate(world, "King's Row", red=["Zarya", "Pharah"], blue=["Ana"])
+    generate(world, Draft("King's Row", red=("Zarya", "Pharah"), blue=("Ana",)))
 
     for each domain D in { HEROES, MAPS, META }:
         INDEPENDENT(D) = ⋃ facts(s)      over each selection s in D   s alone: its own row
@@ -35,12 +35,10 @@ a hero's facts are ui.facts.hero_facts', a team's and the matchup's
 ui.facts.team_facts'.
 """
 
-from collections.abc import Sequence
-
 from db import Refusal
 from ui.facts import compute, hero_facts, team_facts
 from ui.facts.compute import TERRAIN_STANDOUT
-from ui.facts.draft import MAX_BANS, SIDES, is_sided, opposite
+from ui.facts.draft import MAX_BANS, SIDES, Draft, is_sided, opposite
 from ui.facts.factset import PLAYBOOK_SCOPE, FactSet
 from ui.facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Map, Resolved, World
 
@@ -51,20 +49,20 @@ def _g(value: object) -> str:
 
 # --- the board -------------------------------------------------------------
 
-def generate(
-        world: World, map_name: str | None = None, red: Sequence[str] = (),
-        blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "") -> FactSet:
+def generate(world: World, draft: Draft) -> FactSet:
     """The FactSet for a board: the map (and blue's side on a sided map),
     the red and blue picks, and the match's bans (each team's two and the
     lobby's - up to five, all optional). A banned hero cannot be picked and
     cannot be recommended; a side that is not one, and every name World.resolve
-    refuses, is a Refusal."""
-    if side not in ("", *SIDES):
-        raise Refusal("side must be attack or defense, got %r" % side)
-    board = world.resolve(map_name, red, blue, bans, allow_announced=True)
-    side = side if is_sided(board.map) else ""
-    fs = FactSet(board.map.name if board.map else None, [h.name for h in board.red],
-        [h.name for h in board.blue], [h.name for h in board.banned], side)
+    refuses, is a Refusal. The FactSet's draft holds the resolved names and
+    the side the map keeps."""
+    if draft.side not in ("", *SIDES):
+        raise Refusal("side must be attack or defense, got %r" % draft.side)
+    board = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans, allow_announced=True)
+    side = draft.side if is_sided(board.map) else ""
+    fs = FactSet(Draft(
+        board.map.name if board.map else None, tuple(h.name for h in board.red),
+        tuple(h.name for h in board.blue), tuple(h.name for h in board.banned), side))
     _meta_facts(fs, world)
     if board.banned:
         _ban_facts(fs, world, board)

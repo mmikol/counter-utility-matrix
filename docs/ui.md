@@ -314,8 +314,8 @@ record.
 
 ### `factset.py` and `board_facts.py` - the FactSet
 
-`generate(world, map, red, blue, bans, side)` walks the board and numbers
-what it finds. Facts are structured (scope, subject, key, value, unit,
+`generate(world, draft)` walks the board a `Draft` names and numbers what
+it finds. Facts are structured (scope, subject, key, value, unit,
 source) so the inference layer reads them by key, and rendered as
 sentences so a person - or the `/comp` session - reads them as evidence:
 
@@ -337,12 +337,14 @@ something. Below the facts, numbered S1.., rides the playbook's record -
 how many constraints, heuristics and assumptions the catalog holds -
 citable but never mistaken for data, and not the strategies themselves.
 
-`factset.py` is the record: a `Fact`, and the `FactSet` that numbers them
-and files each under every metric its sentence states, so `find(key)` is
-every fact stating that metric and a subject narrows it. The writers are
-three modules: `board_facts.py` holds `generate()` and the meta, bans, map
-and playbook writers, `hero_facts.py` a named hero's, and `team_facts.py`
-each team's and the matchup's.
+`factset.py` is the record: a `Fact`, frozen once numbered, and the
+`FactSet` that numbers them, keeps the `Draft` they describe with its
+names resolved, and files each fact under every metric its sentence
+states, so `find(key)` is every fact stating that metric and a subject
+narrows it. The writers are three modules: `board_facts.py` holds
+`generate()` and the meta, bans, map and playbook writers,
+`hero_facts.py` a named hero's, and `team_facts.py` each team's and the
+matchup's.
 
 ## One click on the board
 
