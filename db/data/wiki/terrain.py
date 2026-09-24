@@ -57,6 +57,8 @@ WORD_RE = re.compile(r"[^\W\d_]+(?:['’-][^\W\d_]+)*")
 LIST_PROSE_WORDS = 4
 # Under this many words of kept text an article says nothing usable.
 MIN_WORDS = 60
+# A rate of mentions is per this many words of kept text.
+WORDS_PER_RATE = 1000
 # The same for one stage. A stage's text is short: Samoa's Volcano is one
 # sentence of 20 words, and it names the lava moat round the point.
 STAGE_MIN_WORDS = 20
@@ -287,7 +289,8 @@ def count_features(text: str) -> dict[str, int]:
 
 
 def per_thousand(mentions: int, words: int) -> float:
-    return round(mentions * 1000.0 / words, 2) if words else 0.0
+    """Mentions per WORDS_PER_RATE words, to two places; 0.0 over no words."""
+    return round(mentions * WORDS_PER_RATE / words, 2) if words else 0.0
 
 
 # --- store ---------------------------------------------------------------------

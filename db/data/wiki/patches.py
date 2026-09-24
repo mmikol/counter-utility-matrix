@@ -6,6 +6,7 @@ have patches to link to.
 """
 
 from collections.abc import Callable
+from typing import NamedTuple
 
 import psycopg
 import requests
@@ -19,6 +20,29 @@ CARGO_TABLE = "Patches"
 CARGO_FIELDS = ("_pageName=name", "date", "platform", "source")
 
 
+class Patch(NamedTuple):
+    """A patches row as the pull writes it."""
+    name: str
+    released: str
+    platform: str | None
+    url: str | None
+
+
+def dated_patches(rows: list[dict[str, str]]) -> tuple[list[Patch], int]:
+    """The Cargo rows that name a patch and its date, and how many do not: a
+    page without a date anchors nothing."""
+    patches: list[Patch] = []
+    skipped = 0
+    for row in rows:
+        name, released = row.get("name"), row.get("date")
+        if not name or not released:
+            skipped += 1
+            continue
+        patches.append(Patch(name, released, row.get("platform") or None,
+                             row.get("source") or None))
+    return patches, skipped
+
+
 class PatchesSummary(PullSummary):
     patches: int
     skipped: int
@@ -30,31 +54,24 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
         log: Callable[[str], None] = print) -> PatchesSummary:
     """Upsert every dated patch from the Patches cargo table."""
     session = fetch.session(session)
-    rows = cargo_query(session, CARGO_TABLE, CARGO_FIELDS, cache_dir)
+    patches, skipped = dated_patches(cargo_query(session, CARGO_TABLE, CARGO_FIELDS, cache_dir))
 
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())
-    loaded, skipped = 0, 0
-    for row in rows:
-        name, released = row.get("name"), row.get("date")
-        if not name or not released:
-            skipped += 1          # a page without a date anchors nothing
-            continue
+    for patch in patches:
         cursor.execute(
             "INSERT INTO patches (name, released, platform, url, source_id)"
             " VALUES (%s, %s, %s, %s, %s)"
             " ON CONFLICT (name) DO UPDATE SET released = EXCLUDED.released,"
             " platform = EXCLUDED.platform, url = EXCLUDED.url,"
             " source_id = EXCLUDED.source_id, cao = now()",
-            (name, released, row.get("platform") or None,
-             row.get("source") or None, source_id),
+            (*patch, source_id),
         )
-        loaded += 1
     connection.commit()
     latest = cursor.execute(
         "SELECT name, released FROM patches ORDER BY released DESC LIMIT 1"
     ).fetchone()
-    log("patches: %d loaded, %d skipped (no date)" % (loaded, skipped))
-    return {"patches": loaded, "skipped": skipped,
+    log("patches: %d loaded, %d skipped (no date)" % (len(patches), skipped))
+    return {"patches": len(patches), "skipped": skipped,
             "latest": "%s (%s)" % latest if latest else None,
             "tables": ["patches"]}

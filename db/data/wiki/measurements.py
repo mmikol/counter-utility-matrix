@@ -10,6 +10,7 @@ alongside, so anything this misreads stays recoverable.
 """
 
 import re
+from typing import NamedTuple
 
 SPLIT_RE = re.compile(r"\s*;\s*")
 # Perk stats read "radius = 5 -> 7 meters": the value before the perk and the
@@ -54,7 +55,7 @@ UNIT_ALIASES = {
 
 # Rate spellings -> (unit on top, unit underneath). The denominator's own
 # magnitude is 1 for these: "125 m/s" is 125 meters per *one* second.
-RATE_UNITS = {
+RATE_UNITS: dict[str, tuple[str | None, str]] = {
     "m/s": ("meters", "seconds"),
     "meters/s": ("meters", "seconds"), "meters/second": ("meters", "seconds"),
     "shots/s": ("shots", "seconds"), "shot/s": ("shots", "seconds"),
@@ -70,7 +71,24 @@ RATE_UNITS = {
 }
 
 
-def normalise_unit(unit):
+class Measurement(NamedTuple):
+    """One row of a stat: its value (None when the text holds no number), the
+    unit on top and underneath, the magnitude underneath (1 for a plain rate,
+    0.59 for "75 over 0.59 seconds"), the condition it holds under, and the
+    text it was read from."""
+    value: float | None
+    numerator: str | None
+    denominator: str | None
+    window: float | None
+    condition: str | None
+    text: str
+
+
+# A measurement before its text: (value, numerator, denominator, window, condition).
+Reading = tuple[float | None, str | None, str | None, float | None, str | None]
+
+
+def normalise_unit(unit: str | None) -> tuple[str | None, str | None]:
     """Recognised units: (numerator, denominator). Denominator None if not a rate."""
     unit = (unit or "").strip().lower()
     if unit in RATE_UNITS:
@@ -82,7 +100,7 @@ def normalise_unit(unit):
 PER_SECOND_RE = re.compile(r"\bper\s+([\d.]*)\s*seconds?\b", re.I)
 
 
-def _measure(text, condition, default_unit):
+def _measure(text: str, condition: str | None, default_unit: str | None) -> list[Reading]:
     """One part -> [(value, numerator, denominator, denominator_value, condition)].
 
     denominator_value carries the magnitude underneath: 1 for a plain rate
@@ -99,36 +117,13 @@ def _measure(text, condition, default_unit):
     if lowered in FALSE_VALUES:
         return [(0, None, None, None, condition)]
 
-    over = OVER_RE.match(body)
-    if over:
-        # "75 over 0.59 seconds": 75 hp across a 0.59 second window.
-        return [(float(over.group(1)), default_unit, "seconds",
-                 float(over.group(2)), condition)]
-
-    # "15 per 0.5 seconds", "33.3% per second"
-    window = PER_SECOND_RE.search(body)
-    if window:
-        head = body[: window.start()].strip()
-        number = NUMBER_UNIT_RE.match(head)
-        if number:
-            numerator, _ = normalise_unit(number.group(2))
-            seconds = float(window.group(1)) if window.group(1) else 1.0
-            return [(float(number.group(1)), numerator or default_unit,
-                     "seconds", seconds, condition)]
+    rate = _measure_rate(body, condition, default_unit)
+    if rate is not None:
+        return [rate]
 
     spread = RANGE_RE.match(body)
     if spread:
-        numerator, denominator = normalise_unit(
-            spread.group(3).split()[0] if spread.group(3) else ""
-        )
-        low, high = sorted((float(spread.group(1)), float(spread.group(2))))
-        window = 1 if denominator else None
-        return [
-            (low, numerator or default_unit, denominator, window,
-             _join(condition, "min")),
-            (high, numerator or default_unit, denominator, window,
-             _join(condition, "max")),
-        ]
+        return _measure_range(spread, condition, default_unit)
 
     number = NUMBER_UNIT_RE.match(body)
     if number:
@@ -140,11 +135,48 @@ def _measure(text, condition, default_unit):
     return [(None, None, None, None, condition)]
 
 
-def _join(condition, extra):
+def _measure_rate(body: str, condition: str | None, default_unit: str | None) -> Reading | None:
+    """A quantity over a window of seconds; None when the text states none."""
+    over = OVER_RE.match(body)
+    if over:
+        # "75 over 0.59 seconds": 75 hp across a 0.59 second window.
+        return (float(over.group(1)), default_unit, "seconds",
+                float(over.group(2)), condition)
+
+    # "15 per 0.5 seconds", "33.3% per second"
+    window = PER_SECOND_RE.search(body)
+    if window:
+        head = body[: window.start()].strip()
+        number = NUMBER_UNIT_RE.match(head)
+        if number:
+            numerator, _ = normalise_unit(number.group(2))
+            seconds = float(window.group(1)) if window.group(1) else 1.0
+            return (float(number.group(1)), numerator or default_unit,
+                    "seconds", seconds, condition)
+    return None
+
+
+def _measure_range(spread: re.Match[str], condition: str | None,
+                   default_unit: str | None) -> list[Reading]:
+    """A range, "10 - 20 meters" -> its low end and its high end, in that order."""
+    numerator, denominator = normalise_unit(
+        spread.group(3).split()[0] if spread.group(3) else ""
+    )
+    low, high = sorted((float(spread.group(1)), float(spread.group(2))))
+    window = 1 if denominator else None
+    return [
+        (low, numerator or default_unit, denominator, window,
+         _join(condition, "min")),
+        (high, numerator or default_unit, denominator, window,
+         _join(condition, "max")),
+    ]
+
+
+def _join(condition: str | None, extra: str) -> str:
     return "%s, %s" % (condition, extra) if condition else extra
 
 
-def _variants(part, condition):
+def _variants(part: str, condition: str | None) -> list[tuple[str, str | None]]:
     """Split one part into the states it describes: [(text, condition)].
 
     Two shapes carry more than one measurement. "5 -> 7 meters" is a perk's
@@ -172,9 +204,10 @@ def _variants(part, condition):
     return [(part, condition)]
 
 
-def parse_measurements(value_text, default_unit=None):
-    """Stat value -> [(value, numerator, denominator, denominator_value,
-                       condition, text)].
+def parse_measurements(value_text: str | None,
+                       default_unit: str | None = None) -> list[Measurement]:
+    """Stat value -> [Measurement(value, numerator, denominator,
+                                  denominator_value, condition, text)].
 
     default_unit is the stat's canonical unit, applied when the value carries
     no unit of its own ("damage = 90" is 90 hp).
@@ -184,7 +217,7 @@ def parse_measurements(value_text, default_unit=None):
     # the wiki sometimes writes a minus as U+2212
     value_text = value_text.replace("\u2212", "-")
 
-    measurements = []
+    measurements: list[Measurement] = []
     for part in SPLIT_RE.split(value_text):
         part = part.strip()
         if not part:
@@ -197,12 +230,8 @@ def parse_measurements(value_text, default_unit=None):
         for text, text_condition in _variants(part, condition):
             if TEMPLATE_ERROR_RE.search(text):
                 # A broken template is not a measurement; keep the text only.
-                measurements.append((None, None, None, None, text_condition, text))
+                measurements.append(Measurement(None, None, None, None, text_condition, text))
                 continue
-            for value, numerator, denominator, window, cond in _measure(
-                text, text_condition, default_unit
-            ):
-                measurements.append(
-                    (value, numerator, denominator, window, cond, text)
-                )
+            for reading in _measure(text, text_condition, default_unit):
+                measurements.append(Measurement(*reading, text))
     return measurements

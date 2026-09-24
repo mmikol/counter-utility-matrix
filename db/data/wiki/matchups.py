@@ -315,18 +315,19 @@ def normalise(text: str, hero: str, other: str,
     token = re.compile(r"\b(?:(?:%s)|%s)(?P<owns>'s)?(?!\w)" % (named, PRONOUN_RE), re.I)
     text = text.replace("\u2019", "'")
     second_person = bool(SECOND_PERSON_RE.search(text))
-    last = [sides[-1]]
+    last = sides[-1]
 
     def replace(match: re.Match[str]) -> str:
+        nonlocal last
         for i, side in enumerate(sides):
             if match.group("side%d" % i):
-                last[0] = side
+                last = side
                 return side[1] if match.group("owns") else side[0]
         said = "he" if HE_RE.fullmatch(match.group(0).split("'")[0]) else "she"
         if pronouns[0] != pronouns[1] and said in pronouns:
             plain, owned, _ = sides[pronouns.index(said)]
         else:
-            plain, owned, _ = sides[-1] if second_person else last[0]
+            plain, owned, _ = sides[-1] if second_person else last
         if match.group("owns"):                       # "he's" is "he is"
             return plain + " is"
         return owned if match.group("possessive") else plain
