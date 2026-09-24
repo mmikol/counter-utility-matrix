@@ -23,7 +23,7 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal, NamedTuple
 
 import psycopg
 from psycopg.sql import SQL, Identifier
@@ -154,8 +154,32 @@ def rebuild(connection: psycopg.Connection, quiet: bool = False) -> list[str]:
 CREATE_RE = re.compile(r"CREATE TABLE (\w+)")
 COMMENT_RE = re.compile(r"^COMMENT ON TABLE (\w+) IS\s+'((?:[^']|'')*)'\s*;", re.M)
 
-# One foreign-key column: (child table, column, parent table, parent column).
-ForeignKey = tuple[str, str, str, str]
+
+class ForeignKey(NamedTuple):
+    """One foreign-key column: the child table and its column, and the parent
+    table and column it references."""
+    child: str
+    column: str
+    parent: str
+    parent_column: str
+
+
+class Column(NamedTuple):
+    """One column as the data dictionary lists it: its name, its type and
+    whether it admits NULL."""
+    name: str
+    data_type: str
+    nullable: bool
+
+
+class TableOrigin(NamedTuple):
+    """Where the data dictionary files a table: the migration that last
+    created it, and its prose."""
+    migration: str
+    prose: str
+
+
+NO_ORIGIN = TableOrigin("", "")      # a table no migration's text creates
 
 
 def table_prose(text: str) -> dict[str, str]:
@@ -179,19 +203,20 @@ def table_prose(text: str) -> dict[str, str]:
     return prose
 
 
-def _migration_tables() -> dict[str, tuple[str, str]]:
-    """{table: (the migration that last created it, its prose)} over every
-    migration, a later COMMENT ON TABLE's text in place of the prose."""
-    out: dict[str, tuple[str, str]] = {}
+def _migration_tables() -> dict[str, TableOrigin]:
+    """{table: its origin} over every migration, a later COMMENT ON TABLE's
+    text in place of the prose."""
+    out: dict[str, TableOrigin] = {}
     for migration in read_migrations():
         for table, prose in table_prose(migration.sql).items():
-            out[table] = (migration.name, prose)
+            out[table] = TableOrigin(migration.name, prose)
         # a later COMMENT ON TABLE rewrites the prose: a statement in an applied
         # migration is never edited, so this is how a stored description is
         # corrected
         for m in COMMENT_RE.finditer(migration.sql):
             if m.group(1) in out:
-                out[m.group(1)] = (out[m.group(1)][0], m.group(2).replace("''", "'").strip())
+                out[m.group(1)] = out[m.group(1)]._replace(
+                    prose=m.group(2).replace("''", "'").strip())
     return out
 
 
@@ -210,16 +235,25 @@ def _foreign_keys(connection: psycopg.Connection) -> list[ForeignKey]:
         " ORDER BY 1, 2, 5, 3, 4").fetchall()
     # a column under two keys (its own, and part of a composite) is documented
     # by the narrower one; the composite still draws its edge in the diagram
-    return [(c, col, p, pc) for c, col, p, pc, _ in rows]
+    return [ForeignKey(c, col, p, pc) for c, col, p, pc, _ in rows]
+
+
+def _columns(connection: psycopg.Connection, table: str) -> list[Column]:
+    """A table's columns in their order, as information_schema describes them."""
+    rows = connection.execute(
+        "SELECT column_name, data_type, is_nullable FROM information_schema.columns"
+        " WHERE table_schema='public' AND table_name=%s ORDER BY ordinal_position",
+        (table,)).fetchall()
+    return [Column(name, data_type, nullable == "YES") for name, data_type, nullable in rows]
 
 
 def _edges(fks: list[ForeignKey], keep: Callable[[str], bool]) -> list[str]:
     """The mermaid lines for the id columns of the child tables `keep` accepts,
     one per edge, sorted; the edges to `sources` are left off."""
     seen: set[str] = set()
-    for child, col, parent, _ in fks:
-        if col.endswith("_id") and parent != "sources" and keep(child):
-            seen.add('    %s ||--o{ %s : "%s"' % (parent, child, col))
+    for fk in fks:
+        if fk.column.endswith("_id") and fk.parent != "sources" and keep(fk.child):
+            seen.add('    %s ||--o{ %s : "%s"' % (fk.parent, fk.child, fk.column))
     return sorted(seen)
 
 
@@ -263,13 +297,13 @@ def _erd(tables: list[str], fks: list[ForeignKey], domain: dict[str, str]) -> st
 
 
 def _dictionary(
-        tables: list[str], columns: dict[str, list[tuple[Any, ...]]], fks: list[ForeignKey],
-        domain: dict[str, str], prose: dict[str, tuple[str, str]]) -> str:
+        tables: list[str], columns: dict[str, list[Column]], fks: list[ForeignKey],
+        domain: dict[str, str], origins: dict[str, TableOrigin]) -> str:
     """The data dictionary: each domain's tables, then every table's prose
     and columns, a foreign key naming the column it references."""
     references: dict[tuple[str, str], tuple[str, str]] = {}
-    for child, col, parent, parent_col in fks:
-        references.setdefault((child, col), (parent, parent_col))
+    for fk in fks:
+        references.setdefault((fk.child, fk.column), (fk.parent, fk.parent_column))
     dd = [
         "Generated from the live schema (`python -m db.mcp call db_docs`).",
         "",
@@ -286,17 +320,17 @@ def _dictionary(
             "`%s`" % t for t in tables if domain[t] == d)))
     dd.append("")
     for t in tables:
-        fn, text = prose.get(t, ("", ""))
+        fn, text = origins.get(t, NO_ORIGIN)
         dd += ["", "#### `%s`" % t, "", "*%s · `%s`*" % (domain[t], fn)]
         if text:
             dd += ["", text]
         dd += ["", "| column | type | null | references |", "| --- | --- | --- | --- |"]
-        for name, typ, nullable in columns[t]:
-            if name in ("source_id", "cao"):
+        for column in columns[t]:
+            if column.name in ("source_id", "cao"):
                 continue
-            r = references.get((t, name))
+            r = references.get((t, column.name))
             dd.append("| `%s` | %s | %s | %s |" % (
-                name, typ, "yes" if nullable == "YES" else "no",
+                column.name, column.data_type, "yes" if column.nullable else "no",
                 "`%s.%s`" % r if r else ""))
     return "\n".join(dd)
 
@@ -304,17 +338,15 @@ def _dictionary(
 def generate_docs(connection: psycopg.Connection, path: str | None = None) -> str:
     """Write the ER diagrams and the data dictionary into docs/db.md (or
     `path`) from the live schema and the migrations' prose -> a summary line."""
-    prose = _migration_tables()
+    origins = _migration_tables()
     tables = psql.table_names(connection)
-    columns = {t: connection.execute(
-        "SELECT column_name, data_type, is_nullable FROM information_schema.columns"
-        " WHERE table_schema='public' AND table_name=%s ORDER BY ordinal_position",
-        (t,)).fetchall() for t in tables}
+    columns = {t: _columns(connection, t) for t in tables}
     fks = _foreign_keys(connection)
-    domain = {t: DOC_DOMAIN.get(prose.get(t, ("", ""))[0], "foundation") for t in tables}
+    domain = {t: DOC_DOMAIN.get(origins.get(t, NO_ORIGIN).migration, "foundation")
+              for t in tables}
     path = path or os.path.join(ROOT, "docs", "db.md")
     embed(path, "erd", _erd(tables, fks, domain))
-    embed(path, "dictionary", _dictionary(tables, columns, fks, domain, prose))
+    embed(path, "dictionary", _dictionary(tables, columns, fks, domain, origins))
     return "regenerated the schema sections of docs/db.md: %d tables" % len(tables)
 
 

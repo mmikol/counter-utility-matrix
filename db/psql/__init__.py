@@ -95,10 +95,12 @@ def lookup_ids(
     }
 
 
-def scalar(cursor: psycopg.Cursor[Any]) -> Any:
+def scalar(cursor: psycopg.Cursor) -> Any:
     """The first column of the row the last statement returned - an aggregate,
     an upsert's RETURNING, a lookup by key - for a statement that always
-    returns one. No row is a bug in the statement, and raises."""
+    returns one. No row is a bug in the statement, and raises. The value is
+    typed Any, as psycopg types a row's cells: the statement decides what the
+    column holds."""
     row = cursor.fetchone()
     if row is None:
         raise RuntimeError("a statement that always returns a row returned none")

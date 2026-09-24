@@ -41,7 +41,7 @@ class DbStatus(TypedDict):
     it is, its tables and row counts, the rates snapshots it holds and the
     migrations it has not seen. The data container's /health reads it."""
     dsn: str
-    state: str
+    state: schema.State
     table_count: int
     counts: dict[str, int]
     snapshots: list[Snapshot]
