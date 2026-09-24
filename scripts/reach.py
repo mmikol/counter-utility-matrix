@@ -17,14 +17,14 @@ import psycopg
 
 from db import ROOT, psql
 from inference import catalog, reach
-from ui.facts import model
+from ui.facts import tables
 
 OUT = os.path.join(ROOT, "tests", "fixtures", "reach.json")
 
 
 def main() -> int:
     with psycopg.connect(psql.default_dsn()) as cx:
-        world = model.load(cx)
+        world = tables.load(cx)
     seated: list[reach.Reach] = []
     unseated: list[str] = []
     for hero in sorted((h for h in world.heroes.values() if h.released), key=lambda h: h.name):
