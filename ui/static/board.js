@@ -233,7 +233,7 @@ function refresh() {
     solving(true);
     el('inf-blue').innerHTML = "<p class='legend searching'>searching both seats…</p>";
     el('inf-red').innerHTML = "<p class='legend searching'>searching…</p>";
-    fetch('/api/infer?' + q).then(function (r) { return r.json(); }).then(function (d) {
+    fetch('/api/board?' + q).then(function (r) { return r.json(); }).then(function (d) {
       if (mine !== seq) return;
       solving(false);
       INF = d; renderInf();

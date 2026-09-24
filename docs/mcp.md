@@ -24,14 +24,17 @@ when the stack is up, so what a session changes is what the board shows;
 the headless agents' run (`orchestrator.py agents`) is allowed an explicit
 list of tools on these two servers and no built-in tool at all.
 
-The HTTP door checks who is knocking: it binds to 127.0.0.1, refuses
-non-local browser origins, caps a request at one megabyte and a batch at
-twenty messages, allows 120 tool calls per client address per minute, and
+The HTTP door checks who is knocking: it binds to 127.0.0.1, answers only
+a request whose `Host` and `Origin` name it - a local name, or `data`, the
+name the board's container calls it by - caps a request at one megabyte
+and a batch at twenty messages, allows 120 tool calls per client address
+per minute, and
 requires `Authorization: Bearer <token>` when `COUNTRIX_MCP_TOKEN`
 is set (in `.env`; `.mcp.json` sends it from the same variable). Every
 tool call is a line in the audit log, `db/raw/audit.jsonl`, that the
 sentry reads - over either transport and in-process, where the refresher
-and the shell call a tool directly. The `query` tool connects as
+and the shell call a tool directly; a line it cannot write is noted on
+stderr and the call goes on. The `query` tool connects as
 `matrix_reader`, a login that can only `SELECT`, runs one read-only
 statement with a timeout, and refuses SQL that reaches for files or
 servers. The whole threat model is in [security.md](security.md).
@@ -39,8 +42,9 @@ servers. The whole threat model is in [security.md](security.md).
 `db/mcp/server.py` is dependency-free - a few hundred lines instead of
 the SDK, so the door has nothing to audit: JSON-RPC 2.0, one message per
 line over stdio, and the same surface over HTTP with a `Mcp-Session-Id`
-per client, an origin guard, `GET /health` for the containers'
-healthchecks, and `405` on a bare `GET /mcp`. The methods:
+per client, the Host-and-Origin guard all three servers share
+(`db/web.py`), `GET /health` for the containers' healthchecks, and `405`
+on a bare `GET /mcp`. The methods:
 `initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`,
 `resources/read`, `resources/templates/list`, and an empty
 `prompts/list`. It logs to stderr, since stdout is the wire.

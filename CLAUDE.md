@@ -106,10 +106,12 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   evaluate and current are comparable. Only `board()` uses the process pool,
   and the pooled and sequential answers must agree bit for bit: string-seeded
   RNGs, integer tallies, ties broken by `map_win_mean` and then sorted names.
-- **The board** (`ui/board.py`) serves `/api/facts` in-process and delegates
-  `/api/infer` and `/api/strategies` to `COUNTRIX_INFERENCE_URL` when set. It
-  is read-only unless `COUNTRIX_READ_ONLY=0`; its one write is a `tune` call
-  through the door.
+- **The board** (`ui/board.py`, its pages in `ui/pages.py`) serves
+  `/api/facts` in-process and delegates `/api/board` and `/api/strategies` to
+  `COUNTRIX_INFERENCE_URL` when set. It is read-only unless
+  `COUNTRIX_READ_ONLY=0`; its one write is a `tune` call through the door.
+  All three HTTP servers stand on `db/web.py`: a request whose Host or Origin
+  is not a local name or one given with `--allow-host` is refused with 403.
 - **Docker** runs one image as five roles plus postgres (`compose.yaml`,
   `docker-entrypoint.sh`). Migrations ship in the image, not a mount: once
   `orchestrator.py up` rebuilds it, any new migration file makes the `data`
@@ -143,7 +145,7 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   or `WORLD_METRICS` and the key its function computes (the namespace must
   equal the registry), `TEXT_METRICS` or `VERSUS_KEYS` or `RED_MATCHUP` where
   they apply, then regenerate the catalog vocabulary in docs/inference.md.
-- `tests/ui/test_board.py` asserts literal source text in `ui/static/*.js`
+- `tests/ui/test_pages.py` asserts literal source text in `ui/static/*.js`
   and `math.html`, and that every `board.css` class is used. The math page
   restates code constants (`SYNERGY_PULL`); change both with the test.
 - `tests/fixtures/optimal.json` is the regression gate on the search.

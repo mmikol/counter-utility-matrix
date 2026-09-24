@@ -32,13 +32,15 @@ computes facts in-process and asks the service for comps.
 ```
 ui/
   __init__.py      the package's map
-  board.py         the page, its JSON endpoints, the math page
+  board.py         the server: the settings, the JSON endpoints, the handler that routes to them
+  pages.py         the page shell, the math and tests pages, the static files they load
   static/
     board.css      the look: the game's - dark surfaces, Bebas Neue headings, a gold accent, red and blue for the sides
     board.js       state, the rosters, the picks, the bans, the fetches, boot
     comps.js       the comps tab: a seat's result and the two seats
     playbook.js    the playbook tab: the groups, the cards, the weight sliders
     math.html      the math page's article
+    tests.html     the tests page's article
   facts/           everything the database knows about a board
     model.py       the World: the database in memory, per request
     tables.py      the load: every table read into a World, the maps' styles, the best maps
@@ -54,11 +56,23 @@ ui/
     team_facts.py  a team's facts, one per team metric, and the matchup's
 ```
 
-## `board.py` - the page and its endpoints
+## `board.py` and `pages.py` - the page and its endpoints
 
-The page is a shell: the stylesheet and the scripts are static files, and
-`TEAM` (six) and `BANS` (five) are the only values the page injects, so
-the scripts have no constant to keep in step with the Python.
+`pages.py` renders the page, and `board.py` serves it and answers the JSON
+endpoints. The page is a shell: the stylesheet and the scripts are static
+files, and `TEAM` (six), `BANS` (five) and whether the board writes are the
+only values the page injects, so the scripts have no constant to keep in
+step with the Python.
+
+Every route stands behind the guard `db/web.py` puts on all three servers:
+a request whose `Host` or `Origin` names neither a local name nor one the
+board was started with (`--allow-host`, the public name of a published
+board) answers 403 before it is routed - a page rebound to the board's
+address sends its reads under its own host name. Each board solved and
+each request that fails leaves one line on stderr, the container's log:
+the request line, the status and the seconds; the page and its files are
+quiet, and a service that does not answer is named there with the
+reason.
 
 | route | serves |
 | --- | --- |
@@ -66,14 +80,16 @@ the scripts have no constant to keep in step with the Python.
 | `/static/<file>` | `board.css`, `board.js`, `comps.js`, `playbook.js` - stylesheets and scripts, nothing else |
 | `/api/roster` | every hero (role, subrole, portrait, status, release day), every map (mode, top style, sided or not), the role icons, and the patches newer than the rates |
 | `/api/facts?map=&side=&red=&blue=&bans=` | the FactSet for the board, as JSON: the facts, their count, and the playbook's record |
-| `/api/infer?map=&side=&red=&blue=&bans=` | the board solved at any stage - the inference layer's `board()` in-process, or the service's `/board` when `COUNTRIX_INFERENCE_URL` is set: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, the empty blue slots filled, red's likely starting comp, the fight odds, the game plan and the shapes the limits allow. The page reads no countered case, so none is solved; a newer board from the same `client` (one lane when none is named) supersedes one still solving, which answers 400 |
+| `/api/board?map=&side=&red=&blue=&bans=[&weights=&client=]` | the board solved at any stage - the inference layer's `board()` in-process, or the service's `/board` when `COUNTRIX_INFERENCE_URL` is set, forwarded before any connection opens: blue's optimal (the counter to red's selection), red's optimal (their counter to yours), both current comps on those scales, the empty blue slots filled, red's likely starting comp, the fight odds, the game plan and the shapes the limits allow, under the playbook tab's weights. The page reads no countered case, so none is solved; a newer board from the same `client` (one lane when none is named) supersedes one still solving, which answers 400 |
 | `/api/strategies` | the strategies catalog: every constraint, heuristic and assumption with its kind, form, frontmatter and body |
 | `/math` | `static/math.html` in the page shell: the equation, the scoring function (what 100 means, fight odds, the argmax), the board (red's likely starting comp and its formula, blue's optimal counter, the weights) and how the layers fit, with a table of contents; linked from the board's header |
 | `/tests` | `static/tests.html` in the page shell: what the engine is checked against - the designed proof over every legal six, the adversarial hunt against a wider search, the random sample and the rate it bounds, the regression gate, the properties the suite holds, and what none of it proves |
-| `POST /api/weight` `{id, weight}` | the board's one write, a `tune` call - off by default (403): a weight applies to the session only; `COUNTRIX_READ_ONLY=0` turns it and the *store* button on. A non-local `Origin` is refused with 403 and a body that does not claim `application/json` with 415, the same guards the data layer's door applies |
+| `POST /api/weight` `{id, weight}` | the board's one write, a `tune` call - off by default (403): a weight applies to the session only; `COUNTRIX_READ_ONLY=0` turns it and the *store* button on. A body that does not claim `application/json` is refused with 415, and one past 4 KB with 400 |
 
-Every request opens its own connection and loads a fresh World, so a
-`pull_rates` or a tune shows on the next click without a restart.
+`/api/roster`, `/api/facts` and an in-process `/api/board` each open their
+own connection and load a fresh World, so a `pull_rates` or a tune shows on
+the next click without a restart. A board forwarded to the service opens
+none, so it answers while the database is out of reach.
 
 ## `static/` - the board's look and behaviour
 
@@ -82,7 +98,7 @@ of state - the map, the side, the bans, the red picks, the blue picks -
 in `localStorage`, so a reload mid-game keeps the board. A click on a
 portrait toggles that hero on that team (a banned hero cannot be picked;
 a hero on one team cannot be on the other); a change debounces, then
-fetches facts and inference together.
+fetches facts and the board together.
 
 **The rosters.** One tile renderer draws the red roster, the blue roster
 and the ban picker, so all three read as the same hero select: portrait
@@ -364,7 +380,7 @@ sequenceDiagram
     Board->>Facts: /api/facts (map, side, red, blue, bans)
     Facts->>DB: load the World (a dozen queries)
     Facts-->>Board: F1..Fn - every fact about those heroes,<br/>the map, each team, the matchup
-    Board->>Solver: /api/infer (map, side, red, blue, bans)
+    Board->>Solver: /api/board (map, side, red, blue, bans)
     Solver->>Solver: blue's seat: shapes the limits allow · per-role pools ·<br/>every candidate scored · local search
     Solver->>Solver: red's seat, the other side: their best counter to your picks
     Solver->>Solver: both current comps: six locked -> ranked against the field;<br/>fewer -> scored with the optimal search's bounds

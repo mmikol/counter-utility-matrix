@@ -335,6 +335,11 @@ def test_http_transport_guards_get_origin_and_health(http_server):
     assert health["status"] in ("ok", "degraded")
     if health["status"] == "ok":
         assert health["state"] in ("empty", "stale", "unfilled", "current")
+    # a rebound page sends no Origin on a GET, but it names its own host
+    with pytest.raises(urllib.error.HTTPError) as foreign:
+        urllib.request.urlopen(urllib.request.Request(
+            http_server + "/health", headers={"Host": "evil.example"}), timeout=10)
+    assert foreign.value.code == 403
 
     def delete(path="/mcp", headers=None):
         request = urllib.request.Request(http_server + path, method="DELETE",
@@ -437,7 +442,7 @@ def _http_server(tmp_path, token=None, rate_limit=120):
 
     from db.mcp.server import HttpServer
     mcp = Server(tools.build(tools.Context(dsn="postgresql://nowhere")), None,
-                 transport="http", audit_path=str(tmp_path / "audit.jsonl"))
+                 audit_path=str(tmp_path / "audit.jsonl"))
     httpd = HttpServer(("127.0.0.1", 0), mcp, lambda: {"status": "ok"}, token=token,
                        rate_limit=rate_limit)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
@@ -578,6 +583,17 @@ def test_an_in_process_tool_call_leaves_one_audit_line(tmp_path, monkeypatch):
     assert [e["tool"] for e in lines] == ["list_sources"]
     assert lines[0]["transport"] == "in-process" and lines[0]["ok"] is True
     assert lines[0]["client"] is None and "ms" in lines[0]
+
+
+def test_an_audit_line_that_cannot_be_written_is_noted_on_stderr_and_not_raised(
+        tmp_path, capsys):
+    """The door stays open when its log fails, and says so where the operator
+    looks - stderr, never stdout, which over stdio is the wire."""
+    from db.mcp.server import audit
+    audit({"tool": "t"}, str(tmp_path))                 # a directory is no file to append to
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("countrix mcp: the audit log %s was not written: " % tmp_path)
 
 
 def test_a_tool_argument_named_name_reaches_the_tool():

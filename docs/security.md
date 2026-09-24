@@ -13,7 +13,7 @@ reachable from this machine only ([deploy.md](deploy.md)).
 | threat | how it would arrive |
 | --- | --- |
 | **prompt injection** | text from a source page (an ability description, a wiki note) or a strategy file that reads like an instruction, shown to a session by a tool - or to the headless agents' run, which has tools and no person watching |
-| **the door** | the MCP server over HTTP: any process on this machine can call every tool, including the ones that write, refresh or rebuild; a browser page could try the same through DNS rebinding |
+| **the door** | the MCP server over HTTP: any process on this machine can call every tool, including the ones that write, refresh or rebuild; a browser page could try the same through DNS rebinding, and read the board, the playbook and the solver behind it that way too |
 | **SQL** | the `query` tool: the project's database users are superusers, and a superuser's `SELECT` can read files off the disk it runs on |
 | **files** | tools that write into the playbook: a path that escapes the folder, a file the catalog would refuse, an oversized body |
 | **the containers** | a compromised process inside one reaching the internet, escalating, or filling the host |
@@ -50,17 +50,29 @@ set on a slider is the session's own and reaches no file. The data
 layer's `tune` tool is deliberately unaffected - a Claude Code session
 still writes weights through it. With `COUNTRIX_READ_ONLY=0` the
 write comes back: `POST /api/weight` on the board (bound to 127.0.0.1
-like everything else, and behind the data layer's two browser guards - a
-non-local `Origin` is refused with 403, a body that does not claim
-`application/json` with 415), which the board turns into a `tune` call - over HTTP to the MCP server with the bearer token in the
+like everything else, behind the guard below, and refusing a body that
+does not claim `application/json` with 415), which the board turns into a
+`tune` call - over HTTP to the MCP server with the bearer token in the
 compose stack, in-process through the same tool registry on the local
 cluster - so the change is validated against the catalog, logged with its
 reason and mirrored like any other. The board never opens a playbook
 file, and its container mounts the playbook read-only.
 
+**Every server answers only to its own names.** The three HTTP servers -
+the MCP door, the inference service and the board - stand on `db/web.py`,
+which checks every request's `Host` and `Origin` before any route runs, on
+every method, reads included: each must name a local host (`localhost`,
+`127.0.0.1`, `::1`, `0.0.0.0`) or one the server was started with - the
+compose service name another container calls it by (`data`, `inference`),
+or a published board's public name (`--allow-host`). Anything else is 403.
+The Host check stops DNS rebinding: a page rebound to 127.0.0.1
+sends its same-origin GETs with no `Origin` but under its own host name,
+so it can read neither the playbook, nor the board, nor the solver's
+answers. A missing `Host` and `Origin: null` are refused too.
+
 **The door checks who is knocking.** The HTTP server binds to 127.0.0.1,
-refuses browser origins that are not local (DNS-rebinding guard), caps a
-request at one megabyte and a batch at twenty messages, allows 120 tool
+answers only to its own names (above), caps a request at one megabyte and
+a batch at twenty messages, allows 120 tool
 calls per client address per minute (the limit is per address, not per
 claimed session id) and answers 429 past that, and - when
 `COUNTRIX_MCP_TOKEN` is set in `.env` - requires
@@ -77,7 +89,10 @@ unknown hero, a malformed weight - is 400 with its reason, and anything
 else is 500 with the error's type and message, its traceback written to
 stderr and never into the reply. The MCP door draws the same line in
 JSON-RPC's words: a refusal is `isError`, anything else `INTERNAL`, the
-traceback in its log.
+traceback in its log. Each server writes one line to stderr for every
+request that fails and every board it solves - the request line, the
+status and the seconds - so the containers' logs say what was asked and
+when; an audit line the door cannot write is noted there too.
 
 **SQL reads tables, not disks.** The `query` tool accepts one statement
 that starts `SELECT`, `WITH`, `EXPLAIN`, `SHOW`, `TABLE` or `VALUES`,

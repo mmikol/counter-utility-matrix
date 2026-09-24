@@ -39,6 +39,15 @@ migrate the database, and then serves an MCP endpoint the read-only
 board never calls. It cannot be dropped from the compose run - `ui` and
 `inference` wait on its health - but it need not be reachable.
 
+Each server answers only to the names it is started with, beside the
+local ones, and refuses any other `Host` or `Origin` with 403 - the guard
+that stops DNS rebinding ([security.md](security.md)). The compose stack
+starts `data` and `inference` answering to the service names the other
+containers call them by. A published board must be started with
+`--allow-host` naming its public host name - `python -m ui.board --host
+0.0.0.0 --port 8017 --allow-host board.example.org` in
+`docker-entrypoint.sh` - or every request answers 403.
+
 ## Three things to settle before anything is published
 
 1. **The MCP server on 8020 carries the tools that write, refresh and

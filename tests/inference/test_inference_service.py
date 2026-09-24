@@ -124,10 +124,13 @@ def test_the_inference_service_listens_where_the_environment_says(monkeypatch):
     monkeypatch.delenv("COUNTRIX_INFERENCE_PORT")
     args = serve.command_line([])
     assert (args.host, args.port) == ("127.0.0.1", 8019)
+    # the names it answers to beyond the local ones: `inference` in the compose stack
+    assert args.allow_host == []
+    assert serve.command_line(["--allow-host", "x", "--allow-host", "y"]).allow_host == ["x", "y"]
 
 
 def test_board_forwards_to_a_named_inference_service(monkeypatch):
-    calls = []
+    calls, connected = [], []
 
     def fake_remote(path, query=None, payload=None):
         calls.append((path, query, payload))
@@ -135,25 +138,32 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
 
     monkeypatch.setenv("COUNTRIX_INFERENCE_URL", "http://inference:8019")
     monkeypatch.setattr(board, "remote", fake_remote)
-    assert board.api_infer(None, {"map": ["Ilios"], "red": ["Zarya"], "blue": []}) == (
+    monkeypatch.setattr(board.psycopg, "connect", lambda *a, **k: connected.append(a))
+    assert board.api_board({"map": ["Ilios"], "red": ["Zarya"], "blue": []}) == (
         {"forwarded": True}, 200)
     assert calls[-1] == ("/board", {"map": "Ilios", "side": "", "red": ["Zarya"],
                                     "blue": [], "bans": []}, None)
-    board.api_infer(None, {"map": ["Ilios"], "weights": ["healing-floor:9.99", "x:12"]})
+    board.api_board({"map": ["Ilios"], "weights": ["healing-floor:9.99", "x:12"]})
     assert calls[-1][1]["weights"] == ["healing-floor:9.99", "x:10"]  # clamped
+    board.api_board({"map": ["Ilios"], "client": ["tab1"]})      # the page's lane rides along
+    assert calls[-1][1]["client"] == "tab1"
     # a malformed weight is the caller's error, refused here and never forwarded
     forwarded = len(calls)
     with pytest.raises(Refusal, match="id:value"):
-        board.api_infer(None, {"map": ["Ilios"], "weights": ["junk"]})
+        board.api_board({"map": ["Ilios"], "weights": ["junk"]})
     assert len(calls) == forwarded
+    assert connected == []                  # a forwarded board opens no connection
     # the status rides along now: a 502 from the service is not served as a 200
     assert board.api_strategies() == ({"forwarded": True}, 200)
 
 
-def test_board_reports_an_unreachable_inference_service(monkeypatch):
+def test_board_reports_an_unreachable_inference_service(monkeypatch, capsys):
     monkeypatch.setenv("COUNTRIX_INFERENCE_URL", "http://127.0.0.1:9")
     data, code = board.remote("/health")
     assert code == 502 and "unreachable" in data["error"]
+    # the 502 is the page's; the reason is the container log's too
+    assert capsys.readouterr().err.startswith(
+        "countrix board: the inference service at http://127.0.0.1:9 did not answer /health: ")
 
 
 # --- served ------------------------------------------------------------------------------
@@ -161,23 +171,47 @@ def test_board_reports_an_unreachable_inference_service(monkeypatch):
 @pytest.fixture()
 def served():
     import threading
-    from http.server import ThreadingHTTPServer
-    server = ThreadingHTTPServer(("127.0.0.1", 0), serve.Handler)
+
+    from db import web
+    server = web.LocalServer(("127.0.0.1", 0), serve.Handler, ["inference"])
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     yield "http://127.0.0.1:%d" % server.server_address[1]
     server.shutdown()
 
 
-def _get(url):
+def _get(url, headers=None):
     import json
     import urllib.error
     import urllib.request
     try:
-        with urllib.request.urlopen(url, timeout=60) as response:
+        request = urllib.request.Request(url, headers=headers or {})
+        with urllib.request.urlopen(request, timeout=60) as response:
             return response.status, json.loads(response.read())
     except urllib.error.HTTPError as error:
         return error.code, json.loads(error.read())
+
+
+def test_the_service_answers_only_to_the_names_it_is_called_by(served, monkeypatch):
+    """The board calls the service as http://inference:8019, so the compose
+    stack starts it with --allow-host inference; any other name is refused
+    before a route runs."""
+    monkeypatch.setattr(serve.psql, "default_dsn", lambda: "postgresql://nobody@127.0.0.1:9/nowhere")
+    assert _get(served + "/health", {"Host": "evil.example"}) == (
+        403, {"error": "host or origin not allowed"})
+    assert _get(served + "/health", {"Host": "inference:8019"})[0] == 200
+    assert _get(served + "/health", {"Origin": "http://evil.example"})[0] == 403
+
+
+def test_a_solve_leaves_a_line_on_stderr_and_health_none(served, monkeypatch, capsys):
+    import re
+    monkeypatch.setattr(serve.psql, "default_dsn", lambda: "postgresql://nobody@127.0.0.1:9/nowhere")
+    capsys.readouterr()
+    assert _get(served + "/health")[0] == 200
+    assert capsys.readouterr().err == ""
+    assert _get(served + "/board?map=Ilios")[0] == 500             # no database: still a line
+    assert re.search(r'"GET /board\?map=Ilios HTTP/1.1" 500 \d+\.\d\ds$',
+                     capsys.readouterr().err.rstrip())
 
 
 def test_health_and_strategies_are_served_without_a_database(served, monkeypatch):

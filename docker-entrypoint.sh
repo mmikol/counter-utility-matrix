@@ -60,7 +60,8 @@ case "$role" in
             sleep 10
         done
         case "$role" in
-            inference) exec python -m inference.serve --host 0.0.0.0 --port 8019 ;;
+            # the board calls the service as http://inference:8019 (compose.yaml)
+            inference) exec python -m inference.serve --host 0.0.0.0 --port 8019 --allow-host inference ;;
             refresh)   exec python -m db.refresh ;;
             *)         exec python -m ui.board --host 0.0.0.0 --port 8017 ;;
         esac ;;

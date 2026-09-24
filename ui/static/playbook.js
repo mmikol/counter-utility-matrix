@@ -1,6 +1,6 @@
 /* the playbook tab: the groups, the cards, the weight sliders and their store;
    loaded before board.js, which calls into it. READ_ONLY comes from the inline
-   script in the page shell (ui/board.py) and is true unless the board was told
+   script in the page shell (ui/pages.py) and is true unless the board was told
    it may write; everything below about *store* is the READ_ONLY=0 case. */
 /* a heuristic's weight is the user's to set: a slider under its card, 0 to 10
    to the hundredth (0.25, 9.99), with a number box for the exact figure,

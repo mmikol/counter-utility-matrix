@@ -15,9 +15,9 @@
 
 The agents run on the host, on the subscription (the claude CLI, signed in
 once); without the CLI the run still brings the stack up and says so. It
-imports the standard library, db's ROOT and inference.derive, the headless
-claude recipe; run it with .venv/bin/python, since inference.derive loads
-psycopg. Exit code 0 means everything answered.
+imports the standard library, db's ROOT, db.web's MCP client and
+inference.derive, the headless claude recipe; run it with .venv/bin/python,
+since inference.derive loads psycopg. Exit code 0 means everything answered.
 """
 
 import json
@@ -31,7 +31,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any, TypedDict
 
-from db import ROOT
+from db import ROOT, web
 from inference import derive
 
 # the compose stack's ports on this host (compose.yaml)
@@ -73,8 +73,8 @@ def _json_object(raw: bytes) -> dict[str, Any]:
     return reply
 
 
-def get_json(url: str | urllib.request.Request, timeout: float = 10) -> dict[str, Any] | None:
-    """The JSON object a URL or a request is answered with, an error status's
+def get_json(url: str, timeout: float = 10) -> dict[str, Any] | None:
+    """The JSON object a URL is answered with, an error status's
     body included, or None when nothing answers with one. An error status
     whose body is not a JSON object reads as {"status": "error", "error":
     "HTTP <code>"}."""
@@ -236,24 +236,10 @@ def mcp(name: str, arguments: dict[str, Any] | None = None, timeout: float = 10 
     """Call one tool on the stack's MCP endpoint -> its text. A reply that is
     not the tool's answer raises RuntimeError with its message: the tool's
     refusal, the door turning the call away, or no server answering."""
-    payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                          "params": {"name": name, "arguments": arguments or {}}})
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    bearer = token()
-    if bearer:
-        headers["Authorization"] = "Bearer " + bearer
-    request = urllib.request.Request(MCP_URL, data=payload.encode(), headers=headers)
-    body = get_json(request, timeout=timeout)
-    if body is None:
-        raise RuntimeError("the MCP server is unreachable at %s" % MCP_URL)
-    if "error" in body:                 # JSON-RPC's error object, or the door's string
-        error = body["error"]
-        raise RuntimeError(error.get("message", str(error)) if isinstance(error, dict)
-                           else str(error))
-    text = body["result"]["content"][0]["text"]
-    if body["result"].get("isError"):
-        raise RuntimeError(text)
-    return text
+    reply = web.call_tool(MCP_URL, name, arguments or {}, token=token(), timeout=timeout)
+    if reply.is_error:
+        raise RuntimeError(reply.text)
+    return reply.text
 
 
 def derive_pending(h: Health) -> bool:

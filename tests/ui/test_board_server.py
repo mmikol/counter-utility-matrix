@@ -2,21 +2,23 @@
 
 import http.client
 import json
+import re
 import threading
 import urllib.error
 import urllib.request
-from http.server import ThreadingHTTPServer
 from urllib.parse import urlparse
 
 import pytest
 
-from db import Refusal
-from ui import board
+from db import Refusal, web
+from ui import board, pages
+
+NOWHERE = "postgresql://nobody@127.0.0.1:9/nowhere"
 
 
 @pytest.fixture()
 def served():
-    server = ThreadingHTTPServer(("127.0.0.1", 0), board.Handler)
+    server = web.LocalServer(("127.0.0.1", 0), board.Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     yield "http://127.0.0.1:%d" % server.server_address[1]
@@ -34,6 +36,15 @@ def post(url, body, headers=None):
         return error.code, json.loads(error.read().decode("utf-8"))
 
 
+def get(url, headers=None):
+    request = urllib.request.Request(url, headers=headers or {})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return response.status, response.headers.get("Content-Type", ""), response.read()
+    except urllib.error.HTTPError as error:
+        return error.code, error.headers.get("Content-Type", ""), error.read()
+
+
 def test_a_read_only_board_refuses_the_one_post(served, monkeypatch):
     # the default: a weight set on the page is the session's own and reaches no file.
     # the sentinel records rather than raising: pytest.fail raises BaseException,
@@ -44,14 +55,14 @@ def test_a_read_only_board_refuses_the_one_post(served, monkeypatch):
     code, data = post(served + "/api/weight", {"id": "coverage", "weight": 3})
     assert code == 403 and "session only" in data["error"]
     assert wrote == [], wrote
-    assert "READ_ONLY = true" in board.view_board()
+    assert "READ_ONLY = true" in pages.view_board(board.read_only())
 
 
 def test_a_writable_board_renders_the_store_button(monkeypatch):
     # COUNTRIX_READ_ONLY=0 is the documented escape hatch: the page shell
     # must hand the scripts READ_ONLY = false, which is what renders *store*
     monkeypatch.setenv("COUNTRIX_READ_ONLY", "0")
-    assert "READ_ONLY = false" in board.view_board()
+    assert "READ_ONLY = false" in pages.view_board(board.read_only())
 
 
 def test_the_board_listens_where_the_environment_says(monkeypatch):
@@ -65,6 +76,9 @@ def test_the_board_listens_where_the_environment_says(monkeypatch):
     args = board.command_line([])
     assert (args.host, args.port) == ("127.0.0.1", 8017)
     assert board.command_line(["--port", "9"]).port == 9      # a flag still wins
+    # the names it answers to beyond the local ones: none unless given
+    assert args.allow_host == []
+    assert board.command_line(["--allow-host", "x", "--allow-host", "y"]).allow_host == ["x", "y"]
 
 
 def test_the_weight_store_is_the_only_post_and_reads_a_small_json_body(served, monkeypatch):
@@ -83,6 +97,17 @@ def test_the_weight_store_is_the_only_post_and_reads_a_small_json_body(served, m
     assert post(served + "/api/weight", body, {"Origin": "http://evil.example"})[0] == 403
     assert post(served + "/api/weight", body, {"Origin": "http://localhost:8017"})[0] == 200
     assert post(served + "/api/weight", b"{}", {"Content-Type": "text/plain"})[0] == 415
+
+
+def test_a_foreign_host_or_origin_is_refused_on_every_route(served, monkeypatch):
+    """The guard runs before any route: a page rebound to the board's address
+    sends its GETs under its own host name and no Origin, and a cross-site
+    request carries a foreign Origin - both are 403, reads included."""
+    monkeypatch.setattr(board.psql, "default_dsn", lambda: NOWHERE)
+    for path in ("/", "/api/strategies"):
+        assert get(served + path, {"Host": "evil.example"})[0] == 403, path
+        assert get(served + path, {"Origin": "http://evil.example"})[0] == 403, path
+        assert get(served + path, {"Host": "localhost:8017"})[0] == 200, path
 
 
 def test_the_one_post_says_what_went_wrong_and_bad_json_means_only_that(served, monkeypatch):
@@ -111,17 +136,9 @@ def test_the_one_post_says_what_went_wrong_and_bad_json_means_only_that(served, 
     assert code == 500 and data["error"] == "ValueError: inside"
 
 
-def get(url):
-    try:
-        with urllib.request.urlopen(url, timeout=60) as response:
-            return response.status, response.headers.get("Content-Type", ""), response.read()
-    except urllib.error.HTTPError as error:
-        return error.code, error.headers.get("Content-Type", ""), error.read()
-
-
 def test_the_page_the_statics_the_math_and_the_strategies_need_no_database(
         served, monkeypatch, tmp_path):
-    monkeypatch.setattr(board, "dsn", lambda: "postgresql://nobody@127.0.0.1:9/nowhere")
+    monkeypatch.setattr(board.psql, "default_dsn", lambda: NOWHERE)
     code, ctype, body = get(served + "/")
     assert code == 200 and "text/html" in ctype and b"Countrix" in body
     code, ctype, body = get(served + "/tests")
@@ -148,14 +165,42 @@ def test_the_page_the_statics_the_math_and_the_strategies_need_no_database(
     assert code == 404 and "application/json" in ctype and json.loads(body)["error"]
 
 
+def test_a_board_on_the_service_answers_while_the_database_is_down(served, monkeypatch):
+    """With the inference service named, a board request is forwarded before
+    any connection opens, so it answers with the database out of reach - a
+    500 when the router connected first."""
+    monkeypatch.setenv("COUNTRIX_INFERENCE_URL", "http://inference:8019")
+    monkeypatch.setattr(board.psql, "default_dsn", lambda: NOWHERE)
+    monkeypatch.setattr(board, "remote", lambda path, query=None, payload=None: (
+        {"forwarded": path, "client": query.get("client")}, 200))
+    code, _, body = get(served + "/api/board?map=Ilios&blue=Ana&client=tab1")
+    assert code == 200 and json.loads(body) == {"forwarded": "/board", "client": "tab1"}
+
+
+def test_a_board_leaves_a_line_on_stderr_and_a_static_file_none(served, monkeypatch, capsys):
+    """The solves are logged with their status and seconds, so the container's
+    log says what the page asked and when; the page and its files are quiet
+    unless they fail."""
+    monkeypatch.setenv("COUNTRIX_INFERENCE_URL", "http://inference:8019")
+    monkeypatch.setattr(board, "remote", lambda path, query=None, payload=None: ({}, 200))
+    capsys.readouterr()
+    assert get(served + "/static/board.css")[0] == 200 and get(served + "/")[0] == 200
+    assert capsys.readouterr().err == ""
+    assert get(served + "/api/board?map=Ilios")[0] == 200
+    assert re.search(r'"GET /api/board\?map=Ilios HTTP/1.1" 200 \d+\.\d\ds$',
+                     capsys.readouterr().err.rstrip())
+    assert get(served + "/static/nope.js")[0] == 404
+    assert '"GET /static/nope.js HTTP/1.1" 404' in capsys.readouterr().err
+
+
 @pytest.mark.invariant
 def test_the_json_endpoints_answer_over_http(served, monkeypatch, dsn):
-    monkeypatch.setattr(board, "dsn", lambda: dsn)
+    monkeypatch.setattr(board.psql, "default_dsn", lambda: dsn)
     code, _, body = get(served + "/api/roster")
     assert code == 200 and len(json.loads(body)["heroes"]) > 50
     code, _, body = get(served + "/api/facts?map=Ilios&blue=Ana")
     assert code == 200 and json.loads(body)["count"] > 0
-    code, _, body = get(served + "/api/infer?map=Ilios&blue=Ana&bans=Widowmaker")
+    code, _, body = get(served + "/api/board?map=Ilios&blue=Ana&bans=Widowmaker")
     assert code == 200 and json.loads(body)["blue"]["blue"] and json.loads(body)["plan"]
-    code, _, body = get(served + "/api/infer?blue=Nobody")
+    code, _, body = get(served + "/api/board?blue=Nobody")
     assert code == 400 and "error" in json.loads(body)

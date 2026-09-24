@@ -22,8 +22,10 @@ boundary does not draw it.
                   Postgres over db.psql.default_dsn()
     refresh       the daily refresh
     sentry        the guard: the playbook, the free text in the database, the door
-    web           the reply an HTTP door gives a request that raised: a Refusal
-                  400, anything else 500 with its traceback on stderr
+    web           what the three HTTP servers share: the Host-and-Origin
+                  guard, the handler that sends and logs, the reply to a
+                  request that raised (a Refusal 400, anything else 500 with
+                  its traceback on stderr), and the one MCP client
     raw/          the CSV mirror the tools export (gitignored)
 
 This file holds what the whole layer must agree on: where things live (ROOT

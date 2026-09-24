@@ -1,29 +1,33 @@
 """The inference engine as a service: the container the board talks to.
 
-    python -m inference.serve --port 8019
+    python -m inference.serve --port 8019 [--allow-host NAME ...]
 
     GET  /health                       the catalog size and the database state; 200
                                        and degraded, naming why, when either is out
                                        of reach
-    GET  /board?map=&side=&red=&blue=&bans=[&client=]   both seats' optimal six + the
-                                       current comp; a newer board from the same client
-                                       supersedes one still solving
+    GET  /board?map=&side=&red=&blue=&bans=[&weights=&client=]   both seats' optimal
+                                       six + the current comp, under the playbook
+                                       tab's weights; a newer board from the same
+                                       client supersedes one still solving
     GET  /infer?map=&side=&red=&blue=&bans=[&top=&pool=]   blue's optimal six
     GET  /evaluate?map=&side=&red=&blue=&bans=   a full six scored against the field
     GET  /strategies                   the catalog
 
-The same functions ui/board.py calls in-process when COUNTRIX_INFERENCE_URL
-is unset. http.server, no web framework. A request that raises is answered
-by db.web.failure: a Refusal 400 with its message, anything else 500 with
-its type and message, the traceback on stderr.
+The engine functions ui/board.py calls in-process when COUNTRIX_INFERENCE_URL
+is unset. http.server on db.web's server and handler, no web framework: a
+request whose Host or Origin names another server is refused with 403 -
+--allow-host adds the names it is called by, as `inference` in the compose
+stack - and every solve leaves a line on stderr with how long it took. A
+request that raises is answered by db.web.failure: a Refusal 400 with its
+message, anything else 500 with its type and message, the traceback on
+stderr.
 """
 
 import argparse
-import json
 import os
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from collections.abc import Mapping, Sequence
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlsplit
 
 import psycopg
 
@@ -34,8 +38,10 @@ from ui.facts import tables
 from ui.facts.draft import parse_board
 
 # A parsed query string, and a handler's answer: a JSON object and its status.
-Query = dict[str, list[str]]
-Answer = tuple[dict[str, Any], int]
+Query = Mapping[str, Sequence[str]]
+Answer = tuple[dict[str, object], int]
+
+SOLVES = ("/board", "/infer", "/evaluate")     # the routes that search, and connect
 
 
 def _first(query: Query, key: str) -> str | None:
@@ -63,10 +69,10 @@ def handle_evaluate(cx: psycopg.Connection, query: Query) -> Answer:
 
 
 def handle_board(cx: psycopg.Connection, query: Query) -> Answer:
-    """Both seats and the current comp - what the board's two displays show.
-    The page never reads the countered case, so it is not solved here; a
-    newer board from the same `client` (one lane when none is named)
-    supersedes this one, which then answers 400."""
+    """Both seats and the current comp - what the board's two displays show -
+    under the playbook tab's weights. The page never reads the countered case,
+    so it is not solved here; a newer board from the same `client` (one lane
+    when none is named) supersedes this one, which then answers 400."""
     draft = parse_board(query)
     superseded = parallel.LATEST.take(_first(query, "client") or "")
     world = tables.load(cx)
@@ -111,29 +117,20 @@ def handle_health() -> Answer:
     return out, 200
 
 
-class Handler(BaseHTTPRequestHandler):
-    def log_message(self, fmt: str, *args: Any) -> None:
-        pass
-
-    def _json(self, payload: object, code: int = 200) -> None:
-        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+class Handler(web.Handler):
+    timed = frozenset(SOLVES)
 
     def do_GET(self) -> None:
-        parsed = urlparse(self.path)
+        parsed = urlsplit(self.path)
         path, query = parsed.path, parse_qs(parsed.query)
         try:
             if path == "/health":
                 return self._json(*handle_health())
             if path == "/strategies":
                 return self._json(*handle_strategies())
-            if path not in ("/board", "/infer", "/evaluate"):
+            if path not in SOLVES:
                 return self._json({"error": "nothing here"}, 404)
-            with psycopg.connect(psql.default_dsn()) as cx:   # only these routes connect
+            with psycopg.connect(psql.default_dsn()) as cx:   # only the solves connect
                 if path == "/board":
                     return self._json(*handle_board(cx, query))
                 if path == "/infer":
@@ -146,19 +143,21 @@ class Handler(BaseHTTPRequestHandler):
 def command_line(argv: list[str] | None = None) -> argparse.Namespace:
     """The command line. Where the service listens defaults to
     COUNTRIX_INFERENCE_HOST and COUNTRIX_INFERENCE_PORT, both read when it
-    starts."""
+    starts; --allow-host, repeated, names a host it answers to beside the
+    local ones."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=os.environ.get("COUNTRIX_INFERENCE_HOST",
                                                          "127.0.0.1"))
     parser.add_argument("--port", type=int,
                         default=int(os.environ.get("COUNTRIX_INFERENCE_PORT", "8019")))
+    parser.add_argument("--allow-host", action="append", default=[], metavar="NAME")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> None:
+    """Serve the engine until interrupted, its pool warmed first."""
     args = command_line(argv)
-    server = ThreadingHTTPServer((args.host, args.port), Handler)
-    server.daemon_threads = True
+    server = web.LocalServer((args.host, args.port), Handler, args.allow_host)
     workers = parallel.warm()                    # the board's solves split across these
     print("countrix inference: http://%s:%d%s" % (
         args.host, args.port, " (%d solver workers)" % workers if workers else ""))
