@@ -265,7 +265,7 @@ venv and restore its local config, which lives in the gitignored
 ```bash
 .venv/bin/pip install --upgrade "desloppify[full]"
 .venv/bin/desloppify update-skill claude        # refreshes .claude/skills/desloppify/SKILL.md
-for p in .venv .cache-blizzard .cache-wiki db/psql/cluster db/raw; do .venv/bin/desloppify exclude $p; done
+for p in .venv .cache-blizzard .cache-wiki db/psql/cluster db/raw .claude/worktrees; do .venv/bin/desloppify exclude $p; done
 .venv/bin/desloppify config set target_strict_score 98
 ```
 
