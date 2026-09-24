@@ -6,17 +6,20 @@ strategy files served as MCP resources.
 Every write validates through the catalog, rewrites the docs catalog for the
 shipped playbook and logs a reasoned line (inference.tune does all three),
 then reloads the strategies table from the files (_remirror): the database
-half of the write, and the one step this module adds.
+half of the write, and the one step this module adds. The frontmatter
+fields the writes take are declared from inference.strategy.FIELDS, the
+rule that checks them, so the door admits what a file may hold.
 """
 
 import os
 
 from db import ROOT
 from door.mcp.registry import Context, tool
-from door.mcp.schema import Properties, ToolReply
+from door.mcp.schema import Properties, Property, ToolReply
 from door.mcp.server import Resource, ResourceText
 from facts import compute
 from inference import catalog, derive, tune
+from inference.strategy import FIELDS, TUNABLE, Field, FieldKind
 
 
 @tool(
@@ -52,6 +55,28 @@ def strategies(ctx: Context) -> ToolReply:
     return ToolReply(text, {"strategies": [h.to_dict() for h in cat], "pending": pending})
 
 
+# the JSON schema type the door declares for each kind of frontmatter field:
+# an expression may be a bare number, as a soft limit's penalty is
+KIND_TYPES: dict[FieldKind, str | list[str]] = {
+    "line": "string", "choice": "string", "number": "number", "flag": "boolean",
+    "expression": ["string", "number"], "params": "object"}
+
+
+def _property(field: Field) -> Property:
+    """A frontmatter field as the door declares it, from the rule that checks
+    it (strategy.FIELDS): its kind's JSON type, a choice's enum and its
+    meaning."""
+    prop = Property(type=KIND_TYPES[field.kind], description=field.meaning)
+    if field.choices:
+        prop["enum"] = list(field.choices)
+    return prop
+
+
+# the fields add_strategy and infer_strategy take beside a strategy's name and kind
+STRATEGY_FIELDS: Properties = {
+    name: _property(field) for name, field in FIELDS.items() if name not in ("name", "kind")}
+
+
 def _remirror(ctx: Context) -> None:
     """A playbook write's database half: the strategies table reloaded from
     the files the write changed."""
@@ -66,9 +91,7 @@ def _remirror(ctx: Context) -> None:
     " with the reason in inference/strategies/tuning-log.md.",
     {
         "id": {"type": "string", "description": "the strategy's id (its filename)"},
-        "field": {"type": "string", "description": "weight | direction | soft | when |"
-                                                   " require | bonus | penalty | metric |"
-                                                   " params.NAME"},
+        "field": {"type": "string", "description": " | ".join((*TUNABLE, "params.NAME"))},
         "value": {"description": "the new value: a number, a boolean, or an expression"},
         "reason": {"type": "string", "description": "why, in a sentence"},
         "by": {"type": "string", "description": "who asked, for the log line (default"
@@ -83,28 +106,6 @@ def tune_tool(      # _tool: inference.tune holds the bare name
         change["id"], change["field"], change["old"], change["new"], change["line"]), change)
 
 
-STRATEGY_FIELDS: Properties = {
-    "metric": {"type": "string", "description": "heuristics: a numeric key from `metrics`"},
-    "direction": {"type": "string", "enum": ["maximize", "minimize"]},
-    "weight": {"type": "number", "description": "0..10; 1-4 is the working range"},
-    "when": {"type": "string", "description": "a guard expression; optional"},
-    "require": {"type": "string", "description": "constraints: a limit expression"},
-    "soft": {
-        "type": "boolean",
-        "description": "with require: charge `penalty` instead of discarding"},
-    "bonus": {
-        "type": "string",
-        "description": "constraints: an expression added while `when` holds"},
-    "penalty": {
-        "type": "string",
-        "description": "constraints: an expression (or a number with soft) subtracted"},
-    "params": {
-        "type": "object",
-        "description": "NAME: number dials the expressions read as params.NAME"},
-    "category": {"type": "string"},
-}
-
-
 @tool(
     "add_strategy", "Store a new strategy in inference/strategies/ from its name,"
     " kind and prose plus the frontmatter /strategy inferred - a heuristic's"
@@ -115,8 +116,8 @@ STRATEGY_FIELDS: Properties = {
     " Left with nothing inferred it lands as a draft the solver ignores.",
     {
         "id": {"type": "string", "description": "lowercase-kebab, becomes the filename"},
-        "name": {"type": "string"},
-        "kind": {"type": "string", "enum": ["constraint", "heuristic", "assumption"]},
+        "name": _property(FIELDS["name"]),
+        "kind": _property(FIELDS["kind"]),
         "body": {"type": "string", "description": "the prose: what it means and why"},
         "reason": {"type": "string", "description": "why it was added, in a sentence"},
         **STRATEGY_FIELDS},

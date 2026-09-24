@@ -90,7 +90,8 @@ def test_tool_refuses_unknown_and_missing_arguments():
     tool = Tool("t", "d", tool_schema({
         "a": {"type": "string"}, "n": {"type": "integer"}, "x": {"type": "number"},
         "names": {"type": "array", "items": {"type": "string"}},
-        "side": {"type": "string", "enum": ["attack", "defense"]}, "any": {}}, ["a"]),
+        "side": {"type": "string", "enum": ["attack", "defense"]}, "any": {},
+        "expr": {"type": ["string", "number"]}}, ["a"]),
         lambda **kw: ("ok", kw))
     with pytest.raises(Refusal, match="unknown argument"):
         tool({"a": "x", "b": 1})
@@ -105,12 +106,15 @@ def test_tool_refuses_unknown_and_missing_arguments():
             ({"a": "x", "n": 1.5}, "'n'", "must be integer"),
             ({"a": "x", "x": False}, "'x'", "must be number"),
             ({"a": "x", "names": ["Ana", 3]}, "'names'", "must be array of string"),
-            ({"a": "x", "side": "sideways"}, "'side'", "must be one of 'attack', 'defense'")):
+            ({"a": "x", "side": "sideways"}, "'side'", "must be one of 'attack', 'defense'"),
+            ({"a": "x", "expr": True}, "'expr'", "must be string or number")):
         with pytest.raises(Refusal) as refused:
             tool(arguments)
         assert str(refused.value) == "t: %s %s" % (named, wanted)
     passing = {"a": "x", "n": 2, "x": 2, "names": ("Ana",), "side": "attack", "any": None}
     assert tool(passing) == ("ok", passing)
+    for either in (2, "x"):                       # a list of types admits any of them
+        assert tool({"a": "x", "expr": either}) == ("ok", {"a": "x", "expr": either})
 
 
 def test_server_reports_a_refused_tool_as_is_error(tmp_path):

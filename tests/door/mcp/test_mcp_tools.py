@@ -181,6 +181,28 @@ def test_every_playbook_write_mirrors_the_catalog_once(tmp_path, monkeypatch):
     assert data["derived"] == [] and len(mirrored) == 3
 
 
+def test_add_strategy_stores_a_soft_limit_with_a_numeric_penalty(tmp_path, monkeypatch):
+    """The door declares its strategy fields from the rule that checks them,
+    so the numeric penalty the skill and the prompt promise a soft limit
+    passes the schema, and a category sets the file's like any field."""
+    for name in catalog.strategy_files(FIXTURE_PLAYBOOK):
+        shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setattr(catalog, "mirror", lambda cx, cat, directory=None: None)
+
+    class Offline(tools.Context):
+        def connect(self):
+            return contextlib.nullcontext("cx")
+    _, added = Offline(dsn="postgresql://nowhere").call(
+        "add_strategy", id="tank-cap", name="Tank cap", kind="constraint",
+        body="At most two tanks.", reason="a test", require="team.tanks <= 2", soft=True,
+        penalty=2, category="shape")
+    assert added["form"] == "limit"
+    stored = next(h for h in catalog.load() if h.id == "tank-cap")
+    assert stored.soft and stored.penalty.source == "2" and stored.category == "shape"
+
+
 def test_a_board_tool_hands_its_function_one_draft(tmp_path, monkeypatch):
     """The board tools share BOARD's five properties, first and in order, and
     each function gets them as one Draft: tuples, with what the call left out

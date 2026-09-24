@@ -4,12 +4,13 @@ objection, a run without a signed-in CLI, and the headless recipe the
 orchestrator shares."""
 
 import os
+import re
 
 import pytest
 
 from db import Refusal
 from inference import catalog, derive, tune
-from inference.strategy import CatalogError
+from inference.strategy import FIELDS, CatalogError
 
 
 def _draft(directory, hid="heal-line", kind="constraint"):
@@ -28,6 +29,18 @@ def test_the_derive_prompt_anchors_its_style_on_one_file_per_form(catalog_copy):
     anchors = derive.style_anchors(cat)
     assert [h.id for h in anchors] == ["anti-air", "anti-heal-answer", "cohesion", "locked-picks"]
     assert {h.form for h in anchors} == {h.form for h in cat} - {"draft"}
+
+
+def test_the_derive_prompt_asks_only_for_fields_a_strategy_has(catalog_copy):
+    """Every key the prompt's answer templates name, for a heuristic draft and
+    a constraint one, is a field the rule in strategy.FIELDS checks."""
+    _draft(catalog_copy, "heal-line", "constraint")
+    _draft(catalog_copy, "sustain-first", "heuristic")
+    cat = catalog.load(catalog_copy)
+    for hid in ("heal-line", "sustain-first"):
+        draft = next(h for h in cat if h.id == hid)
+        asked = set(re.findall(r'"([a-z_]+)":', derive.prompt(draft, cat))) - {"fields", "reason"}
+        assert asked and asked <= set(FIELDS), (hid, asked - set(FIELDS))
 
 
 def test_derive_completes_a_draft_from_the_models_answer(catalog_copy):

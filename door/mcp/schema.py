@@ -19,10 +19,10 @@ class ToolReply(NamedTuple):
 
 
 class Property(TypedDict, total=False):
-    """One argument in a tool's JSON schema: its type, an array's item type,
-    the values it admits and what it means. One that declares no type admits
-    any value."""
-    type: str
+    """One argument in a tool's JSON schema: its type - one name, or a list
+    of the names it admits - an array's item type, the values it admits and
+    what it means. One that declares no type admits any value."""
+    type: str | list[str]
     items: "Property"
     enum: list[str]
     description: str
@@ -62,20 +62,34 @@ JSON_TYPES: dict[str, tuple[type, ...]] = {
     "array": (list, tuple), "object": (dict,)}
 
 
-def _is_a(value: object, kind: str) -> bool:
-    """Whether a value is of a JSON schema type."""
+def _types(spec: Property) -> list[str]:
+    """The JSON schema types a property admits; none when it declares none."""
+    kind = spec.get("type")
+    if kind is None:
+        return []
+    return [kind] if isinstance(kind, str) else kind
+
+
+def type_text(spec: Property) -> str | None:
+    """A property's type as the refusals and the reference word it: its
+    types joined with 'or' ('string or number'), None when it declares none."""
+    return " or ".join(_types(spec)) or None
+
+
+def _is_a(value: object, kinds: list[str]) -> bool:
+    """Whether a value is of any of these JSON schema types."""
     if isinstance(value, bool):
-        return kind == "boolean"
-    return isinstance(value, JSON_TYPES[kind])
+        return "boolean" in kinds
+    return any(isinstance(value, JSON_TYPES[kind]) for kind in kinds)
 
 
 def _misfit(spec: Property, value: object) -> str | None:
     """What a value must be to fit the property that declares it, or None when
-    it fits: its type (an array's items too, where they declare one) and its
-    enum. A property that declares neither admits anything."""
-    kind, items = spec.get("type"), spec.get("items", {}).get("type")
-    wanted = "%s of %s" % (kind, items) if items else kind
-    if kind is not None and not _is_a(value, kind):
+    it fits: one of its types (an array's items too, where they declare one)
+    and its enum. A property that declares neither admits anything."""
+    kinds, items = _types(spec), _types(spec.get("items", {}))
+    wanted = "%s of %s" % (type_text(spec), " or ".join(items)) if items else type_text(spec)
+    if kinds and not _is_a(value, kinds):
         return wanted
     if items and isinstance(value, (list, tuple)) and not all(_is_a(v, items) for v in value):
         return wanted

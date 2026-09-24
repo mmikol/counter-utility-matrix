@@ -120,8 +120,10 @@ from changing that quietly.
 **Files are written by validated tools only.** A strategy's id is its
 filename, lowercase-kebab and nothing else, so no path leaves the folder
 and no file can claim another's id; a file is loaded through the catalog
-before it exists or changes; a frontmatter value is one line and a weight
-is within 0..10; names, prose, questions, reasoning and notes have length
+before it exists or changes; a frontmatter value is one line as the
+loader reads lines, a number is finite and a weight is within 0..10 - one
+rule, `checked_value` in `inference/strategy.py`, that every writer and
+the loader keep; names, prose, questions, reasoning and notes have length
 caps; the deriver accepts only a strategy's own fields from the model, at
 most ten drafts a run, and passes a draft's prose over stdin; a search's
 pool and its alternatives are clamped. The board escapes everything it

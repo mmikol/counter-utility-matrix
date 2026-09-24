@@ -108,15 +108,17 @@ heuristic in the playbook tab) override a weight for one board at a time -
 `weights=<id>:<0..10>` on `/board`, `weights` on the `board` tool - and
 the file is untouched until the slider's *store*, which is a `tune` call;
 every result names the weights it was scored under. A value is clamped to
-0..10; an entry that is not `id:value`, or a value that is not a finite number,
-is refused as the caller's error. One path changes a
-file, logged in `strategies/tuning-log.md` with a reason and who asked:
-**`tune`**, one validated frontmatter edit - `weight` (0..10),
-`direction`, `soft`, `when`, `require`, `bonus`, `penalty`, `metric`, or a
-`params.NAME` dial. The edited file is loaded through the catalog before
-it is written, so an invalid change never lands. The `/tune` skill is the
-conversational front: "it keeps ignoring anti-heal" becomes a `tune` call
-and a re-run of the board to show the effect.
+0..10; an entry that is not `id:value`, or a value that is not a finite
+number, is refused as the caller's error. One path changes a file, logged
+in `strategies/tuning-log.md` with a reason and who asked: **`tune`**,
+one validated frontmatter edit - `kind`, `category`, `metric`,
+`direction`, `weight` (0..10), `confidence`, `when`, `require`, `soft`,
+`bonus`, `penalty` (a soft limit's penalty may be a bare number), or a
+`params.NAME` dial. The value is checked by the rule the loader keeps
+(`checked_value`), and the edited file is loaded through the catalog
+before it is written, so an invalid change never lands. The `/tune` skill
+is the conversational front: "it keeps ignoring anti-heal" becomes a
+`tune` call and a re-run of the board to show the effect.
 
 ## Layout
 
@@ -149,7 +151,7 @@ inference/
 | file | purpose |
 | --- | --- |
 | `frontmatter.py` | The dialect a strategy file opens with: flat `key: value` lines between two `---` fences and one indented mapping (`params:`), each value a string, a number, a boolean, null or a list (`parse_frontmatter`); text outside it is a `FrontmatterError`. |
-| `strategy.py` | One strategy (`Strategy`): a file's fields, its `kind`, the `form` they make it, its compiled expressions and the checks every file passes against the metrics registry, the first failure raised as a `CatalogError`; `to_dict` is the `StrategyRecord` the tools, the service and the board serve. |
+| `strategy.py` | One strategy (`Strategy`): a file's fields, its `kind`, the `form` they make it, its compiled expressions and the checks every file passes against the metrics registry, the first failure raised as a `CatalogError`; `to_dict` is the `StrategyRecord` the tools, the service and the board serve. `FIELDS` names what each frontmatter field holds - one line of text, a choice, the weight, a flag, an expression or the params block - and `checked_value` applies that rule for every writer, the rule the loader reads each file by; the door declares its strategy arguments from the same table. |
 | `catalog.py` | Reads the playbook in force (`strategies_dir`: the shipped folder, or the one `COUNTRIX_STRATEGIES` names), each file parsed and checked into a `Strategy` and any failure a `CatalogError` naming the file, orders the catalog (constraints - limits, then scored - heuristics, assumptions), mirrors it into the `strategies` table, and writes the catalog at the end of this document. `strategy_files` names a playbook's strategy files (its markdown less `README.md` and `tuning-log.md`), and `playbook_digest` hashes them, names and bytes, into the digest a proven fixture records. |
 | `expr.py` | A safe subset of Python expressions: the AST is checked once, compiled, and evaluated over a scope whose missing keys read as zero, so a metric that does not apply to a board never crashes a score. |
 | `scoring.py` | The objective on one board (`Objective`): each strategy's `when` read once where the board settles it, then every candidate prepared (namespace, limit check, raw metric values) and scored with the frozen bounds - a hard limit prunes, a soft one charges, a heuristic normalises and weighs, a scored constraint adds - its breakdown one `Contribution` per strategy. |

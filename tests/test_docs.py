@@ -339,6 +339,19 @@ def test_every_skill_has_frontmatter_and_names_its_tools():
 
 
 @needs_skills
+def test_the_strategy_skill_names_only_arguments_the_writes_take():
+    """A backticked word in the /strategy skill is a tool, an argument of
+    add_strategy, infer_strategy or tune, the server's name or the breakdown's
+    `spread`: the skill cannot tell a session to pass what the door refuses."""
+    from door.mcp import tools
+    taken = {"countrix", "spread", *tools.REGISTRY.names()}
+    for name in ("add_strategy", "infer_strategy", "tune"):
+        taken |= set(tools.REGISTRY.get(name).schema["properties"])
+    named = set(re.findall(r"`([a-z_]+)`", _skills()["strategy"]))
+    assert named - taken == set()
+
+
+@needs_skills
 def test_the_skills_document_covers_every_skill(copy_of):
     doc = _read("docs", "skills.md")
     for name in MUST_NAME:

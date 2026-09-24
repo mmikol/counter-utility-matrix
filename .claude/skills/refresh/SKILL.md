@@ -35,8 +35,8 @@ is left half-done: a step that fails is reported, not hidden.
    read `metrics` for the vocabulary, decide the frontmatter exactly as
    the `/strategy` skill does (a heuristic's metric, direction and
    weight; a constraint's require, or when/bonus/penalty and params; or
-   `kind: assumption`), and write it with `infer_strategy`, the reason
-   quoting the prose. A refused answer is fixed and sent again, once; a
+   `kind: assumption`), and write it with `infer_strategy` - an
+   assumption with `tune`, field `kind` - the reason quoting the prose. A refused answer is fixed and sent again, once; a
    draft you cannot complete is reported with why.
 4. **Re-infer what the data changed.** Look at the catalog against the
    fresh data with restraint. Call `infer` with `compact: true` (the full

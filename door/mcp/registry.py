@@ -37,7 +37,15 @@ from db import CACHE_DIRS, ROOT, embed, psql
 from db.data import fetch
 from db.data.fetch import Log
 from door.mcp.audit import audited
-from door.mcp.schema import Properties, Property, Tool, ToolReply, ToolSchema, tool_schema
+from door.mcp.schema import (
+    Properties,
+    Property,
+    Tool,
+    ToolReply,
+    ToolSchema,
+    tool_schema,
+    type_text,
+)
 
 # A tool's function: its context first, its arguments by name.
 type ToolFn = Callable[..., ToolReply]
@@ -179,7 +187,7 @@ def _escaped(text: str) -> str:
 def _argument(name: str, prop: Property, required: bool) -> str:
     """One argument as the reference lists it: its name, whether it is
     required, its type or the values it admits, and what it means."""
-    kind = " \\| ".join(prop["enum"]) if "enum" in prop else prop.get("type") or "any"
+    kind = " \\| ".join(prop["enum"]) if "enum" in prop else type_text(prop) or "any"
     meaning = ": " + _escaped(prop["description"]) if prop.get("description") else ""
     return "`%s`%s (%s)%s" % (name, " *required*" if required else "", kind, meaning)
 
