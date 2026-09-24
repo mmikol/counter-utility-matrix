@@ -3,7 +3,10 @@ its tools validate their arguments. The protocol tests spawn the real
 server as a subprocess and need no database (tools/list and list_sources
 read nothing); the tool tests need the built database."""
 
+import contextlib
 import json
+import os
+import shutil
 import subprocess
 import sys
 
@@ -13,6 +16,7 @@ from db import ROOT, Refusal
 from db.mcp import tools
 from db.mcp.server import Server, Tool
 from inference import catalog, tune
+from tests.inference import FIXTURE_PLAYBOOK
 
 
 def _talk(messages):
@@ -433,6 +437,37 @@ def test_derive_strategies_is_idle_with_nothing_pending():
     text, data = tools.run_tool(tools.Context(dsn="postgresql://nowhere"), "derive_strategies")
     assert data["skipped"] == "nothing pending" and "nothing pending" in text
     assert data["deferred"] == 0
+
+
+def test_every_playbook_write_mirrors_the_catalog_once(tmp_path, monkeypatch):
+    """tune, add_strategy and infer_strategy each reload the strategies table
+    once, after the write; derive_strategies with nothing derived connects to
+    nothing."""
+    for name in catalog.strategy_files(FIXTURE_PLAYBOOK):
+        shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))
+    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
+    mirrored = []
+    monkeypatch.setattr(catalog, "mirror", lambda cx, cat, directory=None: mirrored.append(
+        (cx, len(cat))))
+
+    class Offline(tools.Context):
+        def connect(self):
+            return contextlib.nullcontext("cx")
+    ctx = Offline(dsn="postgresql://nowhere")
+    heuristic = next(h for h in catalog.load() if h.kind == "heuristic")
+    files = len(catalog.strategy_files(str(tmp_path)))
+    tools.run_tool(ctx, "tune", id=heuristic.id, field="weight", value=3, reason="a test")
+    assert mirrored == [("cx", files)]
+    tools.run_tool(ctx, "add_strategy", id="a-draft", name="A draft", kind="heuristic",
+                   body="Prose to infer from.", reason="a test")
+    assert mirrored[1:] == [("cx", files + 1)]            # the new file is in the mirror
+    tools.run_tool(ctx, "infer_strategy", id="a-draft", reason="a test",
+                   metric=heuristic.metric, direction="maximize", weight=1)
+    assert len(mirrored) == 3
+    assert not [h.id for h in catalog.load() if h.pending]
+    _, data = tools.run_tool(ctx, "derive_strategies")
+    assert data["derived"] == [] and len(mirrored) == 3
 
 
 def test_a_registry_refuses_a_tool_name_twice():

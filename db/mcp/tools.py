@@ -777,8 +777,7 @@ def tune_tool(      # _tool: inference.tune holds the bare name
         ctx: Context, id: str, field: str, value: object, reason: str,
         by: str = "claude-code-session") -> Reply:
     change = tune.tune(id, field, value, reason, by=str(by or "claude-code-session")[:40])
-    with ctx.connect() as cx:
-        catalog.mirror(cx, catalog.load())
+    _remirror(ctx)
     return "tuned %s: %s %s -> %s\n%s" % (change["id"], change["field"], change["old"],
                                          change["new"], change["line"]), change
 
@@ -814,6 +813,13 @@ STRATEGY_FIELDS = {
 }
 
 
+def _remirror(ctx: Context) -> None:
+    """A playbook write's database half: the strategies table reloaded from
+    the files the write changed."""
+    with ctx.connect() as cx:
+        catalog.mirror(cx, catalog.load())
+
+
 @tool("add_strategy", "Store a new strategy in inference/strategies/ from its name,"
       " kind and prose plus the frontmatter /strategy inferred - a heuristic's"
       " metric/direction/weight, or a constraint's require or when/bonus/penalty"
@@ -834,8 +840,7 @@ def add_strategy(
     category = fields.pop("category", "general")
     fields.pop("kind", None)
     added = tune.add(id, name, kind, body, fields, reason, category=category)
-    with ctx.connect() as cx:
-        catalog.mirror(cx, catalog.load())
+    _remirror(ctx)
     note = ("\nstored as a DRAFT: the solver ignores it until /strategy infers its frontmatter"
             if added["form"] == "draft" else "")
     return "added %s as %s/%s -> %s\n%s%s" % (
@@ -851,8 +856,7 @@ def add_strategy(
       ["id", "reason"])
 def infer_strategy(ctx: Context, id: str, reason: str, **fields: Any) -> Reply:
     done = tune.complete(id, fields, reason)
-    with ctx.connect() as cx:
-        catalog.mirror(cx, catalog.load())
+    _remirror(ctx)
     return "%s is now %s: %s\n%s" % (id, done["form"], ", ".join(
         "%s=%s" % kv for kv in done["set"].items()), done["line"]), done
 
@@ -866,8 +870,7 @@ def infer_strategy(ctx: Context, id: str, reason: str, **fields: Any) -> Reply:
 def derive_strategies(ctx: Context, ids: list[str] | None = None) -> Reply:
     result = derive.derive(ids, log=ctx.log)
     if result["derived"]:
-        with ctx.connect() as cx:
-            catalog.mirror(cx, catalog.load())
+        _remirror(ctx)
     return derive.derive_rendered(result), result
 
 
