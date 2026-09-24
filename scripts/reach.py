@@ -23,6 +23,7 @@ OUT = os.path.join(ROOT, "tests", "fixtures", "reach.json")
 
 
 def main() -> int:
+    """Search every released hero, record the boards that seat one -> 0."""
     with psycopg.connect(psql.default_dsn()) as cx:
         world = tables.load(cx)
     seated: list[reach.Reach] = []

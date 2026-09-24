@@ -82,6 +82,8 @@ def spread(rows: list[Proof], keep: int) -> list[Proof]:
 
 
 def main() -> int:
+    """Record the spread of the proofs OPTIMAL_SOURCES names -> 0; the run stops
+    when there is nothing to record or the kept set would make a vacuous gate."""
     # the enumerations live outside the repo - hours of compute a file, kept
     # where they were produced
     sources = [os.path.expanduser(p)
