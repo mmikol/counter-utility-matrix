@@ -58,6 +58,8 @@ if TYPE_CHECKING:
     import psycopg
 
 SHIPPED_DIR = os.path.join(ROOT, "inference", "strategies")
+# the id is the filename, so no id may name a path (docs/security.md)
+ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 
 
 def strategies_dir() -> str:
@@ -279,7 +281,7 @@ class Strategy:
         return "draft"
 
     @property
-    def scored(self) -> bool:
+    def solver_reads(self) -> bool:
         """Whether the solver reads this strategy at all (assumptions and drafts it does not)."""
         return self.form in ("heuristic", "limit", "scored")
 
@@ -334,7 +336,7 @@ def load(directory: str | None = None) -> list[Strategy]:
         path = os.path.join(directory, name)
         hid = name[:-3]                       # the id IS the filename; nothing overrides it
         try:
-            if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", hid):
+            if not ID_RE.fullmatch(hid):
                 raise CatalogError("%s: the filename must be lowercase-kebab" % name)
             with open(path, encoding="utf-8") as handle:
                 raw = handle.read()
@@ -393,7 +395,7 @@ def weighted(catalog: list[Strategy], weights: Mapping[str, float]) -> list[Stra
     return out
 
 
-def scores(catalog: Iterable[Strategy]) -> bool:
+def has_scoring_terms(catalog: Iterable[Strategy]) -> bool:
     """Whether the playbook has any term that scores: a heuristic, a scored
     constraint or a soft limit. A playbook of hard limits and prose alone
     ties every legal six at zero - the board then says "unscored" rather
@@ -437,7 +439,7 @@ def mirror(
             " direction, metric, weight, expression, params, body, playbook, source_id)"
             " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (h.id, h.name, h.kind, h.category, h.direction, h.metric,
-             h.weight if h.scored else None, h.expressions or None,
+             h.weight if h.solver_reads else None, h.expressions or None,
              ", ".join("%s=%s" % kv for kv in sorted(h.params.items())) or None,
              h.body, playbook_name(directory), source_id))
     cx.commit()
@@ -446,7 +448,9 @@ def mirror(
                     assumption=kinds["assumption"], total=len(catalog), tables=["strategies"])
 
 
-def render(catalog: Iterable[Strategy]) -> str:
+def catalog_rendered(catalog: Iterable[Strategy]) -> str:
+    """The catalog as text, one line per strategy: kind, form, id, category and
+    what it weighs - the `strategies` tool's reply."""
     lines = []
     for h in catalog:
         head = "%-10s %-10s %-28s %-9s" % (h.kind, h.form, h.id, h.category)

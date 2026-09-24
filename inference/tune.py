@@ -34,7 +34,6 @@ from inference import catalog as catalog_module
 SCALARS = ("weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric",
            "kind", "category")
 WEIGHT_RANGE = (0.0, 10.0)
-ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 PARAM_RE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
 
 
@@ -181,7 +180,7 @@ def tune(hid, field, value, reason, directory=None, by="claude-code-session"):
     directory, log_path = _where(directory)
     if not reason or not reason.strip():
         raise TuneError("a tuning change needs a reason")
-    if not ID_RE.fullmatch(hid or ""):
+    if not catalog_module.ID_RE.fullmatch(hid or ""):
         raise TuneError("no strategy %r" % hid)          # ids are kebab: no paths here
     path = os.path.join(directory, hid + ".md")
     if not os.path.exists(path):
@@ -207,7 +206,7 @@ def complete(hid, fields, reason, directory=None, by="claude-code-session"):
     directory, log_path = _where(directory)
     if not reason or not reason.strip():
         raise TuneError("an inferred strategy needs a reason")
-    if not ID_RE.fullmatch(hid or ""):
+    if not catalog_module.ID_RE.fullmatch(hid or ""):
         raise TuneError("no strategy %r" % hid)
     path = os.path.join(directory, hid + ".md")
     if not os.path.exists(path):
@@ -248,7 +247,7 @@ def add(hid, name, kind, body, fields=None, reason="", directory=None,
     """A new strategy file from its name, kind, prose and (inferred) fields,
     validated through the catalog before it exists -> {"id", "form", "path", "line"}."""
     directory, log_path = _where(directory)
-    if not ID_RE.fullmatch(hid or ""):
+    if not catalog_module.ID_RE.fullmatch(hid or ""):
         raise TuneError("id must be lowercase-kebab, got %r" % hid)
     if kind not in catalog_module.KINDS:
         raise TuneError("kind must be one of %s" % "/".join(catalog_module.KINDS))

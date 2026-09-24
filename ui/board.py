@@ -180,9 +180,8 @@ def api_weight(payload: dict[str, Any]) -> Reply:
     """Store a heuristic's weight in its file - the slider's "store". The
     change goes through the `tune` tool (validated, logged in the tuning
     log with its reason, mirrored into the database), never around it."""
-    from inference import tune
     hid = str((payload or {}).get("id") or "")
-    if not tune.ID_RE.fullmatch(hid):
+    if not catalog_module.ID_RE.fullmatch(hid):
         return {"error": "no such heuristic"}, 400
     raw: Any = payload.get("weight")         # any JSON: float() refuses what is not a number
     try:

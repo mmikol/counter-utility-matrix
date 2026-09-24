@@ -59,7 +59,7 @@ def _unscored(result):
 def _waiting(result):
     """The reason nothing on this board scores, or None: read off any result,
     the optimal included (a seat with no picks has no comp to read it from)."""
-    if not catalog_module.scores(result.catalog):
+    if not catalog_module.has_scoring_terms(result.catalog):
         return UNSCORED
     best = result.best if result.best is not None else result.score
     if best > 0:

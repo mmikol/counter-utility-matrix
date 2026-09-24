@@ -56,7 +56,8 @@ def test_the_reference_and_the_live_playbooks_are_valid_and_reference_real_metri
     forms = {h.form for h in cat}
     assert forms == {"limit", "scored", "heuristic", "assumption"}
     assert all(h.form == "heuristic" for h in cat if h.kind == "heuristic")
-    assert all(h.form == "assumption" and not h.scored for h in cat if h.kind == "assumption")
+    assert all(h.form == "assumption" and not h.solver_reads for h in cat
+               if h.kind == "assumption")
     assert {h.id for h in cat if h.kind == "assumption"} >= {"optimal-play", "vintage", "objective"}
     registry = compute.registry()
     for h in cat:
@@ -421,9 +422,9 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world):
     carry no share of a best, say so, and the verdict is the one line."""
     from inference import engine
     reference = catalog.load(FIXTURE_PLAYBOOK)
-    assert catalog.scores(reference)
+    assert catalog.has_scoring_terms(reference)
     limit_only = [h for h in reference if h.form == "limit" and not h.soft]
-    assert limit_only and not catalog.scores(limit_only)
+    assert limit_only and not catalog.has_scoring_terms(limit_only)
     b = engine.board(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
                      catalog=limit_only)
     d = b.to_dict()
@@ -456,7 +457,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
         "---\nname: Fliers need hitscan cover\nkind: heuristic\ndirection: maximize\n"
         "metric: team.hitscan\nweight: 1\nwhen: matchup.flyers >= 1\n---\nx\n", "utf-8")
     scratch = catalog.load(str(tmp_path))
-    assert catalog.scores(scratch)
+    assert catalog.has_scoring_terms(scratch)
     grounded = engine.board(world, "King's Row", ["Zarya", "Ana"],
                             ["Reinhardt", "Cassidy"], catalog=scratch).to_dict()
     for key in ("blue", "red"):

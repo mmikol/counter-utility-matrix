@@ -23,7 +23,7 @@ def test_every_hero_reach_finds_a_board_for_is_still_seated_and_none_is_newly_lo
     # reach.json was recorded under the 239 rules 9328429 removed; a playbook that
     # scores nothing seats heroes by tie-break alone. When rules return this runs
     # again, and a board that no longer seats its hero is searched for anew.
-    if not catalog.scores(catalog.load()):
+    if not catalog.has_scoring_terms(catalog.load()):
         pytest.skip("the shipped playbook scores nothing: no hero is the right pick")
     with open(FIXTURE, encoding="utf-8") as handle:
         boards = json.load(handle)

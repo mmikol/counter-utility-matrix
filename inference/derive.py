@@ -222,8 +222,8 @@ def derive(ids=None, directory=None, runner=run_cli, log=print, by="claude -p (d
 
 
 def derive_rendered(result):
-    """The derive() bag as lines. A free <noun>_rendered() reads a result dict;
-    a bound .rendered() belongs to a result object."""
+    """The derive() bag as lines. A free <noun>_rendered() reads plain data -
+    a result dict or a catalog; a bound .rendered() belongs to a result object."""
     parts = ["derive: %d completed" % len(result["derived"])] if result["derived"] else []
     if result["skipped"]:
         parts.append("derive: " + result["skipped"])

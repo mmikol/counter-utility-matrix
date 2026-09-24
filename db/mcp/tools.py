@@ -670,7 +670,7 @@ def board(
 def strategies(ctx: Context) -> Reply:
     cat = catalog.load()
     pending = [h.id for h in cat if h.pending]
-    text = catalog.render(cat)
+    text = catalog.catalog_rendered(cat)
     if catalog.strategies_dir() != catalog.SHIPPED_DIR:
         text = "playbook in force: %s (the shipped one is %s)\n\n%s" % (
             os.path.relpath(catalog.strategies_dir(), ROOT),

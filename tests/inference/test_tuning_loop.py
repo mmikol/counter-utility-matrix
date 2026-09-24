@@ -83,7 +83,7 @@ def test_a_bare_file_is_a_draft_the_solver_ignores(catalog_copy):
                      "# Shut off a heavy heal line\n\nOne anti-heal pick is worth more.\n")
     cat = catalog.load(catalog_copy)
     draft = next(h for h in cat if h.id == "heal-line")
-    assert draft.form == "draft" and draft.pending and not draft.scored
+    assert draft.form == "draft" and draft.pending and not draft.solver_reads
     assert all(h.form == "assumption" and not h.pending for h in cat
                if h.id in ("vintage", "objective", "locked-picks"))
     with pytest.raises(catalog.CatalogError, match="carries nothing to score"):
@@ -123,7 +123,7 @@ def test_add_stores_a_validated_strategy_and_complete_finishes_a_draft(catalog_c
                          directory=catalog_copy)
     assert done["form"] == "heuristic" and done["set"]["weight"] == "2"
     cat = catalog.load(catalog_copy)
-    assert next(h for h in cat if h.id == "sustain-first").scored
+    assert next(h for h in cat if h.id == "sustain-first").solver_reads
     # refusals leave nothing behind
     with pytest.raises(tune.TuneError, match="exists"):
         tune.add("sustain-first", "again", "heuristic", "x", None, "r", directory=catalog_copy)
@@ -177,7 +177,7 @@ def test_derive_completes_a_draft_from_the_models_answer(catalog_copy):
     assert "team.antiheal - " in text and "map.side" in text and "(text)" in text
     assert "kind: constraint\ncategory: matchup\nwhen: enemy.heal_ratio" in text   # a style anchor
     cat = catalog.load(catalog_copy)
-    assert next(h for h in cat if h.id == "heal-line").scored
+    assert next(h for h in cat if h.id == "heal-line").solver_reads
     assert "inferred -> scored" in tune.log_tail(1, os.path.join(catalog_copy, "tuning-log.md"))[0]
     assert derive.derive(directory=catalog_copy, runner=runner)["skipped"] == "nothing pending"
 
