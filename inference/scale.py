@@ -25,7 +25,15 @@ from dataclasses import dataclass
 from facts import compute
 from facts.model import ROLES, Hero
 from facts.team import number
-from inference.scoring import CONFIDENCE_KEY, Bounds, Candidate, Interval, MetricKey, Objective
+from inference.scoring import (
+    CONFIDENCE_KEY,
+    Bounds,
+    Candidate,
+    Interval,
+    MetricKey,
+    Objective,
+    SixKey,
+)
 from inference.shapes import legal_shapes
 
 REFERENCE_SIZE = 1200
@@ -77,7 +85,7 @@ def sample(objective: Objective, size: int = REFERENCE_SIZE) -> list[Candidate]:
         math.comb(len(by_role["tank"]), t) * math.comb(len(by_role["damage"]), d)
         * math.comb(len(by_role["support"]), s) for t, d, s in shapes)
     out: list[Candidate] = []
-    seen: set[frozenset[int]] = set()
+    seen: set[SixKey] = set()
     if shapes:
         while len(out) < min(size, space):
             t, d, s = rng.choice(shapes)

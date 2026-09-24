@@ -48,9 +48,14 @@ class SearchBounds(NamedTuple):
     top: int
 
 
-# the legal sixes one search may enumerate: a candidate holds about 1 KB while the
-# field is ranked, so this is about 540 MB of the 2 GiB each solving container
-# has - inference, and data for the door's solver tools
+# the legal sixes one search may enumerate. A slim candidate holds about 450 bytes
+# while its field is ranked (itself, its heroes tuple, key, score, tie-break,
+# contributions and violations, by sys.getsizeof), so a field this size is about
+# 225 MB. A board at pool 10 (411,825 sixes) holds up to three fields at once,
+# about 550 MB: blue's and red's ranked together in two workers and, with a full
+# six on a seat, that seat's revived again in this process to rank the six. The
+# budget is sized against the 2 GiB each solving container has - inference, and
+# data for the door's solver tools
 FIELD_BUDGET = 500_000
 
 

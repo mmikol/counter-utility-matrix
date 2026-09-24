@@ -26,7 +26,7 @@ from typing import NamedTuple
 from db import Refusal
 from facts.model import ROLES, Hero, Map, World
 from inference import scale
-from inference.scoring import Candidate, Interval, Objective
+from inference.scoring import Candidate, Interval, Objective, SixKey
 from inference.shapes import Shape, legal_shapes
 from inference.strategy import Strategy
 
@@ -240,7 +240,7 @@ class Solver(Objective):
         return out
 
     def _try(self, heroes: Sequence[Hero],
-                known: dict[frozenset[int], Candidate]) -> Candidate | None:
+                known: dict[SixKey, Candidate]) -> Candidate | None:
         """The six prepared, scored and slimmed once; None where a hard limit
         refuses it."""
         cand = Candidate(heroes)
@@ -254,7 +254,7 @@ class Solver(Objective):
         return cand
 
     def _climb(self, seed: Candidate, roster: Sequence[Hero],
-                known: dict[frozenset[int], Candidate]) -> Candidate:
+                known: dict[SixKey, Candidate]) -> Candidate:
         """Single-slot swaps from one six until none ranks above it."""
         locked_ids = {h.id for h in self.locked}
         current = seed
@@ -276,7 +276,7 @@ class Solver(Objective):
             current = best
 
     def _restarts(self, leader: Candidate, roster: Sequence[Hero],
-                  known: dict[frozenset[int], Candidate], n: int = RESTARTS) -> Candidate:
+                  known: dict[SixKey, Candidate], n: int = RESTARTS) -> Candidate:
         """Climbs from random sixes of the leader's own shape. A climb preserves
         the shape, so a start off it can only report on a shape already searched;
         confining the draw is what makes a couple of dozen starts enough."""
@@ -308,7 +308,7 @@ class Solver(Objective):
         return best
 
     def _two_swap(self, leader: Candidate, roster: Sequence[Hero],
-                  known: dict[frozenset[int], Candidate]) -> Candidate:
+                  known: dict[SixKey, Candidate]) -> Candidate:
         """Two open seats changed at once, to convergence. Two picks that pay
         only together are a saddle a one-slot climb cannot cross."""
         locked_ids = {h.id for h in self.locked}
@@ -336,7 +336,7 @@ class Solver(Objective):
         return out
 
     def _bring_pair(self, seed: Candidate, pairs: Sequence[tuple[Hero, Hero]],
-                    known: dict[frozenset[int], Candidate], spent: int) -> Candidate:
+                    known: dict[SixKey, Candidate], spent: int) -> Candidate:
         """Each pair with neither partner in the six, seated in two open slots of
         their own roles, until `considered` reaches `spent`. -> the best six met,
         the seed itself where none beat it."""

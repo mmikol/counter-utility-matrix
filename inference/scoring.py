@@ -149,6 +149,11 @@ class Contribution(TypedDict):
     text: NotRequired[str]
 
 
+# a six's key, its hero ids sorted: a team holds distinct heroes, so the sorted
+# ids name it as a set of them would, in 88 bytes where a frozenset takes 728
+type SixKey = tuple[int, ...]
+
+
 class Candidate:
     """One six on its way through the search: its heroes, and once prepared
     and scored its namespace, limit breaches, raw values, score, tie-break and
@@ -169,7 +174,7 @@ class Candidate:
 
     def __init__(self, heroes: Iterable[Hero]) -> None:
         self.heroes = tuple(heroes)
-        self.key = frozenset(h.id for h in self.heroes)
+        self.key: SixKey = tuple(sorted(h.id for h in self.heroes))
         self.ns: Namespace | None = None
         self.scope: Scope | None = None
         self.score = 0.0
