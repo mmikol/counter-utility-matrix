@@ -127,6 +127,22 @@ def test_a_stale_page_is_named_in_the_pull_reply(monkeypatch, tmp_path):
     assert "  stale            rates_x.html: gone" in text.splitlines()
 
 
+def test_a_pull_that_stores_no_table_says_nothing_stored(monkeypatch, tmp_path):
+    """pull_rates stamps no snapshot from a stale page: its run() writes no
+    table, and the headline says so in place of "snapshot stored"."""
+    from db.data.blizzard import meta
+
+    def run(connection, pull):
+        pull.stale.append("rates_x.html: gone")
+        return {"snapshot_id": None, "tables": []}
+    monkeypatch.setattr(meta, "run", run)
+    ctx = Offline(dsn="postgresql://nowhere", caches={"blizzard": str(tmp_path / "blizzard")},
+                  log=lambda line: None)
+    text, data = ctx.call("pull_rates", refresh=True)
+    assert text.splitlines()[0] == "pull_rates: nothing stored; stale: 1"
+    assert data["tables"] == [] and data["snapshot_id"] is None
+
+
 def test_counterpick_is_gone_from_the_data_layer():
     import importlib.util
     assert importlib.util.find_spec("db.data.counterpick") is None

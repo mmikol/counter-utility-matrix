@@ -37,12 +37,14 @@ from inference import catalog, derive
 type PullFn = Callable[..., PullSummary]
 
 
-def _summary(title: str, summary: PullSummary) -> ToolReply:
-    """A pull's reply: its headline, which ends in the count of pages read
-    from the stale cache when there are any, over one line per count (the
-    tables it wrote left out), and the summary itself as the payload."""
+def _summary(name: str, stored: str, summary: PullSummary) -> ToolReply:
+    """A pull's reply: its headline - "<name>: <stored>", or "<name>: nothing
+    stored" when it wrote no table, ending in the count of pages read from
+    the stale cache when there are any - over one line per count (the tables
+    it wrote left out), and the summary itself as the payload."""
     stale = summary.get("stale")
-    lines = [title + ("; stale: %d" % len(stale) if stale else "")]
+    headline = "%s: %s" % (name, stored if summary["tables"] else "nothing stored")
+    lines = [headline + ("; stale: %d" % len(stale) if stale else "")]
     for key, value in summary.items():
         if key == "tables":
             continue
@@ -92,10 +94,10 @@ def _pull(ctx: Context, source: str, fn: PullFn, refresh: bool, **options: bool)
 
 
 def _pull_call(
-        headline: str, source: str, fn: PullFn, ctx: Context, /, refresh: bool = False,
-        **options: bool) -> ToolReply:
-    """A pull tool's call: the pull, and its summary under the headline."""
-    return _summary(headline, _pull(ctx, source, fn, refresh, **options))
+        name: str, stored: str, source: str, fn: PullFn, ctx: Context, /,
+        refresh: bool = False, **options: bool) -> ToolReply:
+    """A pull tool's call: the pull, and its summary under its headline."""
+    return _summary(name, stored, _pull(ctx, source, fn, refresh, **options))
 
 
 def pull_tool(
@@ -103,11 +105,11 @@ def pull_tool(
         properties: Properties = REFRESH) -> Callable[[PullFn], PullFn]:
     """The decorator that registers a pull as a tool: the tool runs the
     function against `source`'s page cache, refreshing every page when asked,
-    and replies under the headline "<name>: <stored>". The call wears the
-    function's name and module, which is its family; the function is
-    returned as it is."""
+    and replies under the headline "<name>: <stored>", or "<name>: nothing
+    stored" when the pull wrote no table. The call wears the function's name
+    and module, which is its family; the function is returned as it is."""
     def decorate(fn: PullFn) -> PullFn:
-        call = functools.partial(_pull_call, "%s: %s" % (name, stored), source, fn)
+        call = functools.partial(_pull_call, name, stored, source, fn)
         tool(name, description, properties, source=source)(functools.update_wrapper(call, fn))
         return fn
     return decorate

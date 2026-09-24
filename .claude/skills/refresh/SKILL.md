@@ -29,9 +29,11 @@ is left half-done: a step that fails is reported, not hidden.
    `pull_synergies`, `pull_counters`, no refresh. A pull fetches dozens of
    pages at a polite pace and takes minutes; wait for it, one call at a
    time, never two pulls at once. A source that fails keeps yesterday's
-   pages, listed under `stale` in the pull's reply; say which. `query` is
-   yours for looking (read-only by construction): the newest snapshot, a
-   lock, a count.
+   pages, listed under `stale` in the pull's reply; say which.
+   `pull_rates` stamps no snapshot from a stale page (`pull_rates: nothing
+   stored`), so the capture date stays yesterday's. `query` is yours for
+   looking (read-only by construction): the newest snapshot, a lock, a
+   count.
 3. **Complete the drafts.** For each pending strategy: read its prose,
    read `metrics` for the vocabulary, decide the frontmatter exactly as
    the `/strategy` skill does (a heuristic's metric, direction and

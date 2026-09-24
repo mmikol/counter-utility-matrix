@@ -331,9 +331,6 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> TerrainSumma
     """Reload map_terrain and stage_terrain from every map's article -> the
     maps and stages counted, the rows and words, and the maps without text."""
     cursor = connection.cursor()
-    source_id = psql.register_source(cursor, WIKI, psql.now())
-    cursor.execute("DELETE FROM stage_terrain")
-    cursor.execute("DELETE FROM map_terrain")
     maps: list[tuple[int, str]] = cursor.execute(
         "SELECT map_id, name FROM maps ORDER BY name").fetchall()
     stages: dict[int, tuple[bool, dict[str, int]]] = {}
@@ -344,9 +341,13 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> TerrainSumma
             " FROM map_stages s ORDER BY s.map_id, s.position").fetchall():
         stages.setdefault(map_id, (hybrid, {}))[1][stage] = stage_id
 
+    articles = fetch_articles(pull, [name for _, name in maps])
+    # every article is read before the first write: no row stays locked across a fetch
+    source_id = psql.register_source(cursor, WIKI, psql.now())
+    cursor.execute("DELETE FROM stage_terrain")
+    cursor.execute("DELETE FROM map_terrain")
     rows, words_read, stage_rows, stages_read = 0, 0, 0, 0
     without_text: list[str] = []
-    articles = fetch_articles(pull, [name for _, name in maps])
     for map_id, name in maps:
         if name not in articles.found:
             continue

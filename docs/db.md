@@ -69,7 +69,7 @@ them, store them, and return a `PullSummary`.
 | package | module | stores |
 | --- | --- | --- |
 | `blizzard/` | `heroes.py` | the roster: heroes, roles, subroles, portraits and icons, ability and perk text. Runs first; everything links to heroes. Blizzard publishes prose and no numbers. A hero page that will not fetch is listed under `missing`, and that hero keeps the text it had. |
-| | `meta.py` | win, pick and ban rates as a dated snapshot, sliced by skill tier and by map. Competitive Role Queue (the page offers no Open Queue), console, Americas - all recorded on the snapshot. |
+| | `meta.py` | win, pick and ban rates as a dated snapshot, sliced by skill tier and by map. Competitive Role Queue (the page offers no Open Queue), console, Americas - all recorded on the snapshot. Every page is fetched before the first write; when one came from the stale cache the pull stamps no snapshot and writes nothing, and its reply reads `pull_rates: nothing stored`. |
 | `wiki/` | `heroes.py` | hero kits from the Cargo Abilities table: weapons and their firing configs, abilities, perks, keywords, and every stat as a measurement, through `kits/`. Also the announced heroes: a Cargo hero the roster lacks whose article is marked upcoming gets a row (role, subrole, health, release day, status `announced`) so its kit loads ahead of release; Blizzard listing it later flips the status to released. Runs after `blizzard.heroes`. |
 | | `maps.py` | maps, game modes and stages from the Maps article's Standard Play section. |
 | | `terrain.py` | the ground each map's article describes: the sections about play kept, the lore dropped, and the mentions of each terrain feature - chokes, interiors, high ground, flanks, sightlines, open ground, hazards, cover - counted per map and per thousand words (`map_terrain`), and the same per stage over the text the article has about that stage (`stage_terrain`). Reloads both tables. Runs after `wiki.maps`: a stage must exist before its terrain. |
@@ -154,8 +154,10 @@ and articles (kits, synergies, counters) included. It also refreshes on start wh
 are older than `COUNTRIX_REFRESH_MAX_AGE_HOURS`. A page that fails
 to fetch keeps its cached copy, so a flaky source degrades to yesterday's
 numbers rather than an empty table, and the pull's reply lists it under
-`stale`, its headline ending with the count; the board's header shows the
-capture date and warns when patches shipped since.
+`stale`, its headline ending with the count. `pull_rates` stamps no
+snapshot when a page came from the stale cache, so the newest capture
+stays the last real one; the board's header shows the capture date and
+warns when patches shipped since.
 
 | setting | default | meaning |
 | --- | --- | --- |

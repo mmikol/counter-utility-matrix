@@ -15,6 +15,8 @@ vocabularies as ordinary select options.
 """
 
 import json
+from collections.abc import Iterator, Mapping
+from datetime import datetime
 from typing import NamedTuple
 
 import psycopg
@@ -113,6 +115,8 @@ def fetch_slice(pull: fetch.PullContext, params: dict[str, str], rq: str) -> str
 
 
 class RatesSummary(PullSummary):
+    """The pull's counts. A pull that read a page from the stale cache stores
+    nothing: snapshot_id is None, every count 0 and tables empty."""
     queue: str
     platform: str
     region: str
@@ -120,24 +124,45 @@ class RatesSummary(PullSummary):
     maps: int
     hero_rows: int
     map_rows: int
-    snapshot_id: int
+    snapshot_id: int | None
     snapshots: int
     unmatched: list[str]
     skipped_maps: list[str]
 
 
-def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary:
-    """Store the rates page by tier and by map as one new dated snapshot, in
-    one transaction -> the rows written, the snapshots held, the misses."""
-    cao = psql.now()
+class RatesWritten(NamedTuple):
+    """What _store wrote: the snapshot it stamped, the tiers and maps under
+    it, the hero rows of each and the names the roster lacks, sorted."""
+    snapshot_id: int | None
+    tiers: int
+    maps: int
+    hero_rows: int
+    map_rows: int
+    unmatched: list[str]
 
-    rq = competitive_rq(pull)
-    baseline = fetch_slice(pull, {}, rq)
-    tiers = parse_filter_options(baseline, "filter-tier-select")
-    maps = [(slug, label) for slug, label in parse_filter_options(baseline, "filter-map-select")
-            if slug != "all-maps"]
 
-    cursor = connection.cursor()
+TABLES = ("regions", "competitive_tiers", "meta_snapshots", "hero_meta", "map_meta")
+
+
+def _hero_rows(
+        rows: list[RateRow], hero_ids: Mapping[str, int],
+        unmatched: set[str]) -> Iterator[tuple[int, float | None, float | None, float | None]]:
+    """(hero_id, win, pick, ban) for each row whose hero the roster holds; a
+    name it lacks is added to `unmatched`."""
+    for name, win, pick, ban in rows:
+        hero_id = hero_ids.get(name.lower())
+        if hero_id is None:
+            unmatched.add(name)
+            continue
+        yield hero_id, win, pick, ban
+
+
+def _store(
+        cursor: psycopg.Cursor, tiers: list[tuple[str, str]],
+        rows_by_tier: dict[str, list[RateRow]], rows_by_map: dict[int, list[RateRow]],
+        cao: datetime) -> RatesWritten:
+    """Stamp one new snapshot and write its rows: the region and the tiers
+    upserted, each tier's hero rows, and each map's across all ranks."""
     source_id = psql.register_source(cursor, BLIZZARD, cao)
     cursor.execute(
         "INSERT INTO regions (code, name, source_id) VALUES (%s, %s, %s)"
@@ -169,16 +194,10 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary
     snapshot_id = psql.scalar(cursor)
 
     hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
-    map_ids = psql.lookup_ids(cursor, "maps", "name", "map_id")
     unmatched: set[str] = set()
-
-    def load_hero_slice(html: str, tier_code: str) -> int:
-        written = 0
-        for name, win, pick, ban in parse_rows(html):
-            hero_id = hero_ids.get(name.lower())
-            if hero_id is None:
-                unmatched.add(name)
-                continue
+    hero_rows = 0
+    for tier_code, rows in rows_by_tier.items():
+        for hero_id, win, pick, ban in _hero_rows(rows, hero_ids, unmatched):
             cursor.execute(
                 "INSERT INTO hero_meta (snapshot_id, hero_id, region_id,"
                 " tier_id, win_rate, pick_rate, ban_rate, source_id)"
@@ -188,34 +207,10 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary
                 (snapshot_id, hero_id, region_id, tier_ids[tier_code],
                  win, pick, ban, source_id),
             )
-            written += 1
-        return written
-
-    rows = load_hero_slice(baseline, ALL_TIER)
-    for code, _ in tiers:
-        if code != ALL_TIER:
-            rows += load_hero_slice(
-                fetch_slice(pull, {"tier": code}, rq), code)
-    pull.log("hero/tier rows: %d" % rows)
-
-    # Per map, across all ranks. Map x tier would be 270 requests against
-    # 30, and the source refuses connections well before the end of a sweep
-    # that size; rows carry tier_id (all ranks) so widening needs no
-    # migration, only the inner loop.
+            hero_rows += 1
     map_rows = 0
-    skipped_maps: list[str] = []
-    for slug, label in maps:
-        map_id = map_ids.get(label.lower())
-        if map_id is None:
-            skipped_maps.append(label)
-            continue
-        for name, win, pick, ban in parse_rows(
-            fetch_slice(pull, {"map": slug}, rq)
-        ):
-            hero_id = hero_ids.get(name.lower())
-            if hero_id is None:
-                unmatched.add(name)
-                continue
+    for map_id, rows in rows_by_map.items():
+        for hero_id, win, pick, ban in _hero_rows(rows, hero_ids, unmatched):
             cursor.execute(
                 "INSERT INTO map_meta (snapshot_id, hero_id, map_id,"
                 " tier_id, region_id, stage_id, win_rate, pick_rate,"
@@ -227,13 +222,57 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary
                  region_id, win, pick, ban, source_id),
             )
             map_rows += 1
+    return RatesWritten(snapshot_id, len(tier_ids), len(rows_by_map), hero_rows, map_rows,
+                        sorted(unmatched))
+
+
+def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary:
+    """Fetch the rates page by tier and by map, then store it as one new
+    dated snapshot in one transaction -> the rows written, the snapshots
+    held, the misses. A page read from the stale cache stamps no snapshot:
+    nothing is written, so the newest capture stays the last real one."""
+    cao = psql.now()
+    cursor = connection.cursor()
+    # a map the database lacks is never fetched; the read's transaction ends
+    # here, so none stays open across the ~40 fetches
+    map_ids = psql.lookup_ids(cursor, "maps", "name", "map_id")
+    connection.commit()
+
+    rq = competitive_rq(pull)
+    baseline = fetch_slice(pull, {}, rq)
+    tiers = parse_filter_options(baseline, "filter-tier-select")
+    maps = [(slug, label) for slug, label in parse_filter_options(baseline, "filter-map-select")
+            if slug != "all-maps"]
+    rows_by_tier: dict[str, list[RateRow]] = {ALL_TIER: parse_rows(baseline)}
+    for code, _ in tiers:
+        if code != ALL_TIER:
+            rows_by_tier[code] = parse_rows(fetch_slice(pull, {"tier": code}, rq))
+
+    # Per map, across all ranks. Map x tier would be 270 requests against
+    # 30, and the source refuses connections well before the end of a sweep
+    # that size; rows carry tier_id (all ranks) so widening needs no
+    # migration, only the inner loop.
+    rows_by_map: dict[int, list[RateRow]] = {}
+    skipped_maps: list[str] = []
+    for slug, label in maps:
+        map_id = map_ids.get(label.lower())
+        if map_id is None:
+            skipped_maps.append(label)
+            continue
+        rows_by_map[map_id] = parse_rows(fetch_slice(pull, {"map": slug}, rq))
+
+    if pull.stale:
+        pull.log("rates: %d pages from the stale cache; no snapshot stamped" % len(pull.stale))
+        written = RatesWritten(snapshot_id=None, tiers=0, maps=0, hero_rows=0, map_rows=0,
+                               unmatched=[])
+    else:
+        written = _store(cursor, tiers, rows_by_tier, rows_by_map, cao)
     connection.commit()
     snapshots = psql.scalar(cursor.execute("SELECT count(*) FROM meta_snapshots"))
-    pull.log("hero/map rows: %d   snapshots held: %d" % (map_rows, snapshots))
-    return {"queue": QUEUE_NAME, "platform": PLATFORM, "region": REGION,
-            "tiers": len(tier_ids), "maps": len(maps) - len(skipped_maps),
-            "hero_rows": rows, "map_rows": map_rows, "snapshot_id": snapshot_id,
-            "snapshots": snapshots, "unmatched": sorted(unmatched),
-            "skipped_maps": skipped_maps,
-            "tables": ["regions", "competitive_tiers", "meta_snapshots",
-                       "hero_meta", "map_meta"]}
+    pull.log("hero/tier rows: %d" % written.hero_rows)
+    pull.log("hero/map rows: %d   snapshots held: %d" % (written.map_rows, snapshots))
+    return RatesSummary(
+        queue=QUEUE_NAME, platform=PLATFORM, region=REGION, tiers=written.tiers,
+        maps=written.maps, hero_rows=written.hero_rows, map_rows=written.map_rows,
+        snapshot_id=written.snapshot_id, snapshots=snapshots, unmatched=written.unmatched,
+        skipped_maps=skipped_maps, tables=[] if written.snapshot_id is None else list(TABLES))
