@@ -63,7 +63,8 @@ not a string or names nothing served - is `INVALID_PARAMS` (-32602), and a
 message without a string method `INVALID_REQUEST` (-32600). Anything else
 is the server's fault, a playbook that does not load included: the reply
 is `INTERNAL` (-32603) with the error's type and message, the traceback
-goes to stderr, and the audit line says crashed, which the sentry counts.
+goes to stderr, and the audit line says crashed, in the reply's words,
+which the sentry counts.
 
 ## From a shell
 

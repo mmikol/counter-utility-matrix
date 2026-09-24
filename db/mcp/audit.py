@@ -56,7 +56,8 @@ def audited[T](
     a tool - stdio, HTTP and the in-process calls the refresher and the shell
     make - comes through here, so the sentry's window covers all three. A
     Refusal - the tool refusing its input, the wrapper refusing the call - is
-    audited as refused; anything else as crashed."""
+    audited as refused; anything else as crashed. Each carries its message, the
+    crash with the error's type, as the door's reply does."""
     entry: dict[str, object] = {
         "t": datetime.now(UTC).isoformat(timespec="seconds"), "transport": transport,
         "client": client, "tool": name, "args": _sizes(arguments)}
@@ -70,8 +71,9 @@ def audited[T](
     except Refusal as refused:
         audit(dict(entry, ok=False, refused=str(refused)[:200], ms=spent()), audit_path)
         raise
-    except Exception:
-        audit(dict(entry, ok=False, crashed=True, ms=spent()), audit_path)
+    except Exception as error:
+        crashed = "%s: %s" % (type(error).__name__, error)
+        audit(dict(entry, ok=False, crashed=crashed[:200], ms=spent()), audit_path)
         raise
     audit(dict(entry, ok=True, ms=spent()), audit_path)
     return result

@@ -200,7 +200,7 @@ def test_the_strategy_resources_answer_an_unknown_uri_as_a_bad_parameter(tmp_pat
 def test_a_broken_playbook_is_a_server_fault_at_the_door(tmp_path, monkeypatch):
     """A playbook that does not load is the operator's to fix, not the caller's:
     every tool and resource that reads it answers INTERNAL with the catalog's
-    own message, logs the traceback and is audited as crashed."""
+    own message, logs the traceback and is audited as crashed, in the same words."""
     empty = tmp_path / "playbook"
     empty.mkdir()
     monkeypatch.setenv("COUNTRIX_STRATEGIES", str(empty))
@@ -216,7 +216,8 @@ def test_a_broken_playbook_is_a_server_fault_at_the_door(tmp_path, monkeypatch):
         assert fault["message"].startswith("CatalogError: no strategies in")
     assert logged and all("Traceback" in entry for entry in logged)
     lines = [json.loads(line) for line in audit.read_text(encoding="utf-8").splitlines()]
-    assert len(lines) == 1 and lines[0]["tool"] == "strategies" and lines[0]["crashed"] is True
+    assert len(lines) == 1 and lines[0]["tool"] == "strategies"
+    assert lines[0]["crashed"].startswith("CatalogError: no strategies in")
 
 
 def test_an_audit_line_that_cannot_be_written_is_noted_on_stderr_and_not_raised(

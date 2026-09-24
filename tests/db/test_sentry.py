@@ -61,10 +61,13 @@ def test_the_door_is_tallied_from_the_audit_log(tmp_path):
     lines = [{"t": now, "client": "http:a", "tool": "facts", "ok": True}] * 3
     lines += [{"t": now, "client": "http:b", "tool": "tune", "ok": False, "refused": "nope"}]
     lines += [{"t": now, "client": "http:b", "tool": "infer", "ok": False, "crashed": True}]
+    # a crash carries its error; a line written before it did says only true
+    crash = "CatalogError: no strategies in /nowhere"
+    lines += [{"t": now, "client": "http:b", "tool": "board", "ok": False, "crashed": crash}]
     lines += [{"t": old, "client": "http:c", "tool": "facts", "ok": True}]
     audit.write_text("\n".join(json.dumps(line) for line in lines) + "\nnot json\n")
     door = sentry.check_door(str(audit))
-    assert (door.recent, door.refused, door.crashed, door.hot, door.malformed) == (5, 1, 1, [], 1)
+    assert (door.recent, door.refused, door.crashed, door.hot, door.malformed) == (6, 1, 2, [], 1)
     assert door.offset == audit.stat().st_size
     assert sentry.check_door(str(audit), door.offset).malformed == 0     # counted once
     assert sentry.check_door(str(tmp_path / "missing.jsonl")) == sentry.DoorTally()
