@@ -20,10 +20,21 @@ from db import KIND_WEAPON
 from db.data.names import name_key
 from ui.facts.kit import Kit, Stat
 from ui.facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
-from ui.facts.records import Modifier, Snapshot
+from ui.facts.records import (
+    MapRate,
+    Modifier,
+    Patch,
+    PerkEffect,
+    Rates,
+    Snapshot,
+    StageTerrain,
+    Synergy,
+)
 from ui.facts.scalars import derive
 
 type Connection = psycopg.Connection[TupleRow]
+
+NO_TEXT = StageTerrain(0.0, 0)
 
 LATEST_BLIZZARD = """(select ms.snapshot_id from meta_snapshots ms
     join sources s on s.source_id = ms.source_id where s.code = 'blizzard'
@@ -78,7 +89,7 @@ def stage_terrain(w: World) -> None:
         m.stage_z = {stage: {} for stage in m.stage_terrain}
     for feature in TERRAIN_FEATURES:
         rates = {
-            (mid, stage): w.maps[mid].stage_terrain[stage].get(feature, (0.0, 0))[0]
+            (mid, stage): w.maps[mid].stage_terrain[stage].get(feature, NO_TEXT).per_thousand
             for mid, stage in read}
         for (mid, stage), z in _z_scores(rates).items():
             w.maps[mid].stage_z[stage][feature] = z
@@ -89,20 +100,20 @@ def map_styles(w: World) -> None:
     heroes tagged S, each weighted 1/(its tag count), of the hero's win rate
     on the map minus its overall win rate, z-scored across the maps.
     Map.styles[S] = (rate_lift[S] + terrain_lean[S], None); a missing half is 0."""
-    heroes = sorted(
-        (h for h in w.heroes.values() if h.released and h.styles and h.win is not None),
-        key=lambda h: h.id)
+    rated = sorted(
+        ((h, h.win) for h in w.heroes.values() if h.released and h.styles and h.win is not None),
+        key=lambda pair: pair[0].id)
     maps = sorted(w.maps.values(), key=lambda m: m.id)
     for m in maps:
         m.rate_lift = {}
-    for style in sorted({s for h in heroes for s in h.styles}):
-        lifts = {}
+    for style in sorted({s for h, _ in rated for s in h.styles}):
+        lifts: dict[int, float] = {}
         for m in maps:
             total = weight = 0.0
-            for h in heroes:
+            for h, overall in rated:
                 win = h.map_win(m.id)
                 if style in h.styles and win is not None:
-                    total += (win - h.win) / len(h.styles)
+                    total += (win - overall) / len(h.styles)
                     weight += 1 / len(h.styles)
             if weight:
                 lifts[m.id] = total / weight
@@ -118,11 +129,12 @@ def best_maps(w: World) -> None:
     """Hero.best_maps: the three maps with the largest (map win rate - overall
     win rate), only where positive; ties by map name."""
     for h in w.heroes.values():
-        if h.win is None:
+        overall = h.win
+        if overall is None:
             continue
         lifts = sorted(
-            (-round(win - h.win, 3), w.maps[mid].name, mid)
-            for mid, (win, _) in h.map_rates.items() if win > h.win)
+            (-round(win - overall, 3), w.maps[mid].name, mid)
+            for mid, (win, _) in h.map_rates.items() if win > overall)
         h.best_maps = [mid for _, _, mid in lifts[:3]]
 
 
@@ -138,11 +150,14 @@ def _read_heroes(cx: Connection, w: World) -> None:
     """The heroes with their role, subrole and playstyles; the role icons and
     the subroles' passives."""
     for hid, name, role, sub, hp, sh, ar, portrait, status, released in _rows(cx, """
-            select h.hero_id, h.name, r.code, sr.name, h.health,
-                   h.shield, h.armor, h.portrait_url, h.status, h.release_date
+            select h.hero_id, h.name, r.code, sr.name, coalesce(h.health, 0),
+                   coalesce(h.shield, 0), coalesce(h.armor, 0), h.portrait_url,
+                   h.status, h.release_date
             from heroes h join roles r using(role_id)
             join subroles sr on sr.subrole_id = h.subrole_id"""):
-        w.heroes[hid] = Hero(hid, name, role, sub, hp, sh, ar, portrait, status, released)
+        w.heroes[hid] = Hero(
+            id=hid, name=name, role=role, subrole=sub, health=hp, shield=sh, armor=ar,
+            portrait=portrait, status=status, release_date=released)
         w.by_key[name_key(name)] = hid
     for code, url in _rows(cx, "select code, icon_url from roles"):
         w.role_icons[code] = url
@@ -219,7 +234,7 @@ def _read_perks(cx: Connection, w: World) -> None:
             select p.hero_id, p.name, a.name from perk_ability_effects e
             join perks p using(perk_id) join abilities a using(ability_id)
             order by p.hero_id, p.position, a.position"""):
-        w.heroes[hid].perk_effects.append((perk, ability))
+        w.heroes[hid].perk_effects.append(PerkEffect(perk, ability))
 
 
 def _read_rates(cx: Connection, w: World) -> None:
@@ -230,7 +245,7 @@ def _read_rates(cx: Connection, w: World) -> None:
             from hero_meta m join competitive_tiers t on t.tier_id = m.tier_id
             where m.snapshot_id = %s""" % LATEST_BLIZZARD):
         h = w.heroes[hid]
-        rates = tuple(float(x) if x is not None else None for x in (win, pick, ban))
+        rates = Rates(*(float(x) if x is not None else None for x in (win, pick, ban)))
         if tier == "all":
             h.win, h.pick, h.ban = rates
         else:
@@ -265,7 +280,8 @@ def _read_map_rates(cx: Connection, w: World) -> None:
             join competitive_tiers t on t.tier_id = m.tier_id
             where t.code = 'all' and m.snapshot_id = %s""" % LATEST_BLIZZARD):
         if win is not None:
-            w.heroes[hid].map_rates[mid] = (float(win), float(pick) if pick is not None else None)
+            w.heroes[hid].map_rates[mid] = MapRate(
+                float(win), float(pick) if pick is not None else None)
             if ban is not None:
                 w.heroes[hid].map_bans[mid] = float(ban)
     best_maps(w)
@@ -280,7 +296,8 @@ def _read_terrain(cx: Connection, w: World) -> None:
     for mid, stage, feature, rate, mentions in _rows(cx, """
             select s.map_id, s.name, t.feature, t.per_thousand, t.mentions
             from stage_terrain t join map_stages s using(stage_id)"""):
-        w.maps[mid].stage_terrain.setdefault(stage, {})[feature] = (float(rate), mentions)
+        w.maps[mid].stage_terrain.setdefault(stage, {})[feature] = StageTerrain(
+            float(rate), mentions)
     stage_terrain(w)
 
 
@@ -291,9 +308,10 @@ def _read_relations(cx: Connection, w: World) -> None:
         w.answered_by[loser].add(winner)
         w.answers[winner].add(loser)
     for a, b, score, note in _rows(cx, "select hero_id, other_id, score, note from synergies"):
-        w.synergies[frozenset((a, b))] = (score, note)
-        w.partners[a][b] = (score, note)
-        w.partners[b][a] = (score, note)
+        pair = Synergy(score, note)
+        w.synergies[frozenset((a, b))] = pair
+        w.partners[a][b] = pair
+        w.partners[b][a] = pair
 
 
 def _read_provenance(cx: Connection, w: World) -> None:
@@ -316,7 +334,7 @@ def _read_provenance(cx: Connection, w: World) -> None:
                 select distinct on (source_id, queue) snapshot_id from meta_snapshots
                 order by source_id, queue, captured_at desc)
             order by ms.captured_at desc""")]
-    w.newer_patches = [(n, str(r)) for n, r in _rows(cx, """
+    w.newer_patches = [Patch(n, str(r)) for n, r in _rows(cx, """
             select p.name, p.released from patches p
             where p.released > (select coalesce(max(pp.released), '1900-01-01')
                 from meta_snapshots ms join patches pp using(patch_id))
