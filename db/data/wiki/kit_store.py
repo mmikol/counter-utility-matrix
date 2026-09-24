@@ -10,7 +10,7 @@ blizzard.heroes owns are filled in, never replaced.
 
 import dataclasses
 from collections.abc import Iterable, Mapping
-from typing import TypedDict
+from typing import NamedTuple, TypedDict
 
 import psycopg
 from psycopg.sql import SQL
@@ -334,13 +334,19 @@ RELOADED = ("ability_modifiers", "perk_ability_effects", "perk_stats",
             "weapon_stats", "ability_stats", "weapon_configs", "weapons")
 
 
+class Stored(NamedTuple):
+    """What store wrote: the tally, and the heroes it skipped, sorted."""
+    tally: KitTally
+    unknown_heroes: list[str]
+
+
 def store(
         cursor: psycopg.Cursor, by_hero: Mapping[str, HeroKit],
         profiles: Mapping[str, HeroProfile], hero_ids: Mapping[str, int],
-        source_id: int) -> tuple[KitTally, list[str]]:
+        source_id: int) -> Stored:
     """Reload the kit tables from `by_hero` and set each profiled hero's
     pools. hero_ids is {lowercased name: hero_id}; a hero it lacks is
-    skipped. Returns the tally and the heroes skipped, sorted."""
+    skipped and named in the result."""
     for table in RELOADED:
         cursor.execute(SQL("DELETE FROM {}").format(psql.identifier(table)))
     all_codes: set[str] = set()
@@ -372,4 +378,4 @@ def store(
         _load_abilities(cursor, hero_id, kit.weapons, kit.abilities, key_ids, kind_ids,
                         source_id, tally)
         _load_perks(cursor, hero_id, kit.perks, key_ids, source_id, tally)
-    return tally, sorted(unknown_heroes)
+    return Stored(tally, sorted(unknown_heroes))

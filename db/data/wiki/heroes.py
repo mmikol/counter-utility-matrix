@@ -107,13 +107,12 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext, *,
     source_id = psql.register_source(cursor, WIKI, psql.now())
     hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
     announced, unfetched = _announce_heroes(cursor, pull, by_hero, hero_ids, source_id)
-    tally, unknown_heroes = kit_store.store(cursor, by_hero, articles.profiles, hero_ids,
-                                            source_id)
+    stored = kit_store.store(cursor, by_hero, articles.profiles, hero_ids, source_id)
     connection.commit()
 
     return KitsSummary(
-        **tally.counts(), cargo_rows=len(rows), supplemented=articles.stats,
-        missing=articles.missing + unfetched, unknown_heroes=unknown_heroes,
+        **stored.tally.counts(), cargo_rows=len(rows), supplemented=articles.stats,
+        missing=articles.missing + unfetched, unknown_heroes=stored.unknown_heroes,
         announced=announced,
         tables=["abilities", "ability_stats", "ability_modifiers", "weapons",
                 "weapon_configs", "weapon_stats", "perk_stats",
