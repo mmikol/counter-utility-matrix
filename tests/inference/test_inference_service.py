@@ -89,6 +89,18 @@ def test_a_pid_file_race_degrades_health(monkeypatch):
     assert code == 200 and data["status"] == "degraded" and "Expecting value" in data["error"]
 
 
+def test_the_inference_service_listens_where_the_environment_says(monkeypatch):
+    # the host and the port are read together, when the service starts
+    monkeypatch.setenv("COUNTRIX_INFERENCE_HOST", "0.0.0.0")
+    monkeypatch.setenv("COUNTRIX_INFERENCE_PORT", "8029")
+    args = serve.command_line([])
+    assert (args.host, args.port) == ("0.0.0.0", 8029)
+    monkeypatch.delenv("COUNTRIX_INFERENCE_HOST")
+    monkeypatch.delenv("COUNTRIX_INFERENCE_PORT")
+    args = serve.command_line([])
+    assert (args.host, args.port) == ("127.0.0.1", 8019)
+
+
 def test_board_forwards_to_a_named_inference_service(monkeypatch):
     calls = []
 

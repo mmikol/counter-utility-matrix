@@ -46,7 +46,7 @@ from db import RAW_DIR, psql
 from db.mcp import server  # one definition: the door's own
 from inference import catalog as catalog_module
 
-EVERY = float(os.environ.get("COUNTRIX_SENTRY_EVERY", "30"))
+EVERY = 30.0                 # seconds between passes; COUNTRIX_SENTRY_EVERY, read by main()
 
 Log = Callable[[str], object]
 
@@ -333,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
     if argv:
         print(__doc__, file=sys.stderr)
         return 2
-    run_forever()
+    run_forever(float(os.environ.get("COUNTRIX_SENTRY_EVERY", EVERY)))
 
 
 if __name__ == "__main__":

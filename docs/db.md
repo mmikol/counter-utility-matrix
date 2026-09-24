@@ -173,8 +173,9 @@ date and warns when patches shipped since.
 | `COUNTRIX_REFRESH_MAX_AGE_HOURS` | `20` | refresh on start when the cache is older than this |
 | `COUNTRIX_REFRESH_FULL_DAYS` | `7` | refetch every source (not just the daily set) when the wiki cache is older than this |
 
-Set them in the environment or a `.env` file next to `compose.yaml`. The
-same refresh from a shell, against whichever database `DATABASE_URL` names:
+Set them in the environment or a `.env` file next to `compose.yaml`; the
+loop reads them once, when it starts. The same refresh from a shell,
+against whichever database `DATABASE_URL` names:
 
 ```bash
 .venv/bin/python -m db.refresh --now        # once, now (the daily set; --full for every source)

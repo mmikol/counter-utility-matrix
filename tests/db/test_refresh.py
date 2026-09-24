@@ -236,6 +236,26 @@ def test_the_command_line_exits_with_the_refresh_verdict(monkeypatch):
     assert refresh.main(["--now"]) == 0
 
 
+def test_the_refresh_clock_is_read_from_the_environment_at_start(monkeypatch):
+    # tools.Context resolves its dsn lazily, so nothing here touches a database
+    schedules, once = [], []
+    monkeypatch.setattr(refresh, "run_forever",
+                        lambda ctx, schedule: schedules.append(schedule))
+    monkeypatch.setattr(refresh, "refresh_once",
+                        lambda ctx, **kw: once.append(kw) or (True, ""))
+    monkeypatch.setenv("COUNTRIX_REFRESH_AT", "06:30")
+    monkeypatch.setenv("COUNTRIX_REFRESH_MAX_AGE_HOURS", "5")
+    monkeypatch.setenv("COUNTRIX_REFRESH_FULL_DAYS", "3")
+    refresh.main([])
+    assert refresh.main(["--now"]) == 0 and once[-1]["full_days"] == 3.0
+    for name in ("COUNTRIX_REFRESH_AT", "COUNTRIX_REFRESH_MAX_AGE_HOURS",
+                 "COUNTRIX_REFRESH_FULL_DAYS"):
+        monkeypatch.delenv(name)
+    refresh.main([])
+    assert schedules == [refresh.Schedule("06:30", 5.0, 3.0),
+                         refresh.Schedule("05:00", 20.0, 7.0)]
+
+
 def test_full_refresh_is_due_when_the_slow_caches_are_stale(tmp_path):
     assert refresh.full_due(7, [str(tmp_path / "none")]) is True        # nothing cached
     _old_file(tmp_path / "Ana.wikitext", "x", hours=24 * 3)

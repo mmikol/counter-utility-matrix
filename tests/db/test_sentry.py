@@ -147,6 +147,16 @@ def test_a_usage_error_exits_2_and_one_pass_exits_with_its_verdict(monkeypatch, 
     assert sentry.main(["--once"]) == 1
 
 
+def test_the_sentry_interval_is_read_at_start(monkeypatch):
+    every = []
+    monkeypatch.setattr(sentry, "run_forever", lambda seconds: every.append(seconds))
+    monkeypatch.setenv("COUNTRIX_SENTRY_EVERY", "5")
+    sentry.main([])
+    monkeypatch.delenv("COUNTRIX_SENTRY_EVERY")
+    sentry.main([])
+    assert every == [5.0, 30.0]
+
+
 def test_a_column_the_scan_cannot_read_is_a_flag_and_a_missing_one_is_not():
     """A schema this build does not have is nothing to read. Anything else -
     a revoked grant, a lock, a dead connection - has to reach the report, or

@@ -33,9 +33,11 @@ from db import CACHE_DIRS
 from db.data.fetch import SECONDS_PER_HOUR
 from db.mcp import tools
 
-DEFAULT_AT = os.environ.get("COUNTRIX_REFRESH_AT", "05:00")
-DEFAULT_MAX_AGE_HOURS = float(os.environ.get("COUNTRIX_REFRESH_MAX_AGE_HOURS", "20"))
-DEFAULT_FULL_DAYS = float(os.environ.get("COUNTRIX_REFRESH_FULL_DAYS", "7"))
+# The clock when the environment names none: COUNTRIX_REFRESH_AT,
+# COUNTRIX_REFRESH_MAX_AGE_HOURS and COUNTRIX_REFRESH_FULL_DAYS, read by main()
+DEFAULT_AT = "05:00"
+DEFAULT_MAX_AGE_HOURS = 20.0
+DEFAULT_FULL_DAYS = 7.0
 # What moves between patches. Seasons first: rates stamp their snapshot with
 # the season live today. No tool that reads the hero articles: refetching
 # them daily would keep the wiki cache young and a full refresh never due.
@@ -165,18 +167,22 @@ def main(argv: list[str] | None = None) -> int:
     succeeds and 1 when it fails; the loop never returns."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--now", action="store_true", help="refresh once and exit")
-    parser.add_argument("--at", default=DEFAULT_AT, help="daily time, HH:MM (default %s)"
-                        % DEFAULT_AT)
-    parser.add_argument("--max-age-hours", type=float, default=DEFAULT_MAX_AGE_HOURS,
+    parser.add_argument("--at", default=os.environ.get("COUNTRIX_REFRESH_AT", DEFAULT_AT),
+                        help="daily time, HH:MM (default %(default)s)")
+    parser.add_argument("--max-age-hours", type=float,
+                        default=float(os.environ.get("COUNTRIX_REFRESH_MAX_AGE_HOURS",
+                                                     DEFAULT_MAX_AGE_HOURS)),
                         help="refresh on start when the cache is older than this")
     parser.add_argument("--full", action="store_true",
                         help="with --now: every source, not just the daily set")
     args = parser.parse_args(argv)
+    # the full-refresh age has no flag: nothing passes one, and compose sets it
+    full_days = float(os.environ.get("COUNTRIX_REFRESH_FULL_DAYS", DEFAULT_FULL_DAYS))
     ctx = tools.Context(log=print)      # DATABASE_URL, or the embedded cluster
     if args.now:
-        ok, _ = refresh_once(ctx, full=args.full or None)
+        ok, _ = refresh_once(ctx, full=args.full or None, full_days=full_days)
         return 0 if ok else 1
-    run_forever(ctx, Schedule(args.at, args.max_age_hours, DEFAULT_FULL_DAYS))
+    run_forever(ctx, Schedule(args.at, args.max_age_hours, full_days))
 
 
 if __name__ == "__main__":

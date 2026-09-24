@@ -160,11 +160,15 @@ container's `/health` carries the state, and compose's healthcheck and
 `orchestrator.py` wait on it. [security.md](security.md) has the rest of
 the measures.
 
-Settings, from the environment or `.env` (the refresh times are in [db.md](db.md)):
+Settings, from the environment or `.env` (the refresh times are in [db.md](db.md)).
+Each is read where it is used, so a change takes effect on the next call -
+except where a server listens (the UI and inference host and port), the MCP
+server's token, `COUNTRIX_WORKERS` (read when the pool starts), the refresh
+clock and the sentry interval, which are read once at start:
 
 | setting | default | meaning |
 | --- | --- | --- |
-| `COUNTRIX_STRATEGIES` | empty | a playbook folder other than `inference/strategies/`, relative to the repo root or absolute. Read where it is needed (`catalog.strategies_dir()`), so a change takes effect on the next call |
+| `COUNTRIX_STRATEGIES` | empty | a playbook folder other than `inference/strategies/`, relative to the repo root or absolute |
 | `COUNTRIX_WORKERS` | `max(6, min(cores, 12))` | the solver's worker processes |
 | `COUNTRIX_PARALLEL` | `1` | `0`: every board in one process |
 | `COUNTRIX_UI_HOST`, `COUNTRIX_UI_PORT` | `127.0.0.1`, `8017` | where the board listens |

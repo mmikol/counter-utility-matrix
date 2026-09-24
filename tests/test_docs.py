@@ -2,6 +2,7 @@
 what is at the root, and the sections db_docs generates match what the code
 generates today. Pure, except the schema check."""
 
+import ast
 import json
 import os
 import re
@@ -83,6 +84,52 @@ def test_every_setting_the_code_reads_is_documented():
     missing = sorted(n for n in names - {"COUNTRIX_NO_DATABASE", "COUNTRIX_LOCAL_SERVER"}
                      if n not in documented)
     assert not missing, missing
+
+
+def _import_time_reads(tree):
+    """Line numbers of os.environ and os.getenv that run when the module is
+    imported: outside a function body, or in a default or a decorator."""
+    lines = []
+
+    def visit(node, deferred):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            eager = [*getattr(node, "decorator_list", []), *node.args.defaults,
+                     *(d for d in node.args.kw_defaults if d is not None)]
+            for child in eager:
+                visit(child, deferred)
+            for child in node.body if isinstance(node.body, list) else [node.body]:
+                visit(child, True)
+            return
+        if (not deferred and isinstance(node, ast.Attribute)
+                and node.attr in ("environ", "getenv")
+                and isinstance(node.value, ast.Name) and node.value.id == "os"):
+            lines.append(node.lineno)
+        for child in ast.iter_child_nodes(node):
+            visit(child, deferred)
+    visit(tree, False)
+    return lines
+
+
+def test_no_module_reads_the_environment_at_import():
+    """A setting is read when it is used, or by main() at start, never frozen
+    into a module global: a snapshot taken at import outlives a change and
+    makes a test patch the attribute. It cannot see a module-level call into
+    a function that reads the environment."""
+    assert _import_time_reads(ast.parse("import os\nX = os.environ.get('A')\n"
+                                        "def f(y=os.getenv('B')):\n"
+                                        "    return os.environ['C']\n")) == [2, 3]
+    paths = [os.path.join(ROOT, "orchestrator.py")]
+    for folder in ("db", "ui", "inference", "scripts"):
+        for base, dirs, files in os.walk(os.path.join(ROOT, folder)):
+            dirs[:] = [d for d in dirs if d != "__pycache__"]
+            paths += [os.path.join(base, name) for name in files if name.endswith(".py")]
+    frozen = []
+    for path in sorted(paths):
+        with open(path, encoding="utf-8") as handle:
+            tree = ast.parse(handle.read(), path)
+        frozen += ["%s:%d" % (os.path.relpath(path, ROOT), line)
+                   for line in _import_time_reads(tree)]
+    assert not frozen, frozen
 
 
 def test_the_migrations_row_names_every_migration():

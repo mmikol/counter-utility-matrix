@@ -31,8 +31,6 @@ from inference import engine
 from ui.facts import tables
 from ui.facts.draft import parse_board
 
-PORT = int(os.environ.get("COUNTRIX_INFERENCE_PORT", "8019"))
-
 # A parsed query string, and a handler's answer: a JSON object and its status.
 Query = dict[str, list[str]]
 Answer = tuple[dict[str, Any], int]
@@ -141,12 +139,20 @@ class Handler(BaseHTTPRequestHandler):
             self._json(*web.failure(error))
 
 
-def main() -> None:
+def command_line(argv: list[str] | None = None) -> argparse.Namespace:
+    """The command line. Where the service listens defaults to
+    COUNTRIX_INFERENCE_HOST and COUNTRIX_INFERENCE_PORT, both read when it
+    starts."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=os.environ.get("COUNTRIX_INFERENCE_HOST",
                                                          "127.0.0.1"))
-    parser.add_argument("--port", type=int, default=PORT)
-    args = parser.parse_args()
+    parser.add_argument("--port", type=int,
+                        default=int(os.environ.get("COUNTRIX_INFERENCE_PORT", "8019")))
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = command_line(argv)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     server.daemon_threads = True
     workers = engine.warm()                    # the board's solves split across these
