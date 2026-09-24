@@ -19,7 +19,7 @@ python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/ruff check db ui inference tests scripts orchestrator.py    # the paths CI lints
 
 .venv/bin/python -m pytest -q -p no:cacheprovider --cov              # full suite, 75% bar, needs the built database
-COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=77   # as CI runs it
+COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -rs -p no:cacheprovider --cov --cov-fail-under=78   # as CI runs it
 .venv/bin/python -m pytest -q tests/test_docs.py                     # one file
 .venv/bin/python -m pytest -q 'tests/test_docs.py::test_the_overview_names_everything_at_the_root'   # one test
 .venv/bin/python -m pytest -q -m 'not invariant'                     # everything that needs no database
