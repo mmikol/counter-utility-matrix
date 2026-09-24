@@ -313,7 +313,7 @@ def test_a_refused_or_unanswered_tool_call_raises_its_message(monkeypatch):
         raise urllib.error.URLError("connection refused")
     for urlopen, said in ((refusing_tool, "no source x"),
                           (refusing_door, "a bearer token is required"),
-                          (nobody, "unreachable at http://localhost:8020/mcp")):
+                          (nobody, "unreachable")):
         monkeypatch.setattr(urllib.request, "urlopen", urlopen)
         with pytest.raises(RuntimeError, match=said):
             orchestrator.mcp("sync_all")

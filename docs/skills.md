@@ -12,15 +12,15 @@ subscription; no API key. `/refresh` also runs headless, driven by
 
 **Say:** "start the app", "is it up?", "get it ready before the game".
 
-**Does:** runs `.venv/bin/python orchestrator.py up` and reads the verdict. `READY`
-means the data layer answers with no pending migrations and a populated
-database, the inference engine sees the strategies, the board serves the
-roster; it reports the URLs and the rates' capture date. `NOT READY`
-names the problem, and the fixes go in order: a stale bind mount
-(`docker compose up -d --force-recreate`), a schema behind the migrations
-(the data container rebuilds on its own), a database that never answered
-(`docker compose logs db`). If the capture date is not today and you are
-about to play, it offers a refresh.
+**Does:** runs `.venv/bin/python orchestrator.py up` and reads the
+verdict. `READY` means the data layer answers with no pending migrations
+and a populated database, the inference engine sees the strategies, the
+board serves the roster; it reports the URLs and the rates' capture
+date. `NOT READY` names the problem, and the fixes go in order: a stale
+bind mount (`docker compose up -d --force-recreate`), a schema behind
+the migrations (the data container rebuilds on its own), a database that
+never answered (`docker compose logs db`). If the capture date is not
+today and you are about to play, it offers a refresh.
 
 **Ground rule:** never `docker compose down -v`, which deletes the
 database volume.
