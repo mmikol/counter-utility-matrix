@@ -29,6 +29,27 @@ def _status(ctx: tools.Context) -> Callable[[], dict[str, object]]:
     return status
 
 
+def _call(ctx: tools.Context, name: str, text: str) -> int:
+    """`call NAME [JSON-ARGS]`: the tool's text on stdout -> 0; its refusal,
+    or a name no tool has, on stderr -> 1; arguments that are not one JSON
+    object, the usage on stderr -> 2. Anything else is raised with its
+    traceback: a fault inside a tool is not the caller's to fix."""
+    try:
+        arguments = json.loads(text)
+    except json.JSONDecodeError:
+        arguments = None
+    if not isinstance(arguments, dict):
+        print(__doc__, file=sys.stderr)
+        return 2
+    try:
+        shown, _ = tools.run_tool(ctx, name, **arguments)
+    except (tools.NoSuchToolError, Refusal) as error:
+        print("error: %s" % error, file=sys.stderr)
+        return 1
+    print(shown)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     ctx = tools.Context()
@@ -46,14 +67,9 @@ def main(argv: list[str] | None = None) -> int:
             print("%-16s %s" % (t.name, t.description.split(". ")[0]))
         return 0
     if argv[0] == "call" and len(argv) >= 2:
-        arguments = json.loads(argv[2]) if len(argv) > 2 else {}
-        try:
-            text, _ = tools.run_tool(ctx, argv[1], **arguments)
-        except (Refusal, KeyError) as error:
-            sys.exit("error: %s" % error)
-        print(text)
-        return 0
-    sys.exit(__doc__)
+        return _call(ctx, argv[1], argv[2] if len(argv) > 2 else "{}")
+    print(__doc__, file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":

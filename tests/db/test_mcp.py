@@ -77,13 +77,30 @@ def test_bad_json_is_a_parse_error_not_a_crash():
 
 
 def test_tool_refuses_unknown_and_missing_arguments():
-    tool = Tool("t", "d", {"type": "object", "properties": {"a": {"type": "string"}},
-                           "required": ["a"]}, lambda **kw: ("ok", kw))
+    tool = Tool("t", "d", {"type": "object", "required": ["a"], "properties": {
+        "a": {"type": "string"}, "n": {"type": "integer"}, "x": {"type": "number"},
+        "names": {"type": "array", "items": {"type": "string"}},
+        "side": {"type": "string", "enum": ["attack", "defense"]}, "any": {}}},
+        lambda **kw: ("ok", kw))
     with pytest.raises(Refusal, match="unknown argument"):
         tool({"a": "x", "b": 1})
     with pytest.raises(Refusal, match="missing"):
         tool({})
     assert tool({"a": "x"}) == ("ok", {"a": "x"})
+    # a value is checked as well as a name: the type, an array's items, the enum
+    for arguments, named, wanted in (
+            ({"a": 5}, "'a'", "must be string"),
+            ({"a": None}, "'a'", "must be string"),
+            ({"a": "x", "n": True}, "'n'", "must be integer"),      # a bool is no integer
+            ({"a": "x", "n": 1.5}, "'n'", "must be integer"),
+            ({"a": "x", "x": False}, "'x'", "must be number"),
+            ({"a": "x", "names": ["Ana", 3]}, "'names'", "must be array of string"),
+            ({"a": "x", "side": "sideways"}, "'side'", "must be one of 'attack', 'defense'")):
+        with pytest.raises(Refusal) as refused:
+            tool(arguments)
+        assert str(refused.value) == "t: %s %s" % (named, wanted)
+    passing = {"a": "x", "n": 2, "x": 2, "names": ("Ana",), "side": "attack", "any": None}
+    assert tool(passing) == ("ok", passing)
 
 
 def test_server_reports_a_refused_tool_as_is_error(tmp_path):
@@ -127,6 +144,8 @@ def test_a_fault_inside_a_tool_is_internal_and_logged_not_a_bad_parameter(tmp_pa
         "code": -32602, "message": "missing parameter 'name'"}
     assert call("tools/call", {"name": "nope"})["error"] == {
         "code": -32602, "message": "no tool named 'nope'"}
+    assert call("tools/call", {"name": "t", "arguments": [1]})["error"] == {
+        "code": -32602, "message": "arguments must be an object"}
     assert call("resources/read", {})["error"]["code"] == -32602
     assert call("resources/read", {"uri": "strategy://x"})["error"]["code"] == -32602
 
@@ -467,15 +486,23 @@ def test_query_runs_as_the_reader_role(ctx):
 
 # --- the entry point ------------------------------------------------------------------
 
-def test_the_entry_point_lists_tools_and_refuses_nonsense(capsys):
+def test_the_entry_point_lists_tools_and_refuses_nonsense(capsys, tmp_path, monkeypatch):
+    """Usage is 2, a refused call 1 with the reason on stderr; the strategies
+    call reaches the wrapper, so its audit line lands in tmp_path."""
+    from db.mcp import server
     from db.mcp.__main__ import main
+    monkeypatch.setattr(server, "AUDIT_PATH", str(tmp_path / "audit.jsonl"))
     assert main(["list"]) == 0
     out = capsys.readouterr().out
     assert "db_status" in out and "infer" in out
-    with pytest.raises(SystemExit):
-        main(["bogus"])
-    with pytest.raises(SystemExit):
-        main(["call", "no_such_tool"])
+    assert main(["bogus"]) == 2
+    assert main(["call", "no_such_tool"]) == 1
+    assert "error: no tool named 'no_such_tool'" in capsys.readouterr().err
+    assert main(["call", "strategies", '{"bogus": 1}']) == 1
+    assert "unknown argument(s) bogus" in capsys.readouterr().err
+    assert main(["call", "metrics", "{not json"]) == 2
+    assert main(["call", "metrics", "[1]"]) == 2
+    assert "python -m db.mcp call" in capsys.readouterr().err
 
 
 @pytest.mark.invariant
@@ -486,6 +513,23 @@ def test_the_entry_point_calls_a_tool(capsys, dsn, monkeypatch):
     assert "tables" in capsys.readouterr().out
 
 
+def test_an_in_process_call_is_validated_against_the_tools_schema(tmp_path, monkeypatch):
+    """The shell, the refresher and the board call through the same wrapper
+    as either door, so a call the schema refuses never reaches the tool and
+    is audited as refused, not as a crash."""
+    from db.mcp import server
+    path = tmp_path / "audit.jsonl"
+    monkeypatch.setattr(server, "AUDIT_PATH", str(path))
+    ctx = tools.Context(dsn="postgresql://nowhere")
+    with pytest.raises(Refusal, match="strategies: unknown argument"):
+        tools.run_tool(ctx, "strategies", bogus=1)
+    with pytest.raises(Refusal, match="reach: 'hero' must be string"):
+        tools.run_tool(ctx, "reach", hero=5)
+    lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [(e["tool"], e["ok"], "refused" in e) for e in lines] == [
+        ("strategies", False, True), ("reach", False, True)]
+
+
 def test_an_in_process_tool_call_leaves_one_audit_line(tmp_path, monkeypatch):
     """The sentry's window is the audit log, so the refresher's and the shell's
     path has to appear in it like a call through either door."""
@@ -494,7 +538,7 @@ def test_an_in_process_tool_call_leaves_one_audit_line(tmp_path, monkeypatch):
     monkeypatch.setattr(server, "AUDIT_PATH", str(path))
     ctx = tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x")
     tools.run_tool(ctx, "list_sources")
-    with pytest.raises(KeyError):
+    with pytest.raises(tools.NoSuchToolError):
         tools.run_tool(ctx, "no_such_tool")          # never reached a tool: no line
     lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     assert [e["tool"] for e in lines] == ["list_sources"]
@@ -505,6 +549,6 @@ def test_an_in_process_tool_call_leaves_one_audit_line(tmp_path, monkeypatch):
 def test_a_tool_argument_named_name_reaches_the_tool():
     """run_tool takes the tool's name positionally, so add_strategy's own `name`
     argument is not swallowed by the call - it raised TypeError once."""
-    with pytest.raises(KeyError):
+    with pytest.raises(tools.NoSuchToolError, match="no tool named 'no_such_tool'"):
         tools.run_tool(tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x"), "no_such_tool",
                        name="Players play optimally")

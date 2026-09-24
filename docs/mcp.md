@@ -46,9 +46,11 @@ healthchecks, and `405` on a bare `GET /mcp`. The methods:
 `prompts/list`. It logs to stderr, since stdout is the wire.
 
 A call the caller can fix - an unknown hero, a bad weight, SQL that
-Postgres rejects, an argument the tool does not take - raises
-`db.Refusal`: the reply is `isError` with the reason, and the audit line
-says refused. Anything else is the server's fault, a playbook that does
+Postgres rejects - raises `db.Refusal`: the reply is `isError` with the
+reason, and the audit line says refused. Every call, in-process too, is
+checked against the tool's schema before the tool runs: an argument it
+does not take, one it requires left out, a value of the wrong type or
+outside the declared values is refused the same way. Anything else is the server's fault, a playbook that does
 not load included: the reply is `INTERNAL` (-32603) with the error's type
 and message, the traceback goes to stderr, and the audit line says
 crashed, which the sentry counts.
@@ -64,7 +66,9 @@ crashed, which the sentry counts.
 ```
 
 Every tool returns text for a person and a JSON payload for a program;
-`call` prints the text.
+`call` prints the text and exits 0. A refused call, or a name no tool
+has, prints `error: <reason>` to stderr and exits 1; arguments that are
+not one JSON object print the usage and exit 2.
 
 ## Resources
 

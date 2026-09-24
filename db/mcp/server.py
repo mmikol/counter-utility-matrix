@@ -198,6 +198,8 @@ class Server:
         if tool is None:
             raise InvalidParamsError("no tool named %r" % name)
         arguments = params.get("arguments") or {}
+        if not isinstance(arguments, dict):
+            raise InvalidParamsError("arguments must be an object")
         try:
             text, structured = audited(name, arguments, lambda: tool(arguments),
                                        self.transport, getattr(_client, "id", None),
@@ -256,8 +258,39 @@ class Server:
         stdout.flush()
 
 
+# The Python values each JSON schema type admits. A bool is an int to Python
+# and neither an integer nor a number here; None is no type at all.
+JSON_TYPES: dict[str, tuple[type, ...]] = {
+    "string": (str,), "integer": (int,), "number": (int, float), "boolean": (bool,),
+    "array": (list, tuple), "object": (dict,)}
+
+
+def _is_a(value: object, kind: str) -> bool:
+    """Whether a value is of a JSON schema type."""
+    if isinstance(value, bool):
+        return kind == "boolean"
+    return isinstance(value, JSON_TYPES[kind])
+
+
+def _misfit(spec: Mapping[str, Any], value: object) -> str | None:
+    """What a value must be to fit the property that declares it, or None when
+    it fits: its type (an array's items too, where they declare one) and its
+    enum. A property that declares neither admits anything."""
+    kind, items = spec.get("type"), spec.get("items", {}).get("type")
+    wanted = "%s of %s" % (kind, items) if items else kind
+    if kind is not None and not _is_a(value, kind):
+        return wanted
+    if items and isinstance(value, (list, tuple)) and not all(_is_a(v, items) for v in value):
+        return wanted
+    if "enum" in spec and value not in spec["enum"]:
+        return "one of %s" % ", ".join(repr(v) for v in spec["enum"])
+    return None
+
+
 class Tool:
-    """A callable with the description and JSON schema the host needs."""
+    """A callable with the description and JSON schema the host needs. Every
+    call is checked against the schema before the function runs, so a call
+    the schema refuses never reaches the tool, whichever door it came in by."""
 
     def __init__(self, name: str, description: str, schema: Message,
                  fn: Callable[..., Answer]) -> None:
@@ -269,16 +302,21 @@ class Tool:
                 "inputSchema": self.schema}
 
     def __call__(self, arguments: Mapping[str, object]) -> Answer:
-        """Call the tool once its schema allows the call: an argument it does
-        not declare, or one it requires left out, is a Refusal."""
-        allowed = set(self.schema.get("properties", {}))
-        unknown = set(arguments) - allowed
+        """Call the tool once its schema allows the call. An argument it does
+        not declare, one it requires left out, and a value that is not the
+        declared type or not one of the declared values are each a Refusal."""
+        properties = self.schema.get("properties", {})
+        unknown = set(arguments) - set(properties)
         if unknown:
             raise Refusal("%s: unknown argument(s) %s" % (
                 self.name, ", ".join(sorted(unknown))))
         for required in self.schema.get("required", ()):
             if required not in arguments:
                 raise Refusal("%s: missing %r" % (self.name, required))
+        for argument, value in arguments.items():
+            wanted = _misfit(properties[argument], value)
+            if wanted is not None:
+                raise Refusal("%s: %r must be %s" % (self.name, argument, wanted))
         return self.fn(**arguments)
 
 

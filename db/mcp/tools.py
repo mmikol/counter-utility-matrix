@@ -74,26 +74,39 @@ def tool(
     return decorate
 
 
+class NoSuchToolError(KeyError):
+    """No registered tool has the name a caller asked for - told apart from a
+    KeyError raised inside a tool, which is the server's fault."""
+
+    def __str__(self) -> str:
+        return "no tool named %r" % self.args[0]
+
+
+def _bind(ctx: Context, name: str, description: str, json_schema: dict[str, Any],
+          fn: ToolFn) -> Tool:
+    """One registered tool bound to a context: the wrapper that checks every
+    call against the tool's schema, over the function with ctx filled in."""
+    return Tool(name, description, json_schema, functools.partial(fn, ctx))
+
+
 def build(ctx: Context) -> list[Tool]:
     """Bind every registered tool to a context -> [Tool]."""
-    out = []
-    for name, description, json_schema, fn in REGISTRY:
-        def bound(fn: ToolFn = fn, **arguments: Any) -> Reply:
-            return fn(ctx, **arguments)
-        out.append(Tool(name, description, json_schema, bound))
-    return out
+    return [_bind(ctx, *entry) for entry in REGISTRY]
 
 
-def run_tool(ctx: Context, name: str, /, **arguments: Any) -> Reply:
-    """Call a registered tool by name, in-process (the refresher's and the shell's
-    path), audited like a call through either door. The tool's name is positional
-    only, so a tool argument called `name` (add_strategy has one) reaches the tool
+def run_tool(ctx: Context, name: str, /, **arguments: Any) -> tuple[str, Any]:
+    """Call a registered tool by name, in-process - the refresher's, the
+    shell's and the board's path. The call is validated against the tool's
+    schema and audited, like a call through either door: a call the schema
+    refuses is a Refusal, and a name no tool has is a NoSuchToolError, which
+    reaches no tool and leaves no audit line. The name is positional only, so
+    a tool argument called `name` (add_strategy has one) reaches the tool
     instead of colliding here."""
-    for tool_name, _, _schema, fn in REGISTRY:
-        if tool_name == name:
-            return audited(name, arguments, functools.partial(fn, ctx, **arguments),
-                           "in-process")
-    raise KeyError(name)
+    entry = next((e for e in REGISTRY if e[0] == name), None)
+    if entry is None:
+        raise NoSuchToolError(name)
+    tool = _bind(ctx, *entry)
+    return audited(name, arguments, lambda: tool(arguments), "in-process")
 
 
 REFRESH = {"refresh": {"type": "boolean",
