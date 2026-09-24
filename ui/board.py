@@ -37,8 +37,7 @@ from psycopg.rows import TupleRow
 from db import psql, web
 from db.mcp import tools
 from inference import catalog as catalog_module
-from inference import engine as inference_engine
-from inference import parallel, supersede
+from inference import engine, parallel, supersede
 from ui import pages
 from ui.facts import board_facts, tables
 from ui.facts.draft import Draft, board_query, is_sided, parse_board
@@ -170,8 +169,8 @@ def solve_board(
     stopped once `superseded` reports a newer board from the same page. A
     Refusal reaches the request's boundary, which answers it 400."""
     world = tables.load(cx)
-    brief = inference_engine.Brief(weights=weights, countered=False, superseded=superseded)
-    return web.Reply(inference_engine.board(world, draft, brief=brief).to_dict(), 200)
+    brief = engine.Brief(weights=weights, countered=False, superseded=superseded)
+    return web.Reply(engine.board(world, draft, brief=brief).to_dict(), 200)
 
 
 def tool_context() -> tools.Context:
