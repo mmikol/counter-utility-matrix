@@ -27,7 +27,6 @@ from facts.draft import (
     TEAM_SIZE,
     Draft,
     check_tanks,
-    check_team_size,
     is_sided,
     opposite,
 )
@@ -161,8 +160,7 @@ def _optimal(
     started = time.time() if began is None else began
     m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
     side = _side(m, draft.side)
-    check_team_size(blue_h, seat)
-    check_tanks(blue_h, seat)
+    _check_teams(red_h, blue_h, seat)
     result = Result(kind=kind, map_name=m.name if m else None, red=[h.name for h in red_h],
                     blue=[], locked=[h.name for h in blue_h], catalog=catalog,
                     bans=[h.name for h in bans_h], side=side, seat=seat)
@@ -194,10 +192,10 @@ def _evaluated(
     started = time.time()
     m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
     side = _side(m, draft.side)
+    _check_teams(red_h, blue_h, seat)
     if len(blue_h) != TEAM_SIZE:
         raise Refusal("evaluate needs exactly %d %s picks (got %d)"
                          % (TEAM_SIZE, seat, len(blue_h)))
-    check_tanks(blue_h, seat)
     result = Result(kind=kind, map_name=m.name if m else None, red=[h.name for h in red_h],
                     blue=[h.name for h in blue_h], locked=[], catalog=catalog,
                     bans=[h.name for h in bans_h], side=side, seat=seat)
@@ -332,7 +330,7 @@ def _board_once(
     case, which needs red's six, sweeps while the fills merge."""
     m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
     draft = dataclasses.replace(draft, side=_side(m, draft.side))
-    _check_teams(red_h, blue_h)
+    _check_teams(red_h, blue_h, "blue")
     expected = _expected(world, m, bans_h, draft, catalog)
     enemy = draft.red or tuple(expected.blue)
     # each seat's draft, from that seat's perspective: its own picks are `blue`
@@ -485,12 +483,13 @@ class _Pass:
                         kind="countered", swept=against.swept())
 
 
-def _check_teams(red_h: Sequence[Hero], blue_h: Sequence[Hero]) -> None:
-    """Refuse a team no lobby seats: past six picks, or past the queue's
-    tanks."""
-    for team, seat in ((red_h, "red"), (blue_h, "blue")):
-        check_team_size(team, seat)
-        check_tanks(team, seat)
+def _check_teams(red_h: Sequence[Hero], blue_h: Sequence[Hero], seat: Seat) -> None:
+    """Refuse a board the queue would not seat: a team past its tanks, on
+    either seat - the other seat's team (`red_h`) first, then `seat`'s own
+    (`blue_h`), each named from `seat`'s perspective. A team past six picks
+    never gets this far: Draft refuses it."""
+    check_tanks(red_h, "red" if seat == "blue" else "blue")
+    check_tanks(blue_h, seat)
 
 
 def _expected(
