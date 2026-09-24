@@ -1,7 +1,7 @@
 /* the board: TEAM and BANS are set by the page before this loads */
 var el = function (id) { return document.getElementById(id); };
 var ROSTER = null, st = { map: '', red: [], blue: [], bans: [], side: '', weights: {} };
-var SHAPES = null;   /* the (tank, damage, support) triples the playbook allows, from the board */
+var SHAPES = null;   /* the (tank, damage, support) triples the queue and the playbook allow, from the board */
 var ROLES = ['tank', 'damage', 'support'];
 try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
       if (saved && saved.red && saved.blue) st = saved; } catch (e) {}
@@ -81,7 +81,7 @@ function toggle(team, name) {
   else {
     var h = hero(name), cap = h ? roleCap(team, h.role) : null;
     if (cap !== null && roleCounts(team)[h.role] >= cap) {
-      flash('the playbook allows at most ' + cap + ' ' + h.role + (cap === 1 ? '' : 's')); return;
+      flash('the queue allows at most ' + cap + ' ' + h.role + (cap === 1 ? '' : 's')); return;
     }
     arr.push(name);
   }

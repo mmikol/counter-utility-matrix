@@ -654,8 +654,8 @@ def reach_tool(ctx: Context, hero: str) -> Reply:   # _tool: inference.reach hol
       " counter to yours, both current comps scored on those scales, your picks"
       " against red's best counter, your locked picks with the empty slots filled,"
       " the fight odds (each seat's share of its own optimal, and the two against"
-      " each other), the game plan in prose, the shapes the playbook's limits"
-      " allow, and red's likely six"
+      " each other), the game plan in prose, the shapes the queue and the"
+      " playbook's limits allow, and red's likely six"
       " from the data alone (a two-two-two from the map's pick rates and the"
       " wiki's synergies, past the bans; static for the board, no strategy read).",
       dict(BOARD, pool={"type": "integer", "description": "candidates per role the"

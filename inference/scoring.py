@@ -6,8 +6,8 @@
                     only the enemy, the map and the world is settled once per board,
                     not once per candidate. A heuristic guarded on the six's own
                     state is a need: see Objective.score().
-    legal_shapes    the (tanks, damage, supports) triples the hard shape limits
-                    allow, around whatever picks are locked
+    legal_shapes    the (tanks, damage, supports) triples the queue and the hard
+                    shape limits allow, around whatever picks are locked
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -16,7 +16,7 @@ from typing import Literal, NotRequired, TypedDict
 from inference.catalog import BOARD_SECTIONS, Strategy
 from inference.expr import Expr, Scope, Value, scope
 from ui.facts import compute
-from ui.facts.draft import TEAM_SIZE
+from ui.facts.draft import MAX_TANKS, TEAM_SIZE
 from ui.facts.model import ROLES, Hero, Map, World
 from ui.facts.team import NUMBER_TYPES, MetricBag, MetricValue, number, team_metrics
 
@@ -442,15 +442,15 @@ class Objective:
 
 def legal_shapes(catalog: Iterable[Strategy],
                  locked_counts: Mapping[str, int] | None = None) -> list[Shape]:
-    """(tanks, damage, supports) triples the catalog's shape-only hard limits
-    allow - the playbook's rule of the game's form (at most two tanks; or
-    2-2-2) - optionally only those that can still seat the picks counted per
-    role. The board carries the full list so the roster can refuse a pick no
-    legal six could seat."""
+    """(tanks, damage, supports) triples the queue allows - at most MAX_TANKS
+    tanks, whatever the playbook holds - and the catalog's shape-only hard
+    limits allow (a playbook's own rule of form, 2-2-2 say), optionally only
+    those that can still seat the picks counted per role. The board carries
+    the full list so the roster can refuse a pick no legal six could seat."""
     locked_counts = locked_counts or dict.fromkeys(ROLES, 0)
     limits = _shape_limits(catalog)
     out: list[Shape] = []
-    for t in range(TEAM_SIZE + 1):
+    for t in range(MAX_TANKS + 1):
         for d in range(TEAM_SIZE + 1 - t):
             s = TEAM_SIZE - t - d
             if (t < locked_counts["tank"] or d < locked_counts["damage"]

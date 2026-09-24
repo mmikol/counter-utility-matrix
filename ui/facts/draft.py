@@ -1,20 +1,31 @@
-"""The board's vocabulary: a lobby's limits, the sides of a sided map, and
-the Draft - the board at one stage of the pick-and-ban draft - with the
-pair of functions both HTTP doors read and write one with. A leaf: it
-imports only the model, so every other module in the package can take
-these names from it.
+"""The board's vocabulary: a lobby's limits and the refusal of a team past
+them, the sides of a sided map, and the Draft - the board at one stage of
+the pick-and-ban draft - with the pair of functions both HTTP doors read
+and write one with. A leaf: it imports only the model and db's Refusal, so
+every other module in the package can take these names from it.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import NamedTuple
 
-from ui.facts.model import Map
+from db import Refusal
+from ui.facts.model import Hero, Map
 
 TEAM_SIZE = 6             # 6v6 Open Queue
+MAX_TANKS = 2             # the queue's own limit, whatever the playbook holds
 MAX_BANS = 5              # each team's two and the lobby's
 SIDED_MODES = ("Escort", "Hybrid")   # modes with an attacking and a defending side
 SIDES = ("attack", "defense")
 EXPECTED_SHAPE = {"tank": 2, "damage": 2, "support": 2}   # what a lobby fields: two of each
+
+
+def check_tanks(heroes: Iterable[Hero], seat: str) -> None:
+    """Refuse a team the queue would not seat: more than MAX_TANKS tanks. The
+    limit is the game's, so it binds whatever the playbook holds."""
+    tanks = sum(1 for h in heroes if h.role == "tank")
+    if tanks > MAX_TANKS:
+        raise Refusal("the queue allows at most %d tanks, and %s picks %d"
+                      % (MAX_TANKS, seat, tanks))
 
 
 class Draft(NamedTuple):

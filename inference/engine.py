@@ -30,7 +30,7 @@ from inference.scale import Tally, reference_bounds, reference_standing
 from inference.scoring import Bounds, Candidate, Contribution, legal_shapes
 from inference.solver import Solved, Solver, Swept, evaluate_comp
 from ui.facts import board_facts, compute
-from ui.facts.draft import TEAM_SIZE, Draft, is_sided, opposite
+from ui.facts.draft import TEAM_SIZE, Draft, check_tanks, is_sided, opposite
 from ui.facts.factset import Fact, FactSet
 from ui.facts.model import ROLES, Hero, Map, World
 from ui.facts.team import team_metrics, text
@@ -343,6 +343,7 @@ def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
     side = _side(m, side)
     if len(blue_h) > TEAM_SIZE:
         raise Refusal("more than %d %s picks" % (TEAM_SIZE, seat))
+    check_tanks(blue_h, seat)
     result = Result("infer", m.name if m else None, [h.name for h in red_h], [],
                     [h.name for h in blue_h], catalog, [h.name for h in bans_h], side, seat)
     if solved is None:
@@ -379,6 +380,7 @@ def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
     if len(blue_h) != TEAM_SIZE:
         raise Refusal("evaluate needs exactly %d %s picks (got %d)"
                          % (TEAM_SIZE, seat, len(blue_h)))
+    check_tanks(blue_h, seat)
     result = Result("evaluate", m.name if m else None, [h.name for h in red_h],
                     [h.name for h in blue_h], [], catalog, [h.name for h in bans_h], side,
                     seat)
@@ -1106,8 +1108,9 @@ def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
                      blue's optimal's scale (None unless one to five are locked)
         momentum     the verdict from the two current comps
         plan         the game plan in prose, from the same facts
-        shapes       the (tanks, damage, supports) triples the playbook's shape
-                     limits allow - what the roster enforces as you pick
+        shapes       the (tanks, damage, supports) triples the queue and the
+                     playbook's shape limits allow - what the roster enforces
+                     as you pick; a team past the queue's two tanks is refused
         expected     red's likely six from the data alone - a two-two-two from
                      the map's pick rates and the wiki's synergies, past the
                      bans - static for the board, no strategy read; what the
@@ -1120,8 +1123,10 @@ def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
     """
     parallel = parallel_available(catalog)
     catalog = catalog_module.weighted(catalog or catalog_module.load(), weights)
-    m, red_h, _, bans_h = world.resolve(map_name, red, blue, bans)
+    m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
     side = _side(m, side)
+    check_tanks(red_h, "red")
+    check_tanks(blue_h, "blue")
     # red's likely six - the map and the meta alone, past the bans - is static
     # for the board; until red reveals a pick it is what blue's seat counters.
     # A Result like every other seat: its picks carry the reason each rests on

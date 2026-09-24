@@ -13,7 +13,7 @@ from inference.engine import BrokenProcessPool
 from inference.expr import Expr, ExprError
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts import board_facts, compute
-from ui.facts.draft import Draft
+from ui.facts.draft import MAX_TANKS, Draft
 from ui.facts.team import team_metrics
 
 # --- the expression language (pure) --------------------------------------
@@ -283,11 +283,11 @@ def test_a_board_no_six_satisfies_is_refused_by_infer_and_evaluate_alike(world, 
 def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(world, tmp_path):
     from inference import engine
     fix = catalog.load(FIXTURE_PLAYBOOK)
-    # two tanks is allowed under the two-tank limit; a third is not
+    # two tanks is allowed under the two-tank limit; a third is not, and is the queue's
     r = engine.infer(world, "King's Row", ["Zarya"], ["Winston", "D.Va"], pool_size=4,
                      catalog=fix)
     assert {"Winston", "D.Va"} <= set(r.blue)
-    with pytest.raises(Refusal, match="no composition satisfies"):
+    with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
         engine.infer(world, "King's Row", [], ["Winston", "D.Va", "Reinhardt"], pool_size=4,
                      catalog=fix)
     # a stricter authored limit narrows the search the same way
@@ -550,6 +550,33 @@ def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(world):
     assert d["expected"]["kind"] == "expected" and "Zarya" not in d["expected"]["blue"]
     assert len(d["expected"]["picks"]) == 6 and all(p["why"] for p in d["expected"]["picks"])
     assert not any(p["locked"] for p in d["expected"]["picks"])
+
+
+@pytest.mark.invariant
+def test_the_queue_caps_tanks_at_two_whatever_the_playbook_holds(world):
+    """The shipped playbook writes no shape limit and scores nothing, so every
+    six ties and the map's win rates rank the pools - tanks, on most maps. The
+    queue's own limit binds all the same: no six the board shows fields a
+    third tank, the shapes the roster enforces stop at two, and a third tank
+    is refused as the queue's."""
+    from inference import engine
+    shipped = catalog.load()
+    assert not any(h.form == "limit" for h in shipped)       # the cap is the engine's
+    for map_name, blue in (("Blizzard World", []), ("Esperança", []),
+                           ("King's Row", ["Winston", "D.Va"])):
+        d = engine.board(world, map_name, [], blue, catalog=shipped).to_dict()
+        sixes = [d[seat]["blue"] for seat in ("blue", "red", "fill", "expected") if d[seat]]
+        assert len(sixes) == (4 if blue else 3)
+        for six in sixes:
+            assert sum(world.hero(n).role == "tank" for n in six) <= MAX_TANKS, (map_name, six)
+        assert max(t for t, _, _ in d["shapes"]) == MAX_TANKS
+    for blue in (["Winston", "D.Va", "Reinhardt"], ["Winston", "D.Va", "Reinhardt", "Ana"]):
+        with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
+            engine.board(world, "King's Row", [], blue, catalog=shipped)
+    with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
+        engine.evaluate(world, "King's Row", [],
+                        ["Winston", "D.Va", "Reinhardt", "Ana", "Kiriko", "Ashe"],
+                        catalog=shipped)
 
 
 @pytest.mark.invariant
