@@ -53,7 +53,7 @@ def doors(synthetic_world, monkeypatch, tmp_path):
     monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
     monkeypatch.delenv("COUNTRIX_INFERENCE_URL", raising=False)
     monkeypatch.setenv("COUNTRIX_STRATEGIES", FIXTURE_PLAYBOOK)
-    ctx = Offline(dsn="postgresql://nowhere")
+    ctx = Offline(dsn="postgresql://nowhere", client="test")
 
     def query(board):
         return {key: list(value) for key, value in board.items()}
