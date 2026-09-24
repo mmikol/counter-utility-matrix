@@ -243,8 +243,8 @@ def _priming_pool(monkeypatch, outcome):
     return dropped
 
 
-def test_warm_reports_a_worker_that_cannot_start_and_falls_back_to_one_process(monkeypatch,
-                                                                                capsys):
+def test_warm_reports_a_worker_that_cannot_start_and_falls_back_to_one_process(
+        monkeypatch, capsys):
     """A worker that cannot read the playbook fails its priming task. warm()
     says so on stderr, drops the pool and reports no workers, so the server
     boots and its boards solve in its own process."""

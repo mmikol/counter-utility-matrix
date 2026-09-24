@@ -40,8 +40,8 @@ def test_a_playbook_that_scores_nothing_reads_unscored(world):
 
 
 @pytest.mark.invariant
-def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reason(world,
-                                                                                    tmp_path):
+def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reason(
+        world, tmp_path):
     """A playbook whose only scoring term is guarded (hitscan cover while red
     fields a flier) scores nothing until the guard holds: the best six itself
     is zero, so no comp is a share of anything - the board says which
@@ -151,6 +151,7 @@ def test_a_pick_and_the_plan_name_the_queue_the_rates_were_captured_in(
                      catalog=scratch_playbook)
     assert rates_queue(b.blue.facts) == "Role Queue"
     assert b.plan.split("\n")[-1].startswith("Based on: the Role Queue rates and counters")
-    rates = [part for r in (b.blue, b.red) for p in r.picks for part in p["why"].split("; ")
-             if part.startswith("wins ")]
+    rates = [
+        part for r in (b.blue, b.red) for p in r.picks for part in p["why"].split("; ")
+        if part.startswith("wins ")]
     assert rates and all(part.endswith(", Role Queue") for part in rates)
