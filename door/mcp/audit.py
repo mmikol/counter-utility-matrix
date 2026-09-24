@@ -8,7 +8,9 @@ stdio server), http:<address>/<session>, and in-process the board, the
 refresher, the shell, or nested:<tool> for a call one tool makes to
 another. An argument is recorded by name with its length (a string, a
 list, an object) or its type name (anything else: int, float, bool,
-NoneType) - never its value.
+NoneType) - never its value. A request the HTTP door turns away before
+any tool runs is a line too: no tool, under http:<address>, the key the
+door's rate limit counts by, refused with its status and reason.
 
 A line that cannot be written is noted on stderr - never stdout, the stdio
 wire - and never raised: the door stays open if the log fails.
@@ -32,13 +34,14 @@ type Transport = Literal["stdio", "http", "in-process"]
 
 
 class AuditLine(TypedDict):
-    """One line of the log: when, the transport, the caller, the tool, each
+    """One line of the log: when, the transport, the caller, the tool - None
+    for a request the door turned away before any tool ran - each
     argument's size or type name, whether it succeeded and in how many
     milliseconds, and why it did not - a refusal's text or a crash's."""
     t: str
     transport: Transport
     client: str
-    tool: str
+    tool: str | None
     args: dict[str, int | str]
     ok: bool
     ms: int
@@ -72,6 +75,24 @@ def _sizes(arguments: Mapping[str, object]) -> dict[str, int | str]:
             for key, value in arguments.items()}
 
 
+def _line(
+        transport: Transport, client: str, tool: str | None,
+        args: dict[str, int | str]) -> AuditLine:
+    """A line stamped now, not yet ok and taking no time, that its writer
+    completes with the outcome."""
+    return AuditLine(t=datetime.now(UTC).isoformat(timespec="seconds"), transport=transport,
+                     client=client, tool=tool, args=args, ok=False, ms=0)
+
+
+def audit_refusal(
+        transport: Transport, client: str, refused: str, audit_path: str | None = None) -> None:
+    """Leave the line for a request the door turned away before any tool ran:
+    no tool, no arguments, refused with the status and its reason."""
+    line = _line(transport, client, None, {})
+    line["refused"] = refused[:REASON_CHARS]
+    audit(line, audit_path)
+
+
 def audited[T](
         name: str, arguments: Mapping[str, object], call: Callable[[], T], transport: Transport,
         client: str, audit_path: str | None = None) -> T:
@@ -82,9 +103,7 @@ def audited[T](
     refusing its input, the wrapper refusing the call - is audited as
     refused; anything else as crashed. Each carries its message, the crash
     with the error's type, as the door's reply does."""
-    line = AuditLine(
-        t=datetime.now(UTC).isoformat(timespec="seconds"), transport=transport, client=client,
-        tool=name, args=_sizes(arguments), ok=False, ms=0)
+    line = _line(transport, client, name, _sizes(arguments))
     started = time.monotonic()
 
     def spent() -> int:

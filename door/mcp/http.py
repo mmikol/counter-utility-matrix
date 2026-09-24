@@ -6,8 +6,11 @@ session. /health reports the database the tools are pointed at.
 db.web's guard refuses a request that does not name this server before any
 of it runs. The door then asks for the bearer token when one is set, caps a
 body at MAX_BODY and a batch at MAX_BATCH messages, and holds each client
-address to RATE_LIMIT tool calls a RATE_WINDOW. Its audit lines name http
-and the client's address and session.
+address to RATE_LIMIT tool calls a RATE_WINDOW. A tool call's audit line
+names http and the client's address and session. A request to /mcp the
+door turns away leaves a line too, under the address alone, the key the
+rate limit counts by; the guard's 403 and the 404s and 405 for what the
+door does not serve leave none.
 """
 
 import hmac
@@ -21,6 +24,7 @@ from collections.abc import Callable, Iterable, Mapping
 from urllib.parse import urlsplit
 
 from db import web
+from door.mcp.audit import audit_refusal
 from door.mcp.server import PARSE_ERROR, Server, error_response
 
 MAX_BODY = 1 << 20            # one request is a tool call, not an upload
@@ -32,14 +36,17 @@ MAX_TRACKED_CLIENTS = 1000    # past this, clients unseen for a window are forgo
 
 
 class _RejectedError(Exception):
-    """A POST the door turns away before any message in it is handled: the
-    status, the JSON body and any headers the reply carries."""
+    """A request to /mcp the door turns away before any message in it is
+    handled: the status, the reason its audit line records, the JSON body -
+    {"error": reason} unless the reply needs its own - and any headers."""
 
     def __init__(
-            self, code: int, payload: Mapping[str, object],
+            self, code: int, reason: str, payload: Mapping[str, object] | None = None,
             headers: Mapping[str, str] | None = None) -> None:
-        super().__init__(code)
-        self.code, self.payload, self.headers = code, payload, dict(headers or {})
+        super().__init__(code, reason)
+        self.code, self.reason = code, reason
+        self.payload: Mapping[str, object] = {"error": reason} if payload is None else payload
+        self.headers = dict(headers or {})
 
 
 class HttpHandler(web.Handler):
@@ -56,16 +63,23 @@ class HttpHandler(web.Handler):
                 405, {"Allow": "POST, DELETE"})
         self._json({"error": "nothing here"}, 404)
 
-    def _authorized(self) -> bool:
-        """With a token configured, every /mcp request must carry it."""
+    def _check_token(self) -> None:
+        """With a token configured, every /mcp request must carry it: one that
+        does not is refused 401."""
         token = self.server.token
-        if not token:
-            return True
         header = self.headers.get("Authorization") or ""
-        return header.startswith("Bearer ") and hmac.compare_digest(header[7:].strip(), token)
+        if token and not (header.startswith("Bearer ")
+                          and hmac.compare_digest(header[7:].strip(), token)):
+            raise _RejectedError(401, "a bearer token is required",
+                                 headers={"WWW-Authenticate": "Bearer"})
 
-    def _refuse_unauthorized(self) -> None:
-        self._json({"error": "a bearer token is required"}, 401, {"WWW-Authenticate": "Bearer"})
+    def _turn_away(self, rejected: _RejectedError) -> None:
+        """Answer a request the door rejected, the one place that does: its
+        audit line first - no tool, under the client address the rate limit
+        counts by, refused with the status and the reason - then the reply."""
+        audit_refusal("http", "http:%s" % self.client_address[0],
+                      "%d %s" % (rejected.code, rejected.reason), self.server.mcp.audit_path)
+        self._json(rejected.payload, rejected.code, rejected.headers)
 
     def do_DELETE(self) -> None:
         """Ends a session. This server keeps no session state to end, and the
@@ -73,23 +87,24 @@ class HttpHandler(web.Handler):
         on /mcp is guarded alike."""
         if urlsplit(self.path).path != "/mcp":
             return self._json({"error": "nothing here"}, 404)
-        if not self._authorized():
-            return self._refuse_unauthorized()
+        try:
+            self._check_token()
+        except _RejectedError as rejected:
+            return self._turn_away(rejected)
         self._json(None)
 
     def do_POST(self) -> None:
-        """One JSON-RPC message or batch: read, admitted against the batch
-        size and the client's rate, then handled."""
+        """One JSON-RPC message or batch: the token checked, read, admitted
+        against the batch size and the client's rate, then handled."""
         if urlsplit(self.path).path != "/mcp":
             return self._json({"error": "nothing here"}, 404)
-        if not self._authorized():
-            return self._refuse_unauthorized()
         try:
+            self._check_token()
             message = self._read_message()
             messages = message if isinstance(message, list) else [message]
             self._admit(messages)
         except _RejectedError as rejected:
-            return self._json(rejected.payload, rejected.code, rejected.headers)
+            return self._turn_away(rejected)
         self._dispatch(messages, batched=isinstance(message, list))
 
     def _read_message(self) -> object:
@@ -102,7 +117,7 @@ class HttpHandler(web.Handler):
         except ValueError:
             length = -1
         if length <= 0:             # missing, not a number, or no body at all
-            raise _RejectedError(400, {"error": "a positive Content-Length is required"})
+            raise _RejectedError(400, "a positive Content-Length is required")
         if length > MAX_BODY:
             drained = 0
             while drained < min(length, 16 * MAX_BODY):     # let the client finish sending
@@ -111,22 +126,22 @@ class HttpHandler(web.Handler):
                     break
                 drained += len(chunk)
             self.close_connection = True
-            raise _RejectedError(413, {"error": "request too large"})
+            raise _RejectedError(413, "request too large")
         try:
             return json.loads(self.rfile.read(length))
         except (json.JSONDecodeError, UnicodeDecodeError):
-            raise _RejectedError(400, error_response(None, PARSE_ERROR, "bad JSON")) from None
+            raise _RejectedError(
+                400, "bad JSON", error_response(None, PARSE_ERROR, "bad JSON")) from None
 
     def _admit(self, messages: list[object]) -> None:
         """Refuse a batch past MAX_BATCH, and tool calls past the client
         address's rate - the budget is the host's, not a claimed session's."""
         if len(messages) > MAX_BATCH:
-            raise _RejectedError(413, {"error": "at most %d messages per batch" % MAX_BATCH})
+            raise _RejectedError(413, "at most %d messages per batch" % MAX_BATCH)
         calls = sum(1 for m in messages if isinstance(m, dict) and m.get("method") == "tools/call")
         if calls and not self.server.admit(self.client_address[0], calls):
-            raise _RejectedError(
-                429, {"error": "too many calls; try again in a minute"},
-                {"Retry-After": str(RATE_WINDOW)})
+            raise _RejectedError(429, "too many calls; try again in a minute",
+                                 headers={"Retry-After": str(RATE_WINDOW)})
 
     def _dispatch(self, messages: list[object], *, batched: bool) -> None:
         """Handle each message as this client, then reply: 202 when nothing

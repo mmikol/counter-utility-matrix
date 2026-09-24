@@ -15,9 +15,10 @@ Every COUNTRIX_SENTRY_EVERY seconds (30):
                    (descriptions, the wiki's notes, strategy bodies); those
                    are flagged, not removed - a person decides
     the door       the audit log every tool call writes (db/raw/audit.jsonl):
-                   calls in the last minute, refusals, crashes, any client
-                   past the rate limit, and any line that is not an audit
-                   entry
+                   calls in the last minute, refusals, crashes, any HTTP
+                   client address past the door's rate limit - its calls
+                   and the door's refusals of it, whatever session it
+                   claims - and any line that is not an audit entry
     the report     db/raw/sentry.json - ok or not, what was quarantined, the
                    flags, the counts - which `orchestrator.py status` prints
 
@@ -214,26 +215,32 @@ def check_database(dsn: str | None = None) -> list[str]:
 @dataclass(frozen=True)
 class DoorTally:
     """What one read of the audit log found: the last minute's calls,
-    refusals and crashes, the clients past the rate limit, the lines that are
-    not audit entries, and the offset the next read starts from."""
+    refusals and crashes, the HTTP client addresses past the door's rate
+    limit (http:<address>), the lines that are not audit entries, and the
+    offset the next read starts from."""
     offset: int = 0
     recent: int = 0
     refused: int = 0
     crashed: int = 0
-    hot: list[str | None] = field(default_factory=list)
+    hot: list[str] = field(default_factory=list)
     malformed: int = 0
 
 
 def check_door(audit_path: str | None = None, offset: int = 0) -> DoorTally:
     """Read the audit log from `offset` -> the tally. A line that is not an
     audit entry counts once, in the read that first passes it; a last line
-    without its newline is still being written and waits for the next read."""
+    without its newline is still being written and waits for the next read.
+    Only an http: client counts against RATE_LIMIT, keyed on its address as
+    the door's own limit is, so calls spread across session ids and the
+    door's refusals add up. In-process, stdio and nested callers are not
+    rate-limited; a line with no client, as older ones have, counts among
+    the calls alone."""
     audit_path = audit_path or default_audit_path()
     if not os.path.exists(audit_path):
         return DoorTally()
     now = time.time()
     recent = refused = crashed = malformed = 0
-    per_client: dict[str | None, int] = {}
+    per_address: dict[str, int] = {}
     size = os.path.getsize(audit_path)
     # bytes: the door writes UTF-8 unescaped, and a seek can land inside a character
     with open(audit_path, "rb") as handle:
@@ -262,10 +269,12 @@ def check_door(audit_path: str | None = None, offset: int = 0) -> DoorTally:
             if now - when > 60:
                 continue
             recent += 1
-            per_client[client] = per_client.get(client, 0) + 1
+            if client is not None and client.startswith("http:"):
+                address = client.split("/")[0]
+                per_address[address] = per_address.get(address, 0) + 1
             refused += bool(entry.get("refused"))
             crashed += bool(entry.get("crashed"))
-    hot = [c for c, n in per_client.items() if n >= RATE_LIMIT]
+    hot = [address for address, n in per_address.items() if n >= RATE_LIMIT]
     return DoorTally(offset=end, recent=recent, refused=refused, crashed=crashed, hot=hot,
                      malformed=malformed)
 
@@ -303,7 +312,7 @@ def run_once(watch: Watch | None = None, offset: int = 0) -> Report:
     if door.crashed:
         flags.append("%d tool call(s) crashed in the last minute" % door.crashed)
     if door.hot:
-        flags.append("client(s) past the rate limit: %s" % ", ".join(str(c) for c in door.hot))
+        flags.append("client(s) past the rate limit: %s" % ", ".join(door.hot))
     if door.malformed:
         flags.append("%d malformed line(s) in the audit log" % door.malformed)
     report = _report(quarantined, cat, flags, door)

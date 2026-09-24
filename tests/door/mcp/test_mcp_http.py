@@ -1,7 +1,7 @@
 """The door over Streamable HTTP, the data-layer container's: the real
 server spawned on a free port, and an in-process HttpServer for the guards -
 the origin check, the bearer token, the body and batch caps, the rate limit
-per client address and the audit line each call leaves."""
+per client address and the audit line each call and each refusal leaves."""
 
 import http.client
 import json
@@ -143,6 +143,16 @@ def _knock(url, body, headers=None):
         return error.code, json.loads(error.read() or b"null")
 
 
+def _audited(tmp_path):
+    """The audit lines an in-process HttpServer left, oldest first."""
+    return [json.loads(line) for line in (tmp_path / "audit.jsonl").read_text().splitlines()]
+
+
+def _refusal(line):
+    """A door's refusal as the audit line records it: (client, tool, refused)."""
+    return line["client"], line["tool"], line["refused"]
+
+
 def test_the_door_requires_its_token_when_one_is_set(tmp_path):
     httpd, url = _http_server(tmp_path, token="s3cret")
     call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -152,6 +162,10 @@ def test_the_door_requires_its_token_when_one_is_set(tmp_path):
     code, reply = _knock(url, call, {"Authorization": "Bearer s3cret"})
     assert code == 200 and reply["result"]["isError"] is False
     httpd.shutdown()
+    lines = _audited(tmp_path)
+    assert [_refusal(line) for line in lines[:2]] == [
+        ("http:127.0.0.1", None, "401 a bearer token is required")] * 2
+    assert [(line["tool"], line["ok"]) for line in lines[2:]] == [("list_sources", True)]
 
 
 def test_the_door_refuses_huge_bodies_and_rate_limits_a_client_and_audits_every_call(tmp_path):
@@ -164,11 +178,20 @@ def test_the_door_refuses_huge_bodies_and_rate_limits_a_client_and_audits_every_
     assert _knock(url, call, {"Mcp-Session-Id": "two"})[0] == 429     # the budget is the host's
     batch = [dict(call, id=i) for i in range(21)]
     assert _knock(url, batch)[0] == 413
-    lines = [json.loads(line) for line in (tmp_path / "audit.jsonl").read_text().splitlines()]
-    assert len(lines) == 3 and all(line["tool"] == "list_sources" and line["ok"] for line in lines)
-    assert lines[0]["transport"] == "http" and lines[0]["client"].startswith("http:127.0.0.1/one")
-    assert set(lines[0]) >= {"t", "args", "ms"}
     httpd.shutdown()
+    lines = _audited(tmp_path)
+    assert len(lines) == 7                  # a line for each request, the refused ones too
+    called = lines[1:4]
+    assert all(line["tool"] == "list_sources" and line["ok"] for line in called)
+    assert {line["client"] for line in called} == {"http:127.0.0.1/one"}
+    assert called[0]["transport"] == "http" and set(called[0]) >= {"t", "args", "ms"}
+    # each refusal is a line under the address the door limits, whatever session it claims
+    assert [_refusal(line) for line in lines[:1] + lines[4:]] == [
+        ("http:127.0.0.1", None, "413 request too large"),
+        ("http:127.0.0.1", None, "429 too many calls; try again in a minute"),
+        ("http:127.0.0.1", None, "429 too many calls; try again in a minute"),
+        ("http:127.0.0.1", None, "413 at most 20 messages per batch")]
+    assert all(line["transport"] == "http" and line["ok"] is False for line in lines[4:])
 
 
 def test_a_missing_content_length_is_refused_as_required(tmp_path):
@@ -189,3 +212,5 @@ def test_a_missing_content_length_is_refused_as_required(tmp_path):
         assert "Content-Length" in json.loads(response.read())["error"]
         connection.close()
     httpd.shutdown()
+    assert [_refusal(line) for line in _audited(tmp_path)] == [
+        ("http:127.0.0.1", None, "400 a positive Content-Length is required")] * 2

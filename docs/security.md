@@ -87,7 +87,11 @@ its value), outcome, duration. No caller is anonymous: `stdio:<pid>` is
 the process that launched the stdio server, `http:<address>/<session>` a
 caller of the HTTP door, and in-process calls are the `board`'s, the
 `refresher`'s, the `shell`'s, or `nested:<tool>` for a call one tool makes
-to another, whichever door the outer call came through.
+to another, whichever door the outer call came through. A request to
+`/mcp` the door turns away - no token, a body or batch too large, not
+JSON, past the rate - is a line too, with no tool, under `http:<address>`,
+the key the rate limit counts by, refused with its status and reason
+(`429 too many calls; try again in a minute`).
 
 **A failure says what failed, never where.** The board and the inference
 service answer a request that raises through `db/web.py`: a refusal - an
@@ -158,9 +162,11 @@ blob) - one that does is quarantined the same way; that the free text in
 the database (descriptions, the wiki's notes, strategy bodies) carries no
 such text - those are flagged, not removed, a person decides; and what the
 audit log says about the last minute - calls, refusals, crashes, any
-client past the rate limit, and any line that is not an audit entry. The
-scan folds Unicode to one shape and strips zero-width characters first,
-so a word broken by an invisible character still reads as the word. Its
+client address past the door's rate limit (its calls and the door's
+refusals of it, whatever session it claims), and any line that is not an
+audit entry. The scan folds Unicode to one shape and strips zero-width
+characters first, so a word broken by an invisible character still reads
+as the word. Its
 report is `db/raw/sentry.json`, and `.venv/bin/python orchestrator.py
 status` prints it. `.venv/bin/python -m door.sentry --once` runs one pass
 from a shell and exits non-zero when something is wrong.

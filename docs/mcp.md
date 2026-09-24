@@ -35,14 +35,14 @@ per minute, and
 requires `Authorization: Bearer <token>` when `COUNTRIX_MCP_TOKEN`
 is set (in `.env`; `.mcp.json` sends it from the same variable). Every
 tool call is a line in the audit log, `db/raw/audit.jsonl`, that the
-sentry reads - over either transport and in-process - under the caller's
-name: `stdio:<pid>` (the process that launched the server),
-`http:<address>/<session>`, and in-process `board`, `refresher`, `shell`,
-or `nested:<tool>` for one tool's call of another. A line it cannot write
-is noted on stderr and the call goes on. The `query` tool connects as
-`matrix_reader`, a login that can only `SELECT`, runs one read-only
-statement with a timeout, and refuses SQL that reaches for files or
-servers. The whole threat model is in [security.md](security.md).
+sentry reads - over either transport and in-process, each under its
+caller's name (`stdio:<pid>`, `http:<address>/<session>`, `board`,
+`refresher`, `shell`, `nested:<tool>`) - and so is a request the HTTP
+door turns away; [security.md](security.md) states what a line holds. A
+line it cannot write is noted on stderr and the call goes on. The `query`
+tool connects as `matrix_reader`, a login that can only `SELECT`, runs
+one read-only statement with a timeout, and refuses SQL that reaches for
+files or servers. The whole threat model is in [security.md](security.md).
 
 The protocol (`door/mcp/server.py`) and its transports are dependency-free -
 a few hundred lines instead of the SDK, so the door has nothing to audit:
@@ -106,7 +106,7 @@ watches what the tools cannot.
 | --- | --- |
 | `mcp/` | The MCP server and its tools, below. |
 | `refresh.py` | The clock: the daily refresh ([db.md](db.md) has its schedule and settings), and the full one once the wiki cache is a week old. |
-| `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied. Its report, `db/raw/sentry.json`, is what `orchestrator.py status` prints; `.venv/bin/python -m door.sentry --once` is one pass from a shell. |
+| `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied, an HTTP caller keyed on its address like the door's rate limit. Its report, `db/raw/sentry.json`, is what `orchestrator.py status` prints; `.venv/bin/python -m door.sentry --once` is one pass from a shell. |
 
 ### `mcp/` - the server and its tools
 
@@ -116,7 +116,7 @@ The servers and the transports are above, the tool reference below.
 | --- | --- |
 | `server.py` | The protocol: JSON-RPC 2.0 answered from a server's tools and resources, whichever transport carries it - `initialize`, `tools/list`, `tools/call`, `resources/*`, each response a typed record. Dependency-free, like the four modules below, so the door has nothing to audit but its own few hundred lines. |
 | `stdio.py` | The stdio transport `.mcp.json` launches: one message a line on stdin, each answer a line on stdout. |
-| `http.py` | The Streamable HTTP transport (`POST /mcp`, `GET /health`): the bearer token, the body and batch caps, and the rate limit per client address. |
+| `http.py` | The Streamable HTTP transport (`POST /mcp`, `GET /health`): the bearer token, the body and batch caps, and the rate limit per client address. A request it turns away leaves an audit line under that address. |
 | `schema.py` | A tool as the protocol serves it: its arguments as JSON Schema (`ToolSchema`, which `tool_schema` builds, a `Property` per argument, whose type is one JSON type or a list of the types it admits), its reply (`ToolReply`: text, and the same as JSON), and the `Tool` that checks every call against the schema before the tool runs. |
 | `audit.py` | The audit line every call leaves in `db/raw/audit.jsonl`, through any door, in-process too (`AuditLine`): each argument by name with its size or type name, never its value. The sentry reads it. |
 | `registry.py` | The one registry every family declares its tools into (`REGISTRY`, its decorator `tool`). A `ToolSpec` is a tool as registered: name, description, JSON schema, function, its family - the module the function is defined in - and for a pull the source it reads. `Registry` lists the tools family by family in `FAMILIES`' order, whichever family imports first, refuses a name twice and derives the pulls; `run` is the audited in-process call, `write_docs` the tool reference below. `Context` is where a call lands - the database, the page caches, the log, the caller its in-process calls are audited as - and carries the registry, through which one tool calls another on a copy named `nested:<tool>`. |

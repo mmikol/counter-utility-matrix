@@ -73,6 +73,26 @@ def test_the_door_is_tallied_from_the_audit_log(tmp_path):
     assert sentry.check_door(str(tmp_path / "missing.jsonl")) == sentry.DoorTally()
 
 
+def test_the_door_tally_keys_a_client_by_address_and_counts_its_refusals(tmp_path, monkeypatch):
+    """Calls spread across session ids and the door's refusals of the same
+    address add up to the door's own rate key; a caller that is not HTTP is
+    not rate-limited, so no count of its lines makes it hot."""
+    monkeypatch.setattr(sentry, "RATE_LIMIT", 3)
+    audit = tmp_path / "audit.jsonl"
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    turned_away = "429 too many calls; try again in a minute"
+    lines = [
+        {"t": now, "client": "http:10.0.0.1/one", "tool": "facts", "ok": True},
+        {"t": now, "client": "http:10.0.0.1/two", "tool": "facts", "ok": True},
+        {"t": now, "client": "http:10.0.0.1", "tool": None, "ok": False, "refused": turned_away}]
+    audit.write_text("".join(json.dumps(line) + "\n" for line in lines))
+    door = sentry.check_door(str(audit))
+    assert (door.recent, door.refused, door.hot) == (3, 1, ["http:10.0.0.1"])
+    refresher = [{"t": now, "client": "refresher", "tool": "sync_all", "ok": True}] * 3
+    audit.write_text("".join(json.dumps(line) + "\n" for line in refresher))
+    assert sentry.check_door(str(audit)).hot == []
+
+
 def test_an_audit_line_whose_client_is_not_a_name_is_malformed(tmp_path):
     # the door names a client or none; a list there once failed the whole pass
     audit = tmp_path / "audit.jsonl"
