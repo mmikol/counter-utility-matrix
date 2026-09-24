@@ -5,26 +5,31 @@ python -m db.mcp call NAME [JSON-ARGS]  run one tool and print its text"""
 
 import json
 import sys
+from collections.abc import Callable
 
+from db import psql
 from db.mcp import tools
 from db.mcp.server import Server, ToolError, serve_http
 
 
-def _status(ctx):
-    def status():
+def _status(ctx: tools.Context) -> Callable[[], dict[str, object]]:
+    """The data container's /health: the database's state and counts, or
+    degraded with the reason when the database is out of reach."""
+    def status() -> dict[str, object]:
         try:
             _, data = tools.run_tool(ctx, "db_status")
-            return {"status": "ok", "table_count": data["table_count"],
+            return {"status": "ok", "state": data["state"],
+                    "table_count": data["table_count"],
                     "pending_migrations": data["pending_migrations"],
                     "heroes": data["counts"].get("heroes", 0),
                     "announced": data["counts"].get("announced", 0),
                     "newest_capture": data.get("newest_capture")}
-        except Exception as error:      # the server is up even if the DB is not
+        except psql.UNREACHABLE as error:     # the server is up even if the DB is not
             return {"status": "degraded", "error": str(error)}
     return status
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     ctx = tools.Context()
     server = Server(tools.build(ctx), tools.StrategyResources())

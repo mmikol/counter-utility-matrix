@@ -85,7 +85,7 @@ the audit trail of every change to them.
 | `pull_counters` | The Match-Up column of every hero's wiki article: each written cell read as a verdict and stored as a directed edge, one row = countered_by answers hero. Reloads the table whole. Run after pull_heroes. | `refresh` (boolean): fetch every page again instead of reading the cache; a page that fails to fetch keeps its cached copy |
 | `load_authored` | Store the one input a user writes: the mirror of the strategies in inference/strategies/. A whole-truth reload. | none |
 | `sync_all` | Every pull_* tool in dependency order, then the strategies mirror, then the CSV mirror. On a populated database this is an update: entities refresh in place, rates append a snapshot. | `refresh` (boolean): fetch every page again instead of reading the cache; a page that fails to fetch keeps its cached copy |
-| `db_status` | Which database the tools are pointed at, its table and row counts, and the rates snapshots it holds. | none |
+| `db_status` | Which database the tools are pointed at, its state (empty, stale, unfilled or current - what the containers wait on), its table and row counts, and the rates snapshots it holds. | none |
 | `db_init` | Apply the migrations to an EMPTY database (schema only; sync_all fills it). Refuses a database that already has tables. | none |
 | `db_migrate` | Apply the migrations the ledger has not recorded, in place: a populated database catching up with the files without a rebuild. Nothing pending is not an error. | none |
 | `db_rebuild` | Drop everything, reapply the migrations and run sync_all. | `refresh` (boolean): fetch every page again instead of reading the cache; a page that fails to fetch keeps its cached copy |

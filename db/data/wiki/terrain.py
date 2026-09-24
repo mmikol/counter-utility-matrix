@@ -309,7 +309,7 @@ def _counted(counts: dict[str, int]) -> str:
 
 def run(connection: psycopg.Connection, cache_dir: str | None = None,
         session: requests.Session | None = None,
-        log: Callable[[str], None] = print) -> dict[str, object]:
+        log: Callable[[str], object] = print) -> dict[str, object]:
     session = fetch.session(session)
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())

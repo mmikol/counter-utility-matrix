@@ -14,25 +14,40 @@ REFRESH_SKILL = os.path.join(orchestrator.ROOT, ".claude", "skills", "refresh", 
 
 def test_verdict_reads_the_three_health_replies():
     ok, lines = orchestrator.verdict({
-        "data": {"status": "ok", "table_count": 42, "heroes": 53,
+        "data": {"status": "ok", "state": "current", "table_count": 42, "heroes": 53,
                  "pending_migrations": [], "newest_capture": "2026-09-13"},
         "inference": {"status": "ok", "strategies": 38, "heroes": 53},
         "ui": {"heroes": [{}] * 53, "maps": [{}] * 30}})
     assert ok and any("rates captured 2026-09-13" in line for line in lines)
     ok, lines = orchestrator.verdict({
-        "data": {"status": "ok", "table_count": 36, "heroes": 54, "announced": 1,
-                 "pending_migrations": [], "newest_capture": "2026-09-14"},
+        "data": {"status": "ok", "state": "current", "table_count": 36, "heroes": 54,
+                 "announced": 1, "pending_migrations": [], "newest_capture": "2026-09-14"},
         "inference": {"status": "ok", "strategies": 38, "heroes": 54},
         "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}})
     assert ok and any("54 heroes (1 announced, not yet playable)" in line for line in lines)
-    ok, lines = orchestrator.verdict({"data": {"status": "ok", "table_count": 42, "heroes": 53,
-                                        "pending_migrations": ["099_future.sql"]},
-                               "inference": {"status": "ok", "strategies": 0},
-                               "ui": None})
+    ok, lines = orchestrator.verdict({"data": {"status": "ok", "state": "stale",
+                                               "table_count": 42, "heroes": 53,
+                                               "pending_migrations": ["099_future.sql"]},
+                                      "inference": {"status": "ok", "strategies": 0},
+                                      "ui": None})
     assert not ok
-    assert any("behind the migrations" in line for line in lines)
+    assert any("behind the migrations (099_future.sql)" in line for line in lines)
     assert any("stale bind mount" in line for line in lines)
     assert any("board: not answering" in line for line in lines)
+
+
+def test_the_verdict_waits_on_the_data_layers_state():
+    """Ready is the state the data layer reports, db.psql.schema.state; an
+    image older than the checkout reports none, and is not ready either."""
+    served = {"inference": {"status": "ok", "strategies": 38, "heroes": 54},
+              "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
+    for state, said in (("empty", "no heroes yet"), ("unfilled", "no heroes yet"),
+                        (None, "predates this checkout")):
+        data = {"status": "ok", "table_count": 36, "heroes": 0, "pending_migrations": []}
+        if state:
+            data["state"] = state
+        ok, lines = orchestrator.verdict(dict(served, data=data))
+        assert not ok and any(said in line for line in lines), state
 
 
 def test_health_urls_cover_every_served_layer():
@@ -94,8 +109,9 @@ def test_drafts_are_derived_on_the_host_then_the_stack_remirrors(monkeypatch):
 def stubbed(monkeypatch):
     """Every side effect of the orchestrator recorded instead of run."""
     calls = []
-    healthy = {"data": {"status": "ok", "table_count": 36, "heroes": 54, "announced": 1,
-                        "pending_migrations": [], "newest_capture": "2026-09-14"},
+    healthy = {"data": {"status": "ok", "state": "current", "table_count": 36, "heroes": 54,
+                        "announced": 1, "pending_migrations": [],
+                        "newest_capture": "2026-09-14"},
                "inference": {"status": "ok", "strategies": 38, "heroes": 54, "pending": 0},
                "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
     monkeypatch.setattr(orchestrator, "sh", lambda *a, **k: calls.append(("sh", *a)) or "")
@@ -226,8 +242,8 @@ def test_readiness_solves_one_board_through_the_service(monkeypatch):
     monkeypatch.setattr(orchestrator, "get_json", lambda url, timeout=10: {"error": "died"})
     assert orchestrator.probe() is None
     inf = {"status": "ok", "strategies": 300, "heroes": 54}
-    served = {"data": {"status": "ok", "table_count": 36, "heroes": 54}, "inference": inf,
-              "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
+    served = {"data": {"status": "ok", "state": "current", "table_count": 36, "heroes": 54},
+              "inference": inf, "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
     ok, lines = orchestrator.verdict(dict(served, board={"seconds": 2.4, "picks": six}))
     assert ok and any(line.endswith("a board in 2.4s") for line in lines)
     ok, lines = orchestrator.verdict(dict(served, board=None))

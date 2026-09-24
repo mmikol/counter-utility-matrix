@@ -135,9 +135,10 @@ def test_query_is_read_only(ctx):
 
 @pytest.mark.invariant
 def test_db_status_and_roster(ctx):
-    _, status = tools.run_tool(ctx, "db_status")
+    text, status = tools.run_tool(ctx, "db_status")
     # 33: map_strategy went with counterpick.gg (migration 019)
     assert status["table_count"] >= 33 and status["counts"]["heroes"] > 40
+    assert status["state"] == "current" and "state: current" in text
     assert status["counts"]["counters"] >= 100
     assert {s["source"] for s in status["snapshots"]} == {"blizzard"}
     _, roster = tools.run_tool(ctx, "roster")
@@ -240,6 +241,8 @@ def test_http_transport_guards_get_origin_and_health(http_server):
     assert status == 403
     health = json.load(urllib.request.urlopen(http_server + "/health", timeout=10))
     assert health["status"] in ("ok", "degraded")
+    if health["status"] == "ok":
+        assert health["state"] in ("empty", "stale", "unfilled", "current")
 
     def delete(path="/mcp", headers=None):
         request = urllib.request.Request(http_server + path, method="DELETE",
@@ -261,7 +264,67 @@ def test_db_migrate_is_idle_when_the_ledger_is_current(ctx):
     assert data["applied"] == [] and text.startswith("db_migrate: applied 0")
 
 
-# Neither of these touches the database, so they run without one (as CI does).
+# None of these touches the database, so they run without one (as CI does).
+
+def test_readiness_is_the_first_unmet_condition(monkeypatch):
+    """One definition of ready for the entrypoint, compose, /health and the
+    orchestrator: no tables, then a pending migration, then no heroes."""
+    from db.psql import schema
+
+    class Rows:
+        def __init__(self, n):
+            self.n = n
+
+        def fetchone(self):
+            return (self.n,)
+
+    class Connection:
+        def __init__(self, heroes):
+            self.heroes = heroes
+
+        def execute(self, sql, params=None):
+            assert "heroes" in sql
+            return Rows(self.heroes)
+
+    def board(tables, pending, heroes):
+        monkeypatch.setattr(schema, "table_count", lambda cx: tables)
+        monkeypatch.setattr(schema, "pending", lambda cx: pending)
+        return schema.state(Connection(heroes))
+
+    assert board(0, ["001_initial_schema.sql"], 0) == "empty"
+    assert board(35, ["099_future.sql"], 0) == "stale"
+    assert board(35, ["099_future.sql"], 54) == "stale"
+    assert board(35, [], 0) == "unfilled"
+    assert board(35, [], 54) == "current"
+
+
+def test_the_probe_exits_one_when_the_database_never_answers(monkeypatch, capsys):
+    from db.psql import schema
+    monkeypatch.setenv("DATABASE_URL", "postgresql://nobody@127.0.0.1:9/nowhere")
+    monkeypatch.setattr(schema, "CONNECT_TRIES", 2)
+    monkeypatch.setattr(schema.time, "sleep", lambda seconds: None)
+    assert schema.main() == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and "never became reachable" in captured.err
+
+
+def test_health_is_degraded_when_the_database_is_out_of_reach_and_crashes_otherwise(
+        tmp_path, monkeypatch):
+    """The data container's /health answers degraded for every way the database
+    can be out of reach, and nothing else: a bug in the tool still surfaces."""
+    from db.mcp import server
+    from db.mcp.__main__ import _status
+    monkeypatch.setattr(server, "AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    status = _status(tools.Context(dsn="postgresql://nobody@127.0.0.1:9/nowhere"))
+    reply = status()
+    assert reply["status"] == "degraded" and reply["error"]
+
+    def broken(ctx, name, /, **arguments):
+        raise RuntimeError("a bug in db_status")
+    monkeypatch.setattr(tools, "run_tool", broken)
+    with pytest.raises(RuntimeError, match="a bug"):
+        status()
+
 
 def test_metrics_tool_serves_the_vocabulary():
     text, data = tools.run_tool(tools.Context(dsn="postgresql://nowhere"), "metrics")

@@ -3,6 +3,7 @@
     default_dsn        $DATABASE_URL, or the embedded cluster at
                        db/psql/cluster (pgserver, first touch); a host
                        without pgserver must set DATABASE_URL
+    UNREACHABLE        the errors that mean the database is out of reach
     register_source    the `sources` row a page or a file becomes, upserted;
                        every table's rows carry its source_id
     identifier         a table or column name on its way into SQL text,
@@ -34,6 +35,14 @@ try:
     import pgserver
 except ImportError:     # the image and CI filter it out of requirements.txt
     pgserver = None     # type: ignore[assignment]
+
+# Every way the database can be out of reach, for a reader that reports it
+# rather than crashes: the connection and its queries (psycopg.Error); no
+# pgserver and no DATABASE_URL (ImportError, from default_dsn); the embedded
+# cluster's files and socket (OSError); and pgserver's .handle_pids.json,
+# which default_dsn rewrites once and which another process starting at the
+# same moment can empty again before the retry reads it (JSONDecodeError).
+UNREACHABLE = (psycopg.Error, ImportError, OSError, json.JSONDecodeError)
 
 
 def default_dsn() -> str:

@@ -22,27 +22,10 @@ case "$role" in
     *) exec "$@" ;;
 esac
 
+# empty, stale, unfilled or current: db.psql.schema.state, the one definition
+# of ready. It waits a minute for the database to answer, then exits 1.
 db_state() {
-    python - <<'END'
-import os, time, psycopg
-from db.psql import schema
-for _ in range(60):
-    try:
-        cx = psycopg.connect(os.environ["DATABASE_URL"])
-        break
-    except psycopg.Error:
-        time.sleep(1)
-else:
-    raise SystemExit("database service never became reachable")
-if schema.table_count(cx) == 0:
-    print("empty")
-elif schema.pending(cx):
-    print("stale: " + ", ".join(schema.pending(cx)))
-elif cx.execute("select count(*) from heroes").fetchone()[0] == 0:
-    print("unfilled")
-else:
-    print("current")
-END
+    python -m db.psql.schema
 }
 
 case "$role" in
@@ -54,16 +37,26 @@ case "$role" in
             empty|unfilled)
                 echo "data: $state database - running the first build (scrapes the sources once)"
                 python -m db.mcp call db_rebuild ;;
-            stale*)
-                echo "data: schema behind the migrations ($state) - rebuilding from the caches"
+            stale)
+                echo "data: schema behind the migrations - rebuilding from the caches"
                 python -m db.mcp call db_rebuild ;;
             *)
                 echo "data: database current" ;;
         esac
         exec python -m db.mcp --http 0.0.0.0:8020 data ;;
     inference|ui|refresh)
-        until [ "$(db_state)" = "current" ]; do
-            echo "$role: waiting for the data layer to build the database"
+        # as long as the data healthcheck's start_period: 90 waits of 10 s. The
+        # probe runs as its own command, so set -e ends the container when it fails
+        waits=0
+        while :; do
+            state=$(db_state)
+            [ "$state" = "current" ] && break
+            if [ "$waits" -ge 90 ]; then
+                echo "$role: the database is still $state after 900 s - giving up" >&2
+                exit 1
+            fi
+            echo "$role: waiting for the data layer to build the database ($state)"
+            waits=$((waits + 1))
             sleep 10
         done
         case "$role" in

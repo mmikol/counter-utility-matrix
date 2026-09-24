@@ -100,13 +100,20 @@ def verdict(h: Mapping[str, Any]) -> tuple[bool, list[str]]:
         lines.append("data layer: not answering" if not data else
                      "data layer: %s" % data.get("error", data.get("status")))
     else:
-        if data.get("pending_migrations"):
+        # ready is db.psql.schema.state, which the data layer's /health carries
+        state = data.get("state")
+        if state != "current":
             ok = False
-            lines.append("data layer: schema behind the migrations (%s)"
-                         % ", ".join(data["pending_migrations"]))
-        if not data.get("heroes"):
-            ok = False
-            lines.append("data layer: the database holds no heroes yet")
+            if state == "stale":
+                lines.append("data layer: schema behind the migrations (%s)"
+                             % ", ".join(data.get("pending_migrations") or []))
+            elif state in ("empty", "unfilled"):
+                lines.append("data layer: the database holds no heroes yet")
+            elif state is None:
+                lines.append("data layer: its /health carries no state - the image"
+                             " predates this checkout (`orchestrator.py up` rebuilds it)")
+            else:
+                lines.append("data layer: the database is %s" % state)
         lines.append("data layer: %d tables, %d heroes%s, rates captured %s"
                      % (data.get("table_count", 0), data.get("heroes", 0),
                         " (%d announced, not yet playable)" % data["announced"]

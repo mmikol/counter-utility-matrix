@@ -150,9 +150,13 @@ flowchart LR
 
 The containers share one network; only `data` and `refresher` ever open a
 connection out. `docker-entrypoint.sh` takes the role as its argument
-(`data`, `inference`, `ui`, `refresh`, `sentry`); the others wait until
-the data layer reports the database current, and compose's healthchecks
-order the start the same way. [security.md](security.md) has the rest of
+(`data`, `inference`, `ui`, `refresh`, `sentry`). Readiness has one
+definition, `db.psql.schema.state`: empty, stale (a migration the ledger
+lacks), unfilled (no heroes) or current. The entrypoint asks it through
+`python -m db.psql.schema`; `inference`, `ui` and `refresh` wait for
+current, up to the data healthcheck's 900 s, then exit. The data
+container's `/health` carries the state, and compose's healthcheck and
+`orchestrator.py` wait on it. [security.md](security.md) has the rest of
 the measures.
 
 Settings, from the environment or `.env` (the refresh times are in [db.md](db.md)):

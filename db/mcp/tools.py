@@ -12,6 +12,8 @@ import json
 import os
 import re
 import sys
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 import psycopg
 from psycopg.sql import SQL
@@ -24,56 +26,63 @@ from inference import catalog, derive, engine, reach, tune
 from ui.facts import compute, model
 from ui.facts import engine as facts_engine
 
+# A tool's answer: its text, and the same as a JSON object for a structured reply.
+Reply = tuple[str, dict[str, Any]]
+Log = Callable[[str], object]       # print, a list's append, stderr's write
+
 
 class Context:
     """Where a tool call lands: the database and the page caches."""
 
-    def __init__(self, dsn=None, caches=None, log=None):
+    def __init__(self, dsn: str | None = None, caches: Mapping[str, str] | None = None,
+                 log: Log | None = None) -> None:
         self._dsn = dsn
-        self.caches = dict(CACHE_DIRS, **(caches or {}))
-        self.log = log or (lambda msg: sys.stderr.write(msg + "\n"))
+        self.caches: dict[str, str] = dict(CACHE_DIRS, **(caches or {}))
+        self.log: Log = log or (lambda msg: sys.stderr.write(msg + "\n"))
 
     @property
-    def dsn(self):
+    def dsn(self) -> str:
         if self._dsn is None:
             self._dsn = psql.default_dsn()
         return self._dsn
 
-    def connect(self):
+    def connect(self) -> psycopg.Connection:
         return psycopg.connect(self.dsn)
 
-    def cache(self, source):
+    def cache(self, source: str) -> str | None:
         return fetch.prepare_cache(self.caches[source])
 
 
 # --- the registry ----------------------------------------------------------
 
-REGISTRY = []
+# A tool as registered: its name, description, JSON schema and function.
+ToolFn = Callable[..., Reply]
+REGISTRY: list[tuple[str, str, dict[str, Any], ToolFn]] = []
 
 
-def tool(name, description, properties=None, required=()):
+def tool(name: str, description: str, properties: dict[str, Any] | None = None,
+         required: Sequence[str] = ()) -> Callable[[ToolFn], ToolFn]:
     # json_schema, not schema: db.psql.schema is imported above
     json_schema = {"type": "object", "properties": properties or {},
                    "required": list(required), "additionalProperties": False}
 
-    def decorate(fn):
-        fn.tool_name = name
+    def decorate(fn: ToolFn) -> ToolFn:
         REGISTRY.append((name, description, json_schema, fn))
         return fn
     return decorate
 
 
-def build(ctx):
+def build(ctx: Context) -> list[Tool]:
     """Bind every registered tool to a context -> [Tool]."""
     out = []
     for name, description, json_schema, fn in REGISTRY:
-        def bound(fn=fn, **arguments):
+        def bound(fn: ToolFn = fn, **arguments: Any) -> Reply:
             return fn(ctx, **arguments)
         out.append(Tool(name, description, json_schema, bound))
     return out
 
 
-def run_tool(ctx, name, /, **arguments):
+def run_tool(ctx: Context, name: str, /, **arguments: Any) -> Reply:
     """Call a registered tool by name, in-process (the refresher's and the shell's
     path), audited like a call through either door. The tool's name is positional
     only, so a tool argument called `name` (add_strategy has one) reaches the tool
@@ -91,7 +100,7 @@ REFRESH = {"refresh": {"type": "boolean",
                                       " its cached copy"}}
 
 
-def _summary(title, summary):
+def _summary(title: str, summary: Mapping[str, object]) -> Reply:
     lines = [title]
     for key, value in summary.items():
         if key == "tables":
@@ -106,10 +115,10 @@ def _summary(title, summary):
 
 @tool("list_sources", "The sources the data layer pulls from, what each"
       " supplies, and how many pages its cache holds.")
-def list_sources(ctx):
+def list_sources(ctx: Context) -> Reply:
     from db.data.blizzard import BLIZZARD
     from db.data.wiki import WIKI
-    rows = []
+    rows: list[dict[str, Any]] = []
     for source in (BLIZZARD, WIKI):
         path = ctx.caches[source.code]
         cached = len(os.listdir(path)) if os.path.isdir(path) else 0
@@ -122,7 +131,8 @@ def list_sources(ctx):
     return text, {"sources": rows}
 
 
-def _pull(ctx, source, module_path, refresh=False, **options):
+def _pull(ctx: Context, source: str, module_path: str, refresh: bool = False,
+          **options: object) -> dict[str, object]:
     import importlib
     module = importlib.import_module(module_path)
     cache = ctx.cache(source)
@@ -136,7 +146,7 @@ def _pull(ctx, source, module_path, refresh=False, **options):
 @tool("pull_heroes", "Blizzard's roster: heroes, roles, subroles, portraits,"
       " ability and perk text. Run first - everything links to heroes.",
       REFRESH)
-def pull_heroes(ctx, refresh=False):
+def pull_heroes(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_heroes: roster stored", _pull(
         ctx, "blizzard", "db.data.blizzard.heroes", refresh))
 
@@ -148,7 +158,7 @@ def pull_heroes(ctx, refresh=False):
                                 "description": "also read each hero article"
                                                " for the flags Cargo lacks"
                                                " (default true)"}))
-def pull_kits(ctx, refresh=False, supplement=True):
+def pull_kits(ctx: Context, refresh: bool = False, supplement: bool = True) -> Reply:
     return _summary("pull_kits: kit numbers stored", _pull(
         ctx, "wiki", "db.data.wiki.heroes", refresh,
         supplement=supplement))
@@ -159,7 +169,7 @@ def pull_kits(ctx, refresh=False, supplement=True):
       " map's five points, a Hybrid map's two phases, an Escort map's stretches"
       " where its article names them. Push maps have none.",
       REFRESH)
-def pull_maps(ctx, refresh=False):
+def pull_maps(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_maps: map pool stored", _pull(
         ctx, "wiki", "db.data.wiki.maps", refresh))
 
@@ -170,14 +180,14 @@ def pull_maps(ctx, refresh=False):
       " same per stage, where the article has text about the stage. Reloads"
       " map_terrain and stage_terrain whole. Run after pull_maps: a stage must"
       " exist before its terrain.", REFRESH)
-def pull_terrain(ctx, refresh=False):
+def pull_terrain(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_terrain: terrain stored", _pull(
         ctx, "wiki", "db.data.wiki.terrain", refresh))
 
 
 @tool("pull_patches", "The wiki's patch list, so every rates snapshot can say"
       " which game version it measured.", REFRESH)
-def pull_patches(ctx, refresh=False):
+def pull_patches(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_patches: patches stored", _pull(
         ctx, "wiki", "db.data.wiki.patches", refresh))
 
@@ -185,7 +195,7 @@ def pull_patches(ctx, refresh=False):
 @tool("pull_seasons", "The wiki's Season pages: every season that has started,"
       " with its start date. Restamps every rates snapshot with its season. Run"
       " before pull_rates.", REFRESH)
-def pull_seasons(ctx, refresh=False):
+def pull_seasons(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_seasons: seasons stored", _pull(
         ctx, "wiki", "db.data.wiki.seasons", refresh))
 
@@ -194,14 +204,14 @@ def pull_seasons(ctx, refresh=False):
       " by rank tier and by map (Competitive Role Queue - the page offers no"
       " Open Queue - console, Americas). Slow when uncached: ~40 pages, 5s apart.",
       REFRESH)
-def pull_rates(ctx, refresh=False):
+def pull_rates(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_rates: snapshot stored", _pull(
         ctx, "blizzard", "db.data.blizzard.meta", refresh))
 
 
 @tool("pull_playstyles", "The wiki's team-composition page: which playstyle"
       " (dive, brawl, poke) each hero belongs to.", REFRESH)
-def pull_playstyles(ctx, refresh=False):
+def pull_playstyles(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_playstyles: styles stored", _pull(
         ctx, "wiki", "db.data.wiki.playstyles", refresh))
 
@@ -209,7 +219,7 @@ def pull_playstyles(ctx, refresh=False):
 @tool("pull_synergies", "The Synergy section of every hero's wiki article: one"
       " row per pair, score 2 when both articles name each other, 1 when one"
       " does, the wiki's advice as the note. Run after pull_heroes.", REFRESH)
-def pull_synergies(ctx, refresh=False):
+def pull_synergies(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_synergies: pairs stored", _pull(
         ctx, "wiki", "db.data.wiki.synergies", refresh))
 
@@ -218,7 +228,7 @@ def pull_synergies(ctx, refresh=False):
       " written cell read as a verdict and stored as a directed edge, one row ="
       " countered_by answers hero. Reloads the table whole. Run after"
       " pull_heroes.", REFRESH)
-def pull_counters(ctx, refresh=False):
+def pull_counters(ctx: Context, refresh: bool = False) -> Reply:
     return _summary("pull_counters: counters stored", _pull(
         ctx, "wiki", "db.data.wiki.matchups", refresh))
 
@@ -234,14 +244,14 @@ PULLS = [("pull_heroes", "blizzard"), ("pull_kits", "wiki"),
 
 @tool("load_authored", "Store the one input a user writes: the mirror of the"
       " strategies in inference/strategies/. A whole-truth reload.")
-def load_authored(ctx):
+def load_authored(ctx: Context) -> Reply:
     with ctx.connect() as cx:
         cat = catalog.load()
         if any(h.pending for h in cat) and derive.available():
             # drafts on a host with the CLI: the engine derives them now
             ctx.log(derive.derive_rendered(derive.derive(log=ctx.log)))
             cat = catalog.load()
-        summary = catalog.mirror(cx, cat)
+        summary: dict[str, object] = dict(catalog.mirror(cx, cat))
         pending = [h.id for h in cat if h.pending]
         if pending:
             summary["pending"] = len(pending)
@@ -254,8 +264,8 @@ def load_authored(ctx):
 @tool("sync_all", "Every pull_* tool in dependency order, then the strategies"
       " mirror, then the CSV mirror. On a populated database this is an"
       " update: entities refresh in place, rates append a snapshot.", REFRESH)
-def sync_all(ctx, refresh=False):
-    results = {}
+def sync_all(ctx: Context, refresh: bool = False) -> Reply:
+    results: dict[str, Any] = {}
     for name, _ in PULLS:
         ctx.log("=== %s ===" % name)
         results[name] = run_tool(ctx, name, refresh=refresh)[1]
@@ -267,22 +277,25 @@ def sync_all(ctx, refresh=False):
 
 # --- the database's life ----------------------------------------------------
 
-@tool("db_status", "Which database the tools are pointed at, its table and"
+@tool("db_status", "Which database the tools are pointed at, its state (empty,"
+      " stale, unfilled or current - what the containers wait on), its table and"
       " row counts, and the rates snapshots it holds.")
-def db_status(ctx):
+def db_status(ctx: Context) -> Reply:
     with ctx.connect() as cx:
+        ready = schema.state(cx)
         tables = schema.table_count(cx)
-        counts, snaps = {}, []
+        counts: dict[str, int] = {}
+        snaps: list[dict[str, Any]] = []
         if tables:
             for t in ("heroes", "abilities", "maps", "hero_meta", "map_meta",
                       "counters", "synergies", "strategies"):
-                if cx.execute("select to_regclass(%s)", (t,)).fetchone()[0]:
-                    counts[t] = cx.execute(
-                        SQL("select count(*) from {}").format(psql.identifier(t))).fetchone()[0]
+                if psql.scalar(cx.execute("select to_regclass(%s)", (t,))):
+                    counts[t] = psql.scalar(cx.execute(
+                        SQL("select count(*) from {}").format(psql.identifier(t))))
             if "heroes" in counts:
-                counts["announced"] = cx.execute(
-                    "select count(*) from heroes where status = 'announced'").fetchone()[0]
-            if cx.execute("select to_regclass('meta_snapshots')").fetchone()[0]:
+                counts["announced"] = psql.scalar(cx.execute(
+                    "select count(*) from heroes where status = 'announced'"))
+            if psql.scalar(cx.execute("select to_regclass('meta_snapshots')")):
                 snaps = [{"id": i, "captured": str(c), "queue": q, "source": s}
                          for i, c, q, s in cx.execute("""
                     select ms.snapshot_id, ms.captured_at::date, ms.queue,
@@ -291,19 +304,19 @@ def db_status(ctx):
         missing = schema.pending(cx) if tables else []
     dsn = re.sub(r"//[^@/]*@", "//", ctx.dsn)
     newest = max((s["captured"] for s in snaps), default=None)
-    text = "database: %s\ntables: %d\n%s\nsnapshots: %d%s%s" % (
-        dsn, tables, "\n".join("  %-16s %d" % kv for kv in counts.items()),
+    text = "database: %s\nstate: %s\ntables: %d\n%s\nsnapshots: %d%s%s" % (
+        dsn, ready, tables, "\n".join("  %-16s %d" % kv for kv in counts.items()),
         len(snaps), ", newest capture %s" % newest if newest else "",
         "\nPENDING MIGRATIONS (rebuild): %s" % ", ".join(missing)
         if missing else "")
-    return text, {"dsn": dsn, "table_count": tables, "counts": counts,
+    return text, {"dsn": dsn, "state": ready, "table_count": tables, "counts": counts,
                   "snapshots": snaps, "newest_capture": newest,
                   "pending_migrations": missing}
 
 
 @tool("db_init", "Apply the migrations to an EMPTY database (schema only;"
       " sync_all fills it). Refuses a database that already has tables.")
-def db_init(ctx):
+def db_init(ctx: Context) -> Reply:
     with ctx.connect() as cx:
         if schema.table_count(cx):
             raise ToolError("the database already has tables; db_rebuild"
@@ -316,7 +329,7 @@ def db_init(ctx):
 @tool("db_migrate", "Apply the migrations the ledger has not recorded, in"
       " place: a populated database catching up with the files without a"
       " rebuild. Nothing pending is not an error.")
-def db_migrate(ctx):
+def db_migrate(ctx: Context) -> Reply:
     with ctx.connect() as cx:
         names = schema.pending(cx)
         todo = [(p, sql) for p, sql in schema.read_migrations()
@@ -328,7 +341,7 @@ def db_migrate(ctx):
 
 @tool("db_rebuild", "Drop everything, reapply the migrations and run"
       " sync_all.", REFRESH)
-def db_rebuild(ctx, refresh=False):
+def db_rebuild(ctx: Context, refresh: bool = False) -> Reply:
     with ctx.connect() as cx:
         dropped = schema.rebuild(cx, quiet=True)
     results = run_tool(ctx, "sync_all", refresh=refresh)[1]
@@ -337,14 +350,14 @@ def db_rebuild(ctx, refresh=False):
 
 
 @tool("export_csv", "Refresh db/raw/*.csv: one CSV per table.")
-def export_csv(ctx):
+def export_csv(ctx: Context) -> Reply:
     with ctx.connect() as cx:
         counts = psql.export(cx)
     return ("export_csv: %d tables mirrored to db/raw" % len(counts),
             {"row_counts": counts})
 
 
-def write_tool_docs(path=None):
+def write_tool_docs(path: str | None = None) -> str:
     """The tool reference - every registered tool, its description and its
     arguments - generated into docs/mcp.md between its markers."""
     path = path or os.path.join(ROOT, "docs", "mcp.md")
@@ -370,7 +383,7 @@ def write_tool_docs(path=None):
 @tool("db_docs", "Regenerate the generated sections of the docs: the ERD and data"
       " dictionary in docs/db.md from the live schema, the catalog and vocabulary in"
       " docs/inference.md from the strategies files, the tool reference in docs/mcp.md.")
-def db_docs(ctx):
+def db_docs(ctx: Context) -> Reply:
     with ctx.connect() as cx:
         text = schema.generate_docs(cx)
     paths = [p for p in (catalog.write_docs(catalog.load()), write_tool_docs()) if p]
@@ -393,20 +406,20 @@ MAX_QUERY_BYTES = 1 << 20              # what one query may return
 MAX_CELL = 2000                        # characters per cell
 
 
-def reader_dsn(dsn):
+def reader_dsn(dsn: str) -> str:
     """The same database, connected as the reader: a non-superuser session
     cannot SET ROLE back up."""
     parts = psycopg.conninfo.conninfo_to_dict(dsn)
     parts["user"] = READER_ROLE
     parts["password"] = READER_ROLE
-    return psycopg.conninfo.make_conninfo(**parts)
+    return psycopg.conninfo.make_conninfo("", **parts)
 
 
 @tool("query", "Run read-only SQL against the database (SELECT/WITH only,"
       " one statement, first 200 rows). Every table is documented in"
       " the data dictionary in docs/db.md.",
       {"sql": {"type": "string", "description": "the statement"}}, ["sql"])
-def query(ctx, sql):
+def query(ctx: Context, sql: str) -> Reply:
     body = sql.strip().rstrip(";").strip()
     if ";" in body or not body.lower().startswith(READ_ONLY_STARTS):
         raise ToolError("query is read-only: one SELECT/WITH statement")
@@ -423,7 +436,8 @@ def query(ctx, sql):
         columns = [d.name for d in cursor.description] if cursor.description else []
         rows = cursor.fetchmany(200)
         cx.rollback()
-    out, size = [], 0
+    out: list[list[object]] = []
+    size = 0
     for row in rows:
         cells = []
         for v in row:
@@ -440,10 +454,11 @@ def query(ctx, sql):
     return text, {"columns": columns, "rows": out, "truncated": len(rows) == 200}
 
 
-def _plain(value):
+def _plain(value: object) -> object:
     """A cell as JSON carries it: dates and times as ISO text, the rest as is."""
-    if hasattr(value, "isoformat"):
-        return value.isoformat()
+    isoformat = getattr(value, "isoformat", None)
+    if isoformat is not None:
+        return isoformat()
     if isinstance(value, (int, float, str, bool)) or value is None:
         return value
     return str(value)
@@ -470,7 +485,7 @@ BOARD = {
 @tool("roster", "Every hero with role, subrole, health pool, portrait and status"
       " (released, or announced with its release day - shown, never picked), plus"
       " the map pool with modes - the vocabulary the board tools accept.")
-def roster(ctx):
+def roster(ctx: Context) -> Reply:
     with ctx.connect() as cx:
         world = model.load(cx)
     heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
@@ -494,7 +509,9 @@ def roster(ctx):
       " once both teams have picks. Numbered F1.. for citation.",
       dict(BOARD, format={"type": "string", "enum": ["lines", "json"],
                           "description": "lines (default) or json"}))
-def facts(ctx, map=None, red=(), blue=(), bans=(), side="", format="lines"):
+def facts(ctx: Context, map: str | None = None, red: Sequence[str] = (),
+          blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "",
+          format: str = "lines") -> Reply:
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
@@ -529,8 +546,9 @@ COMPACT_TERMS = 15        # the heaviest terms a compact reply carries
                                                       " (the %d heaviest terms, each an id"
                                                       " and its weighted value)"
                                                       % COMPACT_TERMS}))
-def infer(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6,
-          compact=False):
+def infer(ctx: Context, map: str | None = None, red: Sequence[str] = (),
+          blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "",
+          top: int = 5, pool: int = 6, compact: bool = False) -> Reply:
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
@@ -544,7 +562,7 @@ def infer(ctx, map=None, red=(), blue=(), bans=(), side="", top=5, pool=6,
     return result.rendered(), result.to_dict()
 
 
-def _compact(result):
+def _compact(result: engine.Result) -> Reply:
     """A result small enough for a tool reply under a playbook of hundreds:
     the comp, the heuristics that apply but whose metric does not vary on this
     board, and the largest terms."""
@@ -571,7 +589,8 @@ def _compact(result):
 @tool("evaluate", "Score a FULL blue six against the strategies without"
       " searching: the breakdown per strategy, constraint violations, and"
       " how it ranks against the optimum.", BOARD, ["blue"])
-def evaluate(ctx, blue, map=None, red=(), bans=(), side=""):
+def evaluate(ctx: Context, blue: Sequence[str], map: str | None = None,
+             red: Sequence[str] = (), bans: Sequence[str] = (), side: str = "") -> Reply:
     # blue has no default: the schema marks it required and the engine takes a
     # full six, so an empty one was never a call worth reaching the engine
     with ctx.connect() as cx:
@@ -590,7 +609,7 @@ def evaluate(ctx, blue, map=None, red=(), bans=(), side=""):
       " cannot be reached is one the facts or the strategies cannot see.",
       {"hero": {"type": "string", "description": "a released hero (any spelling)"}},
       ["hero"])
-def reach_tool(ctx, hero):          # _tool: inference.reach holds the bare name
+def reach_tool(ctx: Context, hero: str) -> Reply:   # _tool: inference.reach holds the bare name
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
@@ -625,7 +644,9 @@ def reach_tool(ctx, hero):          # _tool: inference.reach holds the bare name
                     "description": "{heuristic id: 0..10} - weights to score this board"
                                    " under instead of the files' (the playbook tab's"
                                    " sliders); the files are untouched"}))
-def board(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6, weights=None):
+def board(ctx: Context, map: str | None = None, red: Sequence[str] = (),
+          blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "",
+          pool: int = 6, weights: dict[str, Any] | None = None) -> Reply:
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
@@ -641,7 +662,7 @@ def board(ctx, map=None, red=(), blue=(), bans=(), side="", pool=6, weights=None
       " ∪ ASSUMPTIONS: every markdown strategy with its kind (constraint, heuristic or"
       " assumption), a constraint's form (limit, scored, draft), metric, direction, weight"
       " and expressions.")
-def strategies(ctx):
+def strategies(ctx: Context) -> Reply:
     cat = catalog.load()
     pending = [h.id for h in cat if h.pending]
     text = catalog.render(cat)
@@ -667,8 +688,8 @@ def strategies(ctx):
        "by": {"type": "string", "description": "who asked, for the log line (default"
                                               " claude-code-session; the board says so)"}},
       ["id", "field", "value", "reason"])
-def tune_tool(ctx, id, field, value, reason,   # _tool: inference.tune holds the bare name
-              by="claude-code-session"):
+def tune_tool(ctx: Context, id: str, field: str, value: object,  # _tool: tune holds the bare name
+              reason: str, by: str = "claude-code-session") -> Reply:
     try:
         change = tune.tune(id, field, value, reason, by=str(by or "claude-code-session")[:40])
         with ctx.connect() as cx:
@@ -683,7 +704,7 @@ def tune_tool(ctx, id, field, value, reason,   # _tool: inference.tune holds the
       " meaning - team.*, enemy.* (the same for the red side), matchup.*, map.*,"
       " world.* - and which are text. What /strategy reads to infer a heuristic's"
       " metric or a constraint's expression from prose.")
-def metrics(ctx):
+def metrics(ctx: Context) -> Reply:
     reg = compute.registry()
     numeric = {k: v for k, v in reg.items() if k not in compute.TEXT_METRICS}
     lines = ["%-32s %s%s" % (k, v, "  (text)" if k in compute.TEXT_METRICS else "")
@@ -724,7 +745,8 @@ STRATEGY_FIELDS = {
             "reason": {"type": "string", "description": "why it was added, in a sentence"}},
            **STRATEGY_FIELDS),
       ["id", "name", "kind", "body"])
-def add_strategy(ctx, id, name, kind, body, reason="", **fields):
+def add_strategy(ctx: Context, id: str, name: str, kind: str, body: str, reason: str = "",
+                 **fields: Any) -> Reply:
     try:
         category = fields.pop("category", "general")
         fields.pop("kind", None)
@@ -746,7 +768,7 @@ def add_strategy(ctx, id, name, kind, body, reason="", **fields):
             "reason": {"type": "string", "description": "how the fields follow from the prose"}},
            **STRATEGY_FIELDS),
       ["id", "reason"])
-def infer_strategy(ctx, id, reason, **fields):
+def infer_strategy(ctx: Context, id: str, reason: str, **fields: Any) -> Reply:
     try:
         done = tune.complete(id, fields, reason)
         with ctx.connect() as cx:
@@ -763,7 +785,7 @@ def infer_strategy(ctx, id, reason, **fields):
       " the claude CLI is signed in (the host); elsewhere drafts stay pending.",
       {"ids": {"type": "array", "items": {"type": "string"},
                "description": "which drafts (default: all)"}})
-def derive_strategies(ctx, ids=None):
+def derive_strategies(ctx: Context, ids: list[str] | None = None) -> Reply:
     result = derive.derive(ids, log=ctx.log)
     if result["derived"]:
         with ctx.connect() as cx:
@@ -774,7 +796,7 @@ def derive_strategies(ctx, ids=None):
 @tool("tuning_log", "The audit trail of every change to the strategies'"
       " frontmatter, newest last.",
       {"lines": {"type": "integer", "description": "how many (default 20)"}})
-def tuning_log(ctx, lines=20):
+def tuning_log(ctx: Context, lines: int = 20) -> Reply:
     tail = tune.log_tail(lines)
     return "\n".join(tail) or "no tuning yet", {"lines": tail}
 
@@ -782,7 +804,7 @@ def tuning_log(ctx, lines=20):
 class StrategyResources:
     """The strategies files (and the tuning log), readable as MCP resources."""
 
-    def list(self):
+    def list(self) -> list[dict[str, str]]:
         out = [{"uri": "strategy://" + h.id, "name": h.name,
                 "description": "%s (%s)" % (h.kind, h.category),
                 "mimeType": "text/markdown"} for h in catalog.load()]
@@ -791,7 +813,7 @@ class StrategyResources:
                     "mimeType": "text/markdown"})
         return out
 
-    def read(self, uri):
+    def read(self, uri: str) -> dict[str, str]:
         hid = uri.replace("strategy://", "", 1)
         if hid == "tuning-log":
             return {"uri": uri, "mimeType": "text/markdown",

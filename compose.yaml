@@ -105,9 +105,10 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      # healthy once the database is built and the MCP server answers
+      # healthy once the MCP server answers and the database's state is
+      # current (db.psql.schema.state: built, migrated, filled)
       test: ["CMD", "python", "-c",
-             "import json,urllib.request;d=json.load(urllib.request.urlopen('http://localhost:8020/health'));assert d['status']=='ok' and d['heroes']>0 and not d['pending_migrations']"]
+             "import json,urllib.request;d=json.load(urllib.request.urlopen('http://localhost:8020/health'));assert d.get('state')=='current'"]
       interval: 10s
       timeout: 5s
       retries: 30

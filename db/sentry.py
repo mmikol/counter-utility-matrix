@@ -43,7 +43,7 @@ from inference import catalog as catalog_module
 
 EVERY = float(os.environ.get("COUNTRIX_SENTRY_EVERY", "30"))
 
-Log = Callable[[str], None]
+Log = Callable[[str], object]
 
 REPORT_PATH = os.path.join(RAW_DIR, "sentry.json")
 QUARANTINE = ".quarantined"

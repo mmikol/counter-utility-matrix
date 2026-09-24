@@ -230,7 +230,7 @@ def parse_announcement(text: str | None) -> Announcement | None:
 
 def announce_heroes(cursor: psycopg.Cursor, session: requests.Session, names: Iterable[str],
                     hero_ids: dict[str, int], cache_dir: str | None, source_id: int,
-                    log: Callable[[str], None] = print) -> tuple[list[str], list[str]]:
+                    log: Callable[[str], object] = print) -> tuple[list[str], list[str]]:
     """Heroes the Cargo table names that the roster lacks: those whose
     article is marked upcoming get a row - role, subrole, health, release
     day, status announced - so their kit loads and the board can show
@@ -593,7 +593,7 @@ def _load_perks(cursor: psycopg.Cursor, hero_id: int, perks: list[KitEntry],
 
 def run(connection: psycopg.Connection, cache_dir: str | None = None,
         session: requests.Session | None = None, supplement: bool = True,
-        log: Callable[[str], None] = print) -> dict[str, object]:
+        log: Callable[[str], object] = print) -> dict[str, object]:
     """Pull the Cargo table (and each hero article), clean, store."""
     session = fetch.session(session)
 

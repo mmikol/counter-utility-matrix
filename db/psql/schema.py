@@ -3,18 +3,28 @@ and the generated documentation.
 
     read_migrations, apply   the files in order, and applying them
     applied, pending         the ledger against the files on disk
+    state                    how ready the database is: empty, stale,
+                             unfilled or current - the one definition every
+                             reader of readiness asks
     drop_all, rebuild        drop every table and reapply every migration
     generate_docs            the ERD and data dictionary of docs/db.md from
                              the live schema
+
+    python -m db.psql.schema     print the state (the container entrypoint's
+                                 probe); exit 1 when the database never answers
 """
 
 import glob
 import os
 import re
+import sys
+import time
+from typing import Literal
 
+import psycopg
 from psycopg.sql import SQL, Identifier
 
-from db import ROOT, embed
+from db import ROOT, embed, psql
 
 MIGRATIONS_DIR = os.path.join(ROOT, "db", "psql", "migrations")
 
@@ -78,6 +88,25 @@ def table_count(connection):
     return connection.execute(
         "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'"
     ).fetchone()[0]
+
+
+State = Literal["empty", "stale", "unfilled", "current"]
+
+
+def state(connection: psycopg.Connection) -> State:
+    """How ready the database is, named by its first unmet condition: empty
+    (no tables), stale (a migration file the ledger has not recorded),
+    unfilled (no heroes yet) or current. The one definition of ready: the
+    container entrypoint asks it through main(), db_status reports it, the
+    data container's /health carries it, and compose's healthcheck and
+    orchestrator.py wait on it."""
+    if table_count(connection) == 0:
+        return "empty"
+    if pending(connection):
+        return "stale"
+    if psql.scalar(connection.execute("SELECT count(*) FROM heroes")) == 0:
+        return "unfilled"
+    return "current"
 
 
 def drop_all(connection):
@@ -218,3 +247,34 @@ def generate_docs(connection, path=None):
                 "`%s.%s`" % r if r else ""))
     embed(path, "dictionary", "\n".join(dd))
     return "regenerated the schema sections of docs/db.md: %d tables" % len(tables)
+
+
+# --- the entrypoint's probe ----------------------------------------------
+
+CONNECT_TRIES = 60          # one a second: a database container starting up
+
+
+def main() -> int:
+    """Print the state for docker-entrypoint.sh, and the pending migrations
+    on stderr when it is stale. A database that never answers is a line on
+    stderr and exit 1, which ends the container under `set -e`."""
+    for _ in range(CONNECT_TRIES):
+        try:
+            cx = psycopg.connect(psql.default_dsn())
+            break
+        except psycopg.OperationalError:
+            time.sleep(1)
+    else:
+        sys.stderr.write("the database never became reachable (%d tries, a second apart)\n"
+                         % CONNECT_TRIES)
+        return 1
+    with cx:
+        found = state(cx)
+        if found == "stale":
+            sys.stderr.write("pending migrations: %s\n" % ", ".join(pending(cx)))
+    print(found)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
