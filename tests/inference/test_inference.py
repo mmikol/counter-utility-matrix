@@ -147,6 +147,9 @@ def _traced_board(monkeypatch, *, parallel, breaks_after=None, blue=("Ana",), re
         def resolve(self, *a):
             return None, [], [], []
 
+        def scale_to(self, best):
+            pass
+
     def infer(world, map_name=None, red=(), blue=(), bans=(), side="", *, solved=None, **kw):
         trace.append(_Call("infer", enemy=tuple(red), locked=tuple(blue), solved=solved,
                            seat=kw.get("seat", "blue")))
@@ -165,13 +168,12 @@ def _traced_board(monkeypatch, *, parallel, breaks_after=None, blue=("Ana",), re
         return Fake()
 
     monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: parallel)
-    monkeypatch.setattr(engine, "_workers", lambda: ("pool", 6))
+    monkeypatch.setattr(engine, "_workers", lambda: engine.Workers("pool", 6))
     monkeypatch.setattr(engine, "_drop_workers", lambda: trace.append(_Call("drop_workers")))
     monkeypatch.setattr(engine, "_Split", Split)
     monkeypatch.setattr(engine, "infer", infer)
     monkeypatch.setattr(engine, "current", current)
     monkeypatch.setattr(engine, "_countered", countered)
-    monkeypatch.setattr(engine, "_finish", lambda result, best: None)
     monkeypatch.setattr(engine, "_momentum", lambda *a, **kw: {"verdict": "-"})
     monkeypatch.setattr(engine, "_plan", lambda *a: "-")
     monkeypatch.setattr(engine, "legal_shapes", lambda catalog: [])
@@ -710,9 +712,8 @@ def test_the_momentum_verdict_reads_the_two_current_comps():
     fix = catalog.load(FIXTURE_PLAYBOOK)
 
     def comp(blue, score, best, partial=False):
-        r = engine.Result("current", None, [], blue, blue, fix)
-        r.score, r.best, r.partial = score, best, partial
-        return r
+        return engine.Result(kind="current", map_name=None, red=[], blue=blue, locked=blue,
+                             catalog=fix, score=score, best=best, partial=partial)
     even = engine._momentum(comp(["a"], 8, 10), comp(["b"], 7.8, 10), None)
     assert even["verdict"].startswith("even") and even["blue"] == 80 and even["red"] == 78
     blue = engine._momentum(comp(["a"] * 6, 9, 10), comp(["b"] * 6, 5, 10),
@@ -829,9 +830,8 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     red_lean = theirs["style_lean"] or theirs["style_top"]
     assert red_lean == "brawl"
     # a real Result, not a stand-in: _plan reads .facts, which Result defines
-    six = engine.Result("infer", m.name, ["Reinhardt", "Zarya"], [], [], rules)
-    six.playstyle = "brawl"
-    six.contributions = terms
+    six = engine.Result(kind="infer", map_name=m.name, red=["Reinhardt", "Zarya"], blue=[],
+                        locked=[], catalog=rules, playstyle="brawl", contributions=terms)
     plan = engine._plan(world, m, "", [], red_h, six)                   # a mirror
     assert "(Reinhardt, Zarya) lean brawl too: %s." % engine.SAME_LEAN["brawl"] in plan
     assert engine.THEIR_LEAN["brawl"] not in plan
@@ -864,11 +864,12 @@ def test_the_rendered_breakdown_marks_a_need():
     """A need reads at or below zero by design, so the breakdown says which
     terms are needs; the flag rides to_dict() on each contribution."""
     from inference import engine
-    r = engine.Result("evaluate", None, [], [], [], [])
-    r.contributions = [{"id": "a-reward", "kind": "heuristic", "form": "heuristic",
-                        "applies": True, "weighted": 0.25, "metric": None, "need": False},
-                       {"id": "a-need", "kind": "heuristic", "form": "heuristic",
-                        "applies": True, "weighted": -0.11, "metric": None, "need": True}]
+    r = engine.Result(kind="evaluate", map_name=None, red=[], blue=[], locked=[], catalog=[],
+                      contributions=[
+                          {"id": "a-reward", "kind": "heuristic", "form": "heuristic",
+                           "applies": True, "weighted": 0.25, "metric": None, "need": False},
+                          {"id": "a-need", "kind": "heuristic", "form": "heuristic",
+                           "applies": True, "weighted": -0.11, "metric": None, "need": True}])
     assert "breakdown: a-reward +0.25 · a-need -0.11 (need)" in r.rendered()
     assert [c["need"] for c in r.to_dict()["contributions"]] == [False, True]
 
