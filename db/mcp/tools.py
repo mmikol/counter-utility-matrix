@@ -254,7 +254,7 @@ def load_authored(ctx: Context) -> Reply:
             # drafts on a host with the CLI: the engine derives them now
             ctx.log(derive.derive_rendered(derive.derive(log=ctx.log)))
             cat = catalog.load()
-        summary: dict[str, object] = dict(catalog.mirror(cx, cat))
+        summary = catalog.mirror(cx, cat)
         pending = [h.id for h in cat if h.pending]
         if pending:
             summary["pending"] = len(pending)
