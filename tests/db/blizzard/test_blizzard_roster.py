@@ -2,8 +2,6 @@
 hero cards, abilities and perks, and the pull over them. No database, no
 network: the pages are inline HTML."""
 
-import itertools
-
 import pytest
 from bs4 import BeautifulSoup
 
@@ -18,6 +16,7 @@ from db.data.blizzard.heroes import (
     parse_roster,
     parse_subroles,
 )
+from tests.db.recording import RecordingConnection
 
 
 def soup(page):
@@ -201,32 +200,6 @@ def test_a_malformed_perks_section_is_refused_by_name(page, reason):
 
 # --- the pull over the pages ------------------------------------------------
 
-class _Cursor:
-    """Records each statement; every RETURNING reads back the next id."""
-
-    def __init__(self):
-        self.statements, self._ids = [], itertools.count(1)
-
-    def execute(self, sql, params=()):
-        self.statements.append((sql, params))
-        return self
-
-    def fetchone(self):
-        return (next(self._ids),)
-
-
-class _Connection:
-    def __init__(self):
-        self.cursors = []
-
-    def cursor(self):
-        self.cursors.append(_Cursor())
-        return self.cursors[-1]
-
-    def commit(self):
-        pass
-
-
 def test_a_hero_page_that_will_not_fetch_is_recorded_and_the_rest_are_stored(monkeypatch):
     """A hero page gone from the cache and the network alike is one missing
     line, not a failed pull: the roster and every other hero page are still
@@ -236,7 +209,7 @@ def test_a_hero_page_that_will_not_fetch_is_recorded_and_the_rest_are_stored(mon
             raise fetch.FetchError("%s failed after 3 attempts: gone" % url)
         return HERO if key == "tracer" else ROSTER
     monkeypatch.setattr(blizzard_heroes, "cached_get", pages)
-    connection = _Connection()
+    connection = RecordingConnection()
     summary = blizzard_heroes.run(connection, fetch.PullContext(None, log=lambda line: None))
     assert [line.split(":")[0] for line in summary["missing"]] == ["Ana"]
     assert summary["heroes"] == 2 and summary["abilities"] == 2 and summary["perks"] == 4
