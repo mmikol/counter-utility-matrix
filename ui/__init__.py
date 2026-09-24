@@ -1,10 +1,10 @@
 """The UI LAYER: the board and the facts behind it.
 
 Two things share this package. facts/ is not presentation: it is the FACTS
-kernel - the World, the metrics registry, the FactSet - that inference/ and
-db/mcp import, so the solver, the deriver and the door all read the numbers
-the board shows. board.py, pages.py and static/ are the only presentation
-code, and no other layer imports them.
+kernel - the World, the metrics registry, the FactSet - that inference/,
+db/mcp and scripts/reach.py import, so the solver, the deriver and the door
+all read the numbers the board shows. board.py, pages.py and static/ are
+the only presentation code, and no other layer imports them.
 
     facts/      the World (the database in memory), the metrics registry,
                 and the FactSet - every fact about a map and two teams

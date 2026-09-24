@@ -416,7 +416,20 @@ side each team holds.
 
 ## What reads this package
 
-The inference layer's solver (`compute`, `team`, `draft`) and engine
-(`board_facts`, `factset`, `model`, `team`, `draft`), the inference
-service, and the MCP tools `roster`, `facts`, `infer`, `evaluate` and
-`board` - all through the same functions the board calls.
+No other layer imports the board or its pages. `ui/facts` is read by the
+inference layer, the door and the reach recorder, all through the same
+functions the board calls:
+
+| reader | what it imports from `ui/facts` |
+| --- | --- |
+| the objective and the scale (`inference/scoring.py`, `inference/scale.py`) | `compute`, `team`, `model` |
+| the shapes (`inference/shapes.py`) | `draft` |
+| the search (`inference/solver.py`) | `model` |
+| the engine (`inference/engine.py`) | `board_facts`, `compute`, `factset`, `model`, `draft` |
+| the result and plan records (`inference/result.py`, `inference/plan.py`) | `factset`, `team`, `model`, `draft` |
+| the pool and reach (`inference/parallel.py`, `inference/reach.py`) | `model`, `draft` |
+| the catalog's checks and the deriver (`inference/strategy.py`, `inference/catalog.py`, `inference/derive.py`) | `compute` - the metric vocabulary |
+| the inference service (`inference/serve.py`) | `tables`, `draft` |
+| the door's `roster`, `facts`, `infer`, `evaluate`, `reach` and `board` tools (`db/mcp/facts.py`, `db/mcp/solver.py`, `db/mcp/boards.py`) | `tables`, `board_facts`, `draft` |
+| the door's `metrics` tool (`db/mcp/playbook.py`) | `compute` - the metric vocabulary |
+| the reach recorder (`scripts/reach.py`) | `tables` |
