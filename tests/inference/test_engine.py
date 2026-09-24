@@ -49,9 +49,9 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert fill.blue == around.blue
     mo = b.momentum
     assert set(mo) >= {"blue", "red", "countered", "verdict", "partial"} and mo["partial"]
-    # blue is half-drafted, so its share is read through the fill - the best six
-    # reachable from its picks - not off the picks alone. Red has no fill computed,
-    # so its share keeps the older reading; both dicts report no share of their own.
+    # each seat is half-drafted, so its share is read through its fill - the best
+    # six reachable from its picks - not off the picks alone; both current comps'
+    # dicts report no share of their own.
     assert mo["blue"] == fill.to_dict()["normalized"]
     assert mo["red"] is not None
     assert cur.to_dict()["normalized"] is None and rc.to_dict()["normalized"] is None
@@ -66,7 +66,7 @@ def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(world)
     assert "If you stray from the six, stay in its family. Tanks: " in plan
     assert "Above all: " in plan
     assert plan.endswith("Based on: the Role Queue rates and counters, the map, the side,"
-                         " red's 2 revealed picks.")
+                         " your 1 pick, red's 2 revealed picks.")
     d = b.to_dict()
     assert d["side"] == "attack" and d["red"]["seat"] == "red" and d["current"]["partial"]
     assert d["red_current"]["seat"] == "red"

@@ -1,6 +1,7 @@
 """The board in prose: the momentum verdict read off the two current comps,
-each half-drafted seat through its fill, and the game plan - the style, the
-terrain and the stages it names, and nothing the board contradicts."""
+each half-drafted seat through its fill, and the game plan - the six the
+comps tab shows, the style, the terrain and the stages it names, and
+nothing the board contradicts."""
 
 import copy
 import os
@@ -229,3 +230,26 @@ def test_a_playbook_that_scores_nothing_gets_a_plan_that_claims_no_counter(
     assert plan._shape(lacking) == "2 tanks, 4 damage and no support"
     assert "supports who can follow" not in plan._advice("dive", lacking)
     assert "no support can follow" in plan._advice("dive", lacking)
+
+
+def test_the_plan_describes_the_six_the_comps_tab_shows(synthetic_world, scratch_playbook):
+    """The comps tab shows blue's optimal before any blue pick, the fill
+    around one to five and the picks themselves at six, and the plan
+    describes that six: it names the picks the six keeps, reads the fill's
+    lean where the optimal leans elsewhere, and counts the picks in what it
+    rests on. It used to read the optimal, which blue's picks never touch."""
+    from inference import engine
+
+    def board(red, blue):
+        return engine.board(synthetic_world, Draft("Harbor Gate", red, blue, side="attack"),
+                            catalog=scratch_playbook)
+    none = board(("Anvil",), ())
+    assert "your pick" not in none.plan and "The six keeps" not in none.plan
+    one = board(("Anvil",), ("Balm",))
+    assert one.fill.playstyle != one.blue.playstyle             # the two sixes lean apart
+    assert "The six keeps your pick (Balm) and fills the rest." in one.plan
+    assert "the six leans %s" % one.fill.playstyle in one.plan
+    assert one.plan.endswith("your 1 pick, red's 1 revealed pick.")
+    full = board((), tuple(one.fill.blue))
+    assert "The six is the one you picked." in full.plan and "your 6 picks" in full.plan
+    assert "the six counters" not in full.plan and "their likely six is " in full.plan

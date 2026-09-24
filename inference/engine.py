@@ -267,7 +267,10 @@ def board(
         momentum     the verdict from the two current comps, each
                      half-drafted seat read through its fill; red's fill is
                      solved for the verdict and not kept
-        plan         the game plan in prose, from the same facts
+        plan         the game plan in prose, from the same facts, for the six
+                     the comps tab shows for blue: its optimal before any
+                     blue pick, the fill around one to five, the picks
+                     themselves at six
         shapes       the (tanks, damage, supports) triples the queue and the
                      playbook's shape limits allow - what the roster enforces
                      as you pick; a team past six picks or two tanks is refused
@@ -345,10 +348,12 @@ def _board_once(
     red_fill = solve.filled(theirs, red_fill_split, seat="red", best=red.result.score)
     countered = solve.countered(countered_seat, against_split, answer_split)
     seats = Seats(cur, red_cur, blue.result, red.result, fill, red_fill, countered)
+    # the six the comps tab shows for blue, which the plan describes
+    shown = fill if fill is not None else cur if len(draft.blue) == TEAM_SIZE else blue.result
     return Board(map_name=expected.map_name, side=draft.side, bans=list(draft.bans),
                  blue=blue.result, red=red.result, current=cur, red_current=red_cur,
                  fill=fill, countered=countered, momentum=momentum(seats),
-                 plan=plan(world, m, draft.side, list(draft.bans), red_h, blue.result),
+                 plan=plan(world, m, draft.side, list(draft.bans), red_h, shown),
                  shapes=[list(s) for s in legal_shapes(catalog)], expected=expected)
 
 

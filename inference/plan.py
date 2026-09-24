@@ -250,26 +250,50 @@ def _family(world: World, m: Map | None, style: str, role: str,
 
 def plan(
         world: World, m: Map | None, side: str, bans: Sequence[str],
-        red_h: Sequence[Hero], blue_r: Result) -> str:
-    """The game plan in prose - the ground, what to play on it, what red's
-    picks mean (their likely six until one is revealed), the family of heroes
-    to stay in when you stray from the six, and what the six is built for -
-    from the same facts and strategies the solver scored, so that picks can be
-    tailored toward the optimal without matching it. Ends with what it rests on."""
-    lean = blue_r.playstyle
-    scoring = catalog_module.has_scoring_terms(blue_r.catalog)
-    read = _ground(m, side, blue_r.facts, scoring)
-    style = _style_read(m, lean, red_h, None if scoring else _roles(blue_r))
-    if style is not None:
-        read.append(style)
+        red_h: Sequence[Hero], six: Result) -> str:
+    """The game plan in prose for `six`, the six the comps tab shows for blue
+    - blue's optimal before any blue pick, the fill around one to five, the
+    picks themselves at six: the ground, blue's picks it keeps, what to play
+    on it, what red's picks mean (their likely six until one is revealed),
+    the family of heroes to stay in when you stray from the six, and what the
+    six is built for - from the same facts and strategies the solver scored,
+    so that picks can be tailored toward the optimal without matching it.
+    Ends with what it rests on."""
+    lean = six.playstyle
+    scoring = catalog_module.has_scoring_terms(six.catalog)
+    yours = _yours(six)
+    read = _ground(m, side, six.facts, scoring)
+    for sentence in (_keeps(six, yours),
+                     _style_read(m, lean, red_h, None if scoring else _roles(six))):
+        if sentence is not None:
+            read.append(sentence)
     lines = [" ".join(read)]
-    for line in (_them(world, m, red_h, lean, blue_r, scoring),
-                 _family_line(world, m, lean, bans), _above_all(blue_r, lean)):
+    for line in (_them(world, m, red_h, lean, six, scoring),
+                 _family_line(world, m, lean, bans), _above_all(six, lean)):
         if line is not None:
             lines.append(line)
-    queue = rates_queue(blue_r.facts) if blue_r.facts is not None else ""
-    lines.append(_basis(m, side, bans, red_h, queue))
+    queue = rates_queue(six.facts) if six.facts is not None else ""
+    lines.append(_basis(m, side, bans, red_h, queue, len(yours)))
     return "\n".join(lines)
+
+
+def _yours(six: Result) -> list[str]:
+    """Blue's own picks in the six: a fill's locks, a full six's heroes, and
+    none in the optimal, which blue's picks never constrain."""
+    if six.kind == "fill":
+        return list(six.locked)
+    return list(six.blue) if six.kind == "evaluate" else []
+
+
+def _keeps(six: Result, yours: Sequence[str]) -> str | None:
+    """What the six does with blue's picks: keeps them and fills the rest, or
+    is them."""
+    if six.kind == "evaluate":
+        return "The six is the one you picked."
+    if yours:
+        return "The six keeps your pick%s (%s) and fills the rest." % (
+            "" if len(yours) == 1 else "s", ", ".join(yours))
+    return None
 
 
 def _ground(m: Map | None, side: str, facts: FactSet | None, scoring: bool) -> list[str]:
@@ -362,16 +386,9 @@ def _them(
         scoring: bool) -> str | None:
     """What red's picks mean: their lean against the six's, and which picks
     of the six answer which of theirs - read off the hero.vs_answers facts
-    the picks cite. With nothing revealed, the likely six the six counters -
-    or only their likely six, where the playbook scores nothing and the six
-    counters nothing."""
+    the picks cite. With nothing revealed, their likely six (_unrevealed)."""
     if not red_h:
-        if blue_r.red and scoring:
-            return ("No red pick yet: the six counters their likely six (%s)."
-                    % ", ".join(blue_r.red))
-        if blue_r.red:
-            return "No red pick yet: their likely six is %s." % _and(blue_r.red)
-        return None
+        return _unrevealed(blue_r, scoring)
     n = len(red_h)
     theirs = team_metrics(world, red_h, m, [])
     red_lean = text(theirs["style_lean"]) or text(theirs["style_top"])
@@ -386,6 +403,17 @@ def _them(
     else:
         them += " show%s no lean yet." % s
     return them + _answers([h.name for h in red_h], _answered(blue_r))
+
+
+def _unrevealed(six: Result, scoring: bool) -> str | None:
+    """Their likely six while red has revealed nothing: the six searched as
+    its counter says so; blue's own six, or one the playbook did not score,
+    counters nothing, and the plan only names it."""
+    if not six.red:
+        return None
+    if scoring and six.kind != "evaluate":
+        return "No red pick yet: the six counters their likely six (%s)." % ", ".join(six.red)
+    return "No red pick yet: their likely six is %s." % _and(six.red)
 
 
 def _answered(six: Result) -> dict[str, list[str]]:
@@ -454,9 +482,9 @@ def _above_all(blue_r: Result, lean: str) -> str | None:
 
 def _basis(
         m: Map | None, side: str, bans: Sequence[str], red_h: Sequence[Hero],
-        queue: str) -> str:
+        queue: str, yours: int) -> str:
     """What the plan rests on, the rates named by the queue they were
-    captured in."""
+    captured in, and blue's picks where the six keeps them."""
     basis = ["the %srates and counters" % ("%s " % queue if queue else "")]
     if m is not None:
         basis.append("the map")
@@ -464,6 +492,8 @@ def _basis(
         basis.append("the side")
     if bans:
         basis.append("%d ban%s" % (len(bans), "" if len(bans) == 1 else "s"))
+    if yours:
+        basis.append("your %d pick%s" % (yours, "" if yours == 1 else "s"))
     if red_h:
         basis.append("red's %d revealed pick%s" % (len(red_h), "" if len(red_h) == 1 else "s"))
     return "Based on: %s." % ", ".join(basis)
