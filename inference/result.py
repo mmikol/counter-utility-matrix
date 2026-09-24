@@ -128,11 +128,15 @@ class Result:
 
     def scale_to(self, best: float) -> None:
         """Set what 100 means here - the board's best score - and write each
-        alternative's share of it, None while the result reads unscored."""
+        alternative's share of it, None while the result reads unscored. An
+        unscored field ties at zero, where no six ranks above another, so the
+        rank goes too: every six would read first."""
         self.best = best
         scoring = self.unscored() is None
         for alt in self.alternatives:
             alt["normalized"] = _pct(alt["score"], best) if scoring else None
+        if not scoring:
+            self.rank = None
 
     def share(self) -> int:
         """The score as a share of what 100 means here, 0-100."""

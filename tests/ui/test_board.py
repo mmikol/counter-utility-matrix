@@ -122,7 +122,9 @@ def test_infer_endpoint_serves_both_seats_and_the_current_comp(db):
     assert data["blue"]["cited"] and all(p["evidence"] for p in data["blue"]["picks"])
     data, code = board.api_infer(db, {"blue": ["Reinhardt", "Zarya", "Widowmaker", "Bastion",
                                                "Ana", "Lúcio"]})
-    assert code == 200 and data["current"]["kind"] == "evaluate" and data["current"]["rank"] >= 1
+    current = data["current"]
+    assert code == 200 and current["kind"] == "evaluate"
+    assert current["rank"] is None if current["unscored"] else current["rank"] >= 1
     db.rollback()
 
 

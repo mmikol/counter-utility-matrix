@@ -1,7 +1,9 @@
 """infer() and evaluate(): locked picks and the queue's shape, an answer to a
 flier, a full six ranked against its field, a board no six satisfies, bans,
-one scale per board, an announced hero, the fill that keeps a lock, and a
-seat's search timed from where it began."""
+one scale per board, an announced hero, the fill that keeps a lock, a
+seat's search timed from where it began, and no rank in an unscored field."""
+
+import os
 
 import pytest
 
@@ -44,10 +46,15 @@ def test_infer_honours_a_hitscan_answer_to_a_flier(world):
 
 @pytest.mark.invariant
 def test_evaluate_ranks_a_full_six_against_the_field(world):
+    """A scored six is ranked against the field; under a playbook that scores
+    nothing every six ties, and none is ranked."""
     from inference import engine
     six = ("Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio")
-    r = engine.evaluate(world, Draft("King's Row", ("Zarya", "Pharah"), six))
+    draft = Draft("King's Row", ("Zarya", "Pharah"), six)
+    r = engine.evaluate(world, draft, catalog=catalog.load(FIXTURE_PLAYBOOK))
     assert r.rank >= 1 and r.kind == "evaluate" and len(r.picks) == 6
+    shipped = engine.evaluate(world, draft)
+    assert shipped.rank is None if shipped.unscored() else shipped.rank >= 1
     with pytest.raises(Refusal, match="exactly 6"):
         engine.evaluate(world, Draft(blue=("Ana",)))
 
@@ -172,3 +179,26 @@ def test_a_seat_solved_across_the_pool_is_timed_from_when_its_search_began(
     alone = engine._optimal(synthetic_world, draft, catalog=scratch_playbook, pool_size=6,
                             top=1, seat="blue", kind="infer", solved=None, began=None)
     assert alone.result.seconds < 5 and parallel.NullSplit.started is None
+
+
+def test_a_six_in_a_field_that_scores_nothing_has_no_rank(
+        synthetic_world, scratch_playbook, tmp_path):
+    """evaluate counts the sixes that score strictly higher, and where the
+    playbook scores nothing every six ties at zero, so every six ranked first.
+    An unscored six now carries no rank; a scored one keeps its place."""
+    import shutil
+
+    from inference import engine
+    six = ("Anvil", "Kite", "Rook", "Needle", "Balm", "Tansy")
+    limit_only = tmp_path / "limit-only"            # the scratch playbook is tmp_path's own
+    limit_only.mkdir()
+    shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), limit_only)
+    unscored = engine.evaluate(synthetic_world, Draft("Harbor Gate", (), six, side="attack"),
+                               catalog=catalog.load(str(limit_only)))
+    assert unscored.unscored() is not None
+    assert unscored.rank is None and unscored.to_dict()["rank"] is None
+    assert "(rank " not in unscored.rendered() and "UNSCORED" in unscored.rendered()
+    scored = engine.evaluate(synthetic_world, Draft("Harbor Gate", (), six, side="attack"),
+                             catalog=scratch_playbook)
+    assert scored.unscored() is None and scored.rank >= 1
+    assert "(rank %d among the feasible field)" % scored.rank in scored.rendered()

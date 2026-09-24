@@ -202,7 +202,7 @@ def test_board_infer_and_evaluate_are_served(served, monkeypatch, dsn):
     assert code == 200 and len(data["blue"]) == 6
     six = "&".join("blue=" + quote(h) for h in data["blue"])
     code, data = _get(served + "/evaluate?map=Ilios&red=Zarya&" + six)
-    assert code == 200 and data["rank"] == 1
+    assert code == 200 and data["rank"] == (None if data["unscored"] else 1)
     code, data = _get(served + "/evaluate?map=Ilios&blue=Ana")
     assert code == 400 and "error" in data
     code, data = _get(served + "/board?map=Ilios&weights=junk")    # a weight is id:value
