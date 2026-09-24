@@ -16,6 +16,7 @@ functions of an Objective.
 """
 
 import itertools
+import math
 import random
 from collections.abc import Iterable, Iterator, Sequence
 
@@ -32,11 +33,12 @@ Tally = dict[int, list[int]]                    # hero id -> [summed millionths,
 
 
 def sample(objective: Objective, size: int = REFERENCE_SIZE) -> list[Candidate]:
-    """A seeded sample of random legal sixes for this board, unprepared.
-    Deterministic for a given map and side, and independent of the locked
-    picks, the pool, the enemies and the bans, so every call on one board
-    shares a scale - and any process draws the same list and can take a
-    slice.
+    """A seeded sample of `size` random legal sixes for this board,
+    unprepared; every legal six, in the seeded order, on a roster that holds
+    fewer. Deterministic for a given map and side, and independent of the
+    locked picks, the pool, the enemies and the bans, so every call on one
+    board shares a scale - and any process draws the same list and can take
+    a slice.
 
     It must not depend on red or the bans. The sample fixes every
     heuristic's [lo, hi], so drawing it differently rescales the whole
@@ -57,10 +59,14 @@ def sample(objective: Objective, size: int = REFERENCE_SIZE) -> list[Candidate]:
     shapes = [(t, d, s) for t, d, s in legal_shapes(objective.catalog)
                 if t <= len(by_role["tank"]) and d <= len(by_role["damage"])
                 and s <= len(by_role["support"])]
+    # the legal sixes there are: a draw for more than that never ends
+    space = sum(
+        math.comb(len(by_role["tank"]), t) * math.comb(len(by_role["damage"]), d)
+        * math.comb(len(by_role["support"]), s) for t, d, s in shapes)
     out: list[Candidate] = []
     seen: set[frozenset[int]] = set()
     if shapes:
-        while len(out) < size:
+        while len(out) < min(size, space):
             t, d, s = rng.choice(shapes)
             heroes = (rng.sample(by_role["tank"], t) + rng.sample(by_role["damage"], d)
                       + rng.sample(by_role["support"], s))

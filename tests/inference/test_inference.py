@@ -1233,3 +1233,26 @@ def test_a_board_confidence_reads_the_boards_own_ban_count(world, tmp_path):
                                   catalog=playbook)
     solver.freeze_bounds()
     assert solver.bounds["scale-by-the-bans" + scoring.CONFIDENCE_KEY] == (2.0, 2.0)
+
+
+def test_a_roster_with_fewer_legal_sixes_than_the_reference_is_sampled_whole(synthetic_world):
+    """Twelve heroes, four a role, hold fewer distinct sixes than REFERENCE_SIZE
+    asks for. The reference is then every legal six once, in the seeded order,
+    where the draw used to spin forever looking for more."""
+    import itertools
+
+    from inference import scale, scoring
+    playbook = catalog.load(FIXTURE_PLAYBOOK)
+    shapes = set(scoring.legal_shapes(playbook))
+
+    def shape(six):
+        return tuple(sum(1 for h in six if h.role == r) for r in ("tank", "damage", "support"))
+    released = [h for h in synthetic_world.heroes.values() if h.released]
+    legal = {
+        frozenset(h.id for h in six)
+        for six in itertools.combinations(released, 6) if shape(six) in shapes}
+    objective = scoring.Objective(synthetic_world, None, red=[], catalog=playbook)
+    drawn = scale.sample(objective)
+    assert len(legal) < scale.REFERENCE_SIZE
+    assert [c.key for c in drawn] == [c.key for c in scale.sample(objective)]
+    assert sorted(sorted(c.key) for c in drawn) == sorted(sorted(six) for six in legal)
