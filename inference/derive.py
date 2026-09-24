@@ -39,8 +39,9 @@ from inference import catalog as catalog_module
 from inference import tune
 from inference.strategy import MAX_NAME, TUNABLE, Form, Strategy
 
-CLI_CANDIDATES = ("claude",                                   # on PATH, any OS
-                  os.path.expanduser("~/.local/bin/claude"))    # the native installer's default
+# expanded on each call, so HOME is read when the CLI is looked for
+CLI_CANDIDATES = ("claude",                   # on PATH, any OS
+                  "~/.local/bin/claude")      # the native installer's default
 TIMEOUT = 300
 MAX_PER_RUN = 10            # drafts completed per run
 PROSE_CAP = 8000            # characters of a draft's prose shown to the model
@@ -82,12 +83,14 @@ class CliUnavailableError(RuntimeError):
 
 
 def cli() -> str | None:
-    """The claude CLI to run, or None."""
+    """The claude CLI to run, or None: COUNTRIX_CLAUDE when set, else the
+    first of CLI_CANDIDATES found, each expanded against HOME as it is now."""
     explicit = os.environ.get("COUNTRIX_CLAUDE")
     if explicit:
         return explicit if os.path.exists(explicit) else shutil.which(explicit)
     for candidate in CLI_CANDIDATES:
-        found = shutil.which(candidate) or (candidate if os.path.isfile(candidate) else None)
+        path = os.path.expanduser(candidate)
+        found = shutil.which(path) or (path if os.path.isfile(path) else None)
         if found:
             return found
     return None

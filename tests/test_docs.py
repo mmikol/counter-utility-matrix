@@ -170,8 +170,20 @@ def test_every_shallow_indent_sits_on_a_four_column_stop():
     assert not off, off
 
 
+def _reads_the_environment(node):
+    """os.environ or os.getenv, or os.path.expanduser or expandvars, which
+    read HOME and the variables they name."""
+    if not isinstance(node, ast.Attribute):
+        return False
+    if node.attr in ("environ", "getenv"):
+        return isinstance(node.value, ast.Name) and node.value.id == "os"
+    return (node.attr in ("expanduser", "expandvars") and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "path" and isinstance(node.value.value, ast.Name)
+            and node.value.value.id == "os")
+
+
 def _import_time_reads(tree):
-    """Line numbers of os.environ and os.getenv that run when the module is
+    """Line numbers of the environment reads that run when the module is
     imported: outside a function body, or in a default or a decorator."""
     lines = []
 
@@ -184,9 +196,7 @@ def _import_time_reads(tree):
             for child in node.body if isinstance(node.body, list) else [node.body]:
                 visit(child, True)
             return
-        if (not deferred and isinstance(node, ast.Attribute)
-                and node.attr in ("environ", "getenv")
-                and isinstance(node.value, ast.Name) and node.value.id == "os"):
+        if not deferred and _reads_the_environment(node):
             lines.append(node.lineno)
         for child in ast.iter_child_nodes(node):
             visit(child, deferred)
@@ -201,7 +211,8 @@ def test_no_module_reads_the_environment_at_import():
     a function that reads the environment."""
     assert _import_time_reads(ast.parse("import os\nX = os.environ.get('A')\n"
                                         "def f(y=os.getenv('B')):\n"
-                                        "    return os.environ['C']\n")) == [2, 3]
+                                        "    return os.environ['C']\n"
+                                        "Y = os.path.expanduser('~')\n")) == [2, 3, 5]
     frozen = []
     for path in _python_files("db", "facts", "inference", "door", "ui", "scripts"):
         with open(path, encoding="utf-8") as handle:

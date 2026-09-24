@@ -142,8 +142,8 @@ db <- facts <- inference <- door <- ui.
 - Every quoted `"COUNTRIX_..."` name in `db/`, `facts/`, `inference/`,
   `door/`, `ui/` or `orchestrator.py` must appear in docs/architecture.md
   or docs/db.md, and is read where it is used or by `main()` at start: an
-  `os.environ` or `os.getenv` that runs at import fails
-  `test_no_module_reads_the_environment_at_import`.
+  `os.environ`, `os.getenv` or `os.path.expanduser` (it reads HOME) that
+  runs at import fails `test_no_module_reads_the_environment_at_import`.
 - A new migration is named by its number in docs/db.md's `migrations/`
   row, the one inventory of the schema's steps. The whole chain must build
   an empty database: an invariant test applies it to a scratch database

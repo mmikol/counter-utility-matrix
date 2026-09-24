@@ -121,6 +121,21 @@ def test_the_headless_recipe_drops_the_session_and_reads_a_signed_out_cli(monkey
     assert derive.require_cli() == "/x/claude"
 
 
+def test_the_cli_is_looked_for_under_home_as_it_is_now(tmp_path, monkeypatch):
+    """The native installer's path is expanded when cli() runs, not when the
+    module was imported: a HOME set later is the one searched."""
+    home, empty = tmp_path / "home", tmp_path / "empty"
+    binary = home / ".local" / "bin" / "claude"
+    binary.parent.mkdir(parents=True)
+    empty.mkdir()
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary.chmod(0o755)
+    monkeypatch.delenv("COUNTRIX_CLAUDE", raising=False)
+    monkeypatch.setenv("PATH", str(empty))
+    monkeypatch.setenv("HOME", str(home))
+    assert derive.cli() == str(binary)
+
+
 def test_derive_counts_drafts_past_the_cap_apart_from_why_it_stopped(catalog_copy, monkeypatch):
     """The drafts past MAX_PER_RUN are deferred, a count of their own: a run
     that stops signed out still says how many wait, and a run that completes
