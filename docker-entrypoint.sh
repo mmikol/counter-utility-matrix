@@ -1,8 +1,8 @@
 #!/bin/sh
 # One image, one container per layer. The first argument is the role:
 #
-#   data        DATA LAYER: build the database when it is empty or its schema
-#               is behind the migrations (the first build scrapes the sources;
+#   data        DATA LAYER: build the database when it is empty, unfilled or
+#               behind the migrations (the first build scrapes the sources;
 #               the mounted caches make later builds cheap), then serve the
 #               MCP server on 8020
 #   inference   INFERENCE ENGINE: wait for the database, serve on 8019

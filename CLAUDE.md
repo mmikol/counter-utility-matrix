@@ -44,9 +44,10 @@ the `db` fixture. Two paths reach `default_dsn()` even under
 and the `/health` of the MCP server the HTTP tests start - and boot the
 cluster, a new empty one where `db/psql/cluster` is absent;
 `DATABASE_URL=postgresql://127.0.0.1:1/none` keeps both off it, as CI's
-coverage figure assumes. The suite targets `db/psql/cluster` whenever that
-folder exists; `DATABASE_URL` or `./docker-db <command>` points at another
-Postgres. CI sets no variable: it has no cluster and no pgserver.
+coverage figure assumes. The suite targets `db/psql/cluster` when that
+folder exists and `DATABASE_URL` is unset; `DATABASE_URL` or
+`./docker-db <command>` points it at another Postgres. CI sets no
+variable: it has no cluster and no pgserver.
 
 The solver's pool (`inference/parallel.py`) spawns `max(6, min(cores, 12))`
 worker processes (12 here) in any process that calls `engine.board()`

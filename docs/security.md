@@ -35,10 +35,11 @@ exponents bounded, no string arithmetic, nesting bounded).
 Code in print mode an explicit allowlist of tools on the two servers -
 status, the catalog, the log, the vocabulary, facts, inference,
 read-only `query`, the refresh and load tools, `infer_strategy`, `tune`,
-`db_docs`, `export_csv` - and no built-in tool at all (`--tools ""`): no
-shell, no file edits, no web, no `add_strategy`, no rebuild or migration,
-no session kept afterwards, at most eighty turns, and a tool-call timeout
-long enough for a polite scrape (`MCP_TOOL_TIMEOUT`). The deriver runs
+`db_docs`, `export_csv`, `reach` - and no built-in tool at all
+(`--tools ""`): no shell, no file edits, no web, no `add_strategy`, no
+rebuild or migration, no session kept afterwards, at most eighty turns,
+and a tool-call timeout long enough for a polite scrape
+(`MCP_TOOL_TIMEOUT`). The deriver runs
 `claude -p` from a neutral directory with no project settings, no MCP
 servers, no tools and two turns, and stores only what the catalog
 validates.

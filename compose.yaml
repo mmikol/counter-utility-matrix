@@ -10,7 +10,7 @@
 #   ui          UI LAYER: the board at http://localhost:8017
 #   refresher   the data layer's clock: seasons and rates daily at
 #               COUNTRIX_REFRESH_AT (05:00 container time; set TZ), every
-#               source weekly, and on start when the caches are a day old
+#               source weekly, and on start when the caches are 20 hours old
 #   sentry      the guard: quarantines a strategy file that will not load or
 #               reads like an instruction, flags instruction-like text in the
 #               database, watches the MCP audit log; its report is what
