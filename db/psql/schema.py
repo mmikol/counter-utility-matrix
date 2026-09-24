@@ -283,7 +283,7 @@ def _erd(tables: list[str], fks: list[ForeignKey], domain: dict[str, str]) -> st
         "```",
         "",
         "Every table but `sources` and `schema_migrations` also carries",
-        "`source_id` → `sources` and a `cao` timestamp. Those edges are left off -",
+        "`source_id` -> `sources` and a `cao` timestamp. Those edges are left off -",
         "they would connect `sources` to %d tables and obscure everything else."
         % (len(tables) - 2),
         "",
@@ -306,10 +306,10 @@ def _dictionary(
     for fk in fks:
         references.setdefault((fk.child, fk.column), (fk.parent, fk.parent_column))
     dd = [
-        "Generated from the live schema (`python -m db.mcp call db_docs`).",
+        "Generated from the live schema (`.venv/bin/python -m db.mcp call db_docs`).",
         "",
         "Two columns are omitted from the lists below: `source_id` (which source the",
-        "row came from, see `sources`) and `cao` — \"current as of\", when that row",
+        "row came from, see `sources`) and `cao` - \"current as of\", when that row",
         "was read. Every table but `sources` and `schema_migrations` carries both;",
         "`sources` carries `cao` alone and `schema_migrations` neither.",
         "",

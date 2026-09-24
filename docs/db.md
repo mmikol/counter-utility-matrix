@@ -301,7 +301,7 @@ COMP        = ARGMAX[ STRATEGIES( FACTS ) ]
 ```
 
 Every table but `sources` and `schema_migrations` also carries
-`source_id` → `sources` and a `cao` timestamp. Those edges are left off -
+`source_id` -> `sources` and a `cao` timestamp. Those edges are left off -
 they would connect `sources` to 33 tables and obscure everything else.
 
 #### HEROES
@@ -430,10 +430,10 @@ erDiagram
 ### Data dictionary
 
 <!-- generated:dictionary -->
-Generated from the live schema (`python -m db.mcp call db_docs`).
+Generated from the live schema (`.venv/bin/python -m db.mcp call db_docs`).
 
 Two columns are omitted from the lists below: `source_id` (which source the
-row came from, see `sources`) and `cao` — "current as of", when that row
+row came from, see `sources`) and `cao` - "current as of", when that row
 was read. Every table but `sources` and `schema_migrations` carries both;
 `sources` carries `cao` alone and `schema_migrations` neither.
 
