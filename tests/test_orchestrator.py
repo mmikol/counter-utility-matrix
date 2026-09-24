@@ -17,23 +17,28 @@ def test_verdict_reads_the_three_health_replies():
         "data": {"status": "ok", "state": "current", "table_count": 42, "heroes": 53,
                  "pending_migrations": [], "newest_capture": "2026-09-13"},
         "inference": {"status": "ok", "strategies": 38, "heroes": 53},
-        "ui": {"heroes": [{}] * 53, "maps": [{}] * 30}})
-    assert ok and any("rates captured 2026-09-13" in line for line in lines)
+        "ui": {"heroes": [{}] * 53, "maps": [{}] * 30},
+        "board": {"seconds": 1.0, "picks": []}})
+    assert ok and lines == ["data layer: 42 tables, 53 heroes, rates captured 2026-09-13",
+                            "inference: 38 strategies, 53 heroes, a board in 1.0s",
+                            "board: 53 heroes on the roster, 30 maps"]
     ok, lines = orchestrator.verdict({
         "data": {"status": "ok", "state": "current", "table_count": 36, "heroes": 54,
                  "announced": 1, "pending_migrations": [], "newest_capture": "2026-09-14"},
         "inference": {"status": "ok", "strategies": 38, "heroes": 54},
-        "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}})
+        "ui": {"heroes": [{}] * 54, "maps": [{}] * 30},
+        "board": {"seconds": 1.0, "picks": []}})
     assert ok and any("54 heroes (1 announced, not yet playable)" in line for line in lines)
     ok, lines = orchestrator.verdict({"data": {"status": "ok", "state": "stale",
                                                "table_count": 42, "heroes": 53,
                                                "pending_migrations": ["099_future.sql"]},
                                       "inference": {"status": "ok", "strategies": 0},
-                                      "ui": None})
+                                      "ui": None, "board": None})
     assert not ok
-    assert any("behind the migrations (099_future.sql)" in line for line in lines)
-    assert any("stale bind mount" in line for line in lines)
-    assert any("board: not answering" in line for line in lines)
+    assert [line.split(" (")[0] for line in lines] == [
+        "data layer: schema behind the migrations", "data layer: 42 tables, 53 heroes,"
+        " rates captured never", "inference: no strategies visible", "board: not answering"]
+    assert "(099_future.sql)" in lines[0] and "stale bind mount" in lines[2]
 
 
 def test_the_verdict_waits_on_the_data_layers_state():
@@ -41,7 +46,8 @@ def test_the_verdict_waits_on_the_data_layers_state():
     image older than the checkout reports none, and is not ready either."""
     served = {
         "inference": {"status": "ok", "strategies": 38, "heroes": 54},
-        "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
+        "ui": {"heroes": [{}] * 54, "maps": [{}] * 30},
+        "board": {"seconds": 1.0, "picks": []}}
     for state, said in (("empty", "no heroes yet"), ("unfilled", "no heroes yet"),
                         (None, "predates this checkout")):
         data = {"status": "ok", "table_count": 36, "heroes": 0, "pending_migrations": []}
@@ -120,7 +126,8 @@ def stubbed(monkeypatch):
                         "announced": 1, "pending_migrations": [],
                         "newest_capture": "2026-09-14"},
                "inference": {"status": "ok", "strategies": 38, "heroes": 54, "pending": 0},
-               "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
+               "ui": {"heroes": [{}] * 54, "maps": [{}] * 30},
+               "board": {"seconds": 1.0, "picks": []}}
     monkeypatch.setattr(orchestrator, "sh", lambda *a, **k: calls.append(("sh", *a)) or "")
     monkeypatch.setattr(orchestrator, "wait_for", lambda url, s, what: calls.append(("wait", what)))
     monkeypatch.setattr(orchestrator, "health", lambda: healthy)

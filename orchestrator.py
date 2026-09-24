@@ -26,7 +26,6 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Mapping
 from typing import Any, TypedDict
 
 from db import ROOT
@@ -75,17 +74,29 @@ def wait_for(url: str, seconds: int, what: str) -> Any:
     raise SystemExit("error: %s did not answer at %s within %ds" % (what, url, seconds))
 
 
-def health() -> dict[str, Any]:
-    """{layer: json or None} for the three served layers, and "board": the
-    probe's seconds and picks, or None when the service could not solve one."""
-    h = {layer: get_json(url) for layer, url in URLS.items()}
-    h["board"] = probe() if h.get("inference") else None
-    return h
-
-
 class Probe(TypedDict):
+    """One board solved through the inference service: how long it took, and
+    blue's six."""
     seconds: float
     picks: list[str]
+
+
+class Health(TypedDict):
+    """What each served layer answered, None where nothing did, and the probe:
+    None when the service could not solve a board or was never asked. The
+    replies stay JSON off the wire; verdict reads them with .get."""
+    data: dict[str, Any] | None
+    inference: dict[str, Any] | None
+    ui: dict[str, Any] | None
+    board: Probe | None
+
+
+def health() -> Health:
+    """The three served layers' replies, and a board probed when the
+    inference service answers."""
+    replies = {layer: get_json(url) for layer, url in URLS.items()}
+    return Health(data=replies["data"], inference=replies["inference"], ui=replies["ui"],
+                  board=probe() if replies["inference"] else None)
 
 
 def probe() -> Probe | None:
@@ -100,66 +111,75 @@ def probe() -> Probe | None:
     return Probe(seconds=round(time.time() - started, 1), picks=picks)
 
 
-def verdict(h: Mapping[str, Any]) -> tuple[bool, list[str]]:
-    """(ok, [lines]) from the health map."""
-    lines: list[str] = []
-    ok = True
-    data = h.get("data")
-    if not data or data.get("status") != "ok":
-        ok = False
-        lines.append("data layer: not answering" if not data else
-                     "data layer: %s" % data.get("error", data.get("status")))
-    else:
-        # ready is db.psql.schema.state, which the data layer's /health carries
-        state = data.get("state")
-        if state != "current":
-            ok = False
-            if state == "stale":
-                lines.append("data layer: schema behind the migrations (%s)"
-                             % ", ".join(data.get("pending_migrations") or []))
-            elif state in ("empty", "unfilled"):
-                lines.append("data layer: the database holds no heroes yet")
-            elif state is None:
-                lines.append("data layer: its /health carries no state - the image"
-                             " predates this checkout (`orchestrator.py up` rebuilds it)")
-            else:
-                lines.append("data layer: the database is %s" % state)
-        lines.append("data layer: %d tables, %d heroes%s, rates captured %s"
-                     % (data.get("table_count", 0), data.get("heroes", 0),
-                        " (%d announced, not yet playable)" % data["announced"]
-                        if data.get("announced") else "",
-                        data.get("newest_capture") or "never"))
-    inf = h.get("inference")
-    if not inf or inf.get("status") != "ok":
-        ok = False
-        lines.append("inference: not answering" if not inf else "inference: %s"
-                     % inf.get("error", inf.get("status")))
-    else:
-        if not inf.get("strategies"):
-            ok = False
-            lines.append("inference: no strategies visible (a stale bind mount -"
-                         " run `docker compose up -d --force-recreate`)")
-        else:
-            lines.append("inference: %d strategies, %d heroes%s"
-                         % (inf["strategies"], inf.get("heroes", 0),
-                            " - %d draft(s) awaiting /strategy" % inf["pending"]
-                            if inf.get("pending") else ""))
-            if "board" in h:                        # probed; absent in a bare verdict
-                if h["board"] is None:
-                    ok = False
-                    lines.append("inference: a board did not solve - the service fails"
-                                 " under this playbook (`docker compose logs inference`)")
-                else:
-                    lines[-1] += ", a board in %.1fs" % h["board"]["seconds"]
-    ui = h.get("ui")
-    if not ui or "heroes" not in ui:
-        ok = False
-        lines.append("board: not answering" if not ui else
-                     "board: %s" % ui.get("error", "no roster in the reply"))
-    else:
-        lines.append("board: %d heroes on the roster, %d maps"
-                     % (len(ui["heroes"]), len(ui.get("maps", []))))
-    return ok, lines
+def _state_problem(data: dict[str, Any]) -> str | None:
+    """Why the database is not ready, from the state the data layer's /health
+    carries (db.psql.schema.state); None when it is current."""
+    state = data.get("state")
+    if state == "current":
+        return None
+    if state == "stale":
+        return ("data layer: schema behind the migrations (%s)"
+                % ", ".join(data.get("pending_migrations") or []))
+    if state in ("empty", "unfilled"):
+        return "data layer: the database holds no heroes yet"
+    if state is None:
+        return ("data layer: its /health carries no state - the image"
+                " predates this checkout (`orchestrator.py up` rebuilds it)")
+    return "data layer: the database is %s" % state
+
+
+def data_verdict(data: dict[str, Any] | None) -> tuple[bool, list[str]]:
+    """The data layer answers, its database is current, and what it holds."""
+    if not data:
+        return False, ["data layer: not answering"]
+    if data.get("status") != "ok":
+        return False, ["data layer: %s" % data.get("error", data.get("status"))]
+    announced = data.get("announced")
+    summary = "data layer: %d tables, %d heroes%s, rates captured %s" % (
+        data.get("table_count", 0), data.get("heroes", 0),
+        " (%d announced, not yet playable)" % announced if announced else "",
+        data.get("newest_capture") or "never")
+    problem = _state_problem(data)
+    return (False, [problem, summary]) if problem else (True, [summary])
+
+
+def inference_verdict(inf: dict[str, Any] | None, board: Probe | None) -> tuple[bool, list[str]]:
+    """The inference service answers, sees the playbook, and solves a board."""
+    if not inf:
+        return False, ["inference: not answering"]
+    if inf.get("status") != "ok":
+        return False, ["inference: %s" % inf.get("error", inf.get("status"))]
+    if not inf.get("strategies"):
+        return False, ["inference: no strategies visible (a stale bind mount -"
+                       " run `docker compose up -d --force-recreate`)"]
+    pending = inf.get("pending")
+    summary = "inference: %d strategies, %d heroes%s" % (
+        inf["strategies"], inf.get("heroes", 0),
+        " - %d draft(s) awaiting /strategy" % pending if pending else "")
+    if board is None:
+        return False, [summary, "inference: a board did not solve - the service fails"
+                                " under this playbook (`docker compose logs inference`)"]
+    return True, [summary + ", a board in %.1fs" % board["seconds"]]
+
+
+def ui_verdict(ui: dict[str, Any] | None) -> tuple[bool, list[str]]:
+    """The board answers with its roster."""
+    if not ui:
+        return False, ["board: not answering"]
+    if "heroes" not in ui:
+        return False, ["board: %s" % ui.get("error", "no roster in the reply")]
+    return True, ["board: %d heroes on the roster, %d maps"
+                  % (len(ui["heroes"]), len(ui.get("maps", [])))]
+
+
+def verdict(h: Health) -> tuple[bool, list[str]]:
+    """(ok, [lines]) from the health map: ok when every layer is, and the
+    data layer's lines, then the inference service's, then the board's."""
+    layers = (
+        data_verdict(h["data"]),
+        inference_verdict(h["inference"], h["board"]),
+        ui_verdict(h["ui"]))
+    return all(ok for ok, _ in layers), [line for _, lines in layers for line in lines]
 
 
 def dotenv() -> dict[str, str]:
@@ -206,11 +226,11 @@ def mcp(name: str, arguments: dict[str, Any] | None = None, timeout: float = 600
     return text
 
 
-def derive_pending(h: Mapping[str, Any]) -> bool:
+def derive_pending(h: Health) -> bool:
     """Drafts in inference/strategies/ are completed on the host (the claude CLI
     lives here, not in the containers), then the stack's database re-mirrors.
     True when drafts were pending and the derive ran, so the health is stale."""
-    pending = (h.get("inference") or {}).get("pending")
+    pending = (h["inference"] or {}).get("pending")
     if not pending:
         return False
     print("%d draft strategy(ies) await frontmatter; deriving on the host..." % pending)
@@ -234,7 +254,7 @@ def up() -> int:
     if derive_pending(h):
         h = health()
     ok, lines = verdict(h)
-    if not ok and h.get("inference") and not h["inference"].get("strategies"):
+    if not ok and h["inference"] and not h["inference"].get("strategies"):
         print("stale bind mounts detected; recreating the containers...")
         sh("docker", "compose", "up", "-d", "--force-recreate")
         wait_for(URLS["inference"], 300, "the inference engine")
