@@ -187,6 +187,14 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> MapsSummary:
     article, and each map's stages from its own article -> the modes, maps,
     combinations and stages stored, and the articles that would not fetch."""
     modes = parse_modes_and_maps(fetch_wikitext(pull, MAPS_PAGE))
+    # every map once, in page order - the order map_ids is filled in below
+    names = list(dict.fromkeys(name for _, _, maps in modes for name in maps))
+    phases = parse_phases(fetch_wikitext(pull, HYBRID_PAGE))
+    # a map in two modes takes its stages from the first
+    codes = {map_name: code for code, _, maps in reversed(modes) for map_name in maps}
+    # every article read before the first write; a map whose article will not
+    # fetch keeps the stages it had: map_stages is upserted, never deleted
+    articles = fetch_articles(pull, names)
 
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())
@@ -220,12 +228,6 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> MapsSummary:
             combinations += 1
         pull.log("  %-11s %2d maps" % (name, len(maps)))
 
-    phases = parse_phases(fetch_wikitext(pull, HYBRID_PAGE))
-    # a map in two modes takes its stages from the first
-    codes = {map_name: code for code, _, maps in reversed(modes) for map_name in maps}
-    # a map whose article will not fetch keeps the stages it had: map_stages
-    # is upserted, never deleted
-    articles = fetch_articles(pull, map_ids)
     stage_rows = 0
     staged: dict[str, int] = {}
     for map_name, text in articles.found.items():

@@ -76,8 +76,9 @@ def _writes_at_fetch(monkeypatch, module, connection):
 def _rates_page(rows, *filters):
     """A rates page: its data table over `rows` (name, win, pick, ban), and
     each filter as (select id, [(value, label)])."""
-    table = [{"cells": {"name": name, "winrate": win, "pickrate": pick, "banrate": ban}}
-             for name, win, pick, ban in rows]
+    table = [
+        {"cells": {"name": name, "winrate": win, "pickrate": pick, "banrate": ban}}
+        for name, win, pick, ban in rows]
     selects = "".join('<select id="%s">%s</select>' % (select_id, "".join(
         '<option value="%s">%s</option>' % option for option in options))
         for select_id, options in filters)
@@ -189,17 +190,20 @@ BUSAN_STAGES = """== Gameplay ==
 """
 
 
-def test_the_maps_pull_stores_the_pool_and_each_map_s_stages(tmp_path):
+def test_the_maps_pull_stores_the_pool_and_each_map_s_stages(tmp_path, monkeypatch):
     """Busan's article lists its three submaps, every Hybrid map plays the
-    Hybrid article's two phases, and Ilios' article is not in the cache."""
+    Hybrid article's two phases, and Ilios' article is not in the cache.
+    Every page is read before the first write."""
     _cache(tmp_path, {
         cache_key(maps.MAPS_PAGE) + ".wikitext": MAPS_PAGE,
         cache_key(maps.HYBRID_PAGE) + ".wikitext": HYBRID_PAGE,
         cache_key("Busan") + ".wikitext": BUSAN_STAGES,
         cache_key("King's Row") + ".wikitext": "'''King's Row''' is a [[Hybrid]] map."})
     connection, lines = RecordingConnection(), []
+    at_fetch = _writes_at_fetch(monkeypatch, maps, connection)
     pull = _pull(tmp_path, lines)
     summary = maps.run(connection, pull)
+    assert at_fetch == [[]]                   # no source row and no map upserted yet
     [cursor] = connection.cursors
     # the ids the upserts read back: the source, then each mode and each new map
     source_id, control, busan, ilios, hybrid, kings_row = 1, 2, 3, 4, 5, 6
@@ -299,9 +303,9 @@ Fight near the point and hold it.
 def _terrain_rows(key_id, words, source_id, **mentions):
     """The eight rows one map or stage is stored as, a feature the text does
     not name at 0."""
-    return [(key_id, feature, mentions.get(feature, 0),
-             terrain.per_thousand(mentions.get(feature, 0), words), source_id)
-            for feature in terrain.FEATURES]
+    counts = {feature: mentions.get(feature, 0) for feature in terrain.FEATURES}
+    return [(key_id, feature, n, terrain.per_thousand(n, words), source_id)
+            for feature, n in counts.items()]
 
 
 def test_the_terrain_pull_counts_each_map_and_stage_and_deletes_nothing_before_it_reads(

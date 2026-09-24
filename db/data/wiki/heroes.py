@@ -10,7 +10,7 @@ which owns the hero, ability and perk rows this fills in.
 """
 
 import re
-from collections.abc import Iterable
+from collections.abc import Mapping
 
 import psycopg
 
@@ -37,28 +37,26 @@ CARGO_FIELDS = (
 
 
 def _announce_heroes(
-        cursor: psycopg.Cursor, pull: fetch.PullContext, names: Iterable[str],
-        hero_ids: dict[str, int], source_id: int) -> tuple[list[str], list[str]]:
-    """Heroes the Cargo table names that the roster lacks: those whose
-    article is marked upcoming get a row - role, subrole, health, release
-    day, status announced - so their kit loads and the board can show
-    them; Blizzard listing them later flips the status to released. Returns
-    (the names stored, the pages that would not fetch), and adds each stored
-    hero's id to `hero_ids`, which the kit and ability lookups that follow
-    read; the rest stay unknown."""
+        cursor: psycopg.Cursor, pull: fetch.PullContext, found: Mapping[str, str],
+        hero_ids: dict[str, int], source_id: int) -> list[str]:
+    """Heroes the Cargo table names that the roster lacks, from their
+    articles (`found`, {name: wikitext}): those whose article is marked
+    upcoming get a row - role, subrole, health, release day, status
+    announced - so their kit loads and the board can show them; Blizzard
+    listing them later flips the status to released. Returns the names
+    stored, and adds each stored hero's id to `hero_ids`, which the kit and
+    ability lookups that follow read; the rest stay unknown."""
     stored: list[str] = []
-    articles = fetch_articles(
-        pull, sorted(name for name in names if name.lower() not in hero_ids))
-    for hero_name, text in articles.found.items():
-        found = parse_announcement(text)
-        if not found:
+    for hero_name, text in found.items():
+        upcoming = parse_announcement(text)
+        if not upcoming:
             continue
         cursor.execute("SELECT s.subrole_id, r.role_id FROM subroles s JOIN roles r USING (role_id)"
-                       " WHERE r.code = %s AND s.code = %s", (found.role, found.subrole))
+                       " WHERE r.code = %s AND s.code = %s", (upcoming.role, upcoming.subrole))
         row = cursor.fetchone()
         if row is None:
             pull.log("announced hero %s: subrole %s/%s not on the roster yet, skipped" % (
-                hero_name, found.role, found.subrole))
+                hero_name, upcoming.role, upcoming.subrole))
             continue
         subrole_id, role_id = row
         slug = re.sub(r"[^a-z0-9]+", "-", hero_name.lower()).strip("-")
@@ -69,14 +67,14 @@ def _announce_heroes(
             " health = coalesce(EXCLUDED.health, heroes.health), cao = now()"
             " RETURNING hero_id",
             (
-                slug, hero_name, role_id, subrole_id, found.health, found.release_date,
+                slug, hero_name, role_id, subrole_id, upcoming.health, upcoming.release_date,
                 source_id))
         hero_ids[hero_name.lower()] = psql.scalar(cursor)
         stored.append(hero_name)
         pull.log("announced hero stored: %s (%s, %s%s)" % (
-            hero_name, found.role, found.subrole,
-            ", releases %s" % found.release_date if found.release_date else ""))
-    return stored, articles.missing
+            hero_name, upcoming.role, upcoming.subrole,
+            ", releases %s" % upcoming.release_date if upcoming.release_date else ""))
+    return stored
 
 
 class KitsSummary(KitCounts, ArticlePullSummary):
@@ -104,15 +102,18 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext, *,
         pull.log("supplemented stats: %d  (fields Cargo does not expose)" % articles.stats)
 
     cursor = connection.cursor()
-    source_id = psql.register_source(cursor, WIKI, psql.now())
     hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
-    announced, unfetched = _announce_heroes(cursor, pull, by_hero, hero_ids, source_id)
+    # the articles of the heroes the roster lacks, read before the first write
+    unlisted = fetch_articles(
+        pull, sorted(name for name in by_hero if name.lower() not in hero_ids))
+    source_id = psql.register_source(cursor, WIKI, psql.now())
+    announced = _announce_heroes(cursor, pull, unlisted.found, hero_ids, source_id)
     stored = kit_store.store(cursor, by_hero, articles.profiles, hero_ids, source_id)
     connection.commit()
 
     return KitsSummary(
         **stored.tally.counts(), cargo_rows=len(rows), supplemented=articles.stats,
-        missing=articles.missing + unfetched, unknown_heroes=stored.unknown_heroes,
+        missing=articles.missing + unlisted.missing, unknown_heroes=stored.unknown_heroes,
         announced=announced,
         tables=["abilities", "ability_stats", "ability_modifiers", "weapons",
                 "weapon_configs", "weapon_stats", "perk_stats",

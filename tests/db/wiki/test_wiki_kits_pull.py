@@ -32,27 +32,19 @@ def _pull(lines):
     return fetch.PullContext(None, log=lines.append)
 
 
-def test_an_announced_hero_is_stored_from_its_article_and_the_rest_are_reported(monkeypatch):
-    """Of the names the roster lacks: Doctrine's article is marked upcoming
-    and stored; Oddity's names a subrole the roster has not seeded; the
-    overview page is no hero; Wraith's page would not fetch."""
-    asked = []
-
-    def articles(pull, titles):
-        asked.append(list(titles))
-        return Articles({"All heroes": "An overview of every hero.",
-                         "Doctrine": ARTICLE % ("Doctrine", "Survivor", "Doctrine"),
-                         "Oddity": ARTICLE % ("Oddity", "Warden", "Oddity")},
-                        ["Wraith: failed after 1 attempt: gone"])
-    monkeypatch.setattr(heroes, "fetch_articles", articles)
+def test_an_announced_hero_is_stored_from_its_article_and_the_rest_are_reported():
+    """Of the articles of the names the roster lacks: Doctrine's is marked
+    upcoming and stored; Oddity's names a subrole the roster has not seeded;
+    the overview page is no hero."""
+    found = {
+        "All heroes": "An overview of every hero.",
+        "Doctrine": ARTICLE % ("Doctrine", "Survivor", "Doctrine"),
+        "Oddity": ARTICLE % ("Oddity", "Warden", "Oddity")}
     lines = []
     cursor = RecordingCursor(reads=[("SELECT s.subrole_id, r.role_id", _subrole)])
     hero_ids = {"anvil": 101}
-    stored, missing = heroes._announce_heroes(
-        cursor, _pull(lines), ["Anvil", "Doctrine", "Oddity", "Wraith", "All heroes"], hero_ids,
-        50)
-    assert asked == [["All heroes", "Doctrine", "Oddity", "Wraith"]]     # the roster's own skipped
-    assert stored == ["Doctrine"] and missing == ["Wraith: failed after 1 attempt: gone"]
+    stored = heroes._announce_heroes(cursor, _pull(lines), found, hero_ids, 50)
+    assert stored == ["Doctrine"]
     assert cursor.written("INSERT INTO heroes") == [
         ("doctrine", "Doctrine", 3, 7, 250, datetime.date(2026, 10, 6), 50)]
     assert hero_ids == {"anvil": 101, "doctrine": 1}         # the id the upsert read back
@@ -77,16 +69,27 @@ ROWS = [
 
 def test_the_pull_stores_every_kit_in_one_transaction_and_counts_what_it_read(monkeypatch):
     """Anvil is on the roster and Doctrine is announced by its article, so
-    both kits are stored; the overview page is skipped by name. The articles
-    add Anvil's pools and three stats, and Kite's would not fetch."""
+    both kits are stored; the overview page is skipped by name, and Wraith's
+    article would not fetch, so Wraith stays unknown. Only the heroes the
+    roster lacks have their articles read for an announcement, and every one
+    is read before the first write. The articles add Anvil's pools and three
+    stats, and Kite's would not fetch."""
+    asked, written = [], []
+
     def articles(pull, titles):
-        return Articles({"Doctrine": ARTICLE % ("Doctrine", "Survivor", "Doctrine")}, [])
+        asked.append(list(titles))
+        written.extend(text for cursor in connection.cursors for text, _ in cursor.statements
+                       if not text.startswith("SELECT"))
+        return Articles({"All heroes": "An overview of every hero.",
+                         "Doctrine": ARTICLE % ("Doctrine", "Survivor", "Doctrine")},
+                        ["Wraith: failed after 1 attempt: gone"])
 
     def supplement(pull, by_hero):
-        assert sorted(by_hero) == ["All heroes", "Anvil", "Doctrine"]
+        assert sorted(by_hero) == ["All heroes", "Anvil", "Doctrine", "Wraith"]
         return Supplement({"Anvil": HeroProfile(health=400, shield=0, armor=300)}, 3,
                           ["Kite: gone"])
-    monkeypatch.setattr(heroes, "cargo_query", lambda pull, table, fields: ROWS)
+    rows = [*ROWS, _cargo("Wraith", "Shadow Step", "Ability")]
+    monkeypatch.setattr(heroes, "cargo_query", lambda pull, table, fields: rows)
     monkeypatch.setattr(heroes, "fetch_articles", articles)
     monkeypatch.setattr(heroes, "supplement_kits", supplement)
     connection = RecordingConnection(reads=[
@@ -95,13 +98,16 @@ def test_the_pull_stores_every_kit_in_one_transaction_and_counts_what_it_read(mo
         ('SELECT "code", "kind_id" FROM "ability_kinds"', [("weapon", 1), ("ability", 2)])])
     lines = []
     summary = heroes.run(connection, _pull(lines))
+    assert asked == [["All heroes", "Doctrine", "Wraith"]]     # the roster's own skipped
+    assert written == []
     assert connection.commits == 1 and len(connection.cursors) == 1
-    assert summary["cargo_rows"] == 4 and summary["supplemented"] == 3
-    assert summary["announced"] == ["Doctrine"] and summary["unknown_heroes"] == ["All heroes"]
-    assert summary["missing"] == ["Kite: gone"]
+    assert summary["cargo_rows"] == 5 and summary["supplemented"] == 3
+    assert summary["announced"] == ["Doctrine"]
+    assert summary["unknown_heroes"] == ["All heroes", "Wraith"]
+    assert summary["missing"] == ["Kite: gone", "Wraith: failed after 1 attempt: gone"]
     assert (summary["weapons"], summary["added"], summary["health"]) == (1, 1, 1)
     assert "heroes" in summary["tables"] and "abilities" in summary["tables"]
-    assert lines[:2] == ["cargo rows: 4   heroes named: 3",
+    assert lines[:2] == ["cargo rows: 5   heroes named: 4",
                          "supplemented stats: 3  (fields Cargo does not expose)"]
     (cursor,) = connection.cursors
     assert cursor.written("INSERT INTO sources")[0][0] == "wiki"
