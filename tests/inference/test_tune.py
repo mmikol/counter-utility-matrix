@@ -1,24 +1,12 @@
-"""The playbook's life: strategies tuned through validation with an audit
-trail, drafts completed from their prose, and the catalog's guards."""
+"""Tuning, adding and completing strategies: each change validated through
+the catalog before it is written, and logged with a reason."""
 
 import os
-import shutil
 from pathlib import Path
 
 import pytest
 
 from inference import catalog, tune
-from tests.inference import FIXTURE_PLAYBOOK
-
-
-@pytest.fixture()
-def catalog_copy(tmp_path):
-    """A private copy of the reference playbook to tune without touching the repo."""
-    for name in os.listdir(FIXTURE_PLAYBOOK):
-        if name.endswith(".md") and name not in catalog.NOT_STRATEGIES:
-            shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
-    return str(tmp_path)
-
 
 # --- tuning --------------------------------------------------------------------------
 
@@ -140,112 +128,7 @@ def test_add_stores_a_validated_strategy_and_complete_finishes_a_draft(catalog_c
         tune.complete("sustain-first", {}, "r", directory=catalog_copy)
 
 
-# --- deriving: the engine asks the model, the catalog keeps the gate ------------------
-
-def _draft(directory, hid="heal-line", kind="constraint"):
-    with open(os.path.join(directory, hid + ".md"), "w", encoding="utf-8") as handle:
-        handle.write("---\nname: Shut off a heavy heal line\nkind: %s\ncategory: matchup\n---\n"
-                     "# Shut off a heavy heal line\n\nWhen their support line heals at or above"
-                     " the roster bench, one anti-heal pick is worth more than another damage"
-                     " dealer. One is rewarded; two overlap.\n" % kind)
-
-
-def test_the_derive_prompt_anchors_its_style_on_one_file_per_form(catalog_copy):
-    """The prompt shows one finished file of each form the playbook holds -
-    the first by id, so the anchors are stable - and never a draft."""
-    from inference import derive
-    _draft(catalog_copy)
-    cat = catalog.load(catalog_copy)
-    anchors = derive.style_anchors(cat)
-    assert [h.id for h in anchors] == ["anti-air", "anti-heal-answer", "cohesion", "locked-picks"]
-    assert {h.form for h in anchors} == {h.form for h in cat} - {"draft"}
-
-
-def test_derive_completes_a_draft_from_the_models_answer(catalog_copy):
-    from inference import derive
-    _draft(catalog_copy)
-    asked = []
-    def runner(text):
-        asked.append(text)
-        return ('Sure. {"fields": {"when": "enemy.heal_ratio >= params.HEAL_RATIO", '
-                '"bonus": "min(team.antiheal, 1) * 1.5", "params": {"HEAL_RATIO": 1.0}}, '
-                '"reason": "one anti-heal pick is worth more than another damage dealer"}')
-    result = derive.derive(directory=catalog_copy, runner=runner, log=lambda m: None)
-    assert result["derived"] == [{"id": "heal-line", "form": "scored", "set": {
-        "when": "enemy.heal_ratio >= params.HEAL_RATIO", "bonus": "min(team.antiheal, 1) * 1.5",
-        "params.HEAL_RATIO": "1"}}] and not result["failed"]
-    assert len(asked) == 1
-    text = asked[0]
-    assert "name: Shut off a heavy heal line" in text and "kind: constraint" in text
-    assert "team.antiheal - " in text and "map.side" in text and "(text)" in text
-    assert "kind: constraint\ncategory: matchup\nwhen: enemy.heal_ratio" in text   # a style anchor
-    cat = catalog.load(catalog_copy)
-    assert next(h for h in cat if h.id == "heal-line").solver_reads
-    assert "inferred -> scored" in tune.log_tail(1, os.path.join(catalog_copy, "tuning-log.md"))[0]
-    assert derive.derive(directory=catalog_copy, runner=runner)["skipped"] == "nothing pending"
-
-
-def test_derive_sends_the_catalogs_objection_back_once(catalog_copy):
-    from inference import derive
-    _draft(catalog_copy, "sustain-first", "heuristic")
-    answers = iter(['{"fields": {"metric": "team.hps_peak", "direction": "maximize", "weight": 2},'
-                    ' "reason": "r"}',
-                    '{"fields": {"metric": "team.heal_peak_total", "direction": "maximize",'
-                    ' "weight": 2},'
-                    ' "reason": "r"}'])
-    seen = []
-    def runner(text):
-        seen.append(text)
-        return next(answers)
-    result = derive.derive(directory=catalog_copy, runner=runner, log=lambda m: None)
-    assert result["derived"][0]["form"] == "heuristic" and len(seen) == 2
-    assert "refused by the catalog: sustain-first: metric 'team.hps_peak'" in seen[1]
-    # two refusals leave the draft as it was
-    _draft(catalog_copy, "stubborn", "heuristic")
-    def bad(text):
-        return '{"fields": {"metric": "team.nope", "direction": "maximize"}, "reason": "r"}'
-    result = derive.derive(["stubborn"], directory=catalog_copy, runner=bad, log=lambda m: None)
-    assert "stubborn" in result["failed"] and not result["derived"]
-    assert next(h for h in catalog.load(catalog_copy) if h.id == "stubborn").pending
-    with pytest.raises(ValueError, match="no JSON object"):
-        derive.parse("I would rather not.")
-
-
-def test_derive_without_a_signed_in_cli_leaves_drafts_pending(catalog_copy, monkeypatch):
-    from inference import derive
-    _draft(catalog_copy)
-    monkeypatch.setattr(derive, "cli", lambda: None)
-    result = derive.derive(directory=catalog_copy, log=lambda m: None)
-    assert result["skipped"].startswith("no claude CLI here") and not result["derived"]
-    def not_logged_in(text):
-        raise derive.CliUnavailableError("the claude CLI is not signed in: run `claude login` once")
-    result = derive.derive(directory=catalog_copy, runner=not_logged_in, log=lambda m: None)
-    assert "not signed in" in result["skipped"]
-    assert "not signed in" in derive.derive_rendered(result)
-    assert next(h for h in catalog.load(catalog_copy) if h.id == "heal-line").pending
-
-
-def test_derive_counts_drafts_past_the_cap_apart_from_why_it_stopped(catalog_copy, monkeypatch):
-    """The drafts past MAX_PER_RUN are deferred, a count of their own: a run
-    that stops signed out still says how many wait, and a run that completes
-    its share says it stopped for nothing."""
-    from inference import derive
-    monkeypatch.setattr(derive, "MAX_PER_RUN", 2)
-    for hid in ("draft-a", "draft-b", "draft-c"):
-        _draft(catalog_copy, hid, "heuristic")
-    def not_logged_in(text):
-        raise derive.CliUnavailableError("the claude CLI is not signed in: run `claude login` once")
-    result = derive.derive(directory=catalog_copy, runner=not_logged_in, log=lambda m: None)
-    assert "not signed in" in result["skipped"] and result["deferred"] == 1
-    assert not result["derived"]
-    def answer(text):
-        return ('{"fields": {"metric": "team.heal_peak_total", "direction": "maximize",'
-                ' "weight": 2}, "reason": "r"}')
-    result = derive.derive(directory=catalog_copy, runner=answer, log=lambda m: None)
-    assert len(result["derived"]) == 2 and result["deferred"] == 1
-    assert result["skipped"] is None
-    assert "1 draft(s) left for the next run" in derive.derive_rendered(result)
-
+# --- the guards: ids, injected fields, an unclosed fence ---------------------------------
 
 def test_tune_and_complete_refuse_ids_that_are_paths(catalog_copy):
     for bad in ("../../README", "coverage/../vintage", "Coverage", ""):
@@ -284,43 +167,3 @@ def test_a_file_whose_frontmatter_never_closes_is_refused():
     whole = "---\nname: X\nweight: 1\n---\nbody\n"
     assert tune.edit_frontmatter(whole, "weight", 2) == (
         "---\nname: X\nweight: 2\n---\nbody\n", "1")
-
-
-def test_the_deriver_accepts_only_a_strategys_fields():
-    from inference import derive
-    with pytest.raises(ValueError, match="fields a strategy does not have"):
-        derive.parse('{"fields": {"prose": true, "weight": 2}, "reason": "r"}')
-    with pytest.raises(ValueError, match="keeps its kind"):
-        derive.parse('{"fields": {"kind": "constraint"}, "reason": "r"}')
-    parsed = derive.parse('{"fields": {"kind": "assumption"}, "reason": "r"}')
-    assert parsed[0] == {"kind": "assumption"}
-    with pytest.raises(ValueError, match="params must be"):
-        derive.parse('{"fields": {"params": {"A": "1 == 1"}}, "reason": "r"}')
-    fields, reason = derive.parse('{"fields": {"weight": 2, "params": {"A": 1.5}}, "reason": "r"}')
-    assert fields == {"weight": 2, "params": {"A": 1.5}} and reason == "r"
-
-
-def test_a_file_named_for_another_id_cannot_hijack_it(catalog_copy):
-    Path(catalog_copy, "aaa.md").write_text(
-        "---\nname: x\nkind: assumption\nid: coverage\n---\nx\n",
-                                            encoding="utf-8")
-    with pytest.raises(catalog.CatalogError) as caught:
-        catalog.load(catalog_copy)
-    assert caught.value.file == "aaa.md" and "id: is the filename" in str(caught.value)
-
-
-def test_another_playbook_is_chosen_by_the_environment(monkeypatch, tmp_path):
-    """COUNTRIX_STRATEGIES names another folder of strategy files; the
-    shipped playbook is the default, and the docs are written from it alone."""
-    monkeypatch.delenv("COUNTRIX_STRATEGIES", raising=False)
-    assert catalog.strategies_dir() == catalog.SHIPPED_DIR
-    other = tmp_path / "other"                      # one rule, copied from the playbook
-    other.mkdir()
-    shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), other)
-    monkeypatch.setenv("COUNTRIX_STRATEGIES", str(other))
-    chosen = catalog.strategies_dir()
-    assert chosen == str(other)
-    one = catalog.load(chosen)
-    assert {h.id for h in one} == {"open-queue-tanks"}
-    assert catalog.write_docs(one, path=str(tmp_path / "never.md")) is None
-    assert not (tmp_path / "never.md").exists()

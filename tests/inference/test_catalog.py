@@ -1,6 +1,10 @@
 """The catalog's guards: what a strategy file may be named, how the
 playbook in force is chosen, and how the catalog reads as text."""
 
+import os
+import shutil
+from pathlib import Path
+
 import pytest
 
 from inference import catalog
@@ -64,3 +68,29 @@ def test_the_rendered_catalog_is_one_line_per_strategy_led_by_its_kind():
     assert len(lines) == len(playbook)
     for line, strategy in zip(lines, playbook, strict=True):
         assert line.startswith(strategy.kind) and strategy.id in line
+
+
+def test_a_file_named_for_another_id_cannot_hijack_it(catalog_copy):
+    Path(catalog_copy, "aaa.md").write_text(
+        "---\nname: x\nkind: assumption\nid: coverage\n---\nx\n",
+        encoding="utf-8")
+    with pytest.raises(catalog.CatalogError) as caught:
+        catalog.load(catalog_copy)
+    assert caught.value.file == "aaa.md" and "id: is the filename" in str(caught.value)
+
+
+def test_another_playbook_is_chosen_by_the_environment(monkeypatch, tmp_path):
+    """COUNTRIX_STRATEGIES names another folder of strategy files; the
+    shipped playbook is the default, and the docs are written from it alone."""
+    monkeypatch.delenv("COUNTRIX_STRATEGIES", raising=False)
+    assert catalog.strategies_dir() == catalog.SHIPPED_DIR
+    other = tmp_path / "other"                      # one rule, copied from the playbook
+    other.mkdir()
+    shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), other)
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", str(other))
+    chosen = catalog.strategies_dir()
+    assert chosen == str(other)
+    one = catalog.load(chosen)
+    assert {h.id for h in one} == {"open-queue-tanks"}
+    assert catalog.write_docs(one, path=str(tmp_path / "never.md")) is None
+    assert not (tmp_path / "never.md").exists()
