@@ -14,6 +14,7 @@ float, a boolean, null, or a [list] of those; a bare word is a string. A
 """
 
 import re
+from typing import NamedTuple
 
 # one value: a string, a number, a boolean, a [list] of values, or null
 Scalar = str | int | float | bool | list["Scalar"] | None
@@ -23,6 +24,13 @@ Frontmatter = dict[str, Scalar | dict[str, Scalar]]
 _WORDS: dict[str, bool | None] = {"true": True, "yes": True, "false": False, "no": False,
                                   "null": None, "none": None, "~": None}
 _INTEGER = re.compile(r"[-+]?\d+(?:_\d+)*\Z")      # what int() reads
+
+
+class Parsed(NamedTuple):
+    """A file split at its fences: the frontmatter read into a mapping, and
+    the body after it."""
+    meta: Frontmatter
+    body: str
 
 
 class FrontmatterError(ValueError):
@@ -56,9 +64,9 @@ def _scalar(text: str) -> Scalar:
     return _number_or_text(text)
 
 
-def parse_frontmatter(text: str) -> tuple[Frontmatter, str]:
-    """'---\\nkey: value\\n---\\nbody' -> (meta, body). Flat keys plus one
-    level of indented mapping (params:)."""
+def parse_frontmatter(text: str) -> Parsed:
+    """'---\\nkey: value\\n---\\nbody' -> Parsed(meta, body). Flat keys plus
+    one level of indented mapping (params:)."""
     if not text.startswith("---"):
         raise FrontmatterError("no frontmatter: the file must open with ---")
     end = text.find("\n---", 3)
@@ -86,4 +94,4 @@ def parse_frontmatter(text: str) -> tuple[Frontmatter, str]:
         else:
             meta[key] = _scalar(value)
             block = None
-    return meta, body.strip("\n")
+    return Parsed(meta, body.strip("\n"))

@@ -12,7 +12,7 @@ import pytest
 
 from db import Refusal
 from inference import catalog
-from inference.frontmatter import parse_frontmatter
+from inference.frontmatter import Parsed, parse_frontmatter
 from inference.strategy import KINDS, CatalogError, Strategy
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts import compute
@@ -160,6 +160,8 @@ def test_frontmatter_parses_scalars_lists_and_params():
                     "f": 1000.0, "w": "word", "z": None, "params": {"K": 3}}
     assert type(meta["n"]) is int and type(meta["f"]) is float
     assert body == "# X\nbody"
+    parsed = parse_frontmatter("---\nname: Y\n---\nprose\n")
+    assert isinstance(parsed, Parsed) and (parsed.meta, parsed.body) == ({"name": "Y"}, "prose")
 
 
 def test_the_reference_and_the_live_playbooks_are_valid_and_reference_real_metrics():

@@ -51,12 +51,12 @@ def _read(directory: str, name: str, ids: set[str]) -> Strategy:
         path = os.path.join(directory, name)
         with open(path, encoding="utf-8") as handle:
             raw = handle.read()
-        meta, body = parse_frontmatter(raw)
-        if "id" in meta and str(meta["id"]) != hid:
+        parsed = parse_frontmatter(raw)
+        if "id" in parsed.meta and str(parsed.meta["id"]) != hid:
             raise CatalogError("%s: id: is the filename; drop it" % name)
         if hid in ids:
             raise CatalogError("%s: duplicate id %r" % (name, hid))
-        return Strategy(hid, meta, body=body, raw=raw, path=path)
+        return Strategy(hid, parsed.meta, body=parsed.body, raw=raw, path=path)
     except (CatalogError, FrontmatterError) as error:
         text = str(error)
         wrapped = CatalogError(text if text.startswith((name, hid)) else "%s: %s" % (name, text))
