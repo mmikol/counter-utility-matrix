@@ -188,6 +188,8 @@ def test_refresh_once_survives_a_bad_day(monkeypatch):
         RuntimeError("blizzard 504")))
     ok, text = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"), logs.append)
     assert ok is False and "504" in text and any("FAILED" in line for line in logs)
+    traceback = next(line for line in logs if line.startswith("Traceback"))
+    assert traceback.endswith("RuntimeError: blizzard 504")
     monkeypatch.setattr(tools, "run_tool", lambda ctx, name, **kw: ("sync_all: done", {}))
     ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"), logs.append)
     assert ok is True
@@ -196,15 +198,29 @@ def test_refresh_once_survives_a_bad_day(monkeypatch):
 def test_the_loop_refreshes_stale_data_on_start_then_waits(monkeypatch):
     runs, waits = [], []
     monkeypatch.setattr(refresh, "cache_age_hours", lambda *a: 30.0)
-    monkeypatch.setattr(refresh, "refresh_once", lambda ctx, log: runs.append(1) or (True, ""))
+    monkeypatch.setattr(refresh, "refresh_once",
+                        lambda ctx, log, **kw: runs.append(kw) or (True, ""))
 
     def sleep(seconds):
         waits.append(seconds)
         if len(waits) == 2:
             raise KeyboardInterrupt
     with pytest.raises(KeyboardInterrupt):
-        refresh.run_forever(None, "05:00", 20, log=lambda m: None, sleep=sleep)
-    assert runs == [1, 1] and all(0 < w <= 24 * 3600 for w in waits)
+        refresh.run_forever(None, refresh.Schedule("05:00", 20, 7), log=lambda m: None,
+                            sleep=sleep)
+    assert runs == [{"full_days": 7}] * 2 and all(0 < w <= 24 * 3600 for w in waits)
+
+
+def test_a_schedule_refuses_a_time_that_is_not_hh_mm():
+    with pytest.raises(ValueError, match="HH:MM"):
+        refresh.Schedule("5pm", 20, 7)
+
+
+def test_the_command_line_exits_with_the_refresh_verdict(monkeypatch):
+    verdicts = iter([(False, "down"), (True, "")])
+    monkeypatch.setattr(refresh, "refresh_once", lambda ctx, **kw: next(verdicts))
+    assert refresh.main(["--now"]) == 1
+    assert refresh.main(["--now"]) == 0
 
 
 def test_full_refresh_is_due_when_the_slow_caches_are_stale(tmp_path):
