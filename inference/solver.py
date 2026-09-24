@@ -1,29 +1,32 @@
 """The solver: the optimal six under the catalog, players playing optimally.
 
-    sample     the REFERENCE: a seeded set of random legal sixes for this
-               board (map, side, enemies, bans). Heuristics are normalised
-               against it, so infer, evaluate and the current comp share one
-               scale and a score means the same thing across calls. The seed
-               is a string, so every process draws the same list and any of
-               them can prepare a slice of it.
-    standing   each hero's mean score across the reference sixes it is in:
-               the playbook's own ranking of the roster on this board
-    enumerate  every shape the hard limits allow, filled around the locked
-               picks from a per-role pool ranked by standing (six per role by
-               default)
-    sweep      a slice of the enumeration prepared, scored and slimmed. The
-               slices partition the field, so the search splits across
-               processes.
-    score      STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS: limits prune (soft ones
-               charge), heuristics normalise and weigh, scored constraints add;
-               assumptions are the agent's. A `when` reading only the enemy, the
-               map and the world is settled once per board, not once per candidate.
-               A heuristic guarded on the six's own state is a need: see score().
-    rank       sorted by score, then tie-break, then names - a total order, so
-               the answer does not depend on how the sweep was split
-    refine     local search from the best six sixes and the best of every shape:
-               swap any slot for any same-role hero on the roster, keep improvements;
-               then bring each of the wiki's synergy pairs into the best sixes two slots at once
+    sample              the REFERENCE: a seeded set of random legal sixes for this
+                        map and side. Heuristics are normalised against it, so infer,
+                        evaluate and the current comp share one scale and a score
+                        means the same thing across calls. The seed is a string, so
+                        every process draws the same list and any of them can prepare
+                        a slice of it.
+    reference_standing  each hero's mean score across the reference sixes it is in:
+                        the playbook's own ranking of the roster on this board
+    legal_sixes         every shape the hard limits allow, filled around the locked
+                        picks from a per-role pool ranked by standing (six per role
+                        by default)
+    sweep               a slice of the enumeration prepared, scored and slimmed. The
+                        slices partition the field, so the search splits across
+                        processes.
+    score               STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS: limits
+                        prune (soft ones charge), heuristics normalise and weigh,
+                        scored constraints add; assumptions are the agent's. A `when`
+                        reading only the enemy, the map and the world is settled once
+                        per board, not once per candidate. A heuristic guarded on the
+                        six's own state is a need: see score().
+    rank                sorted by score, then tie-break, then names - a total order, so
+                        the answer does not depend on how the sweep was split
+    refine              local search from the best six sixes and the best of every
+                        shape: swap any slot for any same-role hero on the roster, keep
+                        improvements; bring each of the wiki's synergy pairs into the
+                        best sixes two slots at once; then climb from random sixes of
+                        the leader's shape and change two seats at once
 """
 
 import heapq
@@ -32,6 +35,7 @@ import random
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import Literal, NamedTuple, NotRequired, TypedDict
 
+from db import Refusal
 from inference.catalog import BOARD_SECTIONS, Strategy
 from inference.expr import Expr, Scope, Value, scope
 from ui.facts import compute
@@ -50,8 +54,7 @@ CONFIDENCE_KEY = "\x00confidence"   # a rule's scale bounds, beside its own
 NEED_BUDGET = 2.0                 # the most one guarded state can cost
 REFERENCE_SEED = 20260913
 
-SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size",
-              "team.open_slots"}
+SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size", "team.open_slots"}
 
 # the namespaces that do not change across the candidates of one board
 STATIC_SECTIONS = BOARD_SECTIONS
@@ -171,8 +174,11 @@ class Evaluated(NamedTuple):
 
 
 class Solver:
-    def __init__(self, world: World, m: Map | None, red: Iterable[Hero],
-                 locked: Iterable[Hero], banned: Iterable[Hero] = (), side: str = "", *,
+    """One board's search: the playbook's objective on this board, the scale
+    it is normalised on, and the local search around the locked picks."""
+
+    def __init__(self, world: World, m: Map | None, *, red: Sequence[Hero],
+                 locked: Sequence[Hero], banned: Sequence[Hero] = (), side: str = "",
                  catalog: list[Strategy], pool_size: int = 6) -> None:
         self.world, self.m, self.red = world, m, list(red)
         self.locked = list(locked)
@@ -346,7 +352,7 @@ class Solver:
         stop being a function of the composition. Bans still screen the
         candidate field, in pools(), refine() and _pairs() - it is only the
         measuring stick that has to hold still."""
-        rng = random.Random("%d|%s|%s" % (              # a str seed is stable across processes
+        rng = random.Random("%d|%s|%s" % (  # nosec B311  # a str seed, stable across processes
             REFERENCE_SEED, self.m.id if self.m else 0, self.side))
         by_role = {r: sorted((h for h in self.world.heroes.values()    # by id: the draw must
                               if h.role == r and h.released),          # not hang on a
@@ -752,17 +758,15 @@ class Solver:
         brought in two slots at once, and the swaps run on from any that gained:
         partners that pay only together are never met one swap at a time.
 
-        An empty field refines to an empty field. `rank` guards its own call and
-        never reaches here with nothing, but `evaluate_comp` calls refine
-        directly, so the same board that gives a clean domain error through
-        `infer` gave `min() iterable argument is empty` through `evaluate`.
-        """
+        An empty field refines to an empty field: rank() returns before calling
+        it, and evaluate_comp refuses a board with no feasible six the way
+        infer does."""
         if not ranked:
             return []
         known = {c.key: c for c in ranked}
         starts = list(ranked[:SEEDS])
         shapes: set[tuple[str, ...]] = set()
-        floor = ranked[0].score - SHAPE_REACH if ranked else 0.0
+        floor = ranked[0].score - SHAPE_REACH
         for cand in ranked:                   # sorted: the first of a shape is its best
             if cand.score < floor:
                 break                         # a swap or two will not make this up
@@ -839,7 +843,8 @@ class Solver:
                    for r in ROLES}
         locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLES}
         shape = {r: sum(1 for h in leader.heroes if h.role == r) for r in ROLES}
-        rng = random.Random("restart|%s|%s" % (self.m.id if self.m else 0, self.side))
+        seed = "restart|%s|%s" % (self.m.id if self.m else 0, self.side)
+        rng = random.Random(seed)  # nosec B311  # a str seed, stable across processes
         best = leader
         for _ in range(n):
             heroes: list[Hero] = []
@@ -960,19 +965,24 @@ def legal_shapes(catalog: Iterable[Strategy],
     return out
 
 
-def evaluate_comp(world: World, m: Map | None, red: Sequence[Hero], heroes: Sequence[Hero],
-                  banned: Sequence[Hero] = (), side: str = "", *, catalog: list[Strategy],
-                  pool_size: int = 6, swept: Swept | None = None) -> Evaluated:
+def evaluate_comp(world: World, m: Map | None, heroes: Sequence[Hero], *,
+                  red: Sequence[Hero], banned: Sequence[Hero] = (), side: str = "",
+                  catalog: list[Strategy], pool_size: int = 6,
+                  swept: Swept | None = None) -> Evaluated:
     """Score one full six against the field the solver would search. `swept`
     takes a Swept from elsewhere - the same board's optimal search, which
-    sweeps the same field."""
+    sweeps the same field. A board with no feasible six is refused, as infer
+    refuses it."""
     if swept is None:
-        solver = Solver(world, m, red, [], banned, side, catalog=catalog,
-                        pool_size=pool_size)
+        solver = Solver(world, m, red=red, locked=[], banned=banned, side=side,
+                        catalog=catalog, pool_size=pool_size)
         solver.freeze_bounds()                # the same reference scale as infer
         swept = solver.sweep()
     solver = swept.solver
     solver.considered = swept.size
+    if not swept.feasible:
+        raise Refusal("no composition satisfies the limits on this board - relax a"
+                      " constraint in inference/strategies/")
     target = solver.score(solver.prepare(Candidate(heroes)))
     # rank against the field the search actually ends on. Ranking against the raw
     # sweep alone called a six first that the refinement had already beaten, so a

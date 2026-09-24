@@ -343,8 +343,8 @@ def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
           seat: str = "blue", solved: Solved | None = None) -> Result:
     """The optimal six for `seat` around its locked picks (`blue`) against
     the other seat's revealed picks (`red`), on `side` of a sided map.
-    `solved` takes a (solver, ranked) the caller already has - a board's
-    search, run across the worker pool - instead of searching here."""
+    `solved` takes a Solved the caller already has - a board's search, run
+    across the worker pool - instead of searching here."""
     started = time.time()
     catalog = catalog or catalog_module.load()
     m, red_h, blue_h, bans_h = world.resolve(map_name, red, blue, bans)
@@ -354,8 +354,8 @@ def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
     result = Result("infer", m.name if m else None, [h.name for h in red_h], [],
                     [h.name for h in blue_h], catalog, [h.name for h in bans_h], side, seat)
     if solved is None:
-        solved = Solver(world, m, red_h, blue_h, bans_h, side, catalog=catalog,
-                        pool_size=pool_size).solve(top=max(top, 1) + 1)
+        solved = Solver(world, m, red=red_h, locked=blue_h, banned=bans_h, side=side,
+                        catalog=catalog, pool_size=pool_size).solve(top=max(top, 1) + 1)
     solver, ranked = solved
     if not ranked:
         raise Refusal("no composition satisfies the limits around the"
@@ -390,8 +390,8 @@ def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
     result = Result("evaluate", m.name if m else None, [h.name for h in red_h],
                     [h.name for h in blue_h], [], catalog, [h.name for h in bans_h], side,
                     seat)
-    evaluated = evaluate_comp(world, m, red_h, blue_h, bans_h, side, catalog=catalog,
-                              pool_size=pool_size, swept=swept)
+    evaluated = evaluate_comp(world, m, blue_h, red=red_h, banned=bans_h, side=side,
+                              catalog=catalog, pool_size=pool_size, swept=swept)
     fs = _board_facts(world, result, side)
     _fill(result, evaluated.target, fs, evaluated.solver)
     result.rank = evaluated.rank
@@ -923,8 +923,8 @@ Spec = namedtuple("Spec", "map_name enemy locked pool_size bans side")
 def _solver(world: World, catalog: list[Strategy], spec: Spec) -> Solver:
     m, red_h, locked_h, bans_h = world.resolve(spec.map_name, spec.enemy, spec.locked,
                                                spec.bans)
-    return Solver(world, m, red_h, locked_h, bans_h, _side(m, spec.side),
-                  catalog=catalog, pool_size=spec.pool_size)
+    return Solver(world, m, red=red_h, locked=locked_h, banned=bans_h,
+                  side=_side(m, spec.side), catalog=catalog, pool_size=spec.pool_size)
 
 
 def _bounds(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,

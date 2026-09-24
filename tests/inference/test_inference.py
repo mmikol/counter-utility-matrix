@@ -263,6 +263,23 @@ def test_evaluate_ranks_a_full_six_against_the_field(world):
 
 
 @pytest.mark.invariant
+def test_a_board_no_six_satisfies_is_refused_by_infer_and_evaluate_alike(world, tmp_path):
+    """A hard limit no six can meet leaves no legal shape, so the field is
+    empty: infer refuses the board, and evaluate refuses it the same way
+    instead of ranking a six first among nothing."""
+    from inference import engine
+    (tmp_path / "seven-tanks.md").write_text(
+        "---\nname: seven tanks\nkind: constraint\nrequire: team.tanks == 7\n---\nx\n", "utf-8")
+    scratch = catalog.load(str(tmp_path))
+    with pytest.raises(Refusal, match="relax a constraint"):
+        engine.infer(world, "King's Row", ["Zarya"], [], catalog=scratch)
+    with pytest.raises(Refusal, match="relax a constraint"):
+        engine.evaluate(world, "King's Row", ["Zarya"],
+                        ["Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko"],
+                        catalog=scratch)
+
+
+@pytest.mark.invariant
 def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(world, tmp_path):
     from inference import engine
     fix = catalog.load(FIXTURE_PLAYBOOK)
@@ -998,8 +1015,8 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
     locked, banned = [world.hero("Reinhardt")], [world.hero("Mercy")]
 
     def solver_on(w):
-        return solver_module.Solver(w, None, [], locked, banned, catalog=scratch,
-                                    pool_size=3)
+        return solver_module.Solver(w, None, red=[], locked=locked, banned=banned,
+                                    catalog=scratch, pool_size=3)
 
     alone = copy.copy(world)                   # the same roster, no synergy pair yet
     alone.synergies, alone.partners = {}, {}
@@ -1053,8 +1070,8 @@ def test_a_ban_does_not_rescale_the_board(world):
 
     def score_under(bans):
         m, red_h, _, bans_h = world.resolve("King's Row", red, [], bans)
-        solver = solver_module.Solver(world, m, red_h, [], bans_h, "attack",
-                                      catalog=catalog)
+        solver = solver_module.Solver(world, m, red=red_h, locked=[], banned=bans_h,
+                                      side="attack", catalog=catalog)
         solver.freeze_bounds()
         cand = solver.prepare(solver_module.Candidate([world.hero(n) for n in six]))
         return solver.score(cand, detail=False).score
@@ -1113,8 +1130,8 @@ def test_a_rule_scales_by_the_metric_it_names(world, tmp_path):
 
     def points(map_name, strategy_id):
         m, red, _, _ = world.resolve(map_name, ["Zarya", "Pharah"], [], [])
-        solver = solver_module.Solver(world, m, red, [], [], engine._side(m, "attack"),
-                                      catalog=playbook)
+        solver = solver_module.Solver(world, m, red=red, locked=[],
+                                      side=engine._side(m, "attack"), catalog=playbook)
         solver.freeze_bounds()
         best = engine.infer(world, map_name, ["Zarya", "Pharah"], [],
                             side=engine._side(m, "attack"), top=1, catalog=playbook)
@@ -1147,6 +1164,7 @@ def test_a_board_confidence_reads_the_boards_own_ban_count(world, tmp_path):
     playbook = catalog.load(str(tmp_path))
     m, red, _, banned = world.resolve("King's Row", ["Zarya", "Pharah"], [],
                                       ["Widowmaker", "Sombra"])
-    solver = solver_module.Solver(world, m, red, [], banned, "attack", catalog=playbook)
+    solver = solver_module.Solver(world, m, red=red, locked=[], banned=banned, side="attack",
+                                  catalog=playbook)
     solver.freeze_bounds()
     assert solver.bounds["scale-by-the-bans" + solver_module.CONFIDENCE_KEY] == (2.0, 2.0)
