@@ -1,8 +1,9 @@
 """board(): both seats on opposite sides, the weights it is given, the fight
-odds, the shapes and the queue's tank limit, a team of seven, the likely six,
-a full six on control, every seat of a board on the synthetic World, and the
-page's boards superseding one another. Every board is the synthetic World's:
-no database."""
+odds, the shapes and the queue's tank limit, an empty catalog kept as the
+caller's, the likely six, a full six on control, every seat of a board on the
+synthetic World, and the page's boards superseding one another. Every board is
+the synthetic World's: no database. test_board_gate holds the lobby's limits
+on every door."""
 
 import pytest
 
@@ -174,19 +175,6 @@ def test_the_queue_caps_tanks_at_two_whatever_the_playbook_holds(synthetic_world
         engine.evaluate(world, Draft("Harbor Gate", (),
                                      ("Anvil", "Kite", "Mortar", "Balm", "Tansy", "Needle")),
                         catalog=ASSUMPTIONS_ONLY)
-
-
-def test_the_board_refuses_a_team_of_seven(synthetic_world):
-    """engine.board is what every door reaches, the MCP tool with no wire to
-    parse among them: a seventh pick on either team is refused before any
-    search, where it used to be scored as a seven-hero comp."""
-    from inference import engine
-    fix = catalog.load(FIXTURE_PLAYBOOK)
-    seven = ["Balm", "Myrrh", "Sorrel", "Tansy", "Rook", "Needle", "Flint"]
-    with pytest.raises(Refusal, match="more than 6 red picks"):
-        engine.board(synthetic_world, Draft("Harbor Gate", tuple(seven), ()), catalog=fix)
-    with pytest.raises(Refusal, match="more than 6 blue picks"):
-        engine.board(synthetic_world, Draft("Harbor Gate", (), tuple(seven)), catalog=fix)
 
 
 def test_an_empty_catalog_is_the_callers_and_loads_no_playbook(synthetic_world, monkeypatch):
