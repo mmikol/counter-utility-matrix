@@ -1109,23 +1109,29 @@ def _solver(world: World, catalog: list[Strategy], spec: Spec) -> Solver:
                   catalog=catalog, pool_size=spec.pool_size)
 
 
+def _worker_solver(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
+                   bounds: Bounds | None = None, standing: Tally | None = None) -> Solver:
+    """In a worker: the Solver for a spec's board, on the world the worker
+    holds and the playbook under the board's weights - on the scale the
+    merged slices froze, when `bounds` is given."""
+    solver = _solver(_world(token, data), catalog_module.weighted(_playbook(), weights), spec)
+    if bounds is not None:
+        solver.adopt_bounds(bounds, standing)
+    return solver
+
+
 def _bounds(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
             index: int, count: int) -> Bounds:
     """One slice of the reference sample, in a worker: the low and high it
     sees for each heuristic."""
-    world = _world(token, data)
-    solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
-    return reference_bounds(solver, index, count)
+    return reference_bounds(_worker_solver(token, data, spec, weights), index, count)
 
 
 def _standing(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
               bounds: Bounds, index: int, count: int) -> Tally:
     """One slice of the reference sample scored under the merged bounds, in a
     worker: each hero's tally in it."""
-    world = _world(token, data)
-    solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
-    solver.adopt_bounds(bounds)
-    return reference_standing(solver, index, count)
+    return reference_standing(_worker_solver(token, data, spec, weights, bounds), index, count)
 
 
 def _merge_tallies(tally: Tally, part: Mapping[int, Sequence[int]]) -> Tally:
@@ -1150,10 +1156,7 @@ def _sweep(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | N
            bounds: Bounds, standing: Tally | None, index: int,
            count: int) -> tuple[int, list[Verdict]]:
     """One slice of one search, in a worker."""
-    world = _world(token, data)
-    solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
-    solver.adopt_bounds(bounds, standing)
-    swept = solver.sweep(index, count)
+    swept = _worker_solver(token, data, spec, weights, bounds, standing).sweep(index, count)
     return swept.size, [_verdict(c) for c in swept.feasible]
 
 
@@ -1162,10 +1165,8 @@ def _rank(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | No
           top: int) -> tuple[list[Verdict], int]:
     """The tail of a split search, in a worker: the merged field ranked and
     refined. -> (the winners, how many candidates refining added)."""
-    world = _world(token, data)
-    solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
-    solver.adopt_bounds(bounds, standing)
-    ranked = solver.rank([_revive(world, v) for v in verdicts], top)
+    solver = _worker_solver(token, data, spec, weights, bounds, standing)
+    ranked = solver.rank([_revive(solver.world, v) for v in verdicts], top)
     return [_verdict(c) for c in ranked], solver.considered
 
 
@@ -1233,7 +1234,8 @@ class _Split:
         self.tail = self.pool.submit(_rank, self.token, self.data, self.spec, self.weights,
                                      self._scale(), self.standing, self.verdicts, self.top)
 
-    def _solver(self) -> Solver:
+    def _scaled_solver(self) -> Solver:
+        """The Solver for this split's board, on the scale its slices froze."""
         solver = _solver(self.world, self.catalog, self.spec)
         solver.adopt_bounds(self._scale(), self.standing)
         return solver
@@ -1243,15 +1245,39 @@ class _Split:
         if self.tail is None:
             raise RuntimeError("solved() follows merge()")
         winners, refined = self.tail.result()
-        solver = self._solver()
+        solver = self._scaled_solver()
         solver.considered = self.size + refined
         return Solved(solver, [solver.hydrate(_revive(self.world, v)) for v in winners])
 
     def swept(self) -> Swept:
         """The Swept of the whole field, as one Solver.sweep() would have left
         it: what a six is ranked against."""
-        return Swept(self._solver(), self.size,
+        return Swept(self._scaled_solver(), self.size,
                      [_revive(self.world, v) for v in self.verdicts])
+
+
+class _NullSplit:
+    """A search not split: each round does nothing and solved() and swept()
+    are None, so the seat searches for itself in this process."""
+    bounds: Bounds | None = None
+    standing: Tally | None = None
+
+    def rank_roster(self) -> None:
+        """Nothing to rank: the seat's own search draws its scale."""
+
+    def sweep(self) -> None:
+        """Nothing to send out."""
+
+    def merge(self) -> None:
+        """Nothing to collect."""
+
+    def solved(self) -> Solved | None:
+        """None: the seat searches for itself."""
+        return None
+
+    def swept(self) -> Swept | None:
+        """None: the seat sweeps its own field."""
+        return None
 
 
 COUNTERED_POOL = 4          # a what-if: a smaller field is enough
@@ -1307,115 +1333,133 @@ def board(world: World, draft: Draft, *, catalog: list[Strategy] | None = None,
     `weights` ({heuristic id: 0..10}) overrides the files' weights for this
     board only - the playbook tab's sliders; the files stay as they are and
     every result says the weights it was scored under.
+
+    Across the pool the four searches are split and walked through their
+    rounds together; in this process each seat searches for itself. A worker
+    dying anywhere in the pooled pass drops the pool and runs the same pass
+    here.
     """
     parallel = parallel_available(catalog)
     catalog = catalog_module.weighted(catalog or catalog_module.load(), weights)
+    if not parallel:
+        return _board_once(world, draft, catalog=catalog, pool_size=pool_size, weights=weights,
+                           workers=None)
+    try:
+        return _board_once(world, draft, catalog=catalog, pool_size=pool_size, weights=weights,
+                           workers=_workers())
+    except BrokenProcessPool:
+        _drop_workers()                # a worker died: this board, in this process
+    return _board_once(world, draft, catalog=catalog, pool_size=pool_size, weights=weights,
+                       workers=None)
+
+
+def _board_once(world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int,
+                weights: Mapping[str, float] | None, workers: Workers | None) -> Board:
+    """The board, its searches split across `workers`, or each run in this
+    process where there are none."""
     m, red_h, blue_h, bans_h = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
     draft = draft._replace(side=_side(m, draft.side))
-    side = draft.side
-    for team, seat in ((red_h, "red"), (blue_h, "blue")):
-        check_team_size(team, seat)
-        check_tanks(team, seat)
-    # red's likely six - the map and the meta alone, past the bans - is static
-    # for the board; until red reveals a pick it is what blue's seat counters.
-    # A Result like every other seat: its picks carry the reason each rests on
-    likely = compute.expected_picks(world, m, banned=bans_h)
-    expected = Result(kind="expected", map_name=m.name if m else None, red=[],
-                      blue=[p["hero"] for p in likely], locked=[], catalog=catalog,
-                      bans=list(draft.bans), side=side, seat="red",
-                      picks=[Pick(hero=p["hero"], role=p["role"], rate=p["rate"],
-                                  locked=p["locked"], why=p["why"], evidence=[])
-                             for p in likely])
+    _check_teams(red_h, blue_h)
+    expected = _expected(world, m, bans_h, draft, catalog)
     enemy = draft.red or tuple(expected.blue)
     # each seat's draft, from that seat's perspective: its own picks are `blue`
     blue_seat = draft._replace(red=enemy, blue=())
-    red_seat = Draft(draft.map_name, draft.blue, (), draft.bans, opposite(side))
+    red_seat = Draft(draft.map_name, draft.blue, (), draft.bans, opposite(draft.side))
     ours = draft._replace(red=enemy)                   # the current comp and the fill
-    theirs = Draft(draft.map_name, draft.blue, draft.red, draft.bans, opposite(side))
-    wants_fill = 0 < len(draft.blue) < TEAM_SIZE
+    theirs = Draft(draft.map_name, draft.blue, draft.red, draft.bans, opposite(draft.side))
     want = BOARD_TOP + 1
-    # One orchestration, run once. Across the pool the four searches are split
-    # and handed to the same six calls; in this process every split is None and
-    # each call searches for itself. A worker dying anywhere in the pooled pass
-    # drops the pool and runs the very same sequence here.
-    for pooled in [True, False] if parallel else [False]:
-        try:
-            fill: Result | None = None
-            countered: Result | None = None
-            blue_split: _Split | None = None
-            red_split: _Split | None = None
-            fill_split: _Split | None = None
-            countered_split: _Split | None = None
-            if pooled:
-                workers = _workers()
-                pool = workers.executor
-                half = max(1, workers.size // 2)
-                rest = max(1, workers.size - half)
-                blue_split = _Split(pool, world, catalog, Spec(blue_seat, pool_size),
-                                    weights, want, half)
-                red_split = _Split(pool, world, catalog, Spec(red_seat, pool_size),
-                                   weights, want, rest)
-                blue_split.rank_roster()
-                red_split.rank_roster()
-                blue_split.sweep()
-                red_split.sweep()
-                if wants_fill:
-                    # the fill is blue's board, so it takes blue's scale and draws none
-                    fill_split = _Split(pool, world, catalog, Spec(ours, pool_size),
-                                        weights, want, half, blue_split.bounds,
-                                        blue_split.standing)
-                    fill_split.sweep()
-                blue_split.merge()
-                red_split.merge()
-            blue = _optimal(world, blue_seat, catalog=catalog, pool_size=pool_size,
-                            top=BOARD_TOP, seat="blue", kind="infer",
-                            solved=blue_split.solved() if blue_split else None)
-            red = _optimal(world, red_seat, catalog=catalog, pool_size=pool_size,
-                           top=BOARD_TOP, seat="red", kind="infer",
-                           solved=red_split.solved() if red_split else None)
-            countered_seat = draft._replace(red=tuple(red.result.blue))
-            if pooled and draft.blue and red.result.blue:
-                countered_split = _Split(
-                    pool, world, catalog,
-                    Spec(countered_seat._replace(blue=()), min(pool_size, COUNTERED_POOL)),
-                    weights, want, rest)
-                countered_split.sweep()
-            if fill_split is not None:
-                fill_split.merge()
-            if countered_split is not None:
-                countered_split.merge()
-            # a full six is ranked against the field its seat's search just swept;
-            # 100 is the seat's optimal, whatever it holds
-            cur = _current(world, ours, solver=blue.solver, best=blue.result.score,
-                           catalog=catalog, pool_size=pool_size, seat="blue", kind="current",
-                           swept=blue_split.swept()
-                           if blue_split and len(draft.blue) == TEAM_SIZE else None)
-            red_cur = _current(world, theirs, solver=red.solver, best=red.result.score,
-                               catalog=catalog, pool_size=pool_size, seat="red",
-                               kind="current",
-                               swept=red_split.swept()
-                               if red_split and len(draft.red) == TEAM_SIZE else None)
-            if wants_fill:
-                fill = _optimal(world, ours, catalog=catalog, pool_size=pool_size,
-                                top=BOARD_TOP, seat="blue", kind="fill",
-                                solved=fill_split.solved() if fill_split else None).result
-            if draft.blue and red.result.blue:
-                countered = _countered(
-                    world, countered_seat, catalog=catalog, pool_size=pool_size,
-                    top=BOARD_TOP,
-                    solved=countered_split.solved() if countered_split else None,
-                    swept=countered_split.swept()
-                    if countered_split and len(draft.blue) == TEAM_SIZE else None)
-            break
-        except BrokenProcessPool:
-            if not pooled:
-                raise                  # nothing was pooled: the pool is not the fault
-            _drop_workers()            # a worker died: this board, in this process
-    if fill is not None:
-        fill.scale_to(blue.result.score)           # how close the best completion comes
-    return Board(map_name=m.name if m else None, side=side, bans=list(draft.bans),
+    half, rest = _slices(workers)
+    full, wants_fill = len(draft.blue) == TEAM_SIZE, 0 < len(draft.blue) < TEAM_SIZE
+
+    def split(seat: Draft, slices: int, *, pool_size: int = pool_size,
+              bounds: Bounds | None = None, standing: Tally | None = None) -> _Split | _NullSplit:
+        if workers is None:
+            return _NullSplit()
+        return _Split(workers.executor, world, catalog, Spec(seat, pool_size), weights, want,
+                      slices, bounds, standing)
+
+    blue_split, red_split = split(blue_seat, half), split(red_seat, rest)
+    blue_split.rank_roster()
+    red_split.rank_roster()
+    blue_split.sweep()
+    red_split.sweep()
+    # the fill is blue's board, so it takes blue's scale and draws none
+    fill_split = (split(ours, half, bounds=blue_split.bounds, standing=blue_split.standing)
+                  if wants_fill else _NullSplit())
+    fill_split.sweep()
+    blue_split.merge()
+    red_split.merge()
+    blue = _optimal(world, blue_seat, catalog=catalog, pool_size=pool_size, top=BOARD_TOP,
+                    seat="blue", kind="infer", solved=blue_split.solved())
+    red = _optimal(world, red_seat, catalog=catalog, pool_size=pool_size, top=BOARD_TOP,
+                   seat="red", kind="infer", solved=red_split.solved())
+    countering = bool(draft.blue and red.result.blue)
+    countered_seat = draft._replace(red=tuple(red.result.blue))
+    countered_split = (split(countered_seat._replace(blue=()), rest,
+                             pool_size=min(pool_size, COUNTERED_POOL))
+                       if countering else _NullSplit())
+    countered_split.sweep()
+    fill_split.merge()
+    countered_split.merge()
+    # a full six is ranked against the field its seat's search just swept;
+    # 100 is the seat's optimal, whatever it holds
+    cur = _current(world, ours, solver=blue.solver, best=blue.result.score, catalog=catalog,
+                   pool_size=pool_size, seat="blue", kind="current",
+                   swept=blue_split.swept() if full else None)
+    red_cur = _current(world, theirs, solver=red.solver, best=red.result.score, catalog=catalog,
+                       pool_size=pool_size, seat="red", kind="current",
+                       swept=red_split.swept() if len(draft.red) == TEAM_SIZE else None)
+    fill = (_filled(world, ours, catalog=catalog, pool_size=pool_size, top=BOARD_TOP,
+                    solved=fill_split.solved(), best=blue.result.score)
+            if wants_fill else None)
+    countered = (_countered(world, countered_seat, catalog=catalog, pool_size=pool_size,
+                            top=BOARD_TOP, solved=countered_split.solved(),
+                            swept=countered_split.swept() if full else None)
+                 if countering else None)
+    return Board(map_name=expected.map_name, side=draft.side, bans=list(draft.bans),
                  blue=blue.result, red=red.result, current=cur, red_current=red_cur,
                  fill=fill, countered=countered,
                  momentum=_momentum(cur, red_cur, countered, blue.result, red.result, fill),
-                 plan=_plan(world, m, side, list(draft.bans), red_h, blue.result),
+                 plan=_plan(world, m, draft.side, list(draft.bans), red_h, blue.result),
                  shapes=[list(s) for s in legal_shapes(catalog)], expected=expected)
+
+
+def _check_teams(red_h: Sequence[Hero], blue_h: Sequence[Hero]) -> None:
+    """Refuse a team no lobby seats: past six picks, or past the queue's
+    tanks."""
+    for team, seat in ((red_h, "red"), (blue_h, "blue")):
+        check_team_size(team, seat)
+        check_tanks(team, seat)
+
+
+def _slices(workers: Workers | None) -> tuple[int, int]:
+    """How a board's searches share the pool: blue's and the fill's slices,
+    and red's and the countered case's. In this process nothing is sliced."""
+    size = workers.size if workers is not None else 0
+    half = max(1, size // 2)
+    return half, max(1, size - half)
+
+
+def _expected(world: World, m: Map | None, bans_h: Sequence[Hero], draft: Draft,
+              catalog: list[Strategy]) -> Result:
+    """Red's likely six - the map and the meta alone, past the bans - static
+    for the board; until red reveals a pick it is what blue's seat counters.
+    A Result like every other seat: its picks carry the reason each rests on."""
+    likely = compute.expected_picks(world, m, banned=bans_h)
+    return Result(kind="expected", map_name=m.name if m else None, red=[],
+                  blue=[p["hero"] for p in likely], locked=[], catalog=catalog,
+                  bans=list(draft.bans), side=draft.side, seat="red",
+                  picks=[Pick(hero=p["hero"], role=p["role"], rate=p["rate"],
+                              locked=p["locked"], why=p["why"], evidence=[])
+                         for p in likely])
+
+
+def _filled(world: World, draft: Draft, *, catalog: list[Strategy], pool_size: int, top: int,
+            solved: Solved | None, best: float) -> Result:
+    """Blue's locked picks (`draft.blue`) with the empty slots filled by the
+    solver, on the scale of blue's optimal, whose score is `best`: how close
+    the best completion comes."""
+    fill = _optimal(world, draft, catalog=catalog, pool_size=pool_size, top=top, seat="blue",
+                    kind="fill", solved=solved).result
+    fill.scale_to(best)
+    return fill
