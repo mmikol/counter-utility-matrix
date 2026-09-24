@@ -409,13 +409,13 @@ def _reasons(fs: FactSet, hero_name: str, locked: bool) -> tuple[str, list[str]]
 
 def _metric_keys(strategy: Strategy | None) -> list[str]:
     """The metrics a contribution's fact can state: a heuristic's own, then
-    every team and matchup key its expressions read."""
+    every team, enemy and matchup key its expressions read."""
     if strategy is None:
         return []
     keys = [strategy.metric] if strategy.kind == "heuristic" and strategy.metric else []
     for e in (strategy.require, strategy.bonus, strategy.penalty, strategy.when):
         if e is not None:
-            keys += [n for n in e.names if n.startswith(("team.", "matchup."))]
+            keys += [n for n in e.names if n.startswith(("team.", "enemy.", "matchup."))]
     return keys
 
 
@@ -424,7 +424,8 @@ def _cited_fact(fs: FactSet, keys: Iterable[str]) -> Fact | None:
     under the key it is worded around and under every other metric its sentence
     carries (FactSet.add's `also`), so the lookup is the metric itself. A team
     metric is stated about blue; a matchup metric about the two sides, and one
-    team metric is only ever stated in a matchup sentence."""
+    team metric is only ever stated in a matchup sentence. Red's numbers that
+    threaten blue ride their matchup sentence under their enemy.* keys."""
     for key in keys:
         for subject in ("blue", "blue vs red"):
             found = fs.find(key, subject)

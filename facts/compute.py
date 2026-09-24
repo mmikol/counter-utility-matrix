@@ -38,13 +38,7 @@ MATCHUP_METRICS = OrderedDict([
     ("tempo_diff", "red median cooldown minus blue's (positive: blue cycles faster)"),
     ("range_diff", "blue median reach minus red's"),
     ("exposure_share", "share of blue answered by red"),
-    ("dive_pressure", "red picks with a movement tool"),
-    ("flyers", "red picks that fly, tanks aside"),
-    ("barrier_need", "barrier health red fields"),
-    ("antiheal_need", "red supports' summed peak heal"),
-    ("ult_threat", "red's summed damage-ultimate ceiling"),
     ("ult_answers", "blue invulnerabilities plus cleanses"),
-    ("style_lean_red", "red's majority playstyle, else none"),
 ])
 
 MAP_METRICS = OrderedDict([
@@ -153,25 +147,14 @@ def _pick_reason(value: float | None, on_map: bool, m: Map | None,
     return why
 
 
-def red_matchup(red_t: MetricBag) -> MetricBag:
-    """The matchup metrics red alone decides: the same for every blue six on
-    a board."""
-    return {"dive_pressure": red_t["mobility_count"], "flyers": red_t["light_flyers"],
-            "barrier_need": red_t["barrier_hp"], "antiheal_need": red_t["heal_peak_supports"],
-            "ult_threat": red_t["ult_damage_total"], "style_lean_red": red_t["style_lean"]}
-
-
-RED_MATCHUP = frozenset("matchup." + key for key in (
-    "dive_pressure", "flyers", "barrier_need", "antiheal_need", "ult_threat", "style_lean_red"))
-
-
 def matchup_metrics(blue_t: MetricBag, red_t: MetricBag) -> MetricBag:
     """MATCHUP_METRICS from blue's seat, given both teams' metrics.
 
-    Only what reading both sides produces. A blue number that is already a
-    team metric is not restated here under a second name: two strategies
-    reading the same number through two keys weigh one signal twice, and the
-    catalog cannot see that they do. Read team.* for blue's own.
+    Only what reading both sides produces. A number that is already a team
+    metric, blue's or red's, is not restated here under a second name: two
+    strategies reading the same number through two keys weigh one signal
+    twice, and the catalog cannot see that they do. Read team.* for blue's
+    own and enemy.* for red's.
     """
     blue_pool, red_pool = number(blue_t["pool_total"]), number(red_t["pool_total"])
     blue_dps, red_dps = number(blue_t["dps_floor"]), number(red_t["dps_floor"])
@@ -189,7 +172,6 @@ def matchup_metrics(blue_t: MetricBag, red_t: MetricBag) -> MetricBag:
     matchup["tempo_diff"] = number(red_t["cooldown_median"]) - number(blue_t["cooldown_median"])
     matchup["range_diff"] = number(blue_t["range_median"]) - number(red_t["range_median"])
     matchup["exposure_share"] = number(blue_t["exposed_count"]) / size if size else 0.0
-    matchup.update(red_matchup(red_t))
     matchup["ult_answers"] = number(blue_t["invuln"]) + number(blue_t["cleanse"])
     return matchup
 
@@ -257,7 +239,6 @@ TEXT_METRICS = {
     "team.subroles", "team.shape_flags", "team.style_counts", "team.style_top",
     "team.style_lean", "team.weakest", "team.squishies", "team.burst_hero",
     "team.isolated", "team.pairs", "team.max_ban_hero", "team.unanswered", "team.exposed",
-    "matchup.style_lean_red",
     "map.style_top", "map.mode", "map.side",
 }
 TEXT_METRICS |= {n.replace("team.", "enemy.", 1) for n in TEXT_METRICS if n.startswith("team.")}

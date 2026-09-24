@@ -189,8 +189,8 @@ db <- facts <- inference <- door <- ui.
   files it under foundation - no test catches that one.
 - A new metric: an entry in `TEAM_METRICS`, `MATCHUP_METRICS`, `MAP_METRICS`
   or `WORLD_METRICS` and the key its function computes (the namespace must
-  equal the registry), `TEXT_METRICS` or `VERSUS_KEYS` or `RED_MATCHUP` where
-  they apply, then regenerate the catalog vocabulary in docs/inference.md.
+  equal the registry), `TEXT_METRICS` or `VERSUS_KEYS` where they apply,
+  then regenerate the catalog vocabulary in docs/inference.md.
 - `tests/ui/test_pages.py` pins the scripts at their seams (routes, query
   keys, element ids, the payload keys they read against what the server
   writes) and holds that every `board.css` class is used; a decision worth

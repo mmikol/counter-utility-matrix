@@ -49,7 +49,7 @@ def write(fs: FactSet, world: World, board: Resolved) -> None:
     if red_t and blue_t:
         matchup = compute.matchup_metrics(blue_t, red_t)
         _matchup_trades(fs, matchup, blue_t, red_t)
-        _matchup_threats(fs, matchup, blue_t)
+        _matchup_threats(fs, matchup, blue_t, red_t)
 
 
 # --- one side -----------------------------------------------------------------
@@ -345,8 +345,8 @@ def _versus_facts(w: _TeamWriter, figures: dict[str, float], enemies: Sequence[H
 def _add_matchup(
         fs: FactSet, matchup: MetricBag, key: str, text: str, unit: str | None = None,
         value: object = None, also: Sequence[str] = ()) -> None:
-    # a few board facts read blue's own metric: matchup carries only what
-    # reading both sides produces, so those pass their value in
+    # a few board facts read one side's own metric, blue's or red's: matchup
+    # carries only what reading both sides produces, so those pass their value in
     fs.add("matchup", "blue vs red", "matchup." + key, text,
         value=matchup[key] if value is None else value,
         unit=unit, source="derived:matchup." + key, also=also)
@@ -391,11 +391,12 @@ def _matchup_trades(fs: FactSet, matchup: MetricBag, blue_t: MetricBag, red_t: M
         "even reach"), "m")
 
 
-def _matchup_threats(fs: FactSet, matchup: MetricBag, blue_t: MetricBag) -> None:
+def _matchup_threats(fs: FactSet, matchup: MetricBag, blue_t: MetricBag, red_t: MetricBag) -> None:
     """The draft's answer edges and coverage, then red's threats, each against
-    blue's answer to it, and the style war."""
+    blue's answer to it, and the style war. A threat is red's own team metric,
+    so its sentence carries the enemy.* key a strategy reads it by."""
     add = functools.partial(_add_matchup, fs, matchup)
-    blue_n, matchup_n = numbers(blue_t), numbers(matchup)
+    blue_n, red_n, matchup_n = numbers(blue_t), numbers(red_t), numbers(matchup)
     net = blue_n["net_edges"]
     add("net_edges", "board net matchup: %d blue answer-edges into red vs %d red into blue"
         " (%+d) - %s" % (blue_n["answer_edges"], blue_n["exposure_edges"], net,
@@ -405,28 +406,32 @@ def _matchup_threats(fs: FactSet, matchup: MetricBag, blue_t: MetricBag) -> None
     add("coverage_share", "coverage: blue answers %.0f%% of red; red answers %.0f%% of blue"
         % (100 * blue_n["coverage_share"], 100 * matchup_n["exposure_share"]),
         value=blue_t["coverage_share"], also=("matchup.exposure_share",))
-    if matchup_n["dive_pressure"]:
+    if red_n["mobility_count"]:
         add("dive_pressure", "dive pressure: %s on red carry engage tools; blue peel"
-            " (%s) must hold" % (_count(matchup_n["dive_pressure"]),
-                _count(blue_n["cc_count"], "crowd-control pick")))
-    if matchup_n["flyers"]:
+            " (%s) must hold" % (_count(red_n["mobility_count"]),
+                _count(blue_n["cc_count"], "crowd-control pick")),
+            value=red_n["mobility_count"], also=("enemy.mobility_count",))
+    if red_n["light_flyers"]:
         add("flyers", "vertical threat: %s on red against %s on blue"
-            % (_count(matchup_n["flyers"], "flyer"),
-                _count(blue_n["hitscan"], "hitscan pick")))
-    if matchup_n["barrier_need"]:
+            % (_count(red_n["light_flyers"], "flyer"),
+                _count(blue_n["hitscan"], "hitscan pick")),
+            value=red_n["light_flyers"], also=("enemy.light_flyers",))
+    if red_n["barrier_hp"]:
         add("barrier_need", "barrier war: red fields %g barrier hp against %s on blue"
-            % (matchup_n["barrier_need"],
-                _count(blue_n["barrier_piercers"], "barrier-piercer")), "hp")
-    if matchup_n["antiheal_need"]:
+            % (red_n["barrier_hp"],
+                _count(blue_n["barrier_piercers"], "barrier-piercer")), "hp",
+            value=red_n["barrier_hp"], also=("enemy.barrier_hp",))
+    if red_n["heal_peak_supports"]:
         add("antiheal_need", "sustain war: red supports peak %g heal against %s on blue"
-            % (matchup_n["antiheal_need"],
-                _count(blue_n["antiheal"], "anti-heal pick")), "hp")
-    if matchup_n["ult_threat"]:
+            % (red_n["heal_peak_supports"],
+                _count(blue_n["antiheal"], "anti-heal pick")), "hp",
+            value=red_n["heal_peak_supports"], also=("enemy.heal_peak_supports",))
+    if red_n["ult_damage_total"]:
         add("ult_threat", "ult threat: red's damage ultimates total %g against %s on blue"
-            % (matchup_n["ult_threat"],
+            % (red_n["ult_damage_total"],
                 _count(matchup_n["ult_answers"], "invulnerability or cleanse answer")), "hp",
-            also=("matchup.ult_answers",))
-    if matchup["style_lean_red"] or blue_t["style_lean"]:
+            value=red_n["ult_damage_total"], also=("matchup.ult_answers", "enemy.ult_damage_total"))
+    if red_t["style_lean"] or blue_t["style_lean"]:
         add("style_lean_red", "style war: red leans %s, blue leans %s" % (
-            matchup["style_lean_red"] or "nothing yet", blue_t["style_lean"] or "nothing yet"),
-            value=matchup["style_lean_red"])
+            red_t["style_lean"] or "nothing yet", blue_t["style_lean"] or "nothing yet"),
+            value=red_t["style_lean"], also=("enemy.style_lean",))

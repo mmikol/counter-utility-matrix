@@ -50,7 +50,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), tmp_path)
     (tmp_path / "fliers-need-cover.md").write_text(
         "---\nname: Fliers need hitscan cover\nkind: heuristic\ndirection: maximize\n"
-        "metric: team.hitscan\nweight: 1\nwhen: matchup.flyers >= 1\n---\nx\n", "utf-8")
+        "metric: team.hitscan\nweight: 1\nwhen: enemy.light_flyers >= 1\n---\nx\n", "utf-8")
     scratch = catalog.load(str(tmp_path))
     assert catalog.has_scoring_terms(scratch)
     grounded = engine.board(world, Draft("Harbor Gate", ("Anvil", "Balm"), ("Mortar", "Needle")),
@@ -59,25 +59,25 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
         assert grounded[key]["scoring"] is True and grounded[key]["normalized"] == 100
     for key in ("current", "red_current", "fill"):
         assert grounded[key]["scoring"] is False and grounded[key]["normalized"] is None
-        assert "Fliers need hitscan cover waits for matchup.flyers >= 1" in \
+        assert "Fliers need hitscan cover waits for enemy.light_flyers >= 1" in \
             grounded[key]["unscored"]
     # against red's optimal six the guard may hold (their best counter can field a flier):
     # then that one result scores, and says nothing about waiting
     countered = grounded["countered"]
     assert countered["scoring"] is (countered["unscored"] is None)
     assert grounded["momentum"]["verdict"].startswith("unscored on this board")
-    assert "waits for matchup.flyers >= 1" in grounded["momentum"]["verdict"]
+    assert "waits for enemy.light_flyers >= 1" in grounded["momentum"]["verdict"]
     # no picks at all: blue's seat counters red's likely six, the optimal is the
     # reference (100), and the verdict is the plain "no picks yet"
     empty = engine.board(world, Draft(), catalog=scratch).to_dict()
     assert empty["blue"]["normalized"] == 100 and empty["blue"]["unscored"] is None
-    # matchup.flyers counts fliers tanks aside: a flying tank does not raise the guard
+    # enemy.light_flyers counts fliers tanks aside: a flying tank does not raise the guard
     if any(
             world.hero(name).flyer and world.hero(name).role != "tank"
             for name in empty["expected"]["blue"]):
         assert empty["momentum"]["verdict"] == "no picks yet on either side"
     else:                         # the likely six fields no such flier: the one rule waits here too
-        assert "waits for matchup.flyers >= 1" in empty["momentum"]["verdict"]
+        assert "waits for enemy.light_flyers >= 1" in empty["momentum"]["verdict"]
     assert empty["blue"]["red"] == empty["expected"]["blue"]           # countering the likely six
     flying = engine.board(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Anvil", "Needle")),
                           catalog=scratch).to_dict()
@@ -88,7 +88,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     assert flying["red_current"]["scoring"] is False
     verdict = flying["momentum"]["verdict"]
     assert verdict.startswith("blue %d / 100" % flying["fill"]["normalized"])
-    assert "red unscored: Fliers need hitscan cover waits for matchup.flyers >= 1" in verdict
+    assert "red unscored: Fliers need hitscan cover waits for enemy.light_flyers >= 1" in verdict
     assert flying["momentum"]["blue"] == flying["fill"]["normalized"]
     assert flying["momentum"]["red"] is None and flying["momentum"]["odds"] is None
     badges = flying["momentum"]["badges"]            # each badge reads its own seat too

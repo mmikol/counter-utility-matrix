@@ -43,7 +43,7 @@ The share of revealed enemies at least one of our picks answers...
 
 | kind | form | frontmatter | what the solver does |
 | --- | --- | --- | --- |
-| heuristic | | `metric`, `direction`, `weight` | normalises the metric to [0, 1] against a seeded sample of legal sixes for the board (flipped for minimize) and adds `weight x norm`; guarded on the six's own state (`team.*`, or a `matchup.*` key blue decides) it is a need and adds `weight x (norm - 1)` - met it costs nothing, unmet its weight - and the needs on one guard are scaled to cost `NEED_BUDGET` (2) together at most; bounds come from the reference sixes the guard holds on, and with no spread there a reward reads 0.5 and a need costs nothing |
+| heuristic | | `metric`, `direction`, `weight` | normalises the metric to [0, 1] against a seeded sample of legal sixes for the board (flipped for minimize) and adds `weight x norm`; guarded on the six's own state (`team.*` or `matchup.*`) it is a need and adds `weight x (norm - 1)` - met it costs nothing, unmet its weight - and the needs on one guard are scaled to cost `NEED_BUDGET` (2) together at most; bounds come from the reference sixes the guard holds on, and with no spread there a reward reads 0.5 and a need costs nothing |
 | constraint | limit | `require: <expr>`, optionally `soft: true` + `penalty: <number>` | discards a candidate that fails (a soft one subtracts the penalty) |
 | constraint | scored | `bonus: <expr>` and/or `penalty: <expr>`, optionally `when` | adds `weight x (bonus - penalty)` while `when` holds |
 | assumption | | nothing - prose by definition | nothing: what the solver takes as given and the agent holds a comp to; shown on the board and read by the session |
@@ -334,13 +334,7 @@ the `team.*` metrics computed for the red side.
 | `matchup.tempo_diff` | red median cooldown minus blue's (positive: blue cycles faster) |
 | `matchup.range_diff` | blue median reach minus red's |
 | `matchup.exposure_share` | share of blue answered by red |
-| `matchup.dive_pressure` | red picks with a movement tool |
-| `matchup.flyers` | red picks that fly, tanks aside |
-| `matchup.barrier_need` | barrier health red fields |
-| `matchup.antiheal_need` | red supports' summed peak heal |
-| `matchup.ult_threat` | red's summed damage-ultimate ceiling |
 | `matchup.ult_answers` | blue invulnerabilities plus cleanses |
-| `matchup.style_lean_red` (text) | red's majority playstyle, else none |
 | `map.known` | 1 if a map is set |
 | `map.sided` | 1 if the mode has an attacking and a defending side (Escort, Hybrid) |
 | `map.side` (text) | this seat's side on a sided map: attack, defense, or empty |

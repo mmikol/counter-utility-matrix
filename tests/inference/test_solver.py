@@ -144,7 +144,7 @@ def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(
         (tmp_path / ("solo-%d.md" % i)).write_text(
             rule % ("Solo %d" % i, metric, "team.supports <= 1"), "utf-8")
     (tmp_path / "their-fliers.md").write_text(
-        rule % ("Their fliers", "team.hitscan", "matchup.flyers >= 1"), "utf-8")
+        rule % ("Their fliers", "team.hitscan", "enemy.light_flyers >= 1"), "utf-8")
     scratch = catalog.load(str(tmp_path))
     # Gale flies for red; blue fields Balm as its one support
     solo = engine.evaluate(world, Draft("Harbor Gate", ("Gale",),

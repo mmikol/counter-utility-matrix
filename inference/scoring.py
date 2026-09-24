@@ -250,15 +250,14 @@ class Objective:
         id, how many slots). Strategies whose `when` and params are the same
         answer together, so they share a slot: a guard a dozen strategies
         write is evaluated once per candidate."""
-        sc = scope(dict(self.static, matchup=compute.red_matchup(self.red_t)))
+        sc = scope(self.static)
         gates: dict[str, bool | None] = {}
         slots: dict[str, int] = {}
         groups: dict[object, int] = {}
         for h in self.catalog:
             if h.when is None:
                 gates[h.id] = True
-            elif all(n.split(".", 1)[0] in STATIC_SECTIONS or n in compute.RED_MATCHUP
-                     for n in h.when.names):
+            elif all(n.split(".", 1)[0] in STATIC_SECTIONS for n in h.when.names):
                 sc["params"] = h.params_section
                 gates[h.id] = bool(h.when.evaluate(sc))
             else:

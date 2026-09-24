@@ -164,7 +164,7 @@ change here or in `team.py` changes both.
 | group | examples |
 | --- | --- |
 | `team.*` (also read as `enemy.*`) | see `team.py` |
-| `matchup.*` | the differences and ratios between the two teams: `dps_diff`, `burst_vs_heal`, `tempo_diff`, `ult_threat`, `style_lean_red` |
+| `matchup.*` | the differences and ratios between the two teams: `dps_diff`, `burst_vs_heal`, `tempo_diff`, `exposure_share`, `ult_answers` |
 | `map.*` | `known`, `mode`, `sided`, `side`, `style_top`, `style_margin`, `stages`, `bans` |
 | `world.*` | `heal_bench`, `hps_bench`, `roster_size` |
 

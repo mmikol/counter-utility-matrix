@@ -33,9 +33,7 @@ def test_metrics_cover_the_registry_exactly(synthetic_world):
     kite, gale = w.hero("Kite"), w.hero("Gale")
     fliers = team_metrics(w, [kite, gale])
     assert fliers["flyers"] == 2 and fliers["light_flyers"] == 1
-    assert compute.red_matchup(fliers)["flyers"] == 1
-    assert compute.red_matchup(team_metrics(w, [kite]))["flyers"] == 0
-    assert compute.registry()["matchup.flyers"] == "red picks that fly, tanks aside"
+    assert compute.registry()["enemy.light_flyers"] == TEAM_METRICS["light_flyers"]
     assert ns["team"]["coverage"] == 1                    # Anvil answers Mortar
     # the benches are the builder's inputs; the roster counts the announced hero
     assert ns["world"] == {"heal_bench": 145.0, "hps_bench": 130.0, "roster_size": 13}
@@ -65,7 +63,7 @@ def test_metrics_without_a_map_fall_back_honestly(synthetic_world):
 def test_the_matchup_reads_both_sides(synthetic_world):
     """Blue Anvil and Balm: 925 pool, 135 damage a second, a 300 swing, a 70
     heal. Red Mortar and Gale: 762.5 pool with the form's armor, 220 a second,
-    a 260 swing, no heal, Gale's 600 ultimate."""
+    a 260 swing, no heal."""
     w = synthetic_world
     blue, red = [w.hero("Anvil"), w.hero("Balm")], [w.hero("Mortar"), w.hero("Gale")]
     blue_t, red_t = team_metrics(w, blue, None, red), team_metrics(w, red, None, blue)
@@ -74,9 +72,7 @@ def test_the_matchup_reads_both_sides(synthetic_world):
         "pool_diff": 162.5, "dps_diff": -85.0, "hps_diff": 60.0,
         "burst_vs_heal": 300.0, "heal_vs_burst": -190.0,
         "chew_time_ours": pytest.approx(762.5 / 135), "chew_time_theirs": pytest.approx(925 / 220),
-        "tempo_diff": -1.0, "range_diff": -25.0, "exposure_share": 0.5,
-        "dive_pressure": 1, "flyers": 1, "barrier_need": 0.0, "antiheal_need": 0.0,
-        "ult_threat": 600.0, "style_lean_red": "", "ult_answers": 2}
+        "tempo_diff": -1.0, "range_diff": -25.0, "exposure_share": 0.5, "ult_answers": 2}
 
 
 def test_no_matchup_metric_restates_a_team_metric(synthetic_world):
@@ -92,13 +88,11 @@ def test_no_matchup_metric_restates_a_team_metric(synthetic_world):
     matchup = compute.matchup_metrics(blue_t, red_t)
 
     # a matchup key that equals blue's own is only proof of a copy if it also
-    # moves when blue does and red does not: compare a second blue on one red.
-    # Here blue's one flier and red's one light flier read alike on purpose
+    # moves when blue does and red does not: compare a second blue on one red
     other = [w.hero(n) for n in ("Anvil", "Mortar", "Needle", "Rook", "Balm", "Sorrel")]
     other_t = team_metrics(w, other, m, red)
     other_matchup = compute.matchup_metrics(other_t, red_t)
 
-    assert matchup["flyers"] == blue_t["flyers"] == 1
     copies = [
         key for key, value in matchup.items()
         if key in blue_t and value == blue_t[key]
@@ -240,7 +234,7 @@ def test_an_expected_pick_says_what_its_rate_rests_on(synthetic_world):
 def test_the_world_metrics_and_the_registry_the_catalog_validates_against(synthetic_world):
     """The world's benches are its own; the registry offers every team metric
     on both sides but the versus keys on red's, which the solver would read as
-    zero, and every red-only matchup key is a matchup key."""
+    zero."""
     assert compute.world_metrics(synthetic_world) == {
         "heal_bench": 145.0, "hps_bench": 130.0, "roster_size": 13}
     reg = compute.registry()
@@ -249,6 +243,5 @@ def test_the_world_metrics_and_the_registry_the_catalog_validates_against(synthe
                         + len(compute.WORLD_METRICS))
     for key in compute.VERSUS_KEYS:
         assert "team." + key in reg and "enemy." + key not in reg, key
-    assert set(reg) >= compute.RED_MATCHUP
     assert reg["team.coverage"] == TEAM_METRICS["coverage"]
     assert all("map.%s" % f in reg for f in TERRAIN_FEATURES)

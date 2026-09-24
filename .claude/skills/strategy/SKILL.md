@@ -88,11 +88,11 @@ question is allowed.
      is a code change in `facts/team.py` (a team metric) or
      `facts/compute.py` (matchup, map, world), whose `registry()` gathers
      both, not a frontmatter trick.
-     A `when` on the six's own state (`team.*`, or a `matchup.*` key blue
-     decides) makes the heuristic a need: met it costs nothing, unmet its
-     weight, and the needs on one guard cost 2 together at most. Write it
-     for "if our six is X, it needs Y". A `when` on red or the map
-     (`enemy.*`, `map.*`, red's `matchup.*` keys) keeps it a reward. Before
+     A `when` on the six's own state (`team.*` or `matchup.*`) makes the
+     heuristic a need: met it costs nothing, unmet its weight, and the
+     needs on one guard cost 2 together at most. Write it for "if our six
+     is X, it needs Y". A `when` on red, the map or the world (`enemy.*`,
+     `map.*`, `world.*`) keeps it a reward. Before
      adding a rule, read `strategies` for the ones already on its metric:
      a trait paid by several rules wants a small weight, not another 1.
    - **constraint, limit**: a `require` that must hold ("at most two

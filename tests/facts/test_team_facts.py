@@ -147,7 +147,8 @@ def test_the_matchup_is_worded_once_both_sides_have_picks(synthetic_world):
     test_the_matchup_reads_both_sides, in words."""
     w = synthetic_world
     assert not _said(_facts(w, "Harbor Gate", ("Mortar", "Gale"), ()))
-    said = _said(_facts(w, "Harbor Gate", ("Mortar", "Gale"), ("Anvil", "Balm")))
+    fs = _facts(w, "Harbor Gate", ("Mortar", "Gale"), ("Anvil", "Balm"))
+    said = _said(fs)
     assert said == {
         "matchup.pool_diff": "pool differential: blue's 2 picks carry 925 hp vs red's 2"
             " picks' 762 - +162 raw material",
@@ -174,6 +175,9 @@ def test_the_matchup_is_worded_once_both_sides_have_picks(synthetic_world):
         "matchup.ult_threat": "ult threat: red's damage ultimates total 600 against 2"
             " invulnerability or cleanse answers on blue",
         "matchup.style_lean_red": "style war: red leans nothing yet, blue leans brawl"}
+    # a threat is red's own number: its sentence carries the enemy.* key
+    assert [(f.key, f.value) for f in fs.find("enemy.light_flyers", "blue vs red")] == [
+        ("matchup.flyers", 1)]
 
 
 def test_the_matchup_names_each_side_of_every_trade(synthetic_world):

@@ -57,8 +57,8 @@ tab's own numbers.</p>
 <p>A hard limit that fails removes the six; a soft one subtracts its penalty. A heuristic
 normalises its metric to 0..1 against %(REFERENCE_SIZE)s random legal sixes for the board
 (seeded from map, side, enemies and bans), flips it when minimising, then multiplies by its
-weight. A heuristic guarded on the six's own state (<code>team.*</code>, or a
-<code>matchup.*</code> blue decides) is a <i>need</i>: met in full it costs nothing, unmet it
+weight. A heuristic guarded on the six's own state (<code>team.*</code> or
+<code>matchup.*</code>) is a <i>need</i>: met in full it costs nothing, unmet it
 costs its weight, so entering the guarded state never pays. A scored constraint adds bonus
 minus penalty while its <code>when</code> holds. An assumption adds nothing.</p>
 <pre class='eq'>for one six x, with every hard limit holding:
