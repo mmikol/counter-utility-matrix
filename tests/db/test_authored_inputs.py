@@ -60,7 +60,7 @@ def test_every_pull_reads_blizzard_or_the_wiki():
         name for name, _ in tools.PULLS)
 
 
-def test_pull_counters_runs_the_wikis_matchups(monkeypatch):
+def test_pull_counters_runs_the_wikis_matchups(monkeypatch, tmp_path):
     from db.data.wiki import matchups
     assert dict(tools.PULLS)["pull_counters"] == "wiki"
     [schema] = [s for name, _, s, _ in tools.REGISTRY if name == "pull_counters"]
@@ -78,7 +78,9 @@ def test_pull_counters_runs_the_wikis_matchups(monkeypatch):
         seen.update(connection=connection, cache_dir=cache_dir)
         return {"counters": 3, "unwritten": ["Freja"], "tables": ["counters"]}
     monkeypatch.setattr(matchups, "run", run)
-    ctx = Offline(dsn="postgresql://nowhere")
+    # a cache folder of its own: the tool creates the one it is handed, and an
+    # empty .cache-wiki at the root lets the next run's cache tests fetch
+    ctx = Offline(dsn="postgresql://nowhere", caches={"wiki": str(tmp_path / "wiki")})
     text, data = tools.run_tool(ctx, "pull_counters")
     assert seen == {"connection": "cx", "cache_dir": ctx.caches["wiki"]}
     assert text.splitlines()[0] == "pull_counters: counters stored"
