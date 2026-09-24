@@ -443,7 +443,7 @@ def _weight_entry(item: object) -> tuple[str, object]:
     return hid, value
 
 
-def weighted(catalog: list[Strategy], weights: Mapping[str, float]) -> list[Strategy]:
+def weighted(catalog: list[Strategy], weights: Mapping[str, float] | None) -> list[Strategy]:
     """The catalog with the heuristics named in `weights` carrying those
     weights instead of their files' - shallow copies, so the files and the
     loaded catalog stay as they are. Only a heuristic has a weight to set:
