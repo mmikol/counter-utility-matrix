@@ -51,8 +51,9 @@ class WikiError(Exception):
 CargoRow = dict[str, Any]
 
 
-def cargo_query(session: requests.Session, table: str, fields: Sequence[str],
-                cache_dir: str | None) -> list[CargoRow]:
+def cargo_query(
+        session: requests.Session, table: str, fields: Sequence[str],
+        cache_dir: str | None) -> list[CargoRow]:
     """Every row of a Cargo table, paginated.
 
     Cargo exposes the wiki's structured data directly, which is far steadier
@@ -78,8 +79,7 @@ def cargo_query(session: requests.Session, table: str, fields: Sequence[str],
     return rows
 
 
-def _cargo_pages(session: requests.Session, table: str,
-                 fields: Sequence[str]) -> list[CargoRow]:
+def _cargo_pages(session: requests.Session, table: str, fields: Sequence[str]) -> list[CargoRow]:
     rows: list[CargoRow] = []
     offset = 0
     while True:

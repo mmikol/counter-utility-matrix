@@ -70,8 +70,9 @@ def read_migrations() -> list[Migration]:
     return migrations
 
 
-def apply(connection: psycopg.Connection, migrations: Sequence[Migration],
-          quiet: bool = False) -> None:
+def apply(
+        connection: psycopg.Connection, migrations: Sequence[Migration],
+        quiet: bool = False) -> None:
     """Run each migration and commit it, then record them all in the ledger
     once the ledger exists."""
     for migration in migrations:
@@ -261,9 +262,9 @@ def _erd(tables: list[str], fks: list[ForeignKey], domain: dict[str, str]) -> st
     return "\n".join(erd)
 
 
-def _dictionary(tables: list[str], columns: dict[str, list[tuple[Any, ...]]],
-                fks: list[ForeignKey], domain: dict[str, str],
-                prose: dict[str, tuple[str, str]]) -> str:
+def _dictionary(
+        tables: list[str], columns: dict[str, list[tuple[Any, ...]]], fks: list[ForeignKey],
+        domain: dict[str, str], prose: dict[str, tuple[str, str]]) -> str:
     """The data dictionary: each domain's tables, then every table's prose
     and columns, a foreign key naming the column it references."""
     references: dict[tuple[str, str], tuple[str, str]] = {}

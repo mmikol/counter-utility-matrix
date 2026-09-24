@@ -421,8 +421,9 @@ class Mirrored(TypedDict):
     tables: list[str]
 
 
-def mirror(cx: "psycopg.Connection", catalog: list[Strategy],
-           directory: str | None = None) -> Mirrored:
+def mirror(
+        cx: "psycopg.Connection", catalog: list[Strategy],
+        directory: str | None = None) -> Mirrored:
     """Reload the strategies table from the files (whole truth), each row
     naming the playbook it came from."""
     from db.data.authored import AUTHORED

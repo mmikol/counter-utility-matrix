@@ -99,8 +99,9 @@ def _quarantine(directory: str, name: str, why: str, log: Log) -> bool:
     return True
 
 
-def check_playbook(directory: str | None = None, log: Log = print
-                   ) -> tuple[list[str], list[catalog_module.Strategy] | None]:
+def check_playbook(
+        directory: str | None = None,
+        log: Log = print) -> tuple[list[str], list[catalog_module.Strategy] | None]:
     """Load the catalog; quarantine what will not load or reads like an
     instruction -> (quarantined names, catalog or None)."""
     directory = directory or catalog_module.strategies_dir()
@@ -225,9 +226,10 @@ class Report(TypedDict):
     audit_offset: int
 
 
-def run_once(directory: str | None = None, audit_path: str | None = None,
-             dsn: str | None = None, log: Log = print, report_path: str | None = None,
-             scan_database: bool = True, offset: int = 0) -> Report:
+def run_once(
+        directory: str | None = None, audit_path: str | None = None, dsn: str | None = None,
+        log: Log = print, report_path: str | None = None, scan_database: bool = True,
+        offset: int = 0) -> Report:
     """One pass -> the report, also written to db/raw/sentry.json."""
     quarantined, cat = check_playbook(directory, log)
     flags = check_database(dsn) if scan_database else []
@@ -257,8 +259,9 @@ def run_once(directory: str | None = None, audit_path: str | None = None,
     return report
 
 
-def run_forever(every: float = EVERY, log: Log = print,
-                sleep: Callable[[float], None] = time.sleep) -> NoReturn:
+def run_forever(
+        every: float = EVERY, log: Log = print,
+        sleep: Callable[[float], None] = time.sleep) -> NoReturn:
     log("sentry: watching the playbook, the database and the door every %gs" % every)
     offset = 0
     while True:

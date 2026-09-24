@@ -292,8 +292,9 @@ def per_thousand(mentions: int, words: int) -> float:
 
 # --- store ---------------------------------------------------------------------
 
-def _store(cursor: psycopg.Cursor, table: str, key: str, key_id: int,
-           counts: dict[str, int], words: int, source_id: int) -> int:
+def _store(
+        cursor: psycopg.Cursor, table: str, key: str, key_id: int, counts: dict[str, int],
+        words: int, source_id: int) -> int:
     insert = SQL("INSERT INTO {} ({}, feature, mentions, per_thousand, source_id)"
                  " VALUES (%s, %s, %s, %s, %s)").format(psql.identifier(table),
                                                         psql.identifier(key))
@@ -307,7 +308,8 @@ def _counted(counts: dict[str, int]) -> str:
     return "  ".join("%s %d" % (f, n) for f, n in counts.items() if n)
 
 
-def run(connection: psycopg.Connection, cache_dir: str | None = None,
+def run(
+        connection: psycopg.Connection, cache_dir: str | None = None,
         session: requests.Session | None = None,
         log: Callable[[str], object] = print) -> dict[str, object]:
     session = fetch.session(session)

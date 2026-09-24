@@ -86,8 +86,8 @@ def test_every_setting_the_code_reads_is_documented():
 def test_the_migrations_row_names_every_migration():
     # the migrations/ row of docs/db.md is the one inventory of the schema's
     # steps, so a new file is named there by its number
-    [row] = [line for line in _read("docs", "db.md").splitlines()
-             if line.startswith("| `migrations/` |")]
+    lines = _read("docs", "db.md").splitlines()
+    [row] = [line for line in lines if line.startswith("| `migrations/` |")]
     folder = os.path.join(ROOT, "db", "psql", "migrations")
     missing = sorted(name for name in os.listdir(folder)
                      if name.endswith(".sql") and "`%s`" % name[:3] not in row)

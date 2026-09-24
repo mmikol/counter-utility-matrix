@@ -228,9 +228,10 @@ def parse_announcement(text: str | None) -> Announcement | None:
     return None
 
 
-def announce_heroes(cursor: psycopg.Cursor, session: requests.Session, names: Iterable[str],
-                    hero_ids: dict[str, int], cache_dir: str | None, source_id: int,
-                    log: Callable[[str], object] = print) -> tuple[list[str], list[str]]:
+def announce_heroes(
+        cursor: psycopg.Cursor, session: requests.Session, names: Iterable[str],
+        hero_ids: dict[str, int], cache_dir: str | None, source_id: int,
+        log: Callable[[str], object] = print) -> tuple[list[str], list[str]]:
     """Heroes the Cargo table names that the roster lacks: those whose
     article is marked upcoming get a row - role, subrole, health, release
     day, status announced - so their kit loads and the board can show
@@ -332,8 +333,9 @@ RETIRED_BLOCK_RE = re.compile(r"\(old\)\s*$", re.I)
 REF_RE = re.compile(r"<ref\b[^>]*/>|<ref\b[^>]*>.*?</ref>", re.I | re.S)
 
 
-def supplement_from_wikitext(session: requests.Session, hero_name: str,
-                             cache_dir: str | None) -> tuple[dict[str, Stats], Profile]:
+def supplement_from_wikitext(
+        session: requests.Session, hero_name: str,
+        cache_dir: str | None) -> tuple[dict[str, Stats], Profile]:
     """One hero page -> ({ability ability_key: {stat: ...}}, {health/shield/armor}).
     A page that will not fetch raises; run() records it among the pull's missing."""
     text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
@@ -353,8 +355,9 @@ def supplement_from_wikitext(session: requests.Session, hero_name: str,
     return extra, parse_hero_profile(text)
 
 
-def _insert_modifiers(cursor: psycopg.Cursor, ability_id: int, entry: KitEntry,
-                      key_ids: dict[str, int], source_id: int) -> int:
+def _insert_modifiers(
+        cursor: psycopg.Cursor, ability_id: int, entry: KitEntry, key_ids: dict[str, int],
+        source_id: int) -> int:
     """Store the buffs and debuffs an ability applies to someone's numbers."""
     written = 0
     for code, (value_text, _) in entry["stats"].items():
@@ -383,8 +386,8 @@ def _insert_modifiers(cursor: psycopg.Cursor, ability_id: int, entry: KitEntry,
     return written
 
 
-def _register_stat_keys(cursor: psycopg.Cursor, codes: Iterable[str],
-                        source_id: int) -> dict[str, int]:
+def _register_stat_keys(
+        cursor: psycopg.Cursor, codes: Iterable[str], source_id: int) -> dict[str, int]:
     """Upsert the stat keys and return {code: stat_key_id}."""
     ids: dict[str, int] = {}
     for code in sorted(codes):
@@ -399,8 +402,9 @@ def _register_stat_keys(cursor: psycopg.Cursor, codes: Iterable[str],
     return ids
 
 
-def _insert_stats(cursor: psycopg.Cursor, table: str, owner_column: str, owner_id: int,
-                  stats: Stats, key_ids: dict[str, int], source_id: int) -> int:
+def _insert_stats(
+        cursor: psycopg.Cursor, table: str, owner_column: str, owner_id: int, stats: Stats,
+        key_ids: dict[str, int], source_id: int) -> int:
     """Write one row per measurement. Returns how many rows were written."""
     insert = SQL(
         "INSERT INTO {table} ({owner}, stat_key_id, value, unit_numerator,"
@@ -429,9 +433,9 @@ def _insert_stats(cursor: psycopg.Cursor, table: str, owner_column: str, owner_i
     return written
 
 
-def _load_weapons(cursor: psycopg.Cursor, hero_id: int, weapons: list[KitEntry],
-                  key_ids: dict[str, int], source_id: int,
-                  tally: collections.Counter[str]) -> None:
+def _load_weapons(
+        cursor: psycopg.Cursor, hero_id: int, weapons: list[KitEntry], key_ids: dict[str, int],
+        source_id: int, tally: collections.Counter[str]) -> None:
     """Weapons, their firing configs (with keywords), and the stats on each."""
     for position, (weapon_name, configs) in enumerate(group_weapons(weapons)):
         cursor.execute(
@@ -466,10 +470,10 @@ def _load_weapons(cursor: psycopg.Cursor, hero_id: int, weapons: list[KitEntry],
             )
 
 
-def _load_abilities(cursor: psycopg.Cursor, hero_id: int, weapon_entries: list[KitEntry],
-                    entries: list[KitEntry], key_ids: dict[str, int],
-                    kind_ids: dict[str, int], source_id: int,
-                    tally: collections.Counter[str]) -> None:
+def _load_abilities(
+        cursor: psycopg.Cursor, hero_id: int, weapon_entries: list[KitEntry],
+        entries: list[KitEntry], key_ids: dict[str, int], kind_ids: dict[str, int], source_id: int,
+        tally: collections.Counter[str]) -> None:
     """Classify the abilities Blizzard loaded, add the ones it omits, stat
     them, store their keywords. Weapon entries take part ONLY to classify."""
     existing = {
@@ -534,9 +538,9 @@ def _load_abilities(cursor: psycopg.Cursor, hero_id: int, weapon_entries: list[K
         )
 
 
-def _load_perks(cursor: psycopg.Cursor, hero_id: int, perks: list[KitEntry],
-                key_ids: dict[str, int], source_id: int,
-                tally: collections.Counter[str]) -> None:
+def _load_perks(
+        cursor: psycopg.Cursor, hero_id: int, perks: list[KitEntry], key_ids: dict[str, int],
+        source_id: int, tally: collections.Counter[str]) -> None:
     """Perk stats, and the link from a perk to the ability it alters."""
     ability_names = [
         row[0] for row in cursor.execute(
@@ -591,7 +595,8 @@ def _load_perks(cursor: psycopg.Cursor, hero_id: int, perks: list[KitEntry],
             tally["perk_links"] += cursor.rowcount
 
 
-def run(connection: psycopg.Connection, cache_dir: str | None = None,
+def run(
+        connection: psycopg.Connection, cache_dir: str | None = None,
         session: requests.Session | None = None, supplement: bool = True,
         log: Callable[[str], object] = print) -> dict[str, object]:
     """Pull the Cargo table (and each hero article), clean, store."""

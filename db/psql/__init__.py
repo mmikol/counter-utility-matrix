@@ -83,8 +83,8 @@ def identifier(name: str) -> Identifier:
     return Identifier(name)
 
 
-def lookup_ids(cursor: psycopg.Cursor, table: str, name_column: str,
-               id_column: str) -> dict[str, int]:
+def lookup_ids(
+        cursor: psycopg.Cursor, table: str, name_column: str, id_column: str) -> dict[str, int]:
     """{lowercased name: id} for matching scraped names against loaded rows."""
     return {
         row[0].lower(): row[1]

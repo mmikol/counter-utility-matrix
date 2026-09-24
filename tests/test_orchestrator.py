@@ -39,8 +39,9 @@ def test_verdict_reads_the_three_health_replies():
 def test_the_verdict_waits_on_the_data_layers_state():
     """Ready is the state the data layer reports, db.psql.schema.state; an
     image older than the checkout reports none, and is not ready either."""
-    served = {"inference": {"status": "ok", "strategies": 38, "heroes": 54},
-              "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
+    served = {
+        "inference": {"status": "ok", "strategies": 38, "heroes": 54},
+        "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
     for state, said in (("empty", "no heroes yet"), ("unfilled", "no heroes yet"),
                         (None, "predates this checkout")):
         data = {"status": "ok", "table_count": 36, "heroes": 0, "pending_migrations": []}

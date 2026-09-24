@@ -34,8 +34,9 @@ Log = Callable[[str], object]       # print, a list's append, stderr's write
 class Context:
     """Where a tool call lands: the database and the page caches."""
 
-    def __init__(self, dsn: str | None = None, caches: Mapping[str, str] | None = None,
-                 log: Log | None = None) -> None:
+    def __init__(
+            self, dsn: str | None = None, caches: Mapping[str, str] | None = None,
+            log: Log | None = None) -> None:
         self._dsn = dsn
         self.caches: dict[str, str] = dict(CACHE_DIRS, **(caches or {}))
         self.log: Log = log or (lambda msg: sys.stderr.write(msg + "\n"))
@@ -60,8 +61,9 @@ ToolFn = Callable[..., Reply]
 REGISTRY: list[tuple[str, str, dict[str, Any], ToolFn]] = []
 
 
-def tool(name: str, description: str, properties: dict[str, Any] | None = None,
-         required: Sequence[str] = ()) -> Callable[[ToolFn], ToolFn]:
+def tool(
+        name: str, description: str, properties: dict[str, Any] | None = None,
+        required: Sequence[str] = ()) -> Callable[[ToolFn], ToolFn]:
     # json_schema, not schema: db.psql.schema is imported above
     json_schema = {"type": "object", "properties": properties or {},
                    "required": list(required), "additionalProperties": False}
@@ -131,8 +133,9 @@ def list_sources(ctx: Context) -> Reply:
     return text, {"sources": rows}
 
 
-def _pull(ctx: Context, source: str, module_path: str, refresh: bool = False,
-          **options: object) -> dict[str, object]:
+def _pull(
+        ctx: Context, source: str, module_path: str, refresh: bool = False,
+        **options: object) -> dict[str, object]:
     import importlib
     module = importlib.import_module(module_path)
     cache = ctx.cache(source)
@@ -508,9 +511,9 @@ def roster(ctx: Context) -> Reply:
       " once both teams have picks. Numbered F1.. for citation.",
       dict(BOARD, format={"type": "string", "enum": ["lines", "json"],
                           "description": "lines (default) or json"}))
-def facts(ctx: Context, map: str | None = None, red: Sequence[str] = (),
-          blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "",
-          format: str = "lines") -> Reply:
+def facts(
+        ctx: Context, map: str | None = None, red: Sequence[str] = (), blue: Sequence[str] = (),
+        bans: Sequence[str] = (), side: str = "", format: str = "lines") -> Reply:
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
@@ -545,9 +548,10 @@ COMPACT_TERMS = 15        # the heaviest terms a compact reply carries
                                                       " (the %d heaviest terms, each an id"
                                                       " and its weighted value)"
                                                       % COMPACT_TERMS}))
-def infer(ctx: Context, map: str | None = None, red: Sequence[str] = (),
-          blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "",
-          top: int = 5, pool: int = 6, compact: bool = False) -> Reply:
+def infer(
+        ctx: Context, map: str | None = None, red: Sequence[str] = (), blue: Sequence[str] = (),
+        bans: Sequence[str] = (), side: str = "", top: int = 5, pool: int = 6,
+        compact: bool = False) -> Reply:
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
@@ -588,8 +592,9 @@ def _compact(result: engine.Result) -> Reply:
 @tool("evaluate", "Score a FULL blue six against the strategies without"
       " searching: the breakdown per strategy, constraint violations, and"
       " how it ranks against the optimum.", BOARD, ["blue"])
-def evaluate(ctx: Context, blue: Sequence[str], map: str | None = None,
-             red: Sequence[str] = (), bans: Sequence[str] = (), side: str = "") -> Reply:
+def evaluate(
+        ctx: Context, blue: Sequence[str], map: str | None = None, red: Sequence[str] = (),
+        bans: Sequence[str] = (), side: str = "") -> Reply:
     # blue has no default: the schema marks it required and the engine takes a
     # full six, so an empty one was never a call worth reaching the engine
     with ctx.connect() as cx:
@@ -643,9 +648,10 @@ def reach_tool(ctx: Context, hero: str) -> Reply:   # _tool: inference.reach hol
                     "description": "{heuristic id: 0..10} - weights to score this board"
                                    " under instead of the files' (the playbook tab's"
                                    " sliders); the files are untouched"}))
-def board(ctx: Context, map: str | None = None, red: Sequence[str] = (),
-          blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "",
-          pool: int = 6, weights: dict[str, Any] | None = None) -> Reply:
+def board(
+        ctx: Context, map: str | None = None, red: Sequence[str] = (), blue: Sequence[str] = (),
+        bans: Sequence[str] = (), side: str = "", pool: int = 6,
+        weights: dict[str, Any] | None = None) -> Reply:
     with ctx.connect() as cx:
         world = model.load(cx)
     try:
@@ -687,8 +693,9 @@ def strategies(ctx: Context) -> Reply:
        "by": {"type": "string", "description": "who asked, for the log line (default"
                                               " claude-code-session; the board says so)"}},
       ["id", "field", "value", "reason"])
-def tune_tool(ctx: Context, id: str, field: str, value: object,  # _tool: tune holds the bare name
-              reason: str, by: str = "claude-code-session") -> Reply:
+def tune_tool(      # _tool: inference.tune holds the bare name
+        ctx: Context, id: str, field: str, value: object, reason: str,
+        by: str = "claude-code-session") -> Reply:
     try:
         change = tune.tune(id, field, value, reason, by=str(by or "claude-code-session")[:40])
         with ctx.connect() as cx:
@@ -744,8 +751,9 @@ STRATEGY_FIELDS = {
             "reason": {"type": "string", "description": "why it was added, in a sentence"}},
            **STRATEGY_FIELDS),
       ["id", "name", "kind", "body"])
-def add_strategy(ctx: Context, id: str, name: str, kind: str, body: str, reason: str = "",
-                 **fields: Any) -> Reply:
+def add_strategy(
+        ctx: Context, id: str, name: str, kind: str, body: str, reason: str = "",
+        **fields: Any) -> Reply:
     try:
         category = fields.pop("category", "general")
         fields.pop("kind", None)
