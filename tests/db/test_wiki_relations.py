@@ -9,6 +9,7 @@ from datetime import date
 import pytest
 
 from db import CACHE_DIRS
+from db.data.fetch import PullContext
 from db.data.names import name_key
 from db.data.wiki import WikiError, seasons, synergies
 
@@ -223,7 +224,7 @@ def test_a_story_arc_subpage_prefixes_its_seasons_with_the_arc():
 @needs_cache
 @pytest.mark.invariant
 def test_synergies_pull_from_the_cache(sandbox):
-    data = synergies.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    data = synergies.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     rows = sandbox.execute(
         "select s.hero_id, s.other_id, s.score, s.note, src.code"
         " from synergies s join sources src using (source_id)").fetchall()
@@ -252,7 +253,7 @@ def test_synergies_pull_from_the_cache(sandbox):
 @needs_cache
 @pytest.mark.invariant
 def test_the_wiki_states_the_well_known_pairs(sandbox):
-    synergies.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    synergies.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     stated = {frozenset((name_key(a), name_key(b))): score for a, b, score in sandbox.execute(
         "select h.name, o.name, s.score from synergies s"
         " join heroes h on h.hero_id = s.hero_id join heroes o on o.hero_id = s.other_id")}
@@ -266,7 +267,7 @@ def test_the_wiki_states_the_well_known_pairs(sandbox):
 @needs_cache
 @pytest.mark.invariant
 def test_seasons_pull_from_the_cache_and_restamp_the_snapshots(sandbox):
-    data = seasons.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    data = seasons.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     rows = sandbox.execute(
         "select s.name, s.started, s.note, src.code from seasons s"
         " join sources src using (source_id) order by s.season_id").fetchall()

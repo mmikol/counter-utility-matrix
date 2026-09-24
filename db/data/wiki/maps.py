@@ -7,11 +7,10 @@ Hybrid article supplies the two phases every Hybrid map plays.
 """
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import NamedTuple
 
 import psycopg
-import requests
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
@@ -183,14 +182,11 @@ class MapsSummary(ArticlePullSummary):
     maps_with_stages: dict[str, int]
 
 
-def run(connection: psycopg.Connection, cache_dir: str | None = None,
-        session: requests.Session | None = None,
-        log: Callable[[str], None] = print) -> MapsSummary:
+def run(connection: psycopg.Connection, pull: fetch.PullContext) -> MapsSummary:
     """Upsert the modes, the maps and their combinations from the Maps
-    article, and each map's stages from its own article."""
-    session = fetch.session(session)
-
-    modes = parse_modes_and_maps(fetch_wikitext(session, MAPS_PAGE, cache_dir))
+    article, and each map's stages from its own article -> the modes, maps,
+    combinations and stages stored, and the articles that would not fetch."""
+    modes = parse_modes_and_maps(fetch_wikitext(pull.session, MAPS_PAGE, pull.cache_dir))
 
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())
@@ -222,15 +218,15 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
                 (map_ids[map_name], mode_id, source_id),
             )
             combinations += 1
-        log("  %-11s %2d maps" % (name, len(maps)))
+        pull.log("  %-11s %2d maps" % (name, len(maps)))
 
-    phases = parse_phases(fetch_wikitext(session, HYBRID_PAGE, cache_dir))
+    phases = parse_phases(fetch_wikitext(pull.session, HYBRID_PAGE, pull.cache_dir))
     # a map in two modes takes its stages from the first
     codes = {map_name: code for code, _, maps in reversed(modes)
              for map_name in maps}
     # a map whose article will not fetch keeps the stages it had: map_stages
     # is upserted, never deleted
-    articles, missing = fetch_articles(session, map_ids, cache_dir, log)
+    articles, missing = fetch_articles(pull.session, map_ids, pull.cache_dir, pull.log)
     stage_rows = 0
     staged: dict[str, int] = {}
     for map_name, text in articles.items():
@@ -238,7 +234,7 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
         stages = stages_of(codes[map_name], text, phases)
         if stages:
             staged[codes[map_name]] = staged.get(codes[map_name], 0) + 1
-            log("  %-22s %s" % (map_name, " > ".join(stages)))
+            pull.log("  %-22s %s" % (map_name, " > ".join(stages)))
         for position, stage in enumerate(stages, start=1):
             cursor.execute(
                 "INSERT INTO map_stages (map_id, position, name, source_id)"

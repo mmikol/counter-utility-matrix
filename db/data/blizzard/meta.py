@@ -15,7 +15,6 @@ vocabularies as ordinary select options.
 """
 
 import json
-from collections.abc import Callable
 from typing import NamedTuple
 
 import psycopg
@@ -134,16 +133,13 @@ class RatesSummary(PullSummary):
     skipped_maps: list[str]
 
 
-def run(connection: psycopg.Connection, cache_dir: str | None = None,
-        session: requests.Session | None = None,
-        log: Callable[[str], None] = print) -> RatesSummary:
-    """Pull the rates page by tier and by map and store them as one new dated
-    snapshot, in one transaction."""
-    session = fetch.session(session)
+def run(connection: psycopg.Connection, pull: fetch.PullContext) -> RatesSummary:
+    """Store the rates page by tier and by map as one new dated snapshot, in
+    one transaction -> the rows written, the snapshots held, the misses."""
     cao = psql.now()
 
-    rq = competitive_rq(session, cache_dir)
-    baseline = fetch_slice(session, {}, cache_dir, rq)
+    rq = competitive_rq(pull.session, pull.cache_dir)
+    baseline = fetch_slice(pull.session, {}, pull.cache_dir, rq)
     tiers = parse_filter_options(baseline, "filter-tier-select")
     maps = [m for m in parse_filter_options(baseline, "filter-map-select")
             if m[0] != "all-maps"]
@@ -204,9 +200,9 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
     rows = load_hero_slice(baseline, ALL_TIER)
     for code, _ in tiers:
         if code != ALL_TIER:
-            rows += load_hero_slice(fetch_slice(session, {"tier": code}, cache_dir, rq),
-                                    code)
-    log("hero/tier rows: %d" % rows)
+            rows += load_hero_slice(
+                fetch_slice(pull.session, {"tier": code}, pull.cache_dir, rq), code)
+    pull.log("hero/tier rows: %d" % rows)
 
     # Per map, across all ranks. Map x tier would be 270 requests against
     # 30, and the source refuses connections well before the end of a sweep
@@ -220,7 +216,7 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
             skipped_maps.append(label)
             continue
         for name, win, pick, ban in parse_rows(
-            fetch_slice(session, {"map": slug}, cache_dir, rq)
+            fetch_slice(pull.session, {"map": slug}, pull.cache_dir, rq)
         ):
             hero_id = hero_ids.get(name.lower())
             if hero_id is None:
@@ -239,7 +235,7 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
             map_rows += 1
     connection.commit()
     snapshots = psql.scalar(cursor.execute("SELECT count(*) FROM meta_snapshots"))
-    log("hero/map rows: %d   snapshots held: %d" % (map_rows, snapshots))
+    pull.log("hero/map rows: %d   snapshots held: %d" % (map_rows, snapshots))
     return {"queue": QUEUE_NAME, "platform": PLATFORM, "region": REGION,
             "tiers": len(tier_ids), "maps": len(maps) - len(skipped_maps),
             "hero_rows": rows, "map_rows": map_rows, "snapshot_id": snapshot_id,

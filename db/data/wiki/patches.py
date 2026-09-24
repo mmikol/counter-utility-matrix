@@ -5,11 +5,9 @@ released at capture time. Runs before the rates pulls so their snapshots
 have patches to link to.
 """
 
-from collections.abc import Callable
 from typing import NamedTuple
 
 import psycopg
-import requests
 
 from db import psql
 from db.data import PullSummary, fetch
@@ -49,12 +47,11 @@ class PatchesSummary(PullSummary):
     latest: str | None
 
 
-def run(connection: psycopg.Connection, cache_dir: str | None = None,
-        session: requests.Session | None = None,
-        log: Callable[[str], None] = print) -> PatchesSummary:
-    """Upsert every dated patch from the Patches cargo table."""
-    session = fetch.session(session)
-    patches, skipped = dated_patches(cargo_query(session, CARGO_TABLE, CARGO_FIELDS, cache_dir))
+def run(connection: psycopg.Connection, pull: fetch.PullContext) -> PatchesSummary:
+    """Upsert every dated patch from the Patches cargo table -> the patches
+    loaded, the undated ones skipped and the latest."""
+    patches, skipped = dated_patches(
+        cargo_query(pull.session, CARGO_TABLE, CARGO_FIELDS, pull.cache_dir))
 
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())
@@ -71,7 +68,7 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
     latest = cursor.execute(
         "SELECT name, released FROM patches ORDER BY released DESC LIMIT 1"
     ).fetchone()
-    log("patches: %d loaded, %d skipped (no date)" % (len(patches), skipped))
+    pull.log("patches: %d loaded, %d skipped (no date)" % (len(patches), skipped))
     return {"patches": len(patches), "skipped": skipped,
             "latest": "%s (%s)" % latest if latest else None,
             "tables": ["patches"]}

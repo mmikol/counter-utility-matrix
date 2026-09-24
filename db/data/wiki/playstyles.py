@@ -7,11 +7,9 @@ whole truth about styles.
 """
 
 import re
-from collections.abc import Callable
 from typing import NamedTuple
 
 import psycopg
-import requests
 
 from db import psql
 from db.data import PullSummary, fetch
@@ -55,12 +53,10 @@ class PlaystylesSummary(PullSummary):
     unmatched: list[str]
 
 
-def run(connection: psycopg.Connection, cache_dir: str | None = None,
-        session: requests.Session | None = None,
-        log: Callable[[str], None] = print) -> PlaystylesSummary:
-    """Reload the playstyles and the heroes listed under each."""
-    session = fetch.session(session)
-    playstyles = parse_playstyles(fetch_wikitext(session, COMPOSITION_PAGE, cache_dir))
+def run(connection: psycopg.Connection, pull: fetch.PullContext) -> PlaystylesSummary:
+    """Reload the playstyles and the heroes listed under each -> the styles,
+    the hero links stored and the names that matched no hero."""
+    playstyles = parse_playstyles(fetch_wikitext(pull.session, COMPOSITION_PAGE, pull.cache_dir))
 
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())
@@ -80,7 +76,7 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
                 (hero_id, code, source_id),
             )
             links += 1
-        log("  %-8s %2d heroes" % (name, len(heroes)))
+        pull.log("  %-8s %2d heroes" % (name, len(heroes)))
     connection.commit()
     return {"playstyles": [name for _, name, _ in playstyles], "links": links,
             "unmatched": unmatched, "tables": ["playstyle"]}

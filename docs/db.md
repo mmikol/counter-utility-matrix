@@ -50,7 +50,7 @@ db/
 | --- | --- |
 | `__init__.py` | What the whole layer agrees on, declared once: where the repo, the caches and the mirror live, the shape of a `sources` row (`Source`: code, name, url), the ability kinds and perk tiers the migrations seed, and the scope every rates snapshot is pinned to - console, controller, Americas. `Refusal` is the one error a caller can fix - an unknown name, a bad value, a board that cannot stand - which every layer raises and every door answers as the caller's; anything else is the server's fault. `embed` rewrites one generated section of a markdown file, for every layer that generates docs. |
 | `data/__init__.py` | `PullSummary`, what every source's `run()` returns: the tables it wrote, beside its own counts. `ArticlePullSummary` adds `missing`, the articles that would not fetch, for a pull that reads one article per entity. |
-| `data/fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `cached`: the cache sequence every source reads through - the fresh copy, else a new one written, else the stale copy. `request`: one page under a `RequestPolicy` - its attempts, backoff, timeout and the pause after a page - retried while attempts remain. `max_age`: the freshness policy for a block - a build keeps every cached page, a refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `prepare_cache`: the cache directory a tool hands a pull. |
+| `data/fetch.py` | `cached_get`: one page, from the cache if it is there and fresh. `cached`: the cache sequence every source reads through - the fresh copy, else a new one written, else the stale copy. `request`: one page under a `RequestPolicy` - its attempts, backoff, timeout and the pause after a page - retried while attempts remain. `max_age`: the freshness policy for a block - a build keeps every cached page, a refresh refetches them, and a page that fails to refetch keeps its cached copy. `session`: a requests session that says who we are. `PullContext`: what a pull's `run()` takes beside its connection - the page cache, the session and the log, stderr unless the caller names another, since over stdio stdout is the MCP wire. `prepare_cache`: the cache directory a tool hands a pull. |
 | `data/names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. |
 | `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `python -m db.sentry --once` is one pass from a shell. |
 | `refresh.py` | The clock: the daily refresh below, and the full one once the wiki cache is a week old. |
@@ -64,9 +64,10 @@ what its modules share: for the wiki, the client that talks to the
 MediaWiki endpoint and `fetch_articles`, through which every pull that reads
 one article per hero or map records an article that will not fetch and
 reads the rest; for Blizzard, `attr`, a tag's attribute as text. Each
-domain module is one `run(connection, cache_dir, session, log)` the tools
-call: fetch (cached), extract the values from the markup, normalise them,
-store them, and return a `PullSummary`.
+domain module is one `run(connection, pull)` the tools call, `pull` a
+`PullContext` holding the page cache, the session and the log: fetch
+(cached), extract the values from the markup, normalise them, store them,
+and return a `PullSummary`.
 
 | package | module | stores |
 | --- | --- | --- |

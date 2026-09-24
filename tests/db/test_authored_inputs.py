@@ -2,6 +2,7 @@
 from Blizzard or the wiki: no authored CSV exists, no loader reads one, no
 table but `strategies` carries the `user` source, and no third source is read."""
 
+import contextlib
 import os
 
 import pytest
@@ -61,6 +62,11 @@ def test_every_pull_reads_blizzard_or_the_wiki():
         spec.name for spec in tools.REGISTRY.pulls())
 
 
+class Offline(tools.Context):
+    def connect(self):
+        return contextlib.nullcontext("cx")
+
+
 def test_pull_counters_runs_the_wikis_matchups(monkeypatch, tmp_path):
     from db.data.wiki import matchups
     spec = tools.REGISTRY.get("pull_counters")
@@ -70,13 +76,8 @@ def test_pull_counters_runs_the_wikis_matchups(monkeypatch, tmp_path):
     assert "wiki" in text and "Match-Up" in text
     seen = {}
 
-    class Offline(tools.Context):
-        def connect(self):
-            import contextlib
-            return contextlib.nullcontext("cx")
-
-    def run(connection, cache_dir=None, session=None, log=print):
-        seen.update(connection=connection, cache_dir=cache_dir)
+    def run(connection, pull):
+        seen.update(connection=connection, cache_dir=pull.cache_dir)
         return {"counters": 3, "unwritten": ["Freja"], "tables": ["counters"]}
     monkeypatch.setattr(matchups, "run", run)
     # a cache folder of its own: the tool creates the one it is handed, and an
@@ -86,6 +87,26 @@ def test_pull_counters_runs_the_wikis_matchups(monkeypatch, tmp_path):
     assert seen == {"connection": "cx", "cache_dir": ctx.caches["wiki"]}
     assert text.splitlines()[0] == "pull_counters: counters stored"
     assert data == {"counters": 3, "unwritten": ["Freja"], "tables": ["counters"]}
+
+
+def test_a_pull_hands_run_its_sources_cache_and_the_context_log(monkeypatch, tmp_path):
+    from db.data import fetch
+    from db.data.blizzard import meta
+    seen = {}
+
+    def run(connection, pull):
+        seen.update(connection=connection, pull=pull, max_age=fetch._max_age())
+        return {"snapshots": 1, "tables": ["meta_snapshots"]}
+    monkeypatch.setattr(meta, "run", run)
+    ctx = Offline(dsn="postgresql://nowhere", caches={"blizzard": str(tmp_path / "blizzard")},
+                  log=lambda line: None)
+    text, _ = tools.run_tool(ctx, "pull_rates", refresh=True)
+    assert text.splitlines()[0] == "pull_rates: snapshot stored"
+    assert seen["connection"] == "cx"
+    assert seen["pull"].cache_dir == ctx.caches["blizzard"]
+    assert seen["pull"].log is ctx.log
+    assert seen["max_age"] == 0                    # refresh: every cached page is stale
+    assert fetch._max_age() is None                # and the policy is restored after
 
 
 def test_counterpick_is_gone_from_the_data_layer():

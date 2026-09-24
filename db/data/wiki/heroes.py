@@ -10,10 +10,9 @@ which owns the hero, ability and perk rows this fills in.
 """
 
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 
 import psycopg
-import requests
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
@@ -37,9 +36,8 @@ CARGO_FIELDS = (
 
 
 def _announce_heroes(
-        cursor: psycopg.Cursor, session: requests.Session, names: Iterable[str],
-        hero_ids: dict[str, int], cache_dir: str | None, source_id: int,
-        log: Callable[[str], None] = print) -> tuple[list[str], list[str]]:
+        cursor: psycopg.Cursor, pull: fetch.PullContext, names: Iterable[str],
+        hero_ids: dict[str, int], source_id: int) -> tuple[list[str], list[str]]:
     """Heroes the Cargo table names that the roster lacks: those whose
     article is marked upcoming get a row - role, subrole, health, release
     day, status announced - so their kit loads and the board can show
@@ -49,7 +47,8 @@ def _announce_heroes(
     read; the rest stay unknown."""
     stored: list[str] = []
     articles, missing = fetch_articles(
-        session, sorted(name for name in names if name.lower() not in hero_ids), cache_dir, log)
+        pull.session, sorted(name for name in names if name.lower() not in hero_ids),
+        pull.cache_dir, pull.log)
     for hero_name, text in articles.items():
         found = parse_announcement(text)
         if not found:
@@ -58,8 +57,8 @@ def _announce_heroes(
                        " WHERE r.code = %s AND s.code = %s", (found["role"], found["subrole"]))
         row = cursor.fetchone()
         if row is None:
-            log("announced hero %s: subrole %s/%s not on the roster yet, skipped"
-                % (hero_name, found["role"], found["subrole"]))
+            pull.log("announced hero %s: subrole %s/%s not on the roster yet, skipped" % (
+                hero_name, found["role"], found["subrole"]))
             continue
         subrole_id, role_id = row
         slug = re.sub(r"[^a-z0-9]+", "-", hero_name.lower()).strip("-")
@@ -73,7 +72,7 @@ def _announce_heroes(
              source_id))
         hero_ids[hero_name.lower()] = psql.scalar(cursor)
         stored.append(hero_name)
-        log("announced hero stored: %s (%s, %s%s)" % (
+        pull.log("announced hero stored: %s (%s, %s%s)" % (
             hero_name, found["role"], found["subrole"],
             ", releases %s" % found["release_date"] if found["release_date"] else ""))
     return stored, missing
@@ -89,28 +88,24 @@ class KitsSummary(KitCounts, ArticlePullSummary):
     announced: list[str]
 
 
-def run(
-        connection: psycopg.Connection, cache_dir: str | None = None,
-        session: requests.Session | None = None, supplement: bool = True,
-        log: Callable[[str], None] = print) -> KitsSummary:
-    """Pull the Cargo table (and each hero article), clean, store, in one
-    transaction."""
-    session = fetch.session(session)
-
-    rows = cargo_query(session, CARGO_TABLE, CARGO_FIELDS, cache_dir)
+def run(connection: psycopg.Connection, pull: fetch.PullContext, *,
+        supplement: bool = True) -> KitsSummary:
+    """Store the Cargo table's kits, with what each hero article adds unless
+    supplement is off, in one transaction -> every row counted, the heroes
+    announced and skipped, and the articles that would not fetch."""
+    rows = cargo_query(pull.session, CARGO_TABLE, CARGO_FIELDS, pull.cache_dir)
     by_hero = parse_rows(rows)
-    log("cargo rows: %d   heroes named: %d" % (len(rows), len(by_hero)))
+    pull.log("cargo rows: %d   heroes named: %d" % (len(rows), len(by_hero)))
 
     articles = Supplement({}, 0, [])
     if supplement:
-        articles = supplement_kits(session, by_hero, cache_dir, log)
-        log("supplemented stats: %d  (fields Cargo does not expose)" % articles.stats)
+        articles = supplement_kits(pull.session, by_hero, pull.cache_dir, pull.log)
+        pull.log("supplemented stats: %d  (fields Cargo does not expose)" % articles.stats)
 
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())
     hero_ids = psql.lookup_ids(cursor, "heroes", "name", "hero_id")
-    announced, unfetched = _announce_heroes(cursor, session, by_hero, hero_ids, cache_dir,
-                                            source_id, log)
+    announced, unfetched = _announce_heroes(cursor, pull, by_hero, hero_ids, source_id)
     tally, unknown_heroes = kit_store.store(cursor, by_hero, articles.profiles, hero_ids,
                                             source_id)
     connection.commit()

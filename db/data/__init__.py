@@ -12,12 +12,13 @@ page to table, plus what they share.
     fetch         the page cache, its freshness policy and the request loop
     names         matching hero, map and ability names across sources
 
-Each fetched source's domain module ends in a
-run(connection, cache_dir, session, log) that returns a PullSummary: the
-tables it wrote, and for a pull that reads one article per entity, the
-articles that would not fetch (ArticlePullSummary). authored/ has no run -
-the strategies mirror is inference.catalog.mirror.
-The MCP tools call them. Nothing here is an entry point of its own.
+Each fetched source's domain module ends in a run(connection, pull) - pull
+a fetch.PullContext: the page cache, the session and the log - that returns
+a PullSummary: the tables it wrote, and for a pull that reads one article
+per entity, the articles that would not fetch (ArticlePullSummary).
+authored/ has no run - the strategies mirror is inference.catalog.mirror.
+The MCP pull tools (db/mcp) import and call them. Nothing here is an entry
+point of its own.
 """
 
 from typing import TypedDict

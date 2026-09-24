@@ -8,12 +8,10 @@ stats, the missing abilities and the maps come from the wiki.
 """
 
 import re
-from collections.abc import Callable
 from datetime import datetime
 from typing import TypedDict
 
 import psycopg
-import requests
 from bs4 import BeautifulSoup, Tag
 
 from db import PERK_TIERS, psql
@@ -322,32 +320,29 @@ class HeroesSummary(PullSummary):
     portraits: int
 
 
-def run(connection: psycopg.Connection, cache_dir: str | None = None,
-        session: requests.Session | None = None,
-        log: Callable[[str], None] = print) -> HeroesSummary:
-    """Pull the roster and every hero page, clean them, store them in one
-    transaction."""
-    session = fetch.session(session)
-
-    roster_soup = BeautifulSoup(cached_get(session, HEROES_URL, cache_dir, cache_key(HEROES_URL),
-                                           policy=PAGE_POLICY), "html.parser")
+def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummary:
+    """Store the roster and every hero page's ability and perk text, in one
+    transaction -> the heroes, subroles, abilities, perks and portraits."""
+    roster_soup = BeautifulSoup(
+        cached_get(pull.session, HEROES_URL, pull.cache_dir, cache_key(HEROES_URL),
+                   policy=PAGE_POLICY), "html.parser")
     subroles = parse_subroles(roster_soup)
     heroes = parse_roster(roster_soup)
     icons = parse_icons(roster_soup)
-    log("roster: %d heroes, %d subroles" % (len(heroes), len(subroles)))
+    pull.log("roster: %d heroes, %d subroles" % (len(heroes), len(subroles)))
 
     abilities_by_slug: dict[str, list[AbilityText]] = {}
     perks_by_slug: dict[str, list[PerkText]] = {}
     for index, hero in enumerate(heroes, start=1):
         slug = hero["slug"]
-        page = cached_get(session, "%s/heroes/%s/" % (BASE_URL, slug),
-                          cache_dir, cache_key(slug), policy=PAGE_POLICY)
+        page = cached_get(pull.session, "%s/heroes/%s/" % (BASE_URL, slug),
+                          pull.cache_dir, cache_key(slug), policy=PAGE_POLICY)
         soup = BeautifulSoup(page, "html.parser")
         abilities_by_slug[slug] = parse_abilities(soup, slug)
         perks_by_slug[slug] = parse_perks(soup, slug)
-        log("  [%2d/%d] %-18s %d abilities, %d perks"
-            % (index, len(heroes), hero["name"],
-               len(abilities_by_slug[slug]), len(perks_by_slug[slug])))
+        pull.log("  [%2d/%d] %-18s %d abilities, %d perks" % (
+            index, len(heroes), hero["name"],
+            len(abilities_by_slug[slug]), len(perks_by_slug[slug])))
 
     cursor = connection.cursor()
     _store(cursor, subroles, heroes, abilities_by_slug, perks_by_slug, icons, psql.now())

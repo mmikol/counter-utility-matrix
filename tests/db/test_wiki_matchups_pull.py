@@ -7,6 +7,7 @@ import os
 import pytest
 
 from db import CACHE_DIRS
+from db.data.fetch import PullContext
 from db.data.wiki import matchups
 
 needs_cache = pytest.mark.skipif(
@@ -18,7 +19,7 @@ needs_cache = pytest.mark.skipif(
 @needs_cache
 @pytest.mark.invariant
 def test_counters_pull_from_the_cache(sandbox):
-    data = matchups.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    data = matchups.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     rows = sandbox.execute(
         "select c.hero_id, c.countered_by_id, src.code from counters c"
         " join sources src using (source_id)").fetchall()
@@ -53,7 +54,7 @@ def test_counters_pull_from_the_cache(sandbox):
 @needs_cache
 @pytest.mark.invariant
 def test_the_wiki_states_the_well_known_counters(sandbox):
-    data = matchups.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    data = matchups.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     answers = {(winner, loser) for winner, loser in sandbox.execute(
         "select w.name, l.name from counters c join heroes w on w.hero_id = c.countered_by_id"
         " join heroes l on l.hero_id = c.hero_id")}

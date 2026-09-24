@@ -8,6 +8,7 @@ import os
 import pytest
 
 from db import CACHE_DIRS
+from db.data.fetch import PullContext
 from db.data.wiki import maps, terrain
 
 needs_cache = pytest.mark.skipif(
@@ -26,7 +27,7 @@ def terrain_of(connection, name):
 @needs_cache
 @pytest.mark.invariant
 def test_terrain_pulls_from_the_cache(sandbox):
-    data = terrain.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    data = terrain.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     rows = sandbox.execute(
         "select t.map_id, t.feature, t.mentions, t.per_thousand, src.code"
         " from map_terrain t join sources src using (source_id)").fetchall()
@@ -57,7 +58,7 @@ def test_terrain_pulls_from_the_cache(sandbox):
 @needs_cache
 @pytest.mark.invariant
 def test_the_wiki_states_the_well_known_ground(sandbox):
-    terrain.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    terrain.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
 
     # King's Row: narrow streets, the first chokepoint, the gateway
     kings_row = terrain_of(sandbox, "King's Row")
@@ -88,8 +89,8 @@ def stage_terrain_of(connection, map_name, stage):
 @needs_cache
 @pytest.mark.invariant
 def test_stage_terrain_pulls_from_the_cache(sandbox):
-    maps.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
-    data = terrain.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    maps.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
+    data = terrain.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     rows = sandbox.execute(
         "select t.stage_id, t.feature, t.mentions, t.per_thousand, src.code"
         " from stage_terrain t join sources src using (source_id)").fetchall()
@@ -131,8 +132,8 @@ def test_stage_terrain_pulls_from_the_cache(sandbox):
 @needs_cache
 @pytest.mark.invariant
 def test_the_wiki_states_a_stages_ground(sandbox):
-    maps.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
-    terrain.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    maps.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
+    terrain.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
 
     # Ilios: "On the Well section of the map, the big hole in the middle"
     well = stage_terrain_of(sandbox, "Ilios", "Well")
@@ -169,24 +170,24 @@ def test_the_wiki_states_a_stages_ground(sandbox):
 @needs_cache
 @pytest.mark.invariant
 def test_the_pull_replaces_the_tables_whole(sandbox):
-    maps.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    maps.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     counts = "select (select count(*) from map_terrain), (select count(*) from stage_terrain)"
-    terrain.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    terrain.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     first = sandbox.execute(counts).fetchone()
-    terrain.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    terrain.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     assert sandbox.execute(counts).fetchone() == first and all(first)
 
 
 @needs_cache
 @pytest.mark.invariant
 def test_pulling_the_maps_again_keeps_the_stages_and_their_terrain(sandbox):
-    maps.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
-    terrain.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    maps.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
+    terrain.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     before = sandbox.execute(
         "select s.stage_id, s.map_id, s.position, s.name, count(t.feature)"
         " from map_stages s left join stage_terrain t using (stage_id)"
         " group by s.stage_id order by s.stage_id").fetchall()
-    maps.run(sandbox, cache_dir=CACHE_DIRS["wiki"], log=lambda *_: None)
+    maps.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     assert sandbox.execute(
         "select s.stage_id, s.map_id, s.position, s.name, count(t.feature)"
         " from map_stages s left join stage_terrain t using (stage_id)"

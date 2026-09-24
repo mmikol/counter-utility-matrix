@@ -24,11 +24,10 @@ reloaded wholesale: one row means countered_by_id answers hero_id.
 
 import re
 import unicodedata
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from typing import NamedTuple
 
 import psycopg
-import requests
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
@@ -458,15 +457,14 @@ class CountersSummary(ArticlePullSummary):
     unmatched: list[str]
 
 
-def run(connection: psycopg.Connection, cache_dir: str | None = None,
-        session: requests.Session | None = None,
-        log: Callable[[str], None] = print) -> CountersSummary:
-    session = fetch.session(session)
+def run(connection: psycopg.Connection, pull: fetch.PullContext) -> CountersSummary:
+    """Reload counters from the Match-Up column of every released hero's
+    article -> the edges stored, the cells read and what went unanswered."""
     cursor = connection.cursor()
     cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
     released: dict[str, int] = dict(cursor.fetchall())
 
-    articles, missing = fetch_articles(session, released, cache_dir, log)
+    articles, missing = fetch_articles(pull.session, released, pull.cache_dir, pull.log)
     known = {name_key(name): Known(name, pronoun(articles.get(name, ""))) for name in released}
     readings = {name: parse_matchups(text, name, known) for name, text in articles.items()}
     edges, contradicted, unmatched = combine(readings, index(released))
@@ -484,10 +482,11 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
     names = {hero_id: name for name, hero_id in released.items()}
     cells = [reading for article in readings.values() for _, reading in article]
     in_an_edge = {hero_id for pair in edges for hero_id in pair}
-    log("  counters   %d edges from %d articles; %d cells, %d with no verdict;"
-        " %d heroes with no edge" % (len(edges), sum(1 for r in readings.values() if r),
-                                     len(cells), sum(1 for r in cells if not r.verdict),
-                                     len(released) - len(in_an_edge)))
+    pull.log(
+        "  counters   %d edges from %d articles; %d cells, %d with no verdict;"
+        " %d heroes with no edge" % (
+            len(edges), sum(1 for r in readings.values() if r), len(cells),
+            sum(1 for r in cells if not r.verdict), len(released) - len(in_an_edge)))
     return {"counters": len(edges),
             "articles": sum(1 for r in readings.values() if r),
             "cells": len(cells),

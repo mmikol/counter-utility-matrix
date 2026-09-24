@@ -14,11 +14,10 @@ is restamped with its season.
 """
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from datetime import date
 
 import psycopg
-import requests
 
 from db import psql
 from db.data import PullSummary, fetch
@@ -100,19 +99,17 @@ class SeasonsSummary(PullSummary):
     upcoming: list[str]
 
 
-def run(connection: psycopg.Connection, cache_dir: str | None = None,
-        session: requests.Session | None = None,
-        log: Callable[[str], None] = print) -> SeasonsSummary:
+def run(connection: psycopg.Connection, pull: fetch.PullContext) -> SeasonsSummary:
     """Reload the seasons that have started and restamp every rates snapshot
-    with its season, in one transaction."""
-    session = fetch.session(session)
+    with its season, in one transaction -> the seasons, the latest, the
+    snapshots stamped and the seasons still to come."""
     seasons: list[tuple[str, date | None, str]] = []
     # A subpage that will not fetch fails the pull whole, not through
     # fetch_articles: the table is reloaded and every snapshot restamped, so
     # a missing era would stamp its snapshots with an earlier era's season.
     # fetch_wikitext already serves the cached copy when the network fails.
-    for page in parse_subpages(fetch_wikitext(session, SEASON_PAGE, cache_dir)):
-        found = parse_seasons(fetch_wikitext(session, page, cache_dir))
+    for page in parse_subpages(fetch_wikitext(pull.session, SEASON_PAGE, pull.cache_dir)):
+        found = parse_seasons(fetch_wikitext(pull.session, page, pull.cache_dir))
         seasons.extend((name, started, page) for name, started in found)
     today = psql.now().date()
     started = sorted(((name, start, page) for name, start, page in seasons
@@ -136,8 +133,8 @@ def run(connection: psycopg.Connection, cache_dir: str | None = None,
         "  ORDER BY s.started DESC, s.season_id DESC LIMIT 1)")
     stamped = cursor.rowcount
     connection.commit()
-    log("  seasons    %d, latest %s (%s); %d snapshots stamped"
-        % (len(started), started[-1][0], started[-1][1], stamped))
+    pull.log("  seasons    %d, latest %s (%s); %d snapshots stamped" % (
+        len(started), started[-1][0], started[-1][1], stamped))
     return {"seasons": len(started), "latest": started[-1][0],
             "latest_started": started[-1][1].isoformat(), "stamped": stamped,
             "upcoming": upcoming, "tables": ["seasons", "meta_snapshots"]}

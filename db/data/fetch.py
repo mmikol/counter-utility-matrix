@@ -14,6 +14,9 @@ shared by every source.
                      copy, so a flaky source degrades to yesterday's numbers,
                      never to an empty table
     session          a requests session that identifies this project
+    PullContext      what a pull's run() takes beside its connection: the page
+                     cache, the session and the log (stderr unless the caller
+                     names another - over stdio, stdout is the MCP wire)
     prepare_cache    the cache directory a tool hands a pull
 
 Each source package (blizzard, wiki) names its own endpoints
@@ -195,6 +198,24 @@ def session(existing: requests.Session | None = None) -> requests.Session:
     s = existing or requests.Session()
     s.headers.update({"User-Agent": USER_AGENT})
     return s
+
+
+# Where a pull's progress lines go: to_stderr below, print, a list's append.
+type Log = Callable[[str], None]
+
+
+def to_stderr(line: str) -> None:
+    """A progress line on stderr: over stdio, stdout is the MCP wire."""
+    sys.stderr.write(line + "\n")
+
+
+@dataclasses.dataclass(frozen=True)
+class PullContext:
+    """What a pull runs with: the page cache it reads through (None reads
+    none), the session it fetches on and where its progress lines go."""
+    cache_dir: str | None
+    session: requests.Session = dataclasses.field(default_factory=session)
+    log: Log = to_stderr
 
 
 def prepare_cache(path: str | None) -> str | None:

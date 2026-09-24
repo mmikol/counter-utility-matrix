@@ -8,10 +8,9 @@ has about that stage. Both tables are reloaded wholesale.
 """
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 
 import psycopg
-import requests
 from psycopg.sql import SQL
 
 from db import psql
@@ -321,11 +320,9 @@ def _counted(counts: Mapping[str, int]) -> str:
     return "  ".join("%s %d" % (f, n) for f, n in counts.items() if n)
 
 
-def run(
-        connection: psycopg.Connection, cache_dir: str | None = None,
-        session: requests.Session | None = None,
-        log: Callable[[str], None] = print) -> TerrainSummary:
-    session = fetch.session(session)
+def run(connection: psycopg.Connection, pull: fetch.PullContext) -> TerrainSummary:
+    """Reload map_terrain and stage_terrain from every map's article -> the
+    maps and stages counted, the rows and words, and the maps without text."""
     cursor = connection.cursor()
     source_id = psql.register_source(cursor, WIKI, psql.now())
     cursor.execute("DELETE FROM stage_terrain")
@@ -341,7 +338,8 @@ def run(
 
     rows, words_read, stage_rows, stages_read = 0, 0, 0, 0
     without_text: list[str] = []
-    articles, missing = fetch_articles(session, [name for _, name in maps], cache_dir, log)
+    articles, missing = fetch_articles(pull.session, [name for _, name in maps],
+                                       pull.cache_dir, pull.log)
     for map_id, name in maps:
         if name not in articles:
             continue
@@ -350,13 +348,13 @@ def run(
         words = word_count(text)
         if words < MIN_WORDS:
             without_text.append(name)
-            log("  %-22s %4d words: no usable text" % (name, words))
+            pull.log("  %-22s %4d words: no usable text" % (name, words))
         else:
             counts = count_features(text)
             rows += _store(cursor, "map_terrain", "map_id", map_id, counts, words,
                            source_id)
             words_read += words
-            log("  %-22s %4d words  %s" % (name, words, _counted(counts)))
+            pull.log("  %-22s %4d words  %s" % (name, words, _counted(counts)))
 
         hybrid, stage_ids = stages.get(map_id, (False, {}))
         for stage, text in stage_texts(article, list(stage_ids), hybrid).items():
@@ -367,7 +365,7 @@ def run(
             stage_rows += _store(cursor, "stage_terrain", "stage_id",
                                  stage_ids[stage], counts, words, source_id)
             stages_read += 1
-            log("    %-30s %4d words  %s" % (stage, words, _counted(counts)))
+            pull.log("    %-30s %4d words  %s" % (stage, words, _counted(counts)))
     connection.commit()
     total_stages = sum(len(stage_ids) for _, stage_ids in stages.values())
     return {"maps": len(maps) - len(without_text) - len(missing),
