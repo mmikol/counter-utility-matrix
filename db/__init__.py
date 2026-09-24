@@ -33,10 +33,11 @@ inference.derive inside a run the door started.
 
 This file holds what the whole layer must agree on: where things live (ROOT
 and the paths under it), the shape of a `sources` row (Source), the ability
-and perk vocabularies the migrations seed, the scope every rates snapshot is
-pinned to, the one error a caller can fix (Refusal), which every layer raises
-and every door answers as the caller's, and embed, which rewrites one
-generated section of a markdown file for every layer that generates docs.
+and perk vocabularies the migrations seed (ABILITY_KINDS, PERK_TIERS), the
+scope every rates snapshot is pinned to, the one error a caller can fix
+(Refusal), which every layer raises and every door answers as the caller's,
+and embed, which rewrites one generated section of a markdown file for every
+layer that generates docs.
 docs/db.md walks the tree.
 
 Every row carries a source_id, and that is the only distinction drawn
