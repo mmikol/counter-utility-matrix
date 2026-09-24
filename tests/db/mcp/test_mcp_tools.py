@@ -253,7 +253,8 @@ def test_the_order_holds_whichever_family_imports_first():
         "from db.mcp import tools",
         "print(' '.join(tools.REGISTRY.names()))"))
     listed = subprocess.run([sys.executable, "-c", script], cwd=ROOT, capture_output=True,
-                            text=True, timeout=60, check=True)
+                            text=True, timeout=60)
+    assert listed.returncode == 0, listed.stderr          # a child that died says why
     assert listed.stdout.split() == tools.REGISTRY.names()
 
 
