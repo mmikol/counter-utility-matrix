@@ -109,7 +109,7 @@ def db_init(ctx: Context) -> ToolReply:
         if schema.table_count(cx):
             raise Refusal("the database already has tables; db_rebuild"
                           " starts over")
-        schema.apply(cx, schema.read_migrations(), quiet=True)
+        schema.apply(cx, schema.read_migrations())
         n = schema.table_count(cx)
     return ToolReply("db_init: %d tables, no data" % n, {"table_count": n})
 
@@ -122,7 +122,7 @@ def db_migrate(ctx: Context) -> ToolReply:
     with ctx.connect() as cx:
         names = schema.pending(cx)
         todo = [m for m in schema.read_migrations() if m.name in names]
-        schema.apply(cx, todo, quiet=True)
+        schema.apply(cx, todo)
     return ToolReply("db_migrate: applied %d migration(s)%s"
                      % (len(names), ": " + ", ".join(names) if names else ""),
                      {"applied": names})
@@ -134,7 +134,7 @@ def db_migrate(ctx: Context) -> ToolReply:
     " and none is built.", REFRESH)
 def db_rebuild(ctx: Context, refresh: bool = False) -> ToolReply:
     with ctx.connect(boot=True) as cx:
-        dropped = schema.rebuild(cx, quiet=True)
+        dropped = schema.rebuild(cx)
     results = ctx.call("sync_all", refresh=refresh).data
     return ToolReply("db_rebuild: dropped %d tables, rebuilt" % len(dropped),
                      {"dropped": len(dropped), "sync": results})

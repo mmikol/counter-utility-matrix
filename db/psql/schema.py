@@ -72,17 +72,13 @@ def read_migrations() -> list[Migration]:
     return migrations
 
 
-def apply(
-        connection: psycopg.Connection, migrations: Sequence[Migration],
-        quiet: bool = False) -> None:
+def apply(connection: psycopg.Connection, migrations: Sequence[Migration]) -> None:
     """Run each migration and commit it, then record them all in the ledger
     once the ledger exists."""
     for migration in migrations:
         with connection.cursor() as cursor:
             cursor.execute(migration.sql)
         connection.commit()
-        if not quiet:
-            print("  applied %s" % migration.name)
     if psql.scalar(connection.execute("select to_regclass('schema_migrations')")):
         for migration in migrations:
             connection.execute(
@@ -142,12 +138,10 @@ def drop_all(connection: psycopg.Connection) -> list[str]:
     return tables
 
 
-def rebuild(connection: psycopg.Connection, quiet: bool = False) -> list[str]:
+def rebuild(connection: psycopg.Connection) -> list[str]:
     """Drop everything and reapply every migration. Returns the tables dropped."""
     dropped = drop_all(connection)
-    if dropped and not quiet:
-        print("  dropped %d existing tables" % len(dropped))
-    apply(connection, read_migrations(), quiet)
+    apply(connection, read_migrations())
     return dropped
 
 

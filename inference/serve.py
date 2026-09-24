@@ -109,11 +109,7 @@ def handle_health() -> web.Reply:
         errors.append(str(error))
     else:
         out["strategies"], out["pending"] = len(cat), sum(1 for h in cat if h.pending)
-    # Degraded is the answer to every way the database can be out of reach,
-    # and finding it is one of them: default_dsn imports pgserver to locate
-    # the embedded cluster, so a machine without that package raised
-    # ModuleNotFoundError out of a handler whose whole job is to say what is
-    # wrong. A health endpoint that crashes reports nothing.
+    # psql.UNREACHABLE: a database out of reach is degraded, never a 500
     try:
         with psycopg.connect(psql.default_dsn()) as cx:
             out["heroes"] = psql.scalar(cx.execute("select count(*) from heroes"))
