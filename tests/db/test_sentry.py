@@ -70,6 +70,17 @@ def test_the_door_is_tallied_from_the_audit_log(tmp_path):
     assert sentry.check_door(str(tmp_path / "missing.jsonl")) == sentry.DoorTally()
 
 
+def test_an_audit_line_whose_client_is_not_a_name_is_malformed(tmp_path):
+    # the door names a client or none; a list there once failed the whole pass
+    audit = tmp_path / "audit.jsonl"
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    lines = [{"t": now, "client": ["http:a"], "tool": "facts", "ok": True},
+             {"t": now, "client": None, "tool": "facts", "ok": True}]
+    audit.write_text("".join(json.dumps(line) + "\n" for line in lines))
+    door = sentry.check_door(str(audit))
+    assert (door.recent, door.malformed) == (1, 1)
+
+
 def test_the_sentry_reads_the_log_the_door_writes(tmp_path, monkeypatch):
     # one definition of the path, the door's, read when each of them runs
     from db.mcp import server

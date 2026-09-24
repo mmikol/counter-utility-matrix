@@ -27,7 +27,7 @@ import traceback
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import NoReturn
+from typing import NamedTuple, NoReturn
 
 from db import CACHE_DIRS
 from db.data.fetch import SECONDS_PER_HOUR
@@ -111,9 +111,16 @@ def full_due(
     return sorted(ages)[len(ages) // 2] > full_days * 24 * SECONDS_PER_HOUR
 
 
+class Refreshed(NamedTuple):
+    """What one refresh came to: whether it succeeded, and its summary or its
+    error."""
+    ok: bool
+    text: str
+
+
 def refresh_once(
         ctx: tools.Context, log: tools.Log = print, full: bool | None = None,
-        full_days: float = DEFAULT_FULL_DAYS) -> tuple[bool, str]:
+        full_days: float = DEFAULT_FULL_DAYS) -> Refreshed:
     """One refresh -> (ok, text): daily (seasons, rates, strategies, export)
     or full (every source) - decided by full_due() unless `full` is given.
     Never raises; a failure returns (False, the error)."""
@@ -138,9 +145,9 @@ def refresh_once(
         log(traceback.format_exc().rstrip())
         log("refresh: FAILED after %.0fs: %s: %s"
             % (time.time() - started, type(error).__name__, error))
-        return False, str(error)
+        return Refreshed(False, str(error))
     log("refresh: done in %.0fs - %s" % (time.time() - started, text))
-    return True, text
+    return Refreshed(True, text)
 
 
 def run_forever(

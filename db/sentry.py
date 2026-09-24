@@ -37,7 +37,7 @@ import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import NoReturn, TypedDict
+from typing import NamedTuple, NoReturn, TypedDict
 
 import psycopg
 from psycopg.sql import SQL
@@ -131,9 +131,14 @@ def _quarantine(directory: str, name: str, why: str, log: Log) -> bool:
     return True
 
 
-def check_playbook(
-        directory: str | None = None,
-        log: Log = print) -> tuple[list[str], list[catalog_module.Strategy] | None]:
+class PlaybookCheck(NamedTuple):
+    """What one look at the playbook found: the files it quarantined, and the
+    catalog, or None while the playbook will not load."""
+    quarantined: list[str]
+    catalog: list[catalog_module.Strategy] | None
+
+
+def check_playbook(directory: str | None = None, log: Log = print) -> PlaybookCheck:
     """Load the catalog; quarantine what will not load or reads like an
     instruction -> (quarantined names, catalog or None)."""
     directory = directory or catalog_module.strategies_dir()
@@ -146,9 +151,9 @@ def check_playbook(
             name = error.file
             if not name or not os.path.exists(os.path.join(directory, name)):
                 log("sentry: the playbook will not load and the file is unclear: %s" % text)
-                return quarantined, None
+                return PlaybookCheck(quarantined, None)
             if not _quarantine(directory, name, "will not load: " + text[:120], log):
-                return quarantined, None
+                return PlaybookCheck(quarantined, None)
             quarantined.append(name)
             continue
         hit = None
@@ -158,11 +163,12 @@ def check_playbook(
                 hit = (os.path.basename(h.path), why)
                 break
         if not hit:
-            return quarantined, cat
-        if not _quarantine(directory, hit[0], "reads like an instruction: %r" % hit[1], log):
-            return quarantined, None
-        quarantined.append(hit[0])
-    return quarantined, None
+            return PlaybookCheck(quarantined, cat)
+        name, why = hit
+        if not _quarantine(directory, name, "reads like an instruction: %r" % why, log):
+            return PlaybookCheck(quarantined, None)
+        quarantined.append(name)
+    return PlaybookCheck(quarantined, None)
 
 
 def scan(cx: psycopg.Connection) -> list[str]:
@@ -248,10 +254,14 @@ def check_door(audit_path: str | None = None, offset: int = 0) -> DoorTally:
             except (ValueError, KeyError, TypeError):
                 malformed += start >= offset
                 continue
+            client: object = entry.get("client")
+            if client is not None and not isinstance(client, str):
+                malformed += start >= offset       # the door names a client or none
+                continue
             if now - when > 60:
                 continue
             recent += 1
-            per_client[entry.get("client")] = per_client.get(entry.get("client"), 0) + 1
+            per_client[client] = per_client.get(client, 0) + 1
             refused += bool(entry.get("refused"))
             crashed += bool(entry.get("crashed"))
     hot = [c for c, n in per_client.items() if n >= server.RATE_LIMIT]
