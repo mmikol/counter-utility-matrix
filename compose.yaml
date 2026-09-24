@@ -148,7 +148,7 @@ services:
       COUNTRIX_INFERENCE_URL: http://inference:8019
       COUNTRIX_UI_HOST: 0.0.0.0
       # the board writes nothing unless COUNTRIX_READ_ONLY=0; the two
-      # below are the channel that one write would use (the data layer's tune)
+      # below are the channel that one write would use (a tune call through the door)
       COUNTRIX_READ_ONLY: ${COUNTRIX_READ_ONLY:-}
       COUNTRIX_MCP_URL: http://data:8020/mcp
       COUNTRIX_MCP_TOKEN: ${COUNTRIX_MCP_TOKEN:-}

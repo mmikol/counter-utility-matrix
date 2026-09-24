@@ -74,9 +74,10 @@ or the user points at, and leave a report.
    docstring that says what it does; a module over a few hundred lines or
    a function over a screen is a smell to name, not necessarily to fix.
    Every write to the playbook or the database goes through a tool that
-   validates and logs it - no new side doors. The strategy files are the
-   one input a user writes: every table but `strategies` is filled by a
-   pull or derived at load, and none carries the `user` source. The
+   validates and logs it, the sentry's quarantine rename aside - no new
+   side doors. The strategy files are the one input a user writes: every
+   table but `strategies` is filled by a pull or derived at load, and none
+   carries the `user` source. The
    pulls read Blizzard's site and the wiki, nothing else: no third-party
    site or API.
 

@@ -1,13 +1,16 @@
 # The MCP servers
 
 One set of tools, served over the
-[Model Context Protocol](https://modelcontextprotocol.io) by the data
-layer (`db/mcp/`). A Claude Code session calls them as MCP tools; the
-board, the refresher, Docker's entrypoint and the shell call the same
-functions in-process. Nothing writes except through them, and nothing
-drives the layer another way, so a session and the board see the same
-numbers. Reading is direct: the UI and inference layers `SELECT` over
-their own connection.
+[Model Context Protocol](https://modelcontextprotocol.io) by the door
+over all three layers (`db/mcp/`): the data layer's pulls, the UI
+layer's facts, and the inference layer's solver and playbook. A Claude
+Code session calls them as MCP tools; the board, the refresher, Docker's
+entrypoint and the shell call the same functions in-process. The door
+gates every write: a write to Postgres or the playbook runs under one of
+its tools, and the sentry's quarantine rename of a bad strategy file
+(`db/sentry.py`) is the one write outside it, so a session and the board
+see the same numbers. Reading is direct: the UI and inference layers
+`SELECT` over their own connection.
 
 ## The two servers
 
