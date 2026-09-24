@@ -80,6 +80,9 @@ def _announce_heroes(
 
 
 class KitsSummary(KitCounts, ArticlePullSummary):
+    """The store's counts, every one present, and what the pull read: the
+    Cargo rows, the stats the articles added, the heroes it skipped and the
+    ones it announced."""
     cargo_rows: int
     supplemented: int
     unknown_heroes: list[str]

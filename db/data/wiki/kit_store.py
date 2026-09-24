@@ -1,4 +1,4 @@
-"""The store stage of the kits pull: a hero's kit, read, into the tables.
+"""The store stage of the kits pull: each hero's kit into the tables.
 
 Loads weapons and their firing configs, classifies every ability, adds the
 abilities Blizzard does not publish, stores each ability's keywords, and

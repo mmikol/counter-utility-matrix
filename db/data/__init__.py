@@ -29,7 +29,6 @@ class PullSummary(TypedDict):
 
 
 class ArticlePullSummary(PullSummary):
-    """A pull that fetches one article per entity: 'title: error' for each
-    article that would not fetch, so a pull that read nothing cannot look
-    like a pull that found nothing."""
+    """The summary of a pull that fetches one article per entity: missing
+    holds 'title: error' for each article that would not fetch."""
     missing: list[str]
