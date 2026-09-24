@@ -3,15 +3,19 @@ files they load - the stylesheet, the scripts and the display font.
 
 The page is a shell over the static files: board.js loads last because it
 calls into comps.js and playbook.js, and TEAM and BANS come from the page so
-the scripts keep no constant in step with the Python. ui/board.py serves
-these; nothing here reads the database or knows a route's handler.
+the scripts keep no constant in step with the Python. The math page's code
+numbers are filled in here too, from the modules that hold them, so
+math.html quotes no constant of its own. ui/board.py serves these; nothing
+here reads the database or knows a route's handler.
 """
 
 import html
 import os
 from typing import NamedTuple
 
+from facts import compute
 from facts.draft import MAX_BANS, TEAM_SIZE
+from inference import scale, scoring, solver
 
 GITHUB_MARK = (
     "<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='true'><path fill='currentColor' d='M8 0C3.58 0 0 3.58 0 8"  # noqa: E501
@@ -151,8 +155,17 @@ def _article(name: str) -> str:
 
 
 def view_math() -> str:
-    """The math page: ui/static/math.html, the article alone, in the page shell."""
-    return page("the math", _article("math.html"))
+    """The math page: ui/static/math.html in the page shell, the code
+    constants it quotes filled in from their modules on every call, so the
+    page follows the code. A literal percent in math.html is written %%."""
+    return page("the math", _article("math.html") % {
+        "SYNERGY_PULL": compute.SYNERGY_PULL,
+        "REFERENCE_SIZE": format(scale.REFERENCE_SIZE, ","),
+        "NEED_BUDGET": scoring.NEED_BUDGET,
+        "PARTNER_POINTS": solver.PARTNER_POINTS,
+        "SEEDS": solver.SEEDS,
+        "SHAPE_REACH": solver.SHAPE_REACH,
+        "RESTARTS": solver.RESTARTS})
 
 
 def view_tests() -> str:

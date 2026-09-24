@@ -55,12 +55,12 @@ same board gives the same six.</p>
 <code>enemy</code>, <code>matchup</code>, <code>map</code> and <code>world</code>, the facts
 tab's own numbers.</p>
 <p>A hard limit that fails removes the six; a soft one subtracts its penalty. A heuristic
-normalises its metric to 0..1 against 1,200 random legal sixes for the board (seeded from map,
-side, enemies and bans), flips it when minimising, then multiplies by its weight. A heuristic
-guarded on the six's own state (<code>team.*</code>, or a <code>matchup.*</code> blue decides)
-is a <i>need</i>: met in full it costs nothing, unmet it costs its weight, so entering the
-guarded state never pays. A scored constraint adds bonus minus penalty while its
-<code>when</code> holds. An assumption adds nothing.</p>
+normalises its metric to 0..1 against %(REFERENCE_SIZE)s random legal sixes for the board
+(seeded from map, side, enemies and bans), flips it when minimising, then multiplies by its
+weight. A heuristic guarded on the six's own state (<code>team.*</code>, or a
+<code>matchup.*</code> blue decides) is a <i>need</i>: met in full it costs nothing, unmet it
+costs its weight, so entering the guarded state never pays. A scored constraint adds bonus
+minus penalty while its <code>when</code> holds. An assumption adds nothing.</p>
 <pre class='eq'>for one six x, with every hard limit holding:
 
 score(x) = &Sigma; heuristics h     w_h &middot; norm_h( metric_h(x) )
@@ -72,7 +72,7 @@ norm_h(v) = clamp( (v &minus; min_ref) / (max_ref &minus; min_ref), 0, 1 )
             and 1 &minus; that when h minimises
             min_ref, max_ref: over the reference sixes h's guard holds on
             max_ref = min_ref: a reward reads 0.5, a need costs nothing
-s_n       = min( 1, 2 / &Sigma; w over the needs on n's guard ): one state costs 2 at most</pre>
+s_n       = min( 1, %(NEED_BUDGET)g / &Sigma; w over the needs on n's guard ): one state costs %(NEED_BUDGET)g at most</pre>
 <p id='what-100-means'><b>What 100 means.</b> Each seat's best six on this board is its
 optimal, 100. The badge above a picker is that seat's picks as a share of its optimal under
 this playbook, not a win probability. An optimal at or below zero leaves no share to divide,
@@ -82,17 +82,18 @@ rest. A seat still drafting is read through its fill, the best six its picks can
 both sides alike: a sum over fewer picks reads low, so the seat with more picks would lead. With
 one seat unscored the bars show the shares alone. This is not a fitted probability.</p>
 <p id='argmax'><b>The argmax.</b> Each role's pool is the six heroes of highest standing: a
-hero's mean score across the reference sixes it appears in, plus 0.5 for each locked partner.
-Every legal shape is filled around the locked picks and scored. A local search then swaps
-same-role heroes while the score rises, starting from the best six sixes and from the best six
-of every shape within 4 points of the top, and finally brings the wiki's synergy pairs into the
-leading sixes two slots at a time. Ties break by mean map win rate, then by name.</p>
+hero's mean score across the reference sixes it appears in, plus %(PARTNER_POINTS)g for each
+locked partner. Every legal shape is filled around the locked picks and scored. A local search
+then swaps same-role heroes while the score rises, starting from the best %(SEEDS)d sixes and
+from the best six of every shape within %(SHAPE_REACH)g points of the top, and finally brings
+the wiki's synergy pairs into the leading sixes two slots at a time. Ties break by mean map win
+rate, then by name.</p>
 <p id='searched'><b>What is searched, and what is not.</b> There are
 <b>18,040,386</b> legal sixes. The search scores about <b>14,500</b> of them, near enough
-0.08%, so the answer is not a proof that nothing better exists. Two things cut the space.
+0.08%%, so the answer is not a proof that nothing better exists. Two things cut the space.
 The <b>pool</b> keeps each role's six highest-standing heroes, a truncation that can drop a
 hero who is weak alone and decisive beside one partner. The <b>local search</b> reaches back
-out of the pool: it swaps against the whole released roster, restarts two dozen times inside
+out of the pool: it swaps against the whole released roster, restarts %(RESTARTS)d times inside
 the leading shape, and changes two seats at once, which is how a pair that only pays together
 is found. The suite checks the reaching back on every run: on small boards of a twelve-hero
 test roster under a two-two-two role queue, each role's pool cut to half, the search returns
@@ -117,7 +118,7 @@ and the optimal is the tie-break alone.</p>
 <p id='likely-comp'><b>Red's most likely starting comp</b>: a two-two-two, filled slot by slot
 with the likeliest hero from the map's pick rates and the synergy table, past the bans. No
 strategy is read, and it does not change when red reveals a pick.</p>
-<pre class='eq'>likelihood(h) = pick(h, map) + 2 &times; partners(h, the six so far)
+<pre class='eq'>likelihood(h) = pick(h, map) + %(SYNERGY_PULL)g &times; partners(h, the six so far)
 
 pick(h, map)   the hero's pick rate on this map (overall with no map set)
 partners(h, S) heroes already on the six the synergy table pairs h with</pre>

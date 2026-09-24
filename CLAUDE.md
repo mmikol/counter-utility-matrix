@@ -192,8 +192,8 @@ db <- facts <- inference <- door <- ui.
   keys, element ids, the payload keys they read against what the server
   writes) and holds that every `board.css` class is used; a decision worth
   pinning is made on the server, as the seat badge is (`momentum.badges`).
-  The math page restates code constants (`SYNERGY_PULL`); change both with
-  the test.
+  The math page renders the code constants it quotes (`view_math` fills
+  them in), so a literal percent in `ui/static/math.html` is written `%%`.
 - `test_the_search_reaches_the_enumerated_maximum` in
   `tests/inference/test_solver.py` is the regression gate on the search:
   six synthetic boards under the reference playbook and a role queue, each

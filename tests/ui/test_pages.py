@@ -10,9 +10,11 @@ server, as the seat badge is (momentum.badges), and tested there."""
 import os
 import re
 
-from facts import board_facts
+import pytest
+
+from facts import board_facts, compute
 from facts.draft import Draft, board_query
-from inference import catalog, engine, tune
+from inference import catalog, engine, scale, scoring, solver, tune
 from inference.result import Badge, Momentum, Pick
 from inference.scoring import Contribution
 from inference.strategy import StrategyRecord
@@ -119,7 +121,6 @@ def test_the_page_is_a_shell_over_static_files():
     assert "<h2 id='equation'>The Counter Utility Matrix</h2>" in page  # the name is the equation
     # and the page says what the short name stands for
     assert "<b>Countrix</b> is short for <b>Counter Utility Matrix</b>" in page
-    assert "likelihood(h) = pick(h, map) + 2 &times; partners(h, the six so far)" in page
     css = pages.static_file("board.css")[0].decode()
     for rule in (".tile.capped", ".tile.soon", ".momentum .verdict", ".inf-six + .inf-six"):
         assert rule in css, rule
@@ -248,6 +249,30 @@ def test_an_apostrophe_cannot_close_a_single_quoted_attribute():
         replaced = replaced.replace(pattern, entity)
     assert "'" not in replaced and "<" not in replaced and '"' not in replaced
     assert "title='each side\\'s" not in script and "title='each side&#39;s" in script
+
+
+@pytest.mark.parametrize(("module", "name", "phrase"), [
+    (compute, "SYNERGY_PULL", "likelihood(h) = pick(h, map) + %s &times; partners"),
+    (scale, "REFERENCE_SIZE", "against %s random legal sixes"),
+    (scoring, "NEED_BUDGET", "min( 1, %s / &Sigma; w over the needs"),
+    (scoring, "NEED_BUDGET", "one state costs %s at most"),
+    (solver, "PARTNER_POINTS", "plus %s for each locked partner"),
+    (solver, "SEEDS", "from the best %s sixes"),
+    (solver, "SHAPE_REACH", "within %s points of the top"),
+    (solver, "RESTARTS", "restarts %s times"),
+])
+def test_the_math_page_quotes_each_constant_from_the_code(monkeypatch, module, name, phrase):
+    """math.html quotes the code's numbers as placeholders ui/pages.py fills in,
+    so a changed constant changes the page, and a phrase the page stops
+    quoting from the code fails here. The page is read with its line breaks
+    as spaces, so rewrapping the article moves no phrase."""
+    monkeypatch.setattr(module, name, 37)
+    assert phrase % "37" in " ".join(pages.view_math().split())
+
+
+def test_the_math_page_writes_a_large_count_with_thousands_separators(monkeypatch):
+    monkeypatch.setattr(scale, "REFERENCE_SIZE", 12000)
+    assert "against 12,000 random legal sixes" in " ".join(pages.view_math().split())
 
 
 def test_the_math_page_states_the_equation_and_the_layers():
