@@ -5,10 +5,12 @@ Two kinds of test:
     unit         pure functions - no database, no network
     invariant    properties the built database must hold
 
-The second defaults to the repo's own build at db/psql/cluster, the database
-`python -m db.mcp call db_rebuild` produces, and skips itself when it is
-absent. COUNTRIX_LOCAL_SERVER or DATABASE_URL override the target;
-COUNTRIX_NO_DATABASE=1 runs the suite with no database, as CI does.
+A unit test that needs a World takes synthetic_world, built by hand in
+tests/synthetic.py. The second kind defaults to the repo's own build at
+db/psql/cluster, the database `python -m db.mcp call db_rebuild` produces,
+and skips itself when it is absent. COUNTRIX_LOCAL_SERVER or DATABASE_URL
+override the target; COUNTRIX_NO_DATABASE=1 runs the suite with no database,
+as CI does.
 """
 
 import os
@@ -16,6 +18,7 @@ import os
 import pytest
 
 from db import DEFAULT_DB_DIR
+from tests import synthetic
 
 
 def _dsn():
@@ -68,6 +71,13 @@ def world(db):
     w = tables.load(db)
     db.rollback()
     return w
+
+
+@pytest.fixture()
+def synthetic_world():
+    """A fresh synthetic World for each test, which may change it: twelve
+    released heroes, an announced one and three maps, and no database."""
+    return synthetic.world()
 
 
 @pytest.fixture(scope="session")

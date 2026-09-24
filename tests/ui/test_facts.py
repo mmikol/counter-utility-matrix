@@ -1,11 +1,18 @@
-"""The UI layer: facts for a board, from the built database."""
+"""A board's facts from the built database: the wording on real maps and
+heroes, the terrain and stage facts, the map-rate and best-map facts and the
+provenance. The values here are the scrape's, pinned on purpose; the
+arithmetic behind them runs on the synthetic World in test_team.py,
+test_metrics.py, test_tables.py and test_board_facts.py, and what the load
+itself reads is test_world.py's."""
+
+import statistics
 
 import pytest
 
-from db import Refusal
-from ui.facts import board_facts, compute, factset, model, tables
-from ui.facts.draft import EXPECTED_SHAPE, TEAM_SIZE, Draft, is_sided
-from ui.facts.team import TEAM_METRICS, team_metrics
+from inference import engine
+from ui.facts import board_facts, compute, model
+from ui.facts.compute import STAGE_FEATURES, STAGE_MENTIONS, TERRAIN_STANDOUT
+from ui.facts.draft import Draft
 
 pytestmark = pytest.mark.invariant
 
@@ -14,7 +21,6 @@ def test_every_metric_a_strategy_can_name_reaches_the_fact_that_states_it(world)
     """The citation path, end to end: for every registered team and matchup
     metric, either a board fact states it or none does - and the ones that do
     are found by the metric's own name."""
-    from inference import engine
     fs = board_facts.generate(world, Draft("King's Row", ("Zarya", "Pharah"),
                                            ("Ana", "Reinhardt")))
     metrics = [k for k in compute.registry() if k.startswith(("team.", "matchup."))]
@@ -22,13 +28,6 @@ def test_every_metric_a_strategy_can_name_reaches_the_fact_that_states_it(world)
     assert len(cited) > 60, len(cited)
     for key in cited:
         assert engine._cited_fact(fs, [key]).text
-
-
-def test_every_fact_is_keyed_and_the_meta_comes_first(world):
-    fs = board_facts.generate(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",)))
-    assert all(f.key and f.scope and f.text for f in fs.facts)
-    assert fs.facts[0].scope == "meta"
-    assert {"map", "hero", "team", "matchup", "playbook"} <= {f.scope for f in fs.facts}
 
 
 def test_every_named_hero_gets_a_deep_stack_of_independent_facts(world):
@@ -39,81 +38,7 @@ def test_every_named_hero_gets_a_deep_stack_of_independent_facts(world):
     assert sum(1 for f in fs.facts if f.subject == "Zarya") == 0
 
 
-def _an_edge(world):
-    """(loser, winner): the first directed counter edge between released heroes, by name -
-    the edges are the wiki's and move with it, so no test names one."""
-    names = {h.id: h.name for h in world.heroes.values() if h.released}
-    return min((names[a], names[b]) for a, b in world.counters if a in names and b in names)
-
-
-def test_team_facts_appear_per_side_and_matchup_only_with_both(world):
-    fs = board_facts.generate(world, Draft("King's Row", ("Zarya", "Pharah")))
-    scopes = {f.scope for f in fs.facts}
-    assert "team" in scopes and "matchup" not in scopes
-    assert fs.find("team.tanks", "red")
-    fs = board_facts.generate(world, Draft("King's Row", ("Zarya", "Pharah"),
-                                           ("Ana", "Reinhardt")))
-    assert fs.find("team.coverage", "blue") and fs.find("matchup.net_edges")
-    # the crowd-control line names every blue pick that carries a tool, read off the picks
-    (cc,) = fs.find("team.cc_count", "blue")
-    tooled = [h for h in (world.hero("Ana"), world.hero("Reinhardt")) if h.cc_tools]
-    assert tooled and all("%s: " % h.name in cc.text for h in tooled)
-    loser, winner = _an_edge(world)                # whichever match-up the wiki states
-    fs = board_facts.generate(world, Draft("King's Row", (loser,), (winner,)))
-    assert any("%s is answered by blue %s" % (loser, winner) in f.text for f in fs.facts)
-
-
-def test_board_context_facts_warn_and_cite(world):
-    loser, winner = _an_edge(world)
-    fs = board_facts.generate(world, Draft(None, (winner,), (loser,)))
-    assert any(f.text.startswith("WARNING: blue %s is answered by red %s" % (loser, winner))
-               for f in fs.facts)
-    fs = board_facts.generate(world, Draft("King's Row", (), ("Ana", "Reinhardt")))
-    assert any(f.key == "hero.with_ally" and f.subject == "Ana" for f in fs.facts)
-    assert fs.find("hero.map_win", "Ana")
-
-
-def test_metrics_cover_the_registry_exactly(world):
-    m = world.map("King's Row")
-    ns = compute.namespace(world, m, [world.hero("Zarya"), world.hero("Pharah")],
-                           [world.hero("Ana"), world.hero("Reinhardt")], ban_count=0)
-    team_keys = {k for k in ns["team"] if not k.startswith("_")}
-    assert team_keys == set(TEAM_METRICS)
-    assert set(ns["matchup"]) == set(compute.MATCHUP_METRICS)
-    assert set(ns["map"]) == set(compute.MAP_METRICS)
-    assert ns["team"]["tanks"] == 1 and ns["team"]["supports"] == 1
-    assert ns["enemy"]["flyers"] == 1                     # Pharah
-    # a flying tank is a flier, not one hitscan is picked to answer
-    dva, pharah = world.hero("D.Va"), world.hero("Pharah")
-    red = team_metrics(world, [dva, pharah])
-    assert red["flyers"] == 2 and red["light_flyers"] == 1
-    assert compute.red_matchup(red)["flyers"] == 1
-    assert compute.red_matchup(team_metrics(world, [dva]))["flyers"] == 0
-    assert compute.registry()["matchup.flyers"] == "red picks that fly, tanks aside"
-    assert ns["team"]["coverage"] >= 1                    # Reinhardt answers Zarya
-    for key in compute.TEXT_METRICS:
-        prefix, name = key.split(".")
-        assert name in ns[prefix if prefix != "enemy" else "team"]
-    # the solver builds its bag lean: every key a strategy can name reads the same there
-    blue = [world.hero("Ana"), world.hero("Reinhardt")]
-    red = [world.hero("Zarya"), world.hero("Pharah")]
-    full = team_metrics(world, blue, m, red)
-    lean = team_metrics(world, blue, m, red, lean=True)
-    for key in compute.registry():
-        if key.startswith("team."):
-            name = key.split(".", 1)[1]
-            assert lean[name] == full[name], key
-
-
-def test_metrics_without_a_map_fall_back_honestly(world):
-    ns = compute.namespace(world, None, [], [world.hero("Ana")], ban_count=0)
-    assert ns["map"]["known"] == 0 and ns["team"]["map_known"] == 0
-    assert ns["team"]["map_win_mean"] == ns["team"]["win_mean"]
-    assert ns["team"]["coverage_share"] == 0.0 and ns["matchup"]["chew_time_ours"] == 999.0
-
-
 def test_the_whole_database_becomes_facts(world):
-    # what the load itself reads is checked in test_world.py
     fs = board_facts.generate(world, Draft("King's Row", ("Zarya",), ("Ana",)))
     keys = {f.key for f in fs.facts}
     assert {"hero.perk_effect", "playbook.catalog"} <= keys, keys
@@ -124,23 +49,9 @@ def test_the_whole_database_becomes_facts(world):
     assert any("Americas" in f.text for f in fs.facts if f.key == "meta.snapshot")
 
 
-def test_bans_become_facts_and_a_banned_pick_is_refused(world):
-    fs = board_facts.generate(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",),
-                                           bans=("Widowmaker", "Sombra")))
-    assert fs.draft.bans == ("Widowmaker", "Sombra")
-    assert fs.find("bans.count") and len(fs.find("bans.hero")) == 2
-    # Widowmaker answers Pharah and Zarya: the ban took an answer off the table
-    assert any("banned Widowmaker answered red" in f.text for f in fs.facts)
-    with pytest.raises(Refusal, match="banned this match"):
-        board_facts.generate(world, Draft(None, ("Zarya",), ("Ana",), bans=("Ana",)))
-    with pytest.raises(Refusal, match="unknown heroes"):
-        board_facts.generate(world, Draft(bans=("Goku",)))
-
-
 def test_the_rates_half_of_a_maps_style_is_derived_from_its_rates(world):
     """Map.rate_lift[S] is the z-score, across the maps, of the mean map-minus-overall
     win rate of the released heroes tagged S, each weighted 1/(its tag count)."""
-    import statistics
     styles = sorted({s for h in world.heroes.values() for s in h.styles})
     assert styles and all(set(m.styles) == set(styles) for m in world.maps.values())
 
@@ -162,48 +73,25 @@ def test_the_rates_half_of_a_maps_style_is_derived_from_its_rates(world):
     ranked = sorted(m.styles, key=lambda s: (-m.styles[s][0], s))
     assert m.style_top == ranked[0]
     assert m.style_margin == pytest.approx(m.styles[ranked[0]][0] - m.styles[ranked[1]][0])
-    # an announced hero moves no map's style
-    early = [h for h in world.heroes.values() if not h.released]
-    before = {mm.id: (dict(mm.styles), dict(mm.rate_lift)) for mm in world.maps.values()}
-    kept = [(h, h.win, h.map_rates) for h in early]
-    for h in early:
-        h.win, h.map_rates = 99.0, {m.id: (1.0, None)}
-    try:
-        tables.map_styles(world)
-        assert early and before == {mm.id: (dict(mm.styles), dict(mm.rate_lift))
-                                    for mm in world.maps.values()}
-    finally:
-        for h, win, map_rates in kept:
-            h.win, h.map_rates = win, map_rates
     fs = board_facts.generate(world, Draft("King's Row"))
     facts = fs.find("map.rate_lift")
     assert [f.value["style"] for f in facts] == ranked
-    top = facts[0]
+    top, lead = facts[0], m.rate_lift[ranked[0]]
     assert top.source == "playstyle+map_meta" and top.text == (
         "%s heroes win %.1f sd %s on King's Row than on other maps"
-        % (ranked[0], abs(m.rate_lift[ranked[0]]),
-           "less" if m.rate_lift[ranked[0]] < 0 else "more"))
+        % (ranked[0], abs(lead), "less" if lead < 0 else "more"))
     assert not any("authored" in f.text or "archetype" in f.text for f in fs.facts)
 
 
-def test_a_map_without_text_reads_zero_for_every_terrain_metric(world):
-    bare = [m for m in world.maps.values() if not m.terrain]
-    assert bare
-    for m in bare:
-        metrics = compute.map_metrics(m, ban_count=0)
-        assert all(metrics[f] == 0.0 for f in model.TERRAIN_FEATURES)
-        assert m.terrain_lean == {}
-        assert {s: v[0] for s, v in m.styles.items()} == m.rate_lift    # the rates alone
-    none = compute.map_metrics(None, ban_count=0)
-    assert all(none[f] == 0.0 for f in model.TERRAIN_FEATURES)
-    fs = board_facts.generate(world, Draft(bare[0].name))
+def test_a_map_without_text_gets_no_terrain_fact(world):
+    bare = next(m for m in world.maps.values() if not m.terrain)
+    fs = board_facts.generate(world, Draft(bare.name))
     assert fs.find("map.terrain_unread") and not fs.find("map.terrain")
     assert not fs.find("map.terrain_lean")
     assert "no terrain" in fs.find("map.style_top")[0].text
 
 
 def test_terrain_and_both_halves_of_the_style_are_facts(world):
-    from ui.facts.compute import TERRAIN_STANDOUT
     m = world.map("King's Row")
     fs = board_facts.generate(world, Draft("King's Row"))
     standouts = sorted((f for f in model.TERRAIN_FEATURES
@@ -232,22 +120,7 @@ def test_terrain_and_both_halves_of_the_style_are_facts(world):
         % (m.style_top, m.terrain_lean[m.style_top], m.rate_lift[m.style_top]))
 
 
-def test_map_stages_counts_arenas_and_map_phases_counts_parts_of_a_route(world):
-    """`map.stages >= 3` guards rules about separate arenas (Control, Flashpoint):
-    a Hybrid map's two phases and an Escort map's three stretches count as
-    map.phases and leave map.stages at 0."""
-    for m in world.maps.values():
-        x = compute.map_metrics(m, ban_count=0)
-        assert (x["stages"], x["phases"]) == (
-            (0, len(m.stages)) if is_sided(m) else (len(m.stages), 0)), m.name
-        assert (x["stages"] >= 3) == (m.mode in ("Control", "Flashpoint")), m.name
-    assert compute.map_metrics(world.map("Havana"), ban_count=0)["phases"] == 3
-    assert compute.map_metrics(world.map("King's Row"), ban_count=0)["phases"] == 2
-    assert compute.map_metrics(world.map("Dorado"), ban_count=0)["phases"] == 0
-    none = compute.map_metrics(None, ban_count=0)
-    assert (none["stages"], none["phases"]) == (0, 0)
-    assert {"map.stages", "map.phases"} <= set(compute.registry())
-    assert not {"map.stages", "map.phases"} & compute.TEXT_METRICS
+def test_a_map_lists_its_stages_as_arenas_or_as_the_phases_of_a_route(world):
     # one list fact a map: stages on arenas, phases on a route, neither without rows
     for name, key, other in (("Ilios", "map.stages", "map.phases"),
                              ("Havana", "map.phases", "map.stages"),
@@ -262,7 +135,6 @@ def test_map_stages_counts_arenas_and_map_phases_counts_parts_of_a_route(world):
 
 
 def test_a_stage_fact_names_the_terrain_its_own_text_stresses(world):
-    from ui.facts.compute import STAGE_FEATURES, STAGE_MENTIONS, TERRAIN_STANDOUT
     ilios = world.map("Ilios")
     z = ilios.stage_z["Well"]["hazards"]
     mentions = ilios.stage_terrain["Well"]["hazards"][1]
@@ -300,56 +172,6 @@ def test_a_stage_without_text_of_its_own_gets_no_stage_fact(world):
         assert not board_facts.generate(world, Draft(m.name)).find("map.stage_terrain"), m.name
         assert all(compute.stage_standouts(m, s) == [] for s in m.stages)
     assert board_facts.generate(world, Draft("Oasis")).find("map.stages")  # the list still stands
-    # one mention swings a short text's rate: it is not a fact
-    import copy
-    m = copy.copy(oasis)
-    m.stage_terrain = {"Gardens": {"hazards": (40.0, compute.STAGE_MENTIONS - 1)}}
-    m.stage_z = {"Gardens": {"hazards": 3.0}}
-    assert compute.stage_standouts(m, "Gardens") == []
-    m.stage_terrain = {"Gardens": {"hazards": (40.0, compute.STAGE_MENTIONS)}}
-    assert compute.stage_standouts(m, "Gardens") == [("hazards", 3.0)]
-    assert compute.stage_standouts(m, "University") == []
-
-
-def test_sides_exist_only_on_escort_and_hybrid(world):
-    from ui.facts.compute import map_metrics
-    from ui.facts.draft import opposite
-    kings, ilios = world.map("King's Row"), world.map("Ilios")
-    assert is_sided(kings) and not is_sided(ilios)
-    assert map_metrics(kings, "attack", ban_count=0)["side"] == "attack"
-    assert map_metrics(ilios, "attack", ban_count=0)["side"] == ""
-    assert map_metrics(ilios, ban_count=0)["sided"] == 0
-    assert opposite("attack") == "defense" and opposite("") == ""
-    fs = board_facts.generate(world, Draft("King's Row", ("Zarya",), ("Ana",), side="attack"))
-    assert fs.draft.side == "attack"
-    assert any(f.key == "map.side" and "blue attacks King's Row; red defends" in f.text
-               for f in fs.facts)
-    assert fs.find("map.side_caveat")
-    fs = board_facts.generate(world, Draft("Ilios", side="attack"))
-    assert fs.draft.side == "" and any("no attacking or defending side" in f.text for f in fs.facts)
-    with pytest.raises(Refusal, match="side must be"):
-        board_facts.generate(world, Draft("King's Row", side="left"))
-
-
-def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_apart(world):
-    # FACTS = INDEPENDENT ∪ DEPENDENT (F1..); the playbook's record rides below as S1..
-    fs = board_facts.generate(world, Draft("King's Row", ("Zarya", "Pharah"), ("Ana",)))
-    facts = [f for f in fs.facts if f.scope != factset.PLAYBOOK_SCOPE]
-    side = fs.playbook
-    assert facts and side
-    assert all(f.id.startswith("F") for f in facts) and all(f.id.startswith("S") for f in side)
-    assert [f.id for f in facts] == ["F%d" % i for i in range(1, len(facts) + 1)]
-    assert [f.id for f in side] == ["S%d" % i for i in range(1, len(side) + 1)]
-    assert {f.scope for f in facts} <= {"meta", "bans", "map", "hero", "team", "matchup"}
-    assert {f.key.split(".")[0] for f in side} == {"playbook"}
-    assert {f.key for f in side} == {"playbook.catalog"}
-    assert fs.count == len(facts) and fs.to_dict()["playbook_count"] == len(side)
-    text = fs.rendered()
-    assert text.startswith("[F1]") and factset.PLAYBOOK_DIVIDER in text
-    divider = text.index(factset.PLAYBOOK_DIVIDER)
-    assert text.index("[S1]") > divider > text.index("[F%d]" % len(facts))
-    catalog_note = next(f.text for f in side if f.key == "playbook.catalog")
-    assert "STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS" in catalog_note
 
 
 def test_map_rates_are_the_intersection_with_the_board(world):
@@ -390,9 +212,6 @@ def test_a_heros_best_maps_are_derived_from_blizzards_map_rates(world):
     on_map = board_facts.generate(world, Draft(top.name, (), ("Symmetra",)))
     assert on_map.find("hero.map_strategy", "Symmetra")[0].value == 1
     assert any(f.value == "Symmetra" for f in on_map.find("map.playbook_pick"))
-    assert team_metrics(world, [sym], top)["map_strategy_hits"] == 1
-    assert compute.registry()["team.map_strategy_hits"] == (
-        "picks whose three best maps by rate include this map")
 
 
 def test_the_provenance_is_one_line_per_source(world):
@@ -403,66 +222,8 @@ def test_the_provenance_is_one_line_per_source(world):
     assert any(f.value["source"] == "blizzard" for f in lines)   # the main rates' line is there
 
 
-def test_the_map_fact_carries_this_maps_ban_rate_and_the_team_its_availability_here(world):
+def test_the_map_fact_carries_this_maps_ban_rate(world):
     fs = board_facts.generate(world, Draft("King's Row", ("Zarya",), ("Sombra", "Ana")))
     fact = fs.find("hero.map_win", "Sombra")[0]
     if world.hero("Sombra").map_ban(world.map("King's Row").id) is not None:
         assert ", banned " in fact.text
-    picks = [world.hero("Sombra"), world.hero("Ana")]
-    t = team_metrics(world, picks, world.map("King's Row"), [])
-    assert 0 <= t["map_availability"] <= 1
-    anywhere = team_metrics(world, picks, None, [])
-    assert anywhere["map_availability"] == anywhere["availability"]
-
-
-def test_expected_picks_read_the_map_and_the_meta_and_no_strategy(world):
-    """Red's likely six: their revealed picks first, then the most-picked
-    heroes on the map, never a banned hero, never a third tank (the queue's
-    own limit), the overall meta when no map is set - each with the rate
-    it rests on. No strategy is read: the same six under any playbook."""
-    from collections import Counter
-    m = world.map("King's Row")
-    zarya, sombra = world.hero("Zarya"), world.hero("Sombra")
-    six = compute.expected_picks(world, m, revealed=[zarya], banned=[sombra])
-    assert six[0]["hero"] == "Zarya" and six[0]["locked"] and six[0]["why"] == "revealed"
-    assert len(six) == TEAM_SIZE and "Sombra" not in [p["hero"] for p in six]
-    assert Counter(p["role"] for p in six) == EXPECTED_SHAPE      # a two-two-two
-    rest = [p for p in six if not p["locked"]]
-    assert all(p["why"].startswith("picked in ") and "King's Row" in p["why"] for p in rest
-               if p["rate"] is not None)
-    # deterministic
-    assert six == compute.expected_picks(world, m, revealed=[zarya], banned=[sombra])
-    # the synergies pull: a partner already on the six is named in the reason
-    heroes = [world.hero(p["hero"]) for p in six]
-    paired = any(world.synergy(x.id, y.id) for x in heroes for y in heroes if x is not y)
-    assert paired == any("pairs with" in p["why"] for p in rest)
-    anywhere = compute.expected_picks(world, None)
-    assert Counter(p["role"] for p in anywhere) == EXPECTED_SHAPE
-    assert all("overall" in p["why"] for p in anywhere if p["rate"] is not None)
-    # no strategy is read: nothing here takes a catalog
-    import inspect
-    assert "catalog" not in inspect.signature(compute.expected_picks).parameters
-
-
-@pytest.mark.invariant
-def test_no_matchup_metric_restates_a_team_metric(world):
-    """A matchup key must read both sides. One that copies blue's own number
-    gives a second name to one signal: two strategies reading it through the
-    two names weigh that signal twice, and nothing in the catalog shows it."""
-    blue = [world.hero(n) for n in ("Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko")]
-    red = [world.hero(n) for n in ("Winston", "Zarya", "Genji", "Tracer", "Lucio", "Mercy")]
-    m = next(iter(world.maps.values()))
-    blue_t = team_metrics(world, blue, m, red)
-    red_t = team_metrics(world, red, m, blue)
-    matchup = compute.matchup_metrics(blue_t, red_t)
-
-    # a matchup key that equals blue's own is only proof of a copy if it also
-    # moves when blue does and red does not: compare a second blue on one red
-    other = [world.hero(n) for n in ("Orisa", "Ramattra", "Reaper", "Bastion", "Moira", "Brigitte")]
-    other_t = team_metrics(world, other, m, red)
-    other_matchup = compute.matchup_metrics(other_t, red_t)
-
-    copies = [key for key, value in matchup.items()
-              if key in blue_t and value == blue_t[key]
-              and other_matchup.get(key) == other_t.get(key)]
-    assert not copies, "matchup restates team: %s - read team.* instead" % ", ".join(sorted(copies))
