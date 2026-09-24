@@ -3,6 +3,7 @@ network - every lesson here was paid for once already."""
 
 import pytest
 
+from db.data.fetch import FetchError
 from db.data.names import name_key
 from db.data.wiki import WikiError
 from db.data.wiki.maps import parse_phases, parse_stages, parse_stretches, stages_of
@@ -266,7 +267,7 @@ def test_the_ability_vocabulary_is_one_list():
                for t in ("weapon", "WEAPON x", "an ultimate", "a passive", "anything"))
 
 
-def test_an_unfetchable_hero_page_is_reported_rather_than_read_as_empty(tmp_path):
+def test_an_unfetchable_hero_page_is_reported_rather_than_read_as_empty(tmp_path, instant_wiki):
     """Every per-entity wiki fetch keeps one contract: the failure is recorded
     by name, so a pull that read nothing cannot look like a pull that found
     nothing. supplement_from_wikitext raises and run() collects it."""
@@ -278,7 +279,10 @@ def test_an_unfetchable_hero_page_is_reported_rather_than_read_as_empty(tmp_path
         def get(self, *a, **kw):
             raise requests.ConnectionError("the wiki is unreachable")
 
-    with pytest.raises((WikiError, requests.RequestException)):
+        def close(self):
+            pass
+
+    with pytest.raises(FetchError):
         supplement_from_wikitext(Down(), "Mizuki", str(tmp_path))
 
 

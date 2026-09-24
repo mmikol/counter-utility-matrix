@@ -167,11 +167,12 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 - A table or column name reaches SQL only as the `psycopg.sql.Identifier`
   that `db.psql.identifier()` returns, composed with `psycopg.sql.SQL`;
   values are always parameters.
-- Pulls read only Blizzard's site and the wiki, through the page caches,
-  each at its own pace: `fetch.cached_get` for Blizzard pages, 5 s for the
-  rates (`db/data/blizzard/meta.py`), the wiki's own client with a 0.5 s delay
-  and rate-limit backoff (`db/data/wiki/__init__.py`). No third source, no
-  API keys.
+- Pulls read only Blizzard's site and the wiki, through the page caches and
+  the one request loop in `db/data/fetch.py`, each at the pace of its own
+  `RequestPolicy`: 5 s a page for the rates (`db/data/blizzard/meta.py`);
+  for the wiki (`db/data/wiki/__init__.py`), 2 s a Cargo page with six
+  attempts to wait out a rate limit, and 0.5 s an article, asked for once.
+  No third source, no API keys.
 - `.venv/bin/python -m db.sentry --once` is not read-only: it renames a
   suspect strategy file to `.md.quarantined`.
 - Never `docker compose down -v`: it deletes the database volume.

@@ -16,7 +16,7 @@ from psycopg.sql import SQL
 
 from db import psql
 from db.data import fetch
-from db.data.wiki import WIKI, WikiError, fetch_wikitext, markup
+from db.data.wiki import WIKI, fetch_wikitext, markup
 from db.data.wiki.maps import parse_stretches
 
 # --- extract: article -> the text about the ground -------------------------
@@ -332,7 +332,7 @@ def run(
     for map_id, name in maps:
         try:
             article = fetch_wikitext(session, name.replace(" ", "_"), cache_dir)
-        except (WikiError, requests.RequestException) as error:
+        except fetch.FetchError as error:
             missing.append("%s: %s" % (name, error))
             log("  %-22s %s" % (name, error))
             continue

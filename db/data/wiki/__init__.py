@@ -18,136 +18,119 @@
 
 The article HTML sits behind a bot challenge; the only open path is the
 MediaWiki endpoint below, which returns JSON (Cargo) and raw wikitext and
-rate-limits. This module is that client, and the `sources` row its pages
-become.
+rate-limits. This module is that client, run on db.data.fetch's request
+loop and page cache, and the `sources` row its pages become.
 """
 
 import json
-import os
-import re
-import time
 from collections.abc import Sequence
-from typing import Any
 
 import requests
 
 from db import Source
-from db.data.fetch import is_stale, keep_stale
+from db.data.fetch import (
+    FetchError,
+    RateLimitError,
+    RequestPolicy,
+    cache_key,
+    cached,
+    request,
+)
 
 WIKI_API = "https://overwatch.fandom.com/api.php"
 CARGO_PAGE_SIZE = 500
-CARGO_RETRIES = 6
 
 # The sources row this module's pages become.
 WIKI = Source("wiki", "Overwatch Wiki", "https://overwatch.fandom.com/")
-REQUEST_DELAY = 0.5
+
+# Cargo is a handful of paged requests, so it waits out a rate limit or a
+# failed request: 20, 40, 60, 60 and 60 s, then gives up. 2 s between pages.
+CARGO_POLICY = RequestPolicy(attempts=6, backoff=20.0, timeout=60, delay=2.0)
+# An article is asked for once. A refresh reads some 200 of them, and one
+# that fails keeps its cached copy or is missing until the next refresh;
+# retrying each against a down wiki would outlast the refresh.
+ARTICLE_POLICY = RequestPolicy(attempts=1, timeout=40, delay=0.5)
 
 
-class WikiError(Exception):
-    pass
+class WikiError(FetchError):
+    """The wiki answered, but not with what was asked for."""
 
 
-# One Cargo row as the API's JSON gives it: {field name: value}.
-CargoRow = dict[str, Any]
+def _payload(response: requests.Response, name: str) -> dict[str, object]:
+    """The JSON object the wiki answered with. An error it states is raised:
+    a rate limit as RateLimitError, which is retried, anything else as
+    WikiError."""
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise WikiError("%s: the response is not a JSON object" % name)
+    if "error" in payload:
+        error = payload["error"]
+        info = str(error.get("info", "")) if isinstance(error, dict) else ""
+        if "rate limit" in info.lower():
+            raise RateLimitError("%s: %s" % (name, info))
+        raise WikiError("%s: %s" % (name, info or "not found"))
+    return payload
+
+
+def _cargo_rows(response: requests.Response, table: str) -> list[dict[str, str]]:
+    """One page of a Cargo table: each row's fields."""
+    items = _payload(response, table).get("cargoquery", [])
+    if not isinstance(items, list) or not all(
+            isinstance(item, dict) and isinstance(item.get("title"), dict) for item in items):
+        raise WikiError("%s: a row has no title" % table)
+    return [item["title"] for item in items]
+
+
+def _wikitext(response: requests.Response, title: str) -> str:
+    """The wikitext of one article."""
+    node: object = _payload(response, title)
+    for key in ("parse", "wikitext", "*"):
+        node = node.get(key) if isinstance(node, dict) else None
+    if not isinstance(node, str):
+        raise WikiError("%s: the response has no wikitext" % title)
+    return node
 
 
 def cargo_query(
         session: requests.Session, table: str, fields: Sequence[str],
-        cache_dir: str | None) -> list[CargoRow]:
+        cache_dir: str | None) -> list[dict[str, str]]:
     """Every row of a Cargo table, paginated.
 
     Cargo exposes the wiki's structured data directly, which is far steadier
-    than parsing article templates. The endpoint rate-limits, so this backs off
-    and caches the whole result.
+    than parsing article templates. The endpoint rate-limits, so CARGO_POLICY
+    waits it out, and the whole result is cached as one file.
     """
-    cache_path = None
-    if cache_dir:
-        cache_path = os.path.join(cache_dir, "cargo_%s.json" % table.lower())
-        if os.path.exists(cache_path) and not is_stale(cache_path):
-            with open(cache_path, encoding="utf-8") as handle:
-                return json.load(handle)
-    try:
-        rows = _cargo_pages(session, table, fields)
-    except (WikiError, requests.RequestException) as error:
-        if cache_path and os.path.exists(cache_path):
-            return json.loads(keep_stale(cache_path, error))
-        raise
-
-    if cache_path:
-        with open(cache_path, "w", encoding="utf-8") as handle:
-            json.dump(rows, handle, ensure_ascii=False)
+    rows: list[dict[str, str]] = json.loads(cached(
+        cache_dir, cache_key("cargo", table.lower()) + ".json",
+        lambda: json.dumps(_cargo_pages(session, table, fields), ensure_ascii=False)))
     return rows
 
 
-def _cargo_pages(session: requests.Session, table: str, fields: Sequence[str]) -> list[CargoRow]:
-    rows: list[CargoRow] = []
+def _cargo_pages(
+        session: requests.Session, table: str, fields: Sequence[str]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
     offset = 0
     while True:
-        payload: dict[str, Any] | None = None
-        for attempt in range(CARGO_RETRIES):
-            response = session.get(
-                WIKI_API,
-                params={
-                    "action": "cargoquery",
-                    "tables": table,
-                    "fields": ",".join(fields),
-                    "limit": str(CARGO_PAGE_SIZE),
-                    "offset": str(offset),
-                    "format": "json",
-                },
-                timeout=60,
-            )
-            response.raise_for_status()
-            payload = response.json()
-            error = payload.get("error", {}).get("info", "")
-            if "rate limit" in error.lower():
-                time.sleep(20 * (attempt + 1))
-                payload = None
-                continue
-            if error:
-                raise WikiError("%s: %s" % (table, error))
-            break
-        if payload is None:
-            raise WikiError("%s: rate limited after %d attempts" % (table, CARGO_RETRIES))
-
-        batch = [row["title"] for row in payload.get("cargoquery", [])]
+        batch = request(
+            session, WIKI_API,
+            {
+                "action": "cargoquery",
+                "tables": table,
+                "fields": ",".join(fields),
+                "limit": str(CARGO_PAGE_SIZE),
+                "offset": str(offset),
+                "format": "json",
+            },
+            CARGO_POLICY, lambda response: _cargo_rows(response, table))
         rows.extend(batch)
         if len(batch) < CARGO_PAGE_SIZE:
-            break
+            return rows
         offset += CARGO_PAGE_SIZE
-        time.sleep(REQUEST_DELAY * 4)
-    return rows
 
 
 def fetch_wikitext(session: requests.Session, title: str, cache_dir: str | None) -> str:
     """Raw wikitext of one article, cached so reruns don't re-hit the wiki."""
-    cache_path = None
-    if cache_dir:
-        name = re.sub(r"[^A-Za-z0-9]+", "_", title).strip("_") + ".wikitext"
-        cache_path = os.path.join(cache_dir, name)
-        if os.path.exists(cache_path) and not is_stale(cache_path):
-            with open(cache_path, encoding="utf-8") as handle:
-                return handle.read()
-
-    try:
-        response = session.get(
-            WIKI_API,
-            params={"action": "parse", "page": title, "prop": "wikitext",
-                    "format": "json"},
-            timeout=40,
-        )
-        response.raise_for_status()
-        payload = response.json()
-        if "error" in payload:
-            raise WikiError("%s: %s" % (title, payload["error"].get("info", "not found")))
-        text = payload["parse"]["wikitext"]["*"]
-    except (WikiError, requests.RequestException) as error:
-        if cache_path and os.path.exists(cache_path):
-            return keep_stale(cache_path, error)
-        raise
-
-    if cache_path:
-        with open(cache_path, "w", encoding="utf-8") as handle:
-            handle.write(text)
-    time.sleep(REQUEST_DELAY)
-    return text
+    return cached(cache_dir, cache_key(title) + ".wikitext", lambda: request(
+        session, WIKI_API,
+        {"action": "parse", "page": title, "prop": "wikitext", "format": "json"},
+        ARTICLE_POLICY, lambda response: _wikitext(response, title)))

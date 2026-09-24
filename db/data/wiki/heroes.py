@@ -32,7 +32,6 @@ from db.data import fetch
 from db.data.names import abilities_named_in, ability_key
 from db.data.wiki import (
     WIKI,
-    WikiError,
     cargo_query,
     fetch_wikitext,
     markup,
@@ -246,7 +245,7 @@ def announce_heroes(
             continue
         try:
             text = fetch_wikitext(session, hero_name.replace(" ", "_"), cache_dir)
-        except (WikiError, requests.RequestException) as error:
+        except fetch.FetchError as error:
             missing.append("%s: %s" % (hero_name, error))
             continue
         found = parse_announcement(text)
@@ -613,7 +612,7 @@ def run(
         for hero_name, (weapons, abilities, perks) in sorted(by_hero.items()):
             try:
                 extra, profile = supplement_from_wikitext(session, hero_name, cache_dir)
-            except (WikiError, requests.RequestException) as error:
+            except fetch.FetchError as error:
                 missing.append("%s: %s" % (hero_name, error))
                 continue
             if profile:
