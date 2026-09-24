@@ -35,10 +35,9 @@ from inference.solver import (
     evaluate_comp,
     legal_shapes,
 )
-from ui.facts import compute
-from ui.facts import engine as facts_engine
+from ui.facts import board_facts, compute
 from ui.facts.draft import TEAM_SIZE, is_sided, opposite
-from ui.facts.engine import Fact, FactSet
+from ui.facts.factset import Fact, FactSet
 from ui.facts.model import ROLES, Hero, Map, World
 from ui.facts.team import team_metrics, text
 
@@ -361,8 +360,8 @@ def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
                          % seat)
     best = ranked[0]
     result.blue = _order(best.heroes)
-    fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans,
-                               side)
+    fs = board_facts.generate(world, result.map_name, result.red, result.blue, result.bans,
+                              side)
     _fill(result, best, fs, solver)
     result.alternatives = [{"blue": _order(c.heroes), "score": round(c.score, 3)}
                            for c in ranked[1:top + 1]]
@@ -392,8 +391,8 @@ def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
     target, field, rank, solver = evaluate_comp(world, m, red_h, blue_h, bans_h, side,
                                                 catalog=catalog, pool_size=pool_size,
                                                 swept=swept)
-    fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans,
-                               side)
+    fs = board_facts.generate(world, result.map_name, result.red, result.blue, result.bans,
+                              side)
     _fill(result, target, fs, solver)
     result.rank = rank
     result.alternatives = [{"blue": _order(c.heroes), "score": round(c.score, 3)}
@@ -439,8 +438,8 @@ def current(world: World, blue_result: Result, map_name: str | None = None,
     result.best = blue_result.score
     cand = solver.prepare(Candidate(blue_h))
     solver.score(cand)
-    fs = facts_engine.generate(world, result.map_name, result.red, result.blue, result.bans,
-                               side)
+    fs = board_facts.generate(world, result.map_name, result.red, result.blue, result.bans,
+                              side)
     _fill(result, cand, fs, solver)
     result.seconds = time.time() - started
     return result

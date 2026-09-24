@@ -3,7 +3,7 @@
 import pytest
 
 from db import Refusal
-from ui.facts import compute, engine, model, tables
+from ui.facts import board_facts, compute, factset, model, tables
 from ui.facts.draft import EXPECTED_SHAPE, TEAM_SIZE, is_sided
 from ui.facts.team import TEAM_METRICS, team_metrics
 
@@ -15,10 +15,8 @@ def test_every_metric_a_strategy_can_name_reaches_the_fact_that_states_it(world)
     metric, either a board fact states it or none does - and the ones that do
     are found by the metric's own name."""
     from inference import engine
-    from ui.facts import compute
-    from ui.facts import engine as facts_engine
-    fs = facts_engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
-                               [], "")
+    fs = board_facts.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"],
+                              [], "")
     metrics = [k for k in compute.registry() if k.startswith(("team.", "matchup."))]
     cited = [k for k in metrics if engine._cited_fact(fs, [k]) is not None]
     assert len(cited) > 60, len(cited)
@@ -27,14 +25,14 @@ def test_every_metric_a_strategy_can_name_reaches_the_fact_that_states_it(world)
 
 
 def test_every_fact_is_keyed_and_the_meta_comes_first(world):
-    fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
+    fs = board_facts.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
     assert all(f.key and f.scope and f.text for f in fs.facts)
     assert fs.facts[0].scope == "meta"
     assert {"map", "hero", "team", "matchup", "playbook"} <= {f.scope for f in fs.facts}
 
 
 def test_every_named_hero_gets_a_deep_stack_of_independent_facts(world):
-    fs = engine.generate(world, "King's Row", ["Tracer"], ["Ana"])
+    fs = board_facts.generate(world, "King's Row", ["Tracer"], ["Ana"])
     for hero in ("Tracer", "Ana"):
         assert sum(1 for f in fs.facts if f.subject == hero) >= 80, hero
     # unnamed heroes get no itemised dump - depth is opt-in by selection
@@ -49,27 +47,27 @@ def _an_edge(world):
 
 
 def test_team_facts_appear_per_side_and_matchup_only_with_both(world):
-    fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], [])
+    fs = board_facts.generate(world, "King's Row", ["Zarya", "Pharah"], [])
     scopes = {f.scope for f in fs.facts}
     assert "team" in scopes and "matchup" not in scopes
     assert fs.find("team.tanks", "red")
-    fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"])
+    fs = board_facts.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana", "Reinhardt"])
     assert fs.find("team.coverage", "blue") and fs.find("matchup.net_edges")
     # the crowd-control line names every blue pick that carries a tool, read off the picks
     (cc,) = fs.find("team.cc_count", "blue")
     tooled = [h for h in (world.hero("Ana"), world.hero("Reinhardt")) if h.cc_tools]
     assert tooled and all("%s: " % h.name in cc.text for h in tooled)
     loser, winner = _an_edge(world)                # whichever match-up the wiki states
-    fs = engine.generate(world, "King's Row", [loser], [winner])
+    fs = board_facts.generate(world, "King's Row", [loser], [winner])
     assert any("%s is answered by blue %s" % (loser, winner) in f.text for f in fs.facts)
 
 
 def test_board_context_facts_warn_and_cite(world):
     loser, winner = _an_edge(world)
-    fs = engine.generate(world, None, [winner], [loser])
+    fs = board_facts.generate(world, None, [winner], [loser])
     assert any(f.text.startswith("WARNING: blue %s is answered by red %s" % (loser, winner))
                for f in fs.facts)
-    fs = engine.generate(world, "King's Row", [], ["Ana", "Reinhardt"])
+    fs = board_facts.generate(world, "King's Row", [], ["Ana", "Reinhardt"])
     assert any(f.key == "hero.with_ally" and f.subject == "Ana" for f in fs.facts)
     assert fs.find("hero.map_win", "Ana")
 
@@ -115,7 +113,7 @@ def test_metrics_without_a_map_fall_back_honestly(world):
 
 def test_the_whole_database_becomes_facts(world):
     # what the load itself reads is checked in test_world.py
-    fs = engine.generate(world, "King's Row", ["Zarya"], ["Ana"])
+    fs = board_facts.generate(world, "King's Row", ["Zarya"], ["Ana"])
     keys = {f.key for f in fs.facts}
     assert {"hero.perk_effect", "playbook.catalog"} <= keys, keys
     # one population of rates, Blizzard's: no source's second set, no third party named
@@ -126,16 +124,16 @@ def test_the_whole_database_becomes_facts(world):
 
 
 def test_bans_become_facts_and_a_banned_pick_is_refused(world):
-    fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"],
-                         bans=["Widowmaker", "Sombra"])
+    fs = board_facts.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"],
+                              bans=["Widowmaker", "Sombra"])
     assert fs.bans == ["Widowmaker", "Sombra"]
     assert fs.find("bans.count") and len(fs.find("bans.hero")) == 2
     # Widowmaker answers Pharah and Zarya: the ban took an answer off the table
     assert any("banned Widowmaker answered red" in f.text for f in fs.facts)
     with pytest.raises(Refusal, match="banned this match"):
-        engine.generate(world, None, ["Zarya"], ["Ana"], bans=["Ana"])
+        board_facts.generate(world, None, ["Zarya"], ["Ana"], bans=["Ana"])
     with pytest.raises(Refusal, match="unknown heroes"):
-        engine.generate(world, None, [], [], bans=["Goku"])
+        board_facts.generate(world, None, [], [], bans=["Goku"])
 
 
 def test_the_rates_half_of_a_maps_style_is_derived_from_its_rates(world):
@@ -176,7 +174,7 @@ def test_the_rates_half_of_a_maps_style_is_derived_from_its_rates(world):
     finally:
         for h, win, map_rates in kept:
             h.win, h.map_rates = win, map_rates
-    fs = engine.generate(world, "King's Row", [], [])
+    fs = board_facts.generate(world, "King's Row", [], [])
     facts = fs.find("map.rate_lift")
     assert [f.value["style"] for f in facts] == ranked
     top = facts[0]
@@ -197,7 +195,7 @@ def test_a_map_without_text_reads_zero_for_every_terrain_metric(world):
         assert {s: v[0] for s, v in m.styles.items()} == m.rate_lift    # the rates alone
     none = compute.map_metrics(None, ban_count=0)
     assert all(none[f] == 0.0 for f in model.TERRAIN_FEATURES)
-    fs = engine.generate(world, bare[0].name, [], [])
+    fs = board_facts.generate(world, bare[0].name, [], [])
     assert fs.find("map.terrain_unread") and not fs.find("map.terrain")
     assert not fs.find("map.terrain_lean")
     assert "no terrain" in fs.find("map.style_top")[0].text
@@ -206,7 +204,7 @@ def test_a_map_without_text_reads_zero_for_every_terrain_metric(world):
 def test_terrain_and_both_halves_of_the_style_are_facts(world):
     from ui.facts.compute import TERRAIN_STANDOUT
     m = world.map("King's Row")
-    fs = engine.generate(world, "King's Row", [], [])
+    fs = board_facts.generate(world, "King's Row", [], [])
     standouts = sorted((f for f in model.TERRAIN_FEATURES
                         if abs(m.terrain_z[f]) >= TERRAIN_STANDOUT),
                        key=lambda f: (-abs(m.terrain_z[f]), f))
@@ -253,12 +251,12 @@ def test_map_stages_counts_arenas_and_map_phases_counts_parts_of_a_route(world):
     for name, key, other in (("Ilios", "map.stages", "map.phases"),
                              ("Havana", "map.phases", "map.stages"),
                              ("King's Row", "map.phases", "map.stages")):
-        fs = engine.generate(world, name)
+        fs = board_facts.generate(world, name)
         assert fs.find(key)[0].value == world.map(name).stages and not fs.find(other)
         assert fs.find(key)[0].source == "map_stages"
-    assert engine.generate(world, "Havana").find("map.phases")[0].text == \
+    assert board_facts.generate(world, "Havana").find("map.phases")[0].text == \
         "Havana phases, in order: City Streets, Distillery, Sea Fort"
-    fs = engine.generate(world, "Colosseo")
+    fs = board_facts.generate(world, "Colosseo")
     assert not fs.find("map.stages") and not fs.find("map.phases")
 
 
@@ -269,7 +267,7 @@ def test_a_stage_fact_names_the_terrain_its_own_text_stresses(world):
     mentions = ilios.stage_terrain["Well"]["hazards"][1]
     assert z >= TERRAIN_STANDOUT and mentions >= STAGE_MENTIONS
     assert compute.stage_standouts(ilios, "Well") == [("hazards", z)]
-    facts = engine.generate(world, "Ilios").find("map.stage_terrain")
+    facts = board_facts.generate(world, "Ilios").find("map.stage_terrain")
     assert [f.value["stage"] for f in facts] == ["Well"]   # the article describes no other
     assert facts[0].source == "stage_terrain" and facts[0].text == (
         "Ilios - Well: hazards, %.1f sd above the ordinary stage (%d mentions in the wiki's"
@@ -279,7 +277,7 @@ def test_a_stage_fact_names_the_terrain_its_own_text_stresses(world):
         "per_thousand": ilios.stage_terrain["Well"]["hazards"][0]}]
     # every stage fact: above the ordinary stage, on two mentions or more, two features at most
     for m in world.maps.values():
-        facts = engine.generate(world, m.name).find("map.stage_terrain")
+        facts = board_facts.generate(world, m.name).find("map.stage_terrain")
         assert [f.value["stage"] for f in facts] == [
             s for s in m.stages if compute.stage_standouts(m, s)], m.name
         for f in facts:
@@ -289,7 +287,7 @@ def test_a_stage_fact_names_the_terrain_its_own_text_stresses(world):
             assert all(x["z"] >= TERRAIN_STANDOUT and x["mentions"] >= STAGE_MENTIONS
                        for x in named)
     # a Hybrid phase's attack and defense text count together: one fact a phase
-    assert [f.value["stage"] for f in engine.generate(world, "King's Row").find(
+    assert [f.value["stage"] for f in board_facts.generate(world, "King's Row").find(
         "map.stage_terrain")] == ["Assault", "Escort"]
 
 
@@ -298,9 +296,9 @@ def test_a_stage_without_text_of_its_own_gets_no_stage_fact(world):
     assert oasis.stages and not oasis.stage_terrain and not oasis.stage_z
     assert not dorado.stages and not dorado.stage_terrain
     for m in (oasis, dorado, world.map("Colosseo"), world.map("Blizzard World")):
-        assert not engine.generate(world, m.name).find("map.stage_terrain"), m.name
+        assert not board_facts.generate(world, m.name).find("map.stage_terrain"), m.name
         assert all(compute.stage_standouts(m, s) == [] for s in m.stages)
-    assert engine.generate(world, "Oasis").find("map.stages")     # the list still stands
+    assert board_facts.generate(world, "Oasis").find("map.stages")     # the list still stands
     # one mention swings a short text's rate: it is not a fact
     import copy
     m = copy.copy(oasis)
@@ -321,21 +319,21 @@ def test_sides_exist_only_on_escort_and_hybrid(world):
     assert map_metrics(ilios, "attack", ban_count=0)["side"] == ""
     assert map_metrics(ilios, ban_count=0)["sided"] == 0
     assert opposite("attack") == "defense" and opposite("") == ""
-    fs = engine.generate(world, "King's Row", ["Zarya"], ["Ana"], side="attack")
+    fs = board_facts.generate(world, "King's Row", ["Zarya"], ["Ana"], side="attack")
     assert fs.side == "attack"
     assert any(f.key == "map.side" and "blue attacks King's Row; red defends" in f.text
                for f in fs.facts)
     assert fs.find("map.side_caveat")
-    fs = engine.generate(world, "Ilios", [], [], side="attack")
+    fs = board_facts.generate(world, "Ilios", [], [], side="attack")
     assert fs.side == "" and any("no attacking or defending side" in f.text for f in fs.facts)
     with pytest.raises(Refusal, match="side must be"):
-        engine.generate(world, "King's Row", [], [], side="left")
+        board_facts.generate(world, "King's Row", [], [], side="left")
 
 
 def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_apart(world):
     # FACTS = INDEPENDENT ∪ DEPENDENT (F1..); the playbook's record rides below as S1..
-    fs = engine.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
-    facts = [f for f in fs.facts if f.scope != engine.PLAYBOOK_SCOPE]
+    fs = board_facts.generate(world, "King's Row", ["Zarya", "Pharah"], ["Ana"])
+    facts = [f for f in fs.facts if f.scope != factset.PLAYBOOK_SCOPE]
     side = fs.playbook
     assert facts and side
     assert all(f.id.startswith("F") for f in facts) and all(f.id.startswith("S") for f in side)
@@ -346,8 +344,8 @@ def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_ap
     assert {f.key for f in side} == {"playbook.catalog"}
     assert fs.count == len(facts) and fs.to_dict()["playbook_count"] == len(side)
     text = fs.rendered()
-    assert text.startswith("[F1]") and engine.PLAYBOOK_DIVIDER in text
-    divider = text.index(engine.PLAYBOOK_DIVIDER)
+    assert text.startswith("[F1]") and factset.PLAYBOOK_DIVIDER in text
+    divider = text.index(factset.PLAYBOOK_DIVIDER)
     assert text.index("[S1]") > divider > text.index("[F%d]" % len(facts))
     catalog_note = next(f.text for f in side if f.key == "playbook.catalog")
     assert "STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS" in catalog_note
@@ -356,11 +354,11 @@ def test_facts_are_the_authoritative_data_and_the_playbook_record_is_numbered_ap
 def test_map_rates_are_the_intersection_with_the_board(world):
     """With a map, a hero's rate facts are about that map alone; without
     one, a single line of where the hero does best - never a line per map."""
-    with_map = engine.generate(world, "King's Row", ["Sombra"], ["Ana"])
+    with_map = board_facts.generate(world, "King's Row", ["Sombra"], ["Ana"])
     assert not with_map.find("hero.rate_map") and not with_map.find("hero.rate_maps")
     assert len(with_map.find("hero.map_win", "Sombra")) == 1
     assert any("King's Row (this map)" in f.text for f in with_map.find("hero.map_win", "Sombra"))
-    no_map = engine.generate(world, None, ["Sombra"], ["Ana"])
+    no_map = board_facts.generate(world, None, ["Sombra"], ["Ana"])
     best = no_map.find("hero.rate_maps", "Sombra")
     assert len(best) == 1 and len(best[0].value) <= 3
     assert best[0].text.startswith("Sombra's best maps: ")
@@ -383,11 +381,11 @@ def test_a_heros_best_maps_are_derived_from_blizzards_map_rates(world):
     # the hero's own line without a map; on its best map, the rank, and the team's count
     sym = world.hero("Symmetra")
     top = world.maps[sym.best_maps[0]]
-    line = engine.generate(world, None, [], ["Symmetra"]).find("hero.best_map", "Symmetra")[0]
+    line = board_facts.generate(world, None, [], ["Symmetra"]).find("hero.best_map", "Symmetra")[0]
     assert line.text.startswith("Symmetra's three best maps by Blizzard's map rates")
     assert line.value == [world.maps[mid].name for mid in sym.best_maps]
     assert line.source == "derived:hero.best_map"
-    on_map = engine.generate(world, top.name, [], ["Symmetra"])
+    on_map = board_facts.generate(world, top.name, [], ["Symmetra"])
     assert on_map.find("hero.map_strategy", "Symmetra")[0].value == 1
     assert any(f.value == "Symmetra" for f in on_map.find("map.playbook_pick"))
     assert team_metrics(world, [sym], top)["map_strategy_hits"] == 1
@@ -396,7 +394,7 @@ def test_a_heros_best_maps_are_derived_from_blizzards_map_rates(world):
 
 
 def test_the_provenance_is_one_line_per_source(world):
-    fs = engine.generate(world, "Ilios", [], ["Ana"])
+    fs = board_facts.generate(world, "Ilios", [], ["Ana"])
     lines = fs.find("meta.snapshot")
     seen = [(f.value["source"], f.value["queue"]) for f in lines]
     assert len(seen) == len(set(seen)), seen                  # no source and queue twice
@@ -404,7 +402,7 @@ def test_the_provenance_is_one_line_per_source(world):
 
 
 def test_the_map_fact_carries_this_maps_ban_rate_and_the_team_its_availability_here(world):
-    fs = engine.generate(world, "King's Row", ["Zarya"], ["Sombra", "Ana"])
+    fs = board_facts.generate(world, "King's Row", ["Zarya"], ["Sombra", "Ana"])
     fact = fs.find("hero.map_win", "Sombra")[0]
     if world.hero("Sombra").map_ban(world.map("King's Row").id) is not None:
         assert ", banned " in fact.text

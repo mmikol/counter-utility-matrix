@@ -12,7 +12,7 @@ from inference import catalog
 from inference.engine import BrokenProcessPool
 from inference.expr import Expr, ExprError
 from tests.inference import FIXTURE_PLAYBOOK
-from ui.facts import compute
+from ui.facts import board_facts, compute
 from ui.facts.team import team_metrics
 
 # --- the expression language (pure) --------------------------------------
@@ -707,7 +707,6 @@ def test_the_plan_names_the_stages_the_facts_hold_and_no_other(world, kings_row_
     import copy
 
     from inference import engine
-    from ui.facts import engine as facts_engine
     blue_r = kings_row_board.blue
     held = blue_r.facts.find("map.stage_terrain", "King's Row")
     assert [f.value["stage"] for f in held] == ["Assault", "Escort"]
@@ -718,14 +717,14 @@ def test_the_plan_names_the_stages_the_facts_hold_and_no_other(world, kings_row_
 
     def plan(name):
         r = copy.copy(blue_r)
-        r.facts = facts_engine.generate(world, name)
+        r.facts = board_facts.generate(world, name)
         return engine._plan(world, world.map(name), "", [], [], r).split("\n")[0]
     assert "Well has the environmental hazards." in plan("Ilios")
     assert "Lighthouse" not in plan("Ilios") and "Ruins" not in plan("Ilios")
     # three stages at most: the largest, told in play order
     suravasa = world.map("Suravasa")
     r = copy.copy(blue_r)
-    r.facts = facts_engine.generate(world, "Suravasa")
+    r.facts = board_facts.generate(world, "Suravasa")
     assert not r.facts.find("map.stage_terrain")
     for stage, z in zip(suravasa.stages[:4], (1.0, 4.0, 3.0, 2.0), strict=True):
         r.facts.add("map", "Suravasa", "map.stage_terrain", stage, source="stage_terrain",
@@ -735,7 +734,7 @@ def test_the_plan_names_the_stages_the_facts_hold_and_no_other(world, kings_row_
     assert suravasa.stages[0] not in engine._plan(world, suravasa, "", [], [], r)
     # no stage fact: Oasis has stages and no text of theirs, Dorado no stages
     for name in ("Oasis", "Dorado", "Colosseo"):
-        assert not facts_engine.generate(world, name).find("map.stage_terrain")
+        assert not board_facts.generate(world, name).find("map.stage_terrain")
         assert " has the " not in plan(name), name
         assert not any(stage in plan(name) for stage in world.map(name).stages), name
 
@@ -814,9 +813,8 @@ def test_a_metric_printed_inside_another_fact_cites_that_fact(world):
     """team.range_max rides the range_median line and team.cleanse the invuln
     line; a rule on either cites that fact, not its guard's."""
     from inference import engine
-    from ui.facts import engine as facts_engine
     six = ["Reinhardt", "Sigma", "Ashe", "Cassidy", "Ana", "Kiriko"]
-    fs = facts_engine.generate(world, "King's Row", ["Zarya"], six, [], "attack")
+    fs = board_facts.generate(world, "King's Row", ["Zarya"], six, [], "attack")
     for metric, line in (("team.range_max", "team.range_median"), ("team.melee", "team.hitscan"),
                          ("team.cleanse", "team.invuln"), ("team.dps_count", "team.dps_floor"),
                          ("matchup.exposure_share", "matchup.coverage_share")):
@@ -827,12 +825,11 @@ def test_a_metric_printed_inside_another_fact_cites_that_fact(world):
 @pytest.mark.invariant
 def test_an_announced_hero_is_described_but_never_picked(world):
     from inference import engine
-    from ui.facts import engine as facts_engine
     early = [h for h in world.heroes.values() if not h.released]
     if not early:
         pytest.skip("no announced hero in the database")
     h = early[0]
-    fs = facts_engine.generate(world, None, [], [h.name])          # the facts may describe it
+    fs = board_facts.generate(world, None, [], [h.name])          # the facts may describe it
     assert fs.find("hero.announced", h.name)
     with pytest.raises(Refusal, match="announced, not yet playable"):
         engine.infer(world, None, [], [h.name])                    # a pick may not

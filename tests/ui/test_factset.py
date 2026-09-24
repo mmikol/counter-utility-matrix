@@ -1,7 +1,7 @@
 """The FactSet itself: how a fact is filed and found. Pure - no database,
 so it runs on the pull-request gate with the rest of the arithmetic."""
 
-from ui.facts.engine import FactSet
+from ui.facts.factset import FactSet
 
 
 def test_a_fact_is_found_under_every_metric_its_sentence_states():

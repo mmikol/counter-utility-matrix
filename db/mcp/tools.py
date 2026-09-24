@@ -23,8 +23,7 @@ from db.data import fetch
 from db.mcp.server import Tool, audited
 from db.psql import schema
 from inference import catalog, derive, engine, reach, tune
-from ui.facts import compute, tables
-from ui.facts import engine as facts_engine
+from ui.facts import board_facts, compute, tables
 
 # A tool's answer: its text, and the same as a JSON object for a structured reply.
 Reply = tuple[str, Mapping[str, Any]]
@@ -547,7 +546,7 @@ def facts(
         bans: Sequence[str] = (), side: str = "", format: str = "lines") -> Reply:
     with ctx.connect() as cx:
         world = tables.load(cx)
-    fs = facts_engine.generate(world, map, list(red), list(blue), list(bans), side)
+    fs = board_facts.generate(world, map, list(red), list(blue), list(bans), side)
     payload = fs.to_dict()
     text = fs.rendered() if format == "lines" else json.dumps(payload)
     return text, payload

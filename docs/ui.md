@@ -48,7 +48,8 @@ ui/
     draft.py       the board's vocabulary and the Draft record the doors read and write
     team.py        the team metrics and the typed bag every metric section comes in
     compute.py     the matchup, map and world metrics, and the registry of them all
-    engine.py      the FactSet: the numbered facts for a board
+    factset.py     the FactSet: a board's facts, numbered and filed by metric
+    board_facts.py generate(): every fact for a board, written into a FactSet
 ```
 
 ## `board.py` - the page and its endpoints
@@ -309,7 +310,7 @@ six from the data alone, filled into `EXPECTED_SHAPE` (two per role) with
 a tie going to the alphabetically first name, each pick an `ExpectedPick`
 record.
 
-### `engine.py` - the FactSet
+### `factset.py` and `board_facts.py` - the FactSet
 
 `generate(world, map, red, blue, bans, side)` walks the board and numbers
 what it finds. Facts are structured (scope, subject, key, value, unit,
@@ -365,6 +366,6 @@ side each team holds.
 ## What reads this package
 
 The inference layer's solver (`compute`, `team`, `draft`) and engine
-(`engine`, `model`, `team`, `draft`), the inference service, and the MCP
-tools `roster`, `facts`, `infer`, `evaluate` and `board` - all through
-the same functions the board calls.
+(`board_facts`, `factset`, `model`, `team`, `draft`), the inference
+service, and the MCP tools `roster`, `facts`, `infer`, `evaluate` and
+`board` - all through the same functions the board calls.
