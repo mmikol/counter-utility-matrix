@@ -168,7 +168,8 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   is documentation the data dictionary reads, and is kept current.
   Locally, `db_migrate` keeps the data; `db_rebuild` drops it.
 - Over stdio, stdout is the JSON-RPC wire. Code reachable from a tool logs
-  through `ctx.log` or stderr, never `print`. A refusal raises `ToolError`.
+  through `ctx.log` or stderr, never `print`. A refusal raises `db.Refusal`;
+  anything else is the server's fault.
 - A table or column name reaches SQL only as the `psycopg.sql.Identifier`
   that `db.psql.identifier()` returns, composed with `psycopg.sql.SQL`;
   values are always parameters.

@@ -9,9 +9,10 @@ import sys
 
 import pytest
 
-from db import ROOT
+from db import ROOT, Refusal
 from db.mcp import tools
-from db.mcp.server import Server, Tool, ToolError
+from db.mcp.server import Server, Tool
+from inference import catalog, tune
 
 
 def _talk(messages):
@@ -78,20 +79,34 @@ def test_bad_json_is_a_parse_error_not_a_crash():
 def test_tool_refuses_unknown_and_missing_arguments():
     tool = Tool("t", "d", {"type": "object", "properties": {"a": {"type": "string"}},
                            "required": ["a"]}, lambda **kw: ("ok", kw))
-    with pytest.raises(ToolError, match="unknown argument"):
+    with pytest.raises(Refusal, match="unknown argument"):
         tool({"a": "x", "b": 1})
-    with pytest.raises(ToolError, match="missing"):
+    with pytest.raises(Refusal, match="missing"):
         tool({})
     assert tool({"a": "x"}) == ("ok", {"a": "x"})
 
 
-def test_server_reports_a_refused_tool_as_is_error():
+def test_server_reports_a_refused_tool_as_is_error(tmp_path):
+    """Every Refusal is the caller's error: the door answers it isError and
+    audits it as refused - a TuneError as much as a Refusal raised plainly."""
     def refuse(**kw):
-        raise ToolError("no")
-    server = Server([Tool("t", "d", {"type": "object", "properties": {}}, refuse)])
-    reply = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                           "params": {"name": "t", "arguments": {}}})
-    assert reply["result"]["isError"] is True
+        raise Refusal("no")
+
+    def refuse_a_tune(**kw):
+        raise tune.TuneError("no strategy 'x'")
+    empty = {"type": "object", "properties": {}}
+    audit = tmp_path / "audit.jsonl"
+    server = Server([Tool("t", "d", empty, refuse), Tool("tuned", "d", empty, refuse_a_tune)],
+                    audit_path=str(audit))
+    for name, said in (("t", "no"), ("tuned", "no strategy 'x'")):
+        reply = server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                               "params": {"name": name, "arguments": {}}})
+        assert reply["result"]["isError"] is True
+        assert reply["result"]["content"][0]["text"] == said
+    lines = [json.loads(line) for line in audit.read_text(encoding="utf-8").splitlines()]
+    assert [(e["tool"], e["refused"]) for e in lines] == [("t", "no"),
+                                                         ("tuned", "no strategy 'x'")]
+    assert not any(e.get("crashed") for e in lines)
 
 
 def test_a_fault_inside_a_tool_is_internal_and_logged_not_a_bad_parameter(tmp_path):
@@ -116,6 +131,43 @@ def test_a_fault_inside_a_tool_is_internal_and_logged_not_a_bad_parameter(tmp_pa
     assert call("resources/read", {"uri": "strategy://x"})["error"]["code"] == -32602
 
 
+def test_the_strategy_resources_answer_an_unknown_uri_as_a_bad_parameter(tmp_path):
+    """The one implementation of the resources a server serves: an id no file
+    holds is a bad parameter, and a strategy's uri reads back its file."""
+    server = Server([], tools.StrategyResources(), log=lambda message: None,
+                    audit_path=str(tmp_path / "audit.jsonl"))
+
+    def read(uri):
+        return server.handle({"jsonrpc": "2.0", "id": 1, "method": "resources/read",
+                              "params": {"uri": uri}})
+    missing = read("strategy://nope")["error"]
+    assert missing["code"] == -32602 and missing["message"].startswith("no resource at")
+    first = catalog.load()[0]
+    assert read("strategy://" + first.id)["result"]["contents"][0]["text"] == first.raw
+
+
+def test_a_broken_playbook_is_a_server_fault_at_the_door(tmp_path, monkeypatch):
+    """A playbook that does not load is the operator's to fix, not the caller's:
+    every tool and resource that reads it answers INTERNAL with the catalog's
+    own message, logs the traceback and is audited as crashed."""
+    empty = tmp_path / "playbook"
+    empty.mkdir()
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", str(empty))
+    logged = []
+    audit = tmp_path / "audit.jsonl"
+    server = Server(tools.build(tools.Context(dsn="postgresql://nowhere")),
+                    tools.StrategyResources(), log=logged.append, audit_path=str(audit))
+    for method, params in (("tools/call", {"name": "strategies", "arguments": {}}),
+                           ("resources/list", {})):
+        fault = server.handle({"jsonrpc": "2.0", "id": 1, "method": method,
+                               "params": params})["error"]
+        assert fault["code"] == -32603
+        assert fault["message"].startswith("CatalogError: no strategies in")
+    assert logged and all("Traceback" in entry for entry in logged)
+    lines = [json.loads(line) for line in audit.read_text(encoding="utf-8").splitlines()]
+    assert len(lines) == 1 and lines[0]["tool"] == "strategies" and lines[0]["crashed"] is True
+
+
 # --- the tools against the built database ------------------------------------
 
 @pytest.fixture(scope="module")
@@ -127,10 +179,13 @@ def ctx(db, dsn):
 def test_query_is_read_only(ctx):
     _text, data = tools.run_tool(ctx, "query", sql="select count(*) from heroes")
     assert data["rows"][0][0] > 40
-    with pytest.raises(ToolError, match="read-only"):
+    with pytest.raises(Refusal, match="read-only"):
         tools.run_tool(ctx, "query", sql="delete from heroes")
-    with pytest.raises(ToolError, match="read-only"):
+    with pytest.raises(Refusal, match="read-only"):
         tools.run_tool(ctx, "query", sql="select 1; drop table heroes")
+    # what Postgres rejects is the caller's to fix too, answered in its words
+    with pytest.raises(Refusal, match='query: column "nosuch" does not exist'):
+        tools.run_tool(ctx, "query", sql="select nosuch from heroes")
 
 
 @pytest.mark.invariant
@@ -150,8 +205,10 @@ def test_db_status_and_roster(ctx):
 def test_facts_and_infer_through_the_tools(ctx):
     text, data = tools.run_tool(ctx, "facts", map="King's Row", red=["Zarya"], blue=["Ana"])
     assert data["count"] > 300 and text.startswith("[F1]")
-    with pytest.raises(ToolError, match="unknown heroes"):
+    with pytest.raises(Refusal, match="unknown heroes"):
         tools.run_tool(ctx, "facts", red=["Goku"])
+    with pytest.raises(Refusal, match="unknown heroes"):
+        tools.run_tool(ctx, "reach", hero="Nosuchhero")
     text, data = tools.run_tool(ctx, "infer", map="King's Row", red=["Zarya"], blue=["Ana"])
     assert len(data["blue"]) == 6 and "Ana" in data["blue"]
     assert "optimal comp" in text
@@ -398,7 +455,7 @@ def test_query_refuses_file_and_server_reaching_sql_before_connecting():
     nowhere = tools.Context(dsn="postgresql://nowhere")
     for sql in ("select pg_read_file('/etc/passwd')", "select * from pg_ls_dir('.')",
                 "COPY heroes TO PROGRAM 'id'", "select pg_sleep(10)"):
-        with pytest.raises(ToolError, match=r"refuses|read-only"):
+        with pytest.raises(Refusal, match=r"refuses|read-only"):
             tools.run_tool(nowhere, "query", sql=sql)
 
 

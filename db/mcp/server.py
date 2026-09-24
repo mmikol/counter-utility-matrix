@@ -15,11 +15,13 @@ import threading
 import time
 import traceback
 import uuid
+from collections.abc import Callable, Iterable, Mapping
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Protocol, TextIO
 from urllib.parse import urlparse
 
-from db import RAW_DIR
+from db import RAW_DIR, Refusal
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "countrix", "version": "2.1.0"}
@@ -32,8 +34,14 @@ SERVER_INFO = {"name": "countrix", "version": "2.1.0"}
 AUDIT_PATH = os.environ.get("COUNTRIX_AUDIT", os.path.join(RAW_DIR, "audit.jsonl"))
 _client = threading.local()
 
+# A JSON-RPC message, request or response, as json.loads reads it: arbitrary JSON.
+Message = dict[str, Any]
+# What a tool answers: its text, and the same as a JSON object for a
+# structured reply, or None.
+Answer = tuple[str, Mapping[str, Any] | None]
 
-def audit(entry, path=None):
+
+def audit(entry: Mapping[str, object], path: str | None = None) -> None:
     """Append one audit line; never raise - the door stays open if the log fails."""
     try:
         path = path or AUDIT_PATH
@@ -46,9 +54,9 @@ def audit(entry, path=None):
         pass
 
 
-def _shape(arguments):
+def _shape(arguments: Mapping[str, object] | None) -> dict[str, object]:
     """{argument name: size} - never the value."""
-    out = {}
+    out: dict[str, object] = {}
     for key, value in (arguments or {}).items():
         if isinstance(value, (list, dict, str)):
             out[key] = len(value)
@@ -56,29 +64,29 @@ def _shape(arguments):
             out[key] = value if isinstance(value, (bool, int, float)) else str(type(value).__name__)
     return out
 
+
 PARSE_ERROR, INVALID_REQUEST, METHOD_NOT_FOUND, INVALID_PARAMS, INTERNAL = (
     -32700, -32600, -32601, -32602, -32603)
 
 
-class ToolError(Exception):
-    """A tool refusing its input: reported as isError, not as a crash."""
-
-
-def audited(name, arguments, call, transport, client=None, audit_path=None):
+def audited[T](name: str, arguments: Mapping[str, object], call: Callable[[], T],
+                transport: str, client: str | None = None, audit_path: str | None = None) -> T:
     """Run one tool call and leave exactly one audit line for it. Every path to
     a tool - stdio, HTTP and the in-process calls the refresher and the shell
-    make - comes through here, so the sentry's window covers all three."""
-    entry = {"t": datetime.now(UTC).isoformat(timespec="seconds"),
-             "transport": transport, "client": client,
-             "tool": name, "args": _shape(arguments)}
+    make - comes through here, so the sentry's window covers all three. A
+    Refusal - the tool refusing its input, the wrapper refusing the call - is
+    audited as refused; anything else as crashed."""
+    entry: dict[str, object] = {
+        "t": datetime.now(UTC).isoformat(timespec="seconds"), "transport": transport,
+        "client": client, "tool": name, "args": _shape(arguments)}
     started = time.time()
 
-    def spent():
+    def spent() -> int:
         return int((time.time() - started) * 1000)
 
     try:
         result = call()
-    except ToolError as refused:
+    except Refusal as refused:
         audit(dict(entry, ok=False, refused=str(refused)[:200], ms=spent()), audit_path)
         raise
     except Exception:
@@ -95,9 +103,20 @@ class InvalidParamsError(Exception):
     fault and reaches the branch that logs a traceback."""
 
 
+class Resources(Protocol):
+    """What a server serves as MCP resources: a listing, and one resource by
+    uri, a KeyError when nothing is at it."""
+
+    def list(self) -> list[dict[str, str]]: ...
+
+    def read(self, uri: str) -> dict[str, str]: ...
+
+
 class Server:
-    def __init__(self, tools, resources=None, log=None, transport="stdio", audit_path=None):
-        """tools: [Tool]; resources: object with list() and read(uri)."""
+    def __init__(
+            self, tools: Iterable["Tool"], resources: Resources | None = None,
+            log: Callable[[str], object] | None = None, transport: str = "stdio",
+            audit_path: str | None = None) -> None:
         self.tools = {t.name: t for t in tools}
         self.resources = resources
         self.log = log or (lambda msg: sys.stderr.write(msg + "\n"))
@@ -106,8 +125,11 @@ class Server:
 
     # --- dispatch ------------------------------------------------------
 
-    def handle(self, message):
-        """One decoded message -> a response dict, or None for notifications."""
+    def handle(self, message: object) -> Message | None:
+        """One decoded message -> a response, or None for a notification. A
+        request the wire cannot serve is INVALID_PARAMS; anything else that
+        escapes a method is the server's fault, INTERNAL with its type and
+        message, and its traceback goes to the log, never to the caller."""
         if not isinstance(message, dict):
             return self._error(None, INVALID_REQUEST, "expected an object")
         msg_id = message.get("id")
@@ -118,7 +140,7 @@ class Server:
         try:
             if method.startswith("notifications/"):
                 return None                # a notification gets no response
-            handler = {
+            handler: Callable[[Message], Message] | None = {
                 "initialize": self._initialize,
                 "ping": lambda p: {},
                 "tools/list": self._tools_list,
@@ -139,13 +161,13 @@ class Server:
             return self._error(msg_id, INTERNAL, "%s: %s"
                                % (type(error).__name__, error))
 
-    def _error(self, msg_id, code, text):
+    def _error(self, msg_id: object, code: int, text: str) -> Message:
         return {"jsonrpc": "2.0", "id": msg_id,
                 "error": {"code": code, "message": text}}
 
     # --- methods -------------------------------------------------------
 
-    def _initialize(self, params):
+    def _initialize(self, params: Message) -> Message:
         asked = params.get("protocolVersion")
         version = asked if asked in PROTOCOL_VERSIONS else PROTOCOL_VERSIONS[0]
         return {
@@ -165,10 +187,10 @@ class Server:
                 " via query."),
         }
 
-    def _tools_list(self, params):
+    def _tools_list(self, params: Message) -> Message:
         return {"tools": [t.describe() for t in self.tools.values()]}
 
-    def _tools_call(self, params):
+    def _tools_call(self, params: Message) -> Message:
         if "name" not in params:
             raise InvalidParamsError("missing parameter 'name'")
         name = params["name"]
@@ -180,21 +202,21 @@ class Server:
             text, structured = audited(name, arguments, lambda: tool(arguments),
                                        self.transport, getattr(_client, "id", None),
                                        self.audit_path)
-        except ToolError as refused:
+        except Refusal as refused:
             return {"content": [{"type": "text", "text": str(refused)}],
                     "isError": True}
-        result = {"content": [{"type": "text", "text": text}],
+        result: Message = {"content": [{"type": "text", "text": text}],
                   "isError": False}
         if structured is not None:
             result["structuredContent"] = structured
         return result
 
-    def _resources_list(self, params):
+    def _resources_list(self, params: Message) -> Message:
         if self.resources is None:
             return {"resources": []}
         return {"resources": self.resources.list()}
 
-    def _resources_read(self, params):
+    def _resources_read(self, params: Message) -> Message:
         if "uri" not in params:
             raise InvalidParamsError("missing parameter 'uri'")
         if self.resources is None:
@@ -206,7 +228,7 @@ class Server:
 
     # --- the wire ------------------------------------------------------
 
-    def serve(self, stdin=None, stdout=None):
+    def serve(self, stdin: Iterable[str] | None = None, stdout: TextIO | None = None) -> None:
         stdin = stdin or sys.stdin
         stdout = stdout or sys.stdout
         for line in stdin:
@@ -229,7 +251,7 @@ class Server:
                     self._write(stdout, response)
 
     @staticmethod
-    def _write(stdout, payload):
+    def _write(stdout: TextIO, payload: object) -> None:
         stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
         stdout.flush()
 
@@ -237,23 +259,26 @@ class Server:
 class Tool:
     """A callable with the description and JSON schema the host needs."""
 
-    def __init__(self, name, description, schema, fn):
+    def __init__(self, name: str, description: str, schema: Message,
+                 fn: Callable[..., Answer]) -> None:
         self.name, self.description, self.schema, self.fn = (
             name, description, schema, fn)
 
-    def describe(self):
+    def describe(self) -> Message:
         return {"name": self.name, "description": self.description,
                 "inputSchema": self.schema}
 
-    def __call__(self, arguments):
+    def __call__(self, arguments: Mapping[str, object]) -> Answer:
+        """Call the tool once its schema allows the call: an argument it does
+        not declare, or one it requires left out, is a Refusal."""
         allowed = set(self.schema.get("properties", {}))
         unknown = set(arguments) - allowed
         if unknown:
-            raise ToolError("%s: unknown argument(s) %s" % (
+            raise Refusal("%s: unknown argument(s) %s" % (
                 self.name, ", ".join(sorted(unknown))))
         for required in self.schema.get("required", ()):
             if required not in arguments:
-                raise ToolError("%s: missing %r" % (self.name, required))
+                raise Refusal("%s: missing %r" % (self.name, required))
         return self.fn(**arguments)
 
 
@@ -273,11 +298,13 @@ TOKEN_ENV = "COUNTRIX_MCP_TOKEN"
 
 class HttpHandler(BaseHTTPRequestHandler):
     server_version = "countrix-mcp/2.1"
+    server: "HttpServer"
 
-    def log_message(self, fmt, *args):
+    def log_message(self, fmt: str, *args: object) -> None:
         pass
 
-    def _reply(self, code, payload=None, headers=None):
+    def _reply(self, code: int, payload: object = None,
+               headers: Mapping[str, str] | None = None) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8") \
             if payload is not None else b""
         self.send_response(code)
@@ -290,7 +317,7 @@ class HttpHandler(BaseHTTPRequestHandler):
         if body:
             self.wfile.write(body)
 
-    def _origin_allowed(self):
+    def _origin_allowed(self) -> bool:
         """DNS-rebinding guard: browsers send Origin; only local ones pass."""
         origin = self.headers.get("Origin")
         if not origin:
@@ -298,7 +325,7 @@ class HttpHandler(BaseHTTPRequestHandler):
         host = urlparse(origin).hostname
         return host in LOCAL_HOSTS or host in self.server.allowed_hosts
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         path = urlparse(self.path).path
         if not self._origin_allowed():
             return self._reply(403, {"error": "origin not allowed"})
@@ -310,7 +337,7 @@ class HttpHandler(BaseHTTPRequestHandler):
                                {"Allow": "POST, DELETE"})
         self._reply(404, {"error": "nothing here"})
 
-    def _authorized(self):
+    def _authorized(self) -> bool:
         """With a token configured, every /mcp request must carry it."""
         token = self.server.token
         if not token:
@@ -318,7 +345,7 @@ class HttpHandler(BaseHTTPRequestHandler):
         header = self.headers.get("Authorization") or ""
         return header.startswith("Bearer ") and hmac.compare_digest(header[7:].strip(), token)
 
-    def do_DELETE(self):
+    def do_DELETE(self) -> None:
         """Ends a session. This server keeps no session state to end, and the
         request runs the door's two checks anyway, so every method on /mcp is
         guarded alike."""
@@ -331,7 +358,7 @@ class HttpHandler(BaseHTTPRequestHandler):
                                {"WWW-Authenticate": "Bearer"})
         return self._reply(200)
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         if urlparse(self.path).path != "/mcp":
             return self._reply(404, {"error": "nothing here"})
         if not self._origin_allowed():
@@ -371,7 +398,7 @@ class HttpHandler(BaseHTTPRequestHandler):
         _client.id = "http:%s/%s" % (client, (self.headers.get("Mcp-Session-Id") or "-")[:8])
         responses = [r for r in (self.server.mcp.handle(m) for m in messages)
                      if r is not None]
-        headers = {}
+        headers: dict[str, str] = {}
         if any(isinstance(m, dict) and m.get("method") == "initialize"
                for m in messages):
             headers["Mcp-Session-Id"] = uuid.uuid4().hex
@@ -384,18 +411,20 @@ class HttpHandler(BaseHTTPRequestHandler):
 class HttpServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address, mcp, status, allowed_hosts=(), token=None,
-                 rate_limit=RATE_LIMIT):
+    def __init__(
+            self, address: tuple[str, int], mcp: Server,
+            status: Callable[[], Mapping[str, object]], allowed_hosts: Iterable[str] = (),
+            token: str | None = None, rate_limit: int = RATE_LIMIT) -> None:
         super().__init__(address, HttpHandler)
         self.mcp = mcp
         self.status = status
         self.allowed_hosts = set(allowed_hosts)
         self.token = token if token is not None else os.environ.get(TOKEN_ENV) or None
         self.rate_limit = rate_limit
-        self._calls = {}
+        self._calls: dict[str, list[float]] = {}
         self._lock = threading.Lock()
 
-    def admit(self, client, calls=1):
+    def admit(self, client: str, calls: int = 1) -> bool:
         """Sliding one-minute window per client address; False past the limit."""
         now = time.time()
         with self._lock:
@@ -410,7 +439,8 @@ class HttpServer(ThreadingHTTPServer):
         return True
 
 
-def serve_http(mcp, host, port, status, allowed_hosts=()):
+def serve_http(mcp: Server, host: str, port: int, status: Callable[[], Mapping[str, object]],
+               allowed_hosts: Iterable[str] = ()) -> None:
     """Serve `mcp` (a Server) over HTTP until interrupted."""
     mcp.transport = "http"
     httpd = HttpServer((host, port), mcp, status, allowed_hosts)

@@ -18,9 +18,9 @@ from typing import Any
 import psycopg
 from psycopg.sql import SQL
 
-from db import CACHE_DIRS, ROOT, embed, psql
+from db import CACHE_DIRS, ROOT, Refusal, embed, psql
 from db.data import fetch
-from db.mcp.server import Tool, ToolError, audited
+from db.mcp.server import Tool, audited
 from db.psql import schema
 from inference import catalog, derive, engine, reach, tune
 from ui.facts import compute, tables
@@ -322,8 +322,8 @@ def db_status(ctx: Context) -> Reply:
 def db_init(ctx: Context) -> Reply:
     with ctx.connect() as cx:
         if schema.table_count(cx):
-            raise ToolError("the database already has tables; db_rebuild"
-                            " starts over")
+            raise Refusal("the database already has tables; db_rebuild"
+                          " starts over")
         schema.apply(cx, schema.read_migrations(), quiet=True)
         n = schema.table_count(cx)
     return "db_init: %d tables, no data" % n, {"table_count": n}
@@ -406,6 +406,11 @@ SQL_DENIED = re.compile(r"\b(pg_read_file|pg_read_binary_file|pg_ls_dir|pg_stat_
 READER_ROLE = "matrix_reader"          # a login of its own (migration 012): SELECT, nothing else
 MAX_QUERY_BYTES = 1 << 20              # what one query may return
 MAX_CELL = 2000                        # characters per cell
+# What Postgres says of a statement the caller can fix: a syntax error, an
+# unknown table, column or function, a privilege the reader lacks, a bad cast,
+# the ten-second timeout.
+QUERY_REFUSED = (psycopg.errors.ProgrammingError, psycopg.errors.DataError,
+                 psycopg.errors.QueryCanceled)
 
 
 def reader_dsn(dsn: str) -> str:
@@ -424,20 +429,14 @@ def reader_dsn(dsn: str) -> str:
 def query(ctx: Context, sql: str) -> Reply:
     body = sql.strip().rstrip(";").strip()
     if ";" in body or not body.lower().startswith(READ_ONLY_STARTS):
-        raise ToolError("query is read-only: one SELECT/WITH statement")
+        raise Refusal("query is read-only: one SELECT/WITH statement")
     if len(body) > 20000:
-        raise ToolError("query too long")
+        raise Refusal("query too long")
     denied = SQL_DENIED.search(body)
     if denied:
-        raise ToolError("query refuses %r: SQL here reads tables, not files or servers"
-                        % denied.group(1))
-    with psycopg.connect(reader_dsn(ctx.dsn)) as cx:
-        cx.execute("SET TRANSACTION READ ONLY")
-        cx.execute("SET LOCAL statement_timeout = '10s'")
-        cursor = cx.execute(body)
-        columns = [d.name for d in cursor.description] if cursor.description else []
-        rows = cursor.fetchmany(200)
-        cx.rollback()
+        raise Refusal("query refuses %r: SQL here reads tables, not files or servers"
+                      % denied.group(1))
+    columns, rows = _read_only(ctx.dsn, body)
     out: list[list[object]] = []
     size = 0
     for row in rows:
@@ -454,6 +453,25 @@ def query(ctx: Context, sql: str) -> Reply:
     text = "\t".join(columns) + "\n" + "\n".join(
         "\t".join(str(v) for v in row) for row in out) if columns else "(no rows)"
     return text, {"columns": columns, "rows": out, "truncated": len(rows) == 200}
+
+
+def _read_only(dsn: str, body: str) -> tuple[list[str], list[tuple[Any, ...]]]:
+    """One checked statement, run as the reader in a read-only transaction
+    under the timeout -> (its column names, its first 200 rows). A statement
+    Postgres rejects is the caller's to fix, like the checks before it: a
+    Refusal in Postgres's own words. A connection that fails is the server's
+    fault and is not caught."""
+    with psycopg.connect(reader_dsn(dsn)) as cx:
+        cx.execute("SET TRANSACTION READ ONLY")
+        cx.execute("SET LOCAL statement_timeout = '10s'")
+        try:
+            cursor = cx.execute(body)
+            columns = [d.name for d in cursor.description] if cursor.description else []
+            rows = cursor.fetchmany(200)
+        except QUERY_REFUSED as error:
+            raise Refusal("query: %s" % str(error).partition("\n")[0]) from error
+        cx.rollback()
+    return columns, rows
 
 
 def _plain(value: object) -> object:
@@ -516,11 +534,7 @@ def facts(
         bans: Sequence[str] = (), side: str = "", format: str = "lines") -> Reply:
     with ctx.connect() as cx:
         world = tables.load(cx)
-    try:
-        fs = facts_engine.generate(world, map, list(red), list(blue), list(bans),
-                                   side)
-    except ValueError as error:
-        raise ToolError(str(error)) from error
+    fs = facts_engine.generate(world, map, list(red), list(blue), list(bans), side)
     payload = fs.to_dict()
     text = fs.rendered() if format == "lines" else json.dumps(payload)
     return text, payload
@@ -554,12 +568,9 @@ def infer(
         compact: bool = False) -> Reply:
     with ctx.connect() as cx:
         world = tables.load(cx)
-    try:
-        pool, top = engine.clamp_search(pool, top)
-        result = engine.infer(world, map, list(red), list(blue), top=top,
-                              pool_size=pool, bans=list(bans), side=side)
-    except ValueError as error:
-        raise ToolError(str(error)) from error
+    pool, top = engine.clamp_search(pool, top)
+    result = engine.infer(world, map, list(red), list(blue), top=top,
+                          pool_size=pool, bans=list(bans), side=side)
     if compact:
         return _compact(result)
     return result.rendered(), result.to_dict()
@@ -599,11 +610,7 @@ def evaluate(
     # full six, so an empty one was never a call worth reaching the engine
     with ctx.connect() as cx:
         world = tables.load(cx)
-    try:
-        result = engine.evaluate(world, map, list(red), list(blue), bans=list(bans),
-                                 side=side)
-    except ValueError as error:
-        raise ToolError(str(error)) from error
+    result = engine.evaluate(world, map, list(red), list(blue), bans=list(bans), side=side)
     return result.rendered(), result.to_dict()
 
 
@@ -616,10 +623,7 @@ def evaluate(
 def reach_tool(ctx: Context, hero: str) -> Reply:   # _tool: inference.reach holds the bare name
     with ctx.connect() as cx:
         world = tables.load(cx)
-    try:
-        found = reach.search(world, hero)
-    except ValueError as error:
-        raise ToolError(str(error)) from error
+    found = reach.search(world, hero)
     where = "%s%s against %s" % (found["map"], " " + found["side"] if found["side"] else "",
                                  ", ".join(found["red"]) or "the likely six")
     if found["bans"] is None:
@@ -654,12 +658,9 @@ def board(
         weights: dict[str, Any] | None = None) -> Reply:
     with ctx.connect() as cx:
         world = tables.load(cx)
-    try:
-        pool, _ = engine.clamp_search(pool)
-        b = engine.board(world, map, list(red), list(blue), list(bans), side,
-                         pool_size=pool, weights=catalog.parse_weights(weights or {}))
-    except ValueError as error:
-        raise ToolError(str(error)) from error
+    pool, _ = engine.clamp_search(pool)
+    b = engine.board(world, map, list(red), list(blue), list(bans), side,
+                     pool_size=pool, weights=catalog.parse_weights(weights or {}))
     return b.rendered(), b.to_dict()
 
 
@@ -696,12 +697,9 @@ def strategies(ctx: Context) -> Reply:
 def tune_tool(      # _tool: inference.tune holds the bare name
         ctx: Context, id: str, field: str, value: object, reason: str,
         by: str = "claude-code-session") -> Reply:
-    try:
-        change = tune.tune(id, field, value, reason, by=str(by or "claude-code-session")[:40])
-        with ctx.connect() as cx:
-            catalog.mirror(cx, catalog.load())
-    except ValueError as error:                 # a TuneError is one
-        raise ToolError(str(error)) from error
+    change = tune.tune(id, field, value, reason, by=str(by or "claude-code-session")[:40])
+    with ctx.connect() as cx:
+        catalog.mirror(cx, catalog.load())
     return "tuned %s: %s %s -> %s\n%s" % (change["id"], change["field"], change["old"],
                                          change["new"], change["line"]), change
 
@@ -754,14 +752,11 @@ STRATEGY_FIELDS = {
 def add_strategy(
         ctx: Context, id: str, name: str, kind: str, body: str, reason: str,
         **fields: Any) -> Reply:
-    try:
-        category = fields.pop("category", "general")
-        fields.pop("kind", None)
-        added = tune.add(id, name, kind, body, fields, reason, category=category)
-        with ctx.connect() as cx:
-            catalog.mirror(cx, catalog.load())
-    except ValueError as error:                 # a TuneError is one
-        raise ToolError(str(error)) from error
+    category = fields.pop("category", "general")
+    fields.pop("kind", None)
+    added = tune.add(id, name, kind, body, fields, reason, category=category)
+    with ctx.connect() as cx:
+        catalog.mirror(cx, catalog.load())
     note = ("\nstored as a DRAFT: the solver ignores it until /strategy infers its frontmatter"
             if added["form"] == "draft" else "")
     return "added %s as %s/%s -> %s\n%s%s" % (
@@ -776,12 +771,9 @@ def add_strategy(
            **STRATEGY_FIELDS),
       ["id", "reason"])
 def infer_strategy(ctx: Context, id: str, reason: str, **fields: Any) -> Reply:
-    try:
-        done = tune.complete(id, fields, reason)
-        with ctx.connect() as cx:
-            catalog.mirror(cx, catalog.load())
-    except ValueError as error:                 # a TuneError is one
-        raise ToolError(str(error)) from error
+    done = tune.complete(id, fields, reason)
+    with ctx.connect() as cx:
+        catalog.mirror(cx, catalog.load())
     return "%s is now %s: %s\n%s" % (id, done["form"], ", ".join(
         "%s=%s" % kv for kv in done["set"].items()), done["line"]), done
 

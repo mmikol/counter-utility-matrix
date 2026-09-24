@@ -7,9 +7,9 @@ import json
 import sys
 from collections.abc import Callable
 
-from db import psql
+from db import Refusal, psql
 from db.mcp import tools
-from db.mcp.server import Server, ToolError, serve_http
+from db.mcp.server import Server, serve_http
 
 
 def _status(ctx: tools.Context) -> Callable[[], dict[str, object]]:
@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         arguments = json.loads(argv[2]) if len(argv) > 2 else {}
         try:
             text, _ = tools.run_tool(ctx, argv[1], **arguments)
-        except (ToolError, KeyError) as error:
+        except (Refusal, KeyError) as error:
             sys.exit("error: %s" % error)
         print(text)
         return 0

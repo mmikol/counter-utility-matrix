@@ -45,6 +45,14 @@ healthchecks, and `405` on a bare `GET /mcp`. The methods:
 `resources/read`, `resources/templates/list`, and an empty
 `prompts/list`. It logs to stderr, since stdout is the wire.
 
+A call the caller can fix - an unknown hero, a bad weight, SQL that
+Postgres rejects, an argument the tool does not take - raises
+`db.Refusal`: the reply is `isError` with the reason, and the audit line
+says refused. Anything else is the server's fault, a playbook that does
+not load included: the reply is `INTERNAL` (-32603) with the error's type
+and message, the traceback goes to stderr, and the audit line says
+crashed, which the sentry counts.
+
 ## From a shell
 
 ```bash

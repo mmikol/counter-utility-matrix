@@ -27,7 +27,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import psycopg
 from psycopg.rows import TupleRow
 
-from db import psql
+from db import Refusal, psql
 from db.mcp.server import LOCAL_HOSTS
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
@@ -203,7 +203,7 @@ def api_weight(payload: dict[str, Any]) -> Reply:
     from db.mcp import tools
     try:
         text, stored = tools.run_tool(tool_context(), "tune", **arguments)
-    except tools.ToolError as error:
+    except Refusal as error:
         return {"error": str(error)}, 400
     return {"line": text.split("\n")[0], "change": stored}, 200
 
