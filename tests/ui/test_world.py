@@ -193,7 +193,7 @@ def test_terrain_metrics_are_z_scores_across_the_maps_with_text(world, rows):
         assert sd > 0
         for m in read:
             assert m.terrain_z[f] == pytest.approx((raw[m.id] - mean) / sd, abs=1e-3)
-            assert compute.map_metrics(m)[f] == m.terrain_z[f]
+            assert compute.map_metrics(m, ban_count=0)[f] == m.terrain_z[f]
         zs = [m.terrain_z[f] for m in read]
         assert statistics.fmean(zs) == pytest.approx(0, abs=1e-3)
         assert statistics.pstdev(zs) == pytest.approx(1, abs=1e-2)
@@ -223,8 +223,8 @@ def test_a_maps_style_is_the_rates_lift_plus_the_terrains_lean(world):
     kings = world.map("King's Row")
     assert max(kings.terrain_lean, key=kings.terrain_lean.get) == "brawl"
     assert kings.style_top == max(kings.styles, key=lambda s: kings.styles[s][0])
-    assert compute.map_metrics(kings)["style_top"] == kings.style_top
-    assert compute.map_metrics(kings)["style_margin"] == kings.style_margin
+    assert compute.map_metrics(kings, ban_count=0)["style_top"] == kings.style_top
+    assert compute.map_metrics(kings, ban_count=0)["style_margin"] == kings.style_margin
 
 
 def test_the_terrain_and_the_style_are_the_same_on_every_load(world, db):
@@ -234,7 +234,8 @@ def test_the_terrain_and_the_style_are_the_same_on_every_load(world, db):
         other = again.maps[m.id]
         assert (m.terrain, m.terrain_z, m.terrain_lean, m.rate_lift, m.styles) == (
             other.terrain, other.terrain_z, other.terrain_lean, other.rate_lift, other.styles)
-        assert list(compute.map_metrics(m)) == list(compute.map_metrics(other))
+        assert (list(compute.map_metrics(m, ban_count=0))
+                == list(compute.map_metrics(other, ban_count=0)))
     before = {m.id: (dict(m.terrain_z), dict(m.terrain_lean)) for m in world.maps.values()}
     tables.map_terrain(world)
     assert before == {m.id: (dict(m.terrain_z), dict(m.terrain_lean)) for m in world.maps.values()}

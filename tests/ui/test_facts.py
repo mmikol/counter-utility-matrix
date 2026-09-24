@@ -72,7 +72,7 @@ def test_board_context_facts_warn_and_cite(world):
 def test_metrics_cover_the_registry_exactly(world):
     m = world.map("King's Row")
     ns = compute.namespace(world, m, [world.hero("Zarya"), world.hero("Pharah")],
-                           [world.hero("Ana"), world.hero("Reinhardt")])
+                           [world.hero("Ana"), world.hero("Reinhardt")], ban_count=0)
     team_keys = {k for k in ns["team"] if not k.startswith("_")}
     assert team_keys == set(compute.TEAM_METRICS)
     assert set(ns["matchup"]) == set(compute.MATCHUP_METRICS)
@@ -93,7 +93,7 @@ def test_metrics_cover_the_registry_exactly(world):
 
 
 def test_metrics_without_a_map_fall_back_honestly(world):
-    ns = compute.namespace(world, None, [], [world.hero("Ana")])
+    ns = compute.namespace(world, None, [], [world.hero("Ana")], ban_count=0)
     assert ns["map"]["known"] == 0 and ns["team"]["map_known"] == 0
     assert ns["team"]["map_win_mean"] == ns["team"]["win_mean"]
     assert ns["team"]["coverage_share"] == 0.0 and ns["matchup"]["chew_time_ours"] == 999.0
@@ -177,11 +177,11 @@ def test_a_map_without_text_reads_zero_for_every_terrain_metric(world):
     bare = [m for m in world.maps.values() if not m.terrain]
     assert bare
     for m in bare:
-        metrics = compute.map_metrics(m)
+        metrics = compute.map_metrics(m, ban_count=0)
         assert all(metrics[f] == 0.0 for f in model.TERRAIN_FEATURES)
         assert m.terrain_lean == {}
         assert {s: v[0] for s, v in m.styles.items()} == m.rate_lift    # the rates alone
-    none = compute.map_metrics(None)
+    none = compute.map_metrics(None, ban_count=0)
     assert all(none[f] == 0.0 for f in model.TERRAIN_FEATURES)
     fs = engine.generate(world, bare[0].name, [], [])
     assert fs.find("map.terrain_unread") and not fs.find("map.terrain")
@@ -224,14 +224,14 @@ def test_map_stages_counts_arenas_and_map_phases_counts_parts_of_a_route(world):
     a Hybrid map's two phases and an Escort map's three stretches count as
     map.phases and leave map.stages at 0."""
     for m in world.maps.values():
-        x = compute.map_metrics(m)
+        x = compute.map_metrics(m, ban_count=0)
         assert (x["stages"], x["phases"]) == (
             (0, len(m.stages)) if is_sided(m) else (len(m.stages), 0)), m.name
         assert (x["stages"] >= 3) == (m.mode in ("Control", "Flashpoint")), m.name
-    assert compute.map_metrics(world.map("Havana"))["phases"] == 3
-    assert compute.map_metrics(world.map("King's Row"))["phases"] == 2
-    assert compute.map_metrics(world.map("Dorado"))["phases"] == 0
-    none = compute.map_metrics(None)
+    assert compute.map_metrics(world.map("Havana"), ban_count=0)["phases"] == 3
+    assert compute.map_metrics(world.map("King's Row"), ban_count=0)["phases"] == 2
+    assert compute.map_metrics(world.map("Dorado"), ban_count=0)["phases"] == 0
+    none = compute.map_metrics(None, ban_count=0)
     assert (none["stages"], none["phases"]) == (0, 0)
     assert {"map.stages", "map.phases"} <= set(compute.registry())
     assert not {"map.stages", "map.phases"} & compute.TEXT_METRICS
@@ -303,8 +303,9 @@ def test_sides_exist_only_on_escort_and_hybrid(world):
     from ui.facts.draft import opposite
     kings, ilios = world.map("King's Row"), world.map("Ilios")
     assert is_sided(kings) and not is_sided(ilios)
-    assert map_metrics(kings, "attack")["side"] == "attack"
-    assert map_metrics(ilios, "attack")["side"] == "" and map_metrics(ilios)["sided"] == 0
+    assert map_metrics(kings, "attack", ban_count=0)["side"] == "attack"
+    assert map_metrics(ilios, "attack", ban_count=0)["side"] == ""
+    assert map_metrics(ilios, ban_count=0)["sided"] == 0
     assert opposite("attack") == "defense" and opposite("") == ""
     fs = engine.generate(world, "King's Row", ["Zarya"], ["Ana"], side="attack")
     assert fs.side == "attack"
@@ -408,19 +409,20 @@ def test_expected_picks_read_the_map_and_the_meta_and_no_strategy(world):
     from collections import Counter
     m = world.map("King's Row")
     zarya, sombra = world.hero("Zarya"), world.hero("Sombra")
-    six = compute.expected_picks(world, m, [zarya], [sombra])
+    six = compute.expected_picks(world, m, revealed=[zarya], banned=[sombra])
     assert six[0]["hero"] == "Zarya" and six[0]["locked"] and six[0]["why"] == "revealed"
     assert len(six) == TEAM_SIZE and "Sombra" not in [p["hero"] for p in six]
     assert Counter(p["role"] for p in six) == EXPECTED_SHAPE      # a two-two-two
     rest = [p for p in six if not p["locked"]]
     assert all(p["why"].startswith("picked in ") and "King's Row" in p["why"] for p in rest
                if p["rate"] is not None)
-    assert six == compute.expected_picks(world, m, [zarya], [sombra])      # deterministic
+    # deterministic
+    assert six == compute.expected_picks(world, m, revealed=[zarya], banned=[sombra])
     # the synergies pull: a partner already on the six is named in the reason
     heroes = [world.hero(p["hero"]) for p in six]
     paired = any(world.synergy(x.id, y.id) for x in heroes for y in heroes if x is not y)
     assert paired == any("pairs with" in p["why"] for p in rest)
-    anywhere = compute.expected_picks(world, None, [], [])
+    anywhere = compute.expected_picks(world, None)
     assert Counter(p["role"] for p in anywhere) == EXPECTED_SHAPE
     assert all("overall" in p["why"] for p in anywhere if p["rate"] is not None)
     # no strategy is read: nothing here takes a catalog

@@ -218,13 +218,13 @@ def _meta_facts(fs: FactSet, world: World) -> None:
                value=len(world.newer_patches), source="patches")
 
 
-def _ban_facts(fs: FactSet, world: World, bans: Sequence[Hero], red: Sequence[Hero],
+def _ban_facts(fs: FactSet, world: World, banned: Sequence[Hero], red: Sequence[Hero],
                blue: Sequence[Hero]) -> None:
     """What the bans took off the table, for both sides."""
     fs.add("bans", "match", "bans.count", "bans this match: %d of %d - %s"
-           % (len(bans), MAX_BANS, ", ".join(h.name for h in bans)),
-           value=[h.name for h in bans], source="derived:bans.count")
-    for h in bans:
+           % (len(banned), MAX_BANS, ", ".join(h.name for h in banned)),
+           value=[h.name for h in banned], source="derived:bans.count")
+    for h in banned:
         fs.add("bans", h.name, "bans.hero", "%s is banned this match - neither team"
                " can pick them" % h.name, value=h.name, source="derived:bans.hero")
         answered = [e.name for e in red if world.counters_of(e.id, h.id)]

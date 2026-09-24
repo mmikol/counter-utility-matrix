@@ -120,11 +120,11 @@ class Candidate:
 
 class Solver:
     def __init__(self, world: World, m: Map | None, red: Iterable[Hero],
-                 locked: Iterable[Hero], bans: Iterable[Hero] = (), side: str = "", *,
+                 locked: Iterable[Hero], banned: Iterable[Hero] = (), side: str = "", *,
                  catalog: list[Strategy], pool_size: int = 6) -> None:
         self.world, self.m, self.red = world, m, list(red)
         self.locked = list(locked)
-        self.banned = {h.id for h in bans}
+        self.banned = {h.id for h in banned}
         self.side = side
         self.catalog = catalog
         self.pool_size = pool_size
@@ -134,7 +134,8 @@ class Solver:
         # the red side's metrics do not change across candidates
         self.red_t = compute.team_metrics(world, self.red, m, ())
         self.static: Namespace = {"enemy": self.red_t,
-                                  "map": compute.map_metrics(m, side, len(self.banned)),
+                                  "map": compute.map_metrics(m, side,
+                                                             ban_count=len(self.banned)),
                                   "world": compute.world_metrics(world)}
         self.bounds: Bounds = {}             # heuristic id -> (min, max)
         self.considered = 0
@@ -330,7 +331,7 @@ class Solver:
         """
         section, key = spec
         if section == "map":
-            over = [compute.map_metrics(m, self.side).get(key)
+            over = [compute.map_metrics(m, self.side, ban_count=len(self.banned)).get(key)
                     for m in self.world.maps.values()]
             over = [float(v) for v in over if v is not None]
             return (min(over), max(over)) if over else (0.0, 0.0)
@@ -908,7 +909,7 @@ def legal_shapes(catalog: Iterable[Strategy],
 
 
 def evaluate_comp(world: World, m: Map | None, red: Sequence[Hero], heroes: Sequence[Hero],
-                  bans: Sequence[Hero] = (), side: str = "", *, catalog: list[Strategy],
+                  banned: Sequence[Hero] = (), side: str = "", *, catalog: list[Strategy],
                   pool_size: int = 6,
                   swept: tuple[Solver, int, list[Candidate]] | None = None,
                   ) -> tuple[Candidate, list[Candidate], int, Solver]:
@@ -916,7 +917,7 @@ def evaluate_comp(world: World, m: Map | None, red: Sequence[Hero], heroes: Sequ
     takes a (solver, field size, feasible) swept elsewhere - the same board's
     optimal search, which sweeps the same field."""
     if swept is None:
-        solver = Solver(world, m, red, [], bans, side, catalog=catalog,
+        solver = Solver(world, m, red, [], banned, side, catalog=catalog,
                         pool_size=pool_size)
         solver.freeze_bounds()                # the same reference scale as infer
         solver.considered, feasible = solver.sweep()

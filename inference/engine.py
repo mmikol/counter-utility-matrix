@@ -1129,7 +1129,7 @@ def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
     # red's likely six - the map and the meta alone, past the bans - is static
     # for the board; until red reveals a pick it is what blue's seat counters.
     # A Result like every other seat: its picks carry the reason each rests on
-    likely = compute.expected_picks(world, m, [], bans_h)
+    likely = compute.expected_picks(world, m, banned=bans_h)
     expected = Result("expected", m.name if m else None, [], [p["hero"] for p in likely], [],
                       catalog, bans, side, seat="red")
     expected.picks = [dict(p, evidence=[]) for p in likely]

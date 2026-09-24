@@ -266,7 +266,7 @@ prints them as the vocabulary a strategy may reference):
 
 `team_metrics(world, heroes, map, enemies)` computes a team's numbers
 (with `lean=True` for the solver, which skips the descriptive strings);
-`matchup_metrics(blue, red)`, `map_metrics(map, side)` and
+`matchup_metrics(blue, red)`, `map_metrics(map, side, ban_count=...)` and
 `world_metrics(world)` the rest; `namespace(...)` bundles them as the
 `team`, `enemy`, `matchup`, `map` and `world` sections a strategy's
 expression reads. `expected_picks` is red's likely six from the data

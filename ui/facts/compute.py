@@ -210,7 +210,7 @@ def _mean(values):
 SYNERGY_PULL = 2.0        # pick-rate points a hero gains per synergy partner already on the six
 
 
-def expected_picks(world, m, revealed=(), bans=(), shape=None):
+def expected_picks(world, m, *, revealed=(), banned=(), shape=None):
     """What the other side is likely to field, from the data alone - no
     strategy read: any picks given as revealed first, then slot by slot the
     hero the map's pick rates (the overall meta with no map set) and the
@@ -220,11 +220,11 @@ def expected_picks(world, m, revealed=(), bans=(), shape=None):
     so the six is static for the board. Each entry says what it rests on
     -> [{hero, role, rate, locked, why}]."""
     shape = dict(shape or EXPECTED_SHAPE)
-    revealed, banned = list(revealed), {h.id for h in bans}
+    revealed, banned_ids = list(revealed), {h.id for h in banned}
     chosen = list(revealed)
     for h in revealed:
         shape[h.role] = max(0, shape.get(h.role, 0) - 1)
-    taken = {h.id for h in revealed} | banned
+    taken = {h.id for h in revealed} | banned_ids
 
     def rate(h):
         r = h.map_pick(m.id) if m is not None else None
@@ -408,9 +408,9 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
         rate = h.ban if ban is None else ban            # this map's ban, else all-ranks
         map_avail *= 1.0 - (rate or 0) / 100.0
     t["map_availability"] = map_avail
-    banned = max(heroes, key=lambda h: h.ban or 0) if heroes else None
-    t["max_ban_rate"] = (banned.ban or 0) if banned else 0.0
-    t["max_ban_hero"] = banned.name if banned and banned.ban else ""
+    top_ban = max(heroes, key=lambda h: h.ban or 0) if heroes else None
+    t["max_ban_rate"] = (top_ban.ban or 0) if top_ban else 0.0
+    t["max_ban_hero"] = top_ban.name if top_ban and top_ban.ban else ""
     t["rank_sensitive_count"] = sum(1 for h in heroes if h.rank_spread >= RANK_SENSITIVE)
     t["trend_sum"] = sum(h.trend for h in heroes if h.trend is not None)
 
@@ -450,7 +450,7 @@ def team_metrics(world, heroes, m=None, enemies=(), lean=False):
     t["double_covered"] = sum(1 for v in answered.values() if len(v) >= 2)
     if enemies and heroes:
         t["banproof_coverage"] = sum(
-            1 for e in enemies if any(x != banned.name for x in answered[e.id]))
+            1 for e in enemies if any(x != top_ban.name for x in answered[e.id]))
     else:
         t["banproof_coverage"] = 0
     t["_answered"] = {} if lean else {e.name: answered[e.id] for e in enemies}
@@ -536,16 +536,16 @@ def stage_standouts(m, stage):
     return sorted(found, key=lambda fz: (-fz[1], fz[0]))[:STAGE_FEATURES]
 
 
-def map_metrics(m, side="", bans=0):
+def map_metrics(m, side="", *, ban_count):
     if m is None:
         return {"known": 0, "sided": 0, "side": "", "style_top": "",
-                "style_margin": 0, "mode": "", "stages": 0, "phases": 0, "bans": bans,
+                "style_margin": 0, "mode": "", "stages": 0, "phases": 0, "bans": ban_count,
                 **dict.fromkeys(TERRAIN_FEATURES, 0.0)}
     sided = 1 if is_sided(m) else 0
     return {"known": 1, "sided": sided, "side": side if sided else "",
             "style_top": m.style_top or "", "style_margin": m.style_margin,
             "mode": m.mode or "", "stages": len(arenas(m)),
-            "phases": len(phases(m)), "bans": bans,
+            "phases": len(phases(m)), "bans": ban_count,
             **{f: m.terrain_z[f] for f in TERRAIN_FEATURES}}
 
 
@@ -554,14 +554,14 @@ def world_metrics(world):
             "roster_size": len(world.heroes)}
 
 
-def namespace(world, m, red, blue, side="", bans=0):
+def namespace(world, m, red, blue, side="", *, ban_count):
     """The whole evaluation namespace for a board: {team, enemy, matchup,
     map, world} - `team` is blue's seat, `enemy` is red's, `side` blue's."""
     blue_t = team_metrics(world, blue, m, red)
     red_t = team_metrics(world, red, m, blue)
     return {"team": blue_t, "enemy": red_t,
             "matchup": matchup_metrics(blue_t, red_t),
-            "map": map_metrics(m, side, bans), "world": world_metrics(world)}
+            "map": map_metrics(m, side, ban_count=ban_count), "world": world_metrics(world)}
 
 
 # Metrics whose value is a name or a list, not a number: a heuristic may not

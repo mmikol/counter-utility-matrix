@@ -173,7 +173,7 @@ def _traced_board(monkeypatch, *, parallel, breaks_after=None, blue=("Ana",), re
     monkeypatch.setattr(engine, "_momentum", lambda *a, **kw: {"verdict": "-"})
     monkeypatch.setattr(engine, "_plan", lambda *a: "-")
     monkeypatch.setattr(engine, "legal_shapes", lambda catalog: [])
-    monkeypatch.setattr(engine.compute, "expected_picks", lambda *a: [])
+    monkeypatch.setattr(engine.compute, "expected_picks", lambda *a, **kw: [])
     engine.board(Fake(), None, list(red), list(blue), catalog=catalog.load(FIXTURE_PLAYBOOK))
     return trace
 
@@ -541,7 +541,7 @@ def test_blue_counters_the_likely_six_until_red_reveals_a_pick(world, monkeypatc
     from inference import engine
     monkeypatch.setattr(engine, "parallel_available", lambda catalog=None: False)
     m = world.map("King's Row")
-    likely = [p["hero"] for p in compute.expected_picks(world, m, [], [])]
+    likely = [p["hero"] for p in compute.expected_picks(world, m)]
     b = engine.board(world, "King's Row", [], ["Ana"])
     assert b.blue.red == likely and b.current.red == likely and b.fill.red == likely
     assert b.expected.blue == likely and b.expected.kind == "expected"
@@ -1104,3 +1104,25 @@ def test_a_rule_scales_by_the_metric_it_names(world, tmp_path):
     unsure = points("Paraíso", "fit-the-map-style")
     assert sure["confidence_raw"] > unsure["confidence_raw"]
     assert sure["weighted"] > unsure["weighted"] * 5
+
+
+@pytest.mark.invariant
+def test_a_board_confidence_reads_the_boards_own_ban_count(world, tmp_path):
+    """A confidence metric of the board is read over every map, and every map
+    reads it with this board's bans: map.bans is the count made in this match,
+    whatever map the population is drawn from."""
+    from inference import solver as solver_module
+    shutil.copytree(FIXTURE_PLAYBOOK, tmp_path, dirs_exist_ok=True)
+    (tmp_path / "scale-by-the-bans.md").write_text(
+        "---\nname: Pick into what the map rewards once the bans are in\nkind: heuristic\n"
+        "category: map\nmetric: team.style_fit\ndirection: maximize\nweight: 2.5\n"
+        "when: map.known == 1\nconfidence: map.bans\n---\n"
+        "# Pick into what the map rewards once the bans are in\n\n"
+        "The share of the six tagged with the style the map rewards, weighed by how "
+        "many bans are made.\n", encoding="utf-8")
+    playbook = catalog.load(str(tmp_path))
+    m, red, _, banned = world.resolve("King's Row", ["Zarya", "Pharah"], [],
+                                      ["Widowmaker", "Sombra"])
+    solver = solver_module.Solver(world, m, red, [], banned, "attack", catalog=playbook)
+    solver.freeze_bounds()
+    assert solver.bounds["scale-by-the-bans" + solver_module.CONFIDENCE_KEY] == (2.0, 2.0)
