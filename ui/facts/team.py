@@ -141,13 +141,16 @@ MetricValue = (
     int | float | str | list[str] | list[tuple[str, str, int]] | dict[str, int]
     | dict[str, list[str]])
 MetricBag = dict[str, MetricValue]
+# the types a numeric metric holds: one tuple, built once, since the solver
+# tests a value against it for every heuristic of every candidate
+NUMBER_TYPES = (int, float)
 
 
 def number(value: MetricValue) -> float:
     """A metric read as a number, an int staying an int. The catalog keeps
     the text metrics out of every place a number is read, so a name or a
     list here is a caller's error."""
-    if isinstance(value, int | float):
+    if isinstance(value, NUMBER_TYPES):
         return value
     raise TypeError("a metric read as a number holds %r" % (value,))
 
@@ -155,7 +158,7 @@ def number(value: MetricValue) -> float:
 def numbers(bag: MetricBag) -> dict[str, float]:
     """The bag's numeric metrics, each the value itself: what a reader that
     words many of them reads them from."""
-    return {k: v for k, v in bag.items() if isinstance(v, int | float)}
+    return {k: v for k, v in bag.items() if isinstance(v, NUMBER_TYPES)}
 
 
 def text(value: MetricValue) -> str:

@@ -37,7 +37,7 @@ from inference.expr import Expr, Scope, Value, scope
 from ui.facts import compute
 from ui.facts.draft import TEAM_SIZE
 from ui.facts.model import ROLES, Hero, Map, World
-from ui.facts.team import MetricBag, number, team_metrics
+from ui.facts.team import NUMBER_TYPES, MetricBag, MetricValue, number, team_metrics
 
 REFERENCE_SIZE = 1200
 PARTNER_POINTS = 0.5              # a locked partner's worth when ranking a pool
@@ -75,6 +75,16 @@ def _split_key(key: str | None) -> tuple[str, str]:
     """A dotted metric key -> (namespace, key)."""
     section, _, name = (key or "").partition(".")
     return section, name
+
+
+def _not_a_number(value: MetricValue | None) -> float:
+    """A metric read as a number that holds none: 0 when it is unset or empty,
+    as the score has always read one. A name or a list is refused - the
+    catalog keeps text metrics out of every place the solver reads a number,
+    and a number itself never reaches here, so the loop pays no call for it."""
+    if value:
+        raise TypeError("a metric read as a number holds %r" % (value,))
+    return 0.0
 
 
 def _amount(value: Value) -> float:
@@ -243,7 +253,7 @@ class Solver:
                     gate = held[slot] = when is None or bool(when.evaluate(sc))
             if gate:
                 value = ns.get(section, _EMPTY).get(key)
-                keep(float(number(value)) if value else 0.0)
+                keep(float(value) if isinstance(value, NUMBER_TYPES) else _not_a_number(value))
             else:
                 keep(None)
         cand.raw = raw
@@ -253,7 +263,8 @@ class Solver:
                 confidence.append(None)
                 continue
             value = ns.get(spec[0], _EMPTY).get(spec[1])
-            confidence.append(float(number(value)) if value else 0.0)
+            confidence.append(float(value) if isinstance(value, NUMBER_TYPES)
+                              else _not_a_number(value))
         cand.confidence = confidence
         cand.tiebreak = number(ns["team"]["map_win_mean"])
         return cand
