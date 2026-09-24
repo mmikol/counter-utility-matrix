@@ -4,10 +4,10 @@ the tools the UI and inference layers expose through it: the facts, the
 solver and the playbook. Every write to Postgres or the playbook runs under
 one of them, the sentry's quarantine rename aside.
 
-    python -m db.mcp                 serve over stdio (what .mcp.json launches)
-    python -m db.mcp --http H:PORT   serve over HTTP (the data container)
-    python -m db.mcp list            print the tools
-    python -m db.mcp call pull_maps  run one tool from the shell
+    .venv/bin/python -m db.mcp                  serve over stdio (what .mcp.json launches)
+    python -m db.mcp --http H:PORT              serve over HTTP (the data container)
+    .venv/bin/python -m db.mcp list             print the tools
+    .venv/bin/python -m db.mcp call pull_maps   run one tool from the shell
 
     server       the protocol: JSON-RPC answered from a server's tools and
                  resources, whichever transport carries it

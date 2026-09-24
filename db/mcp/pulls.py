@@ -4,8 +4,9 @@ domain, then the strategies mirror and the whole sync.
 Every pull_* tool is pull -> clean -> store for one source and domain: that
 domain's run() in its source package under db/data/, handed a PullContext
 over the source's page cache. The pulls are registered in dependency order,
-and sync_all runs them in it. A session, the refresher or a shell (`python
--m db.mcp call`) decides what to pull and when, and reads the summary back.
+and sync_all runs them in it. A session, the refresher or a shell
+(`.venv/bin/python -m db.mcp call`) decides what to pull and when, and reads
+the summary back.
 """
 
 import functools

@@ -1,4 +1,4 @@
-# python orchestrator.py  ->  one container per layer, and a guard:
+# .venv/bin/python orchestrator.py  ->  one container per layer, and a guard:
 #
 #   db          PostgreSQL
 #   data        DATA LAYER: builds the database from the bind-mounted page

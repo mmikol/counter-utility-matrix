@@ -60,7 +60,7 @@ keeps it current.
   `tests/fixtures/playbook` (`COUNTRIX_STRATEGIES` selects it). A tune of
   the live playbook never stales that set; a set proved under the live
   playbook holds only until the next tune. Record it with
-  `python -m scripts.optimal`. The gate test then solves with
+  `.venv/bin/python -m scripts.optimal`. The gate test then solves with
   `catalog=catalog.load(FIXTURE_PLAYBOOK)`, compares the fixture's digest
   with `catalog.playbook_digest(FIXTURE_PLAYBOOK)` and drops its skip;
   `OPTIMAL_STALE_BANNED` and `read_proofs`' `stale_banned` filter go, and

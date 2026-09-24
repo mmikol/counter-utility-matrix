@@ -83,8 +83,8 @@ or the user points at, and leave a report.
 6. **Security posture.** `docs/security.md` lists the measures; check
    that what it describes is still what the code does (the allowlist in
    `orchestrator.py`, the guards in `db/mcp/http.py`, the `query` tool,
-   the sentry's patterns, the compose hardening). `python -m db.sentry
-   --once` must exit 0 on a clean tree.
+   the sentry's patterns, the compose hardening).
+   `.venv/bin/python -m db.sentry --once` must exit 0 on a clean tree.
 
 7. **The backlog is current.** `pm/backlog.md` is the list of what is
    worth doing next, ordered by payoff over blast radius. A run moves an

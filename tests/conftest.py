@@ -7,7 +7,7 @@ Two kinds of test:
 
 A unit test that needs a World takes synthetic_world, built by hand in
 tests/synthetic.py. The second kind defaults to the repo's own build at
-db/psql/cluster, the database `python -m db.mcp call db_rebuild` produces,
+db/psql/cluster, the database `.venv/bin/python -m db.mcp call db_rebuild` produces,
 and skips itself when it is absent. COUNTRIX_LOCAL_SERVER or DATABASE_URL
 override the target; COUNTRIX_NO_DATABASE=1 runs the suite with no database,
 as CI does.
@@ -46,7 +46,7 @@ def dsn(db):
 def db():
     dsn = _dsn()
     if not dsn:
-        pytest.skip("no database: run `python -m db.mcp call db_rebuild` first")
+        pytest.skip("no database: run `.venv/bin/python -m db.mcp call db_rebuild` first")
     import psycopg
 
     try:
@@ -56,7 +56,7 @@ def db():
     if connection.execute(
         "SELECT count(*) FROM pg_tables WHERE schemaname='public'"
     ).fetchone()[0] == 0:
-        pytest.skip("database is empty: run `python -m db.mcp call db_rebuild`")
+        pytest.skip("database is empty: run `.venv/bin/python -m db.mcp call db_rebuild`")
     yield connection
     connection.close()
 

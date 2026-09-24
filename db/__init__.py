@@ -20,9 +20,9 @@ inference.derive inside a run the door started.
                   embedded cluster a local build creates (gitignored)
     mcp/          the MCP server and its tools - the one door to all three
                   layers, for a session, the refresher, Docker's entrypoint
-                  and the shell (`python -m db.mcp call <tool>`) alike. It
-                  gates every write and every pull; a read goes straight to
-                  Postgres over db.psql.default_dsn()
+                  and the shell (`.venv/bin/python -m db.mcp call <tool>`)
+                  alike. It gates every write and every pull; a read goes
+                  straight to Postgres over db.psql.default_dsn()
     refresh       the daily refresh
     sentry        the guard: the playbook, the free text in the database, the door
     web           what the three HTTP servers share: the Host-and-Origin

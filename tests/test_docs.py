@@ -323,7 +323,7 @@ def test_the_tool_reference_is_current(copy_of):
     tools.write_tool_docs(fresh)
     with open(fresh, encoding="utf-8") as handle:
         assert _section(handle.read(), "tools") == _section(committed, "tools"), \
-            "docs/mcp.md is behind the tools: run `python -m db.mcp call db_docs`"
+            "docs/mcp.md is behind the tools: run `.venv/bin/python -m db.mcp call db_docs`"
 
 
 # --- the generated sections ------------------------------------------------------------------
@@ -334,8 +334,9 @@ def test_the_catalog_document_matches_the_strategy_files(copy_of):
     fresh = copy_of("docs/inference.md")
     catalog.write_docs(catalog.load(), fresh)
     with open(fresh, encoding="utf-8") as handle:
-        assert _section(handle.read(), "catalog") == _section(committed, "catalog"), \
-            "docs/inference.md is behind inference/strategies/: run `python -m db.mcp call db_docs`"
+        assert _section(handle.read(), "catalog") == _section(committed, "catalog"), (
+            "docs/inference.md is behind inference/strategies/: run"
+            " `.venv/bin/python -m db.mcp call db_docs`")
 
 
 @pytest.mark.invariant
@@ -346,10 +347,12 @@ def test_the_schema_sections_match_the_live_database(db, copy_of):
     schema.generate_docs(db, fresh)
     with open(fresh, encoding="utf-8") as handle:
         text = handle.read()
-    assert _section(text, "erd") == _section(committed, "erd"), \
-        "docs/db.md's ER diagrams are behind the schema: run `python -m db.mcp call db_docs`"
-    assert _section(text, "dictionary") == _section(committed, "dictionary"), \
-        "docs/db.md's data dictionary is behind the database: run `python -m db.mcp call db_docs`"
+    assert _section(text, "erd") == _section(committed, "erd"), (
+        "docs/db.md's ER diagrams are behind the schema: run"
+        " `.venv/bin/python -m db.mcp call db_docs`")
+    assert _section(text, "dictionary") == _section(committed, "dictionary"), (
+        "docs/db.md's data dictionary is behind the database: run"
+        " `.venv/bin/python -m db.mcp call db_docs`")
 
 
 def test_a_tables_prose_is_the_comment_block_directly_above_it():

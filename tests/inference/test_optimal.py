@@ -8,8 +8,9 @@ re-solves each and checks the solver still reaches it.
 
 It is the regression gate on the search: a change that quietly stops finding a
 two-swap, or narrows the pool, or breaks a constraint, shows up here as a board
-that used to be exact and is not. Regenerate with `python -m scripts.optimal` after
-a deliberate change to the objective, and say in the commit why every number moved.
+that used to be exact and is not. Regenerate with
+`.venv/bin/python -m scripts.optimal` after a deliberate change to the objective,
+and say in the commit why every number moved.
 The recorder's own choices - which proofs it takes and which it holds out - are
 tested here too, on rows written for the test.
 """
