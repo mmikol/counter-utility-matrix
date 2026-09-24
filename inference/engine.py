@@ -30,7 +30,9 @@ from inference.solver import (
     Bounds,
     Candidate,
     Contribution,
+    Solved,
     Solver,
+    Swept,
     Tally,
     evaluate_comp,
     legal_shapes,
@@ -44,10 +46,6 @@ from ui.facts.team import team_metrics, text
 # A record of the payload as JSON: a pick, an alternative, the momentum, a
 # result or a board as to_dict() serves it.
 Payload = dict[str, Any]
-# what a board's search hands on: the solver and its ranked winners, or the
-# solver, the field's size and every feasible six
-Solved = tuple[Solver, list[Candidate]]
-Swept = tuple[Solver, int, list[Candidate]]
 # a candidate as the pool ships it: hero ids, score, tie-break
 Verdict = tuple[tuple[int, ...], float, float]
 
@@ -355,12 +353,10 @@ def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
         raise Refusal("more than %d %s picks" % (TEAM_SIZE, seat))
     result = Result("infer", m.name if m else None, [h.name for h in red_h], [],
                     [h.name for h in blue_h], catalog, [h.name for h in bans_h], side, seat)
-    if solved is not None:
-        solver, ranked = solved
-    else:
-        solver = Solver(world, m, red_h, blue_h, bans_h, side, catalog=catalog,
-                        pool_size=pool_size)
-        ranked = solver.solve(top=max(top, 1) + 1)
+    if solved is None:
+        solved = Solver(world, m, red_h, blue_h, bans_h, side, catalog=catalog,
+                        pool_size=pool_size).solve(top=max(top, 1) + 1)
+    solver, ranked = solved
     if not ranked:
         raise Refusal("no composition satisfies the limits around the"
                          " locked %s picks - relax a constraint in inference/strategies/"
@@ -394,14 +390,13 @@ def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
     result = Result("evaluate", m.name if m else None, [h.name for h in red_h],
                     [h.name for h in blue_h], [], catalog, [h.name for h in bans_h], side,
                     seat)
-    target, field, rank, solver = evaluate_comp(world, m, red_h, blue_h, bans_h, side,
-                                                catalog=catalog, pool_size=pool_size,
-                                                swept=swept)
+    evaluated = evaluate_comp(world, m, red_h, blue_h, bans_h, side, catalog=catalog,
+                              pool_size=pool_size, swept=swept)
     fs = _board_facts(world, result, side)
-    _fill(result, target, fs, solver)
-    result.rank = rank
+    _fill(result, evaluated.target, fs, evaluated.solver)
+    result.rank = evaluated.rank
     result.alternatives = [{"blue": _order(c.heroes), "score": round(c.score, 3)}
-                           for c in field[:3]]
+                           for c in evaluated.field[:3]]
     result.seconds = time.time() - started
     # the board's best known six is the 100, not this comp's own best rival: a
     # beaten six must not read 100 because nothing it was compared against beat it
@@ -973,8 +968,8 @@ def _sweep(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | N
     world = _world(token, data)
     solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
     solver.adopt_bounds(bounds, standing)
-    size, feasible = solver.sweep(index, count)
-    return size, [_verdict(c) for c in feasible]
+    swept = solver.sweep(index, count)
+    return swept.size, [_verdict(c) for c in swept.feasible]
 
 
 def _rank(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
@@ -1059,19 +1054,19 @@ class _Split:
         return solver
 
     def solved(self) -> Solved:
-        """(solver, ranked), as Solver.solve() would have returned them."""
+        """The Solved that Solver.solve() would have returned."""
         if self.tail is None:
             raise RuntimeError("solved() follows merge()")
         winners, refined = self.tail.result()
         solver = self._solver()
         solver.considered = self.size + refined
-        return solver, [solver.hydrate(_revive(self.world, v)) for v in winners]
+        return Solved(solver, [solver.hydrate(_revive(self.world, v)) for v in winners])
 
     def swept(self) -> Swept:
-        """(solver, field size, every feasible candidate), as Solver.sweep()
-        would have left them: what a six is ranked against."""
-        return (self._solver(), self.size,
-                [_revive(self.world, v) for v in self.verdicts])
+        """The Swept of the whole field, as one Solver.sweep() would have left
+        it: what a six is ranked against."""
+        return Swept(self._solver(), self.size,
+                     [_revive(self.world, v) for v in self.verdicts])
 
 
 COUNTERED_POOL = 4          # a what-if: a smaller field is enough

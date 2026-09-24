@@ -1013,7 +1013,7 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
         paired.synergies = {frozenset((a.id, b.id)): (1.0, "scratch")}
         paired.partners = {a.id: {b.id: (1.0, "scratch")}, b.id: {a.id: (1.0, "scratch")}}
         solver = solver_on(paired)
-        top = solver.solve(top=1)[0]
+        top = solver.solve(top=1).ranked[0]
         pooled = {h.id for pool in solver.pools().values() for h in pool}
         assert a.id not in pooled and b.id not in pooled      # the sweep never saw either
         assert {a.name, b.name, "Reinhardt"} <= set(top.names) and "Mercy" not in top.names
@@ -1024,7 +1024,7 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
         # because a one-slot climb meets each partner alone and neither pays alone.
         single = solver_on(paired)
         single._pairs = list                   # the pair step off
-        pair_off = single.solve(top=1)[0]
+        pair_off = single.solve(top=1).ranked[0]
         assert {a.name, b.name} <= set(pair_off.names)
 
         # a pair outside the pool is unreachable only when all three are off: the
@@ -1033,7 +1033,7 @@ def test_partners_that_only_pay_together_are_brought_in_together(world, tmp_path
         neither._pairs = list                  # the pair step off
         neither._two_swap = lambda leader, roster, known: leader
         neither._restarts = lambda leader, roster, known, n=0: leader
-        short = neither.solve(top=1)[0]
+        short = neither.solve(top=1).ranked[0]
         assert not {a.name, b.name} & set(short.names) and short.score < top.score
 
 

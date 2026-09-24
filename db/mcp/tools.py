@@ -595,8 +595,7 @@ def _compact(result: engine.Result) -> Reply:
     board, and the largest terms."""
     full = result.to_dict()
     terms = full["contributions"]
-    silent = sorted(c["id"] for c in terms
-                    if c["kind"] == "heuristic" and c["applies"] and not c["spread"])
+    silent = sorted(c["id"] for c in terms if c.get("spread") is False)   # applying heuristics
     idle = sum(1 for c in terms if not c["applies"])
     largest = sorted((c for c in terms if c["weighted"]),
                      key=lambda c: (-abs(c["weighted"]), c["id"]))[:COMPACT_TERMS]

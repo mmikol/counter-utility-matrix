@@ -30,7 +30,7 @@ import heapq
 import itertools
 import random
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import Any
+from typing import Literal, NamedTuple, NotRequired, TypedDict
 
 from inference.catalog import BOARD_SECTIONS, Strategy
 from inference.expr import Expr, Scope, Value, scope
@@ -57,13 +57,11 @@ SHAPE_KEYS = {"team.tanks", "team.damage", "team.supports", "team.size",
 STATIC_SECTIONS = BOARD_SECTIONS
 
 # The shapes the search passes around. A namespace is the metric bags by
-# section; a contribution's keys vary with its strategy's form, and it is
-# the payload's JSON as score() builds it.
+# section.
 Shape = tuple[int, int, int]                    # tanks, damage, supports
 Bounds = dict[str, tuple[float, float]]         # id, or id + CONFIDENCE_KEY -> low, high
 Tally = dict[int, list[int]]                    # hero id -> [summed millionths, sixes]
 Namespace = dict[str, MetricBag]
-Contribution = dict[str, Any]
 # one heuristic's frozen scale for the scoring loop: the strategy, its low and
 # spread, weight, minimise, need, and its confidence metric's bounds
 Norm = tuple[Strategy, float, float | None, float, bool, bool, tuple[float, float] | None]
@@ -92,6 +90,30 @@ def _amount(value: Value) -> float:
     if isinstance(value, (int, float, str)):          # a bool is an int
         return float(value)
     raise TypeError("a bonus or penalty reads a number, got %r" % (value,))
+
+
+class Contribution(TypedDict):
+    """One strategy's term in a six's score: the `contributions` array of the
+    public payload. Every term carries the required keys; the rest belong to
+    the form that has them, and no term is padded with the others."""
+    id: str
+    kind: Literal["constraint", "heuristic"]
+    form: Literal["limit", "heuristic", "scored"]
+    applies: bool
+    weighted: float
+    metric: str | None                 # a heuristic's metric, a constraint's expressions
+    ok: NotRequired[bool]              # a limit: whether its require holds
+    raw: NotRequired[float | None]     # a heuristic
+    norm: NotRequired[float]
+    when: NotRequired[str | None]      # a heuristic, and a scored constraint
+    spread: NotRequired[bool]          # an applying heuristic
+    need: NotRequired[bool]
+    confidence: NotRequired[str | None]
+    confidence_raw: NotRequired[float | None]
+    bonus: NotRequired[float]          # a scored constraint
+    penalty: NotRequired[float]
+    fact: NotRequired[str]             # engine._fill, where a board fact states the metric
+    text: NotRequired[str]
 
 
 class Candidate:
@@ -125,6 +147,27 @@ class Candidate:
     @property
     def names(self) -> list[str]:
         return [h.name for h in self.heroes]
+
+
+class Solved(NamedTuple):
+    """A board's search: the solver that ran it and its ranked winners, hydrated."""
+    solver: "Solver"
+    ranked: list[Candidate]
+
+
+class Swept(NamedTuple):
+    """A board's field: the whole enumeration's size and one slice's feasible sixes."""
+    solver: "Solver"
+    size: int
+    feasible: list[Candidate]
+
+
+class Evaluated(NamedTuple):
+    """A full six scored and ranked against the refined field's best five, hydrated."""
+    target: Candidate
+    field: list[Candidate]
+    rank: int
+    solver: "Solver"
 
 
 class Solver:
@@ -508,10 +551,8 @@ class Solver:
         weight, and entering the guarded state never pays. Needs written on
         one guard are scaled to sum to NEED_BUDGET at most.
 
-        With `detail`, every contribution carries id, kind, form, applies,
-        weighted and metric; the rest (ok, raw, norm, when, spread, need,
-        confidence) belong to the form that has them, so a reader asks for
-        those with .get()."""
+        With `detail`, every term is a Contribution: its optional keys belong
+        to the form that has them, so a reader asks for those with .get()."""
         total = 0.0
         contributions: list[Contribution] = []
         sc = cand.scope
@@ -661,12 +702,12 @@ class Solver:
 
     # --- the search -------------------------------------------------------------------
 
-    def sweep(self, index: int = 0, count: int = 1) -> tuple[int, list[Candidate]]:
+    def sweep(self, index: int = 0, count: int = 1) -> Swept:
         """Every `count`-th candidate of the enumeration, from `index`:
         prepared, scored and slimmed, so a search of thousands holds only
-        verdicts. -> (the whole field's size, the feasible ones of this
-        slice). The slices of one field partition it, so any split of the
-        work reaches the same set."""
+        verdicts. -> Swept: this solver, the whole field's size and the
+        feasible ones of this slice. The slices of one field partition it, so
+        any split of the work reaches the same set."""
         feasible: list[Candidate] = []
         size = 0
         for heroes in self.legal_sixes():
@@ -675,7 +716,7 @@ class Solver:
                 if not cand.violations:
                     feasible.append(self.slim(self.score(cand, detail=False)))
             size += 1
-        return size, feasible
+        return Swept(self, size, feasible)
 
     def rank(self, feasible: list[Candidate], top: int = 5,
              refine: bool = True) -> list[Candidate]:
@@ -689,11 +730,12 @@ class Solver:
             feasible = self.refine(feasible)
         return [self.hydrate(c) for c in feasible[:top]]
 
-    def solve(self, top: int = 5, refine: bool = True) -> list[Candidate]:
+    def solve(self, top: int = 5, refine: bool = True) -> Solved:
         """The best sixes, in this process."""
         self.freeze_bounds()
-        self.considered, feasible = self.sweep()
-        return self.rank(feasible, top, refine)
+        swept = self.sweep()
+        self.considered = swept.size
+        return Solved(self, self.rank(swept.feasible, top, refine))
 
     @staticmethod
     def _rank_key(c: Candidate) -> tuple[float, float, list[str]]:
@@ -920,24 +962,21 @@ def legal_shapes(catalog: Iterable[Strategy],
 
 def evaluate_comp(world: World, m: Map | None, red: Sequence[Hero], heroes: Sequence[Hero],
                   banned: Sequence[Hero] = (), side: str = "", *, catalog: list[Strategy],
-                  pool_size: int = 6,
-                  swept: tuple[Solver, int, list[Candidate]] | None = None,
-                  ) -> tuple[Candidate, list[Candidate], int, Solver]:
+                  pool_size: int = 6, swept: Swept | None = None) -> Evaluated:
     """Score one full six against the field the solver would search. `swept`
-    takes a (solver, field size, feasible) swept elsewhere - the same board's
-    optimal search, which sweeps the same field."""
+    takes a Swept from elsewhere - the same board's optimal search, which
+    sweeps the same field."""
     if swept is None:
         solver = Solver(world, m, red, [], banned, side, catalog=catalog,
                         pool_size=pool_size)
         solver.freeze_bounds()                # the same reference scale as infer
-        solver.considered, feasible = solver.sweep()
-    else:
-        solver, size, feasible = swept
-        solver.considered = size
+        swept = solver.sweep()
+    solver = swept.solver
+    solver.considered = swept.size
     target = solver.score(solver.prepare(Candidate(heroes)))
     # rank against the field the search actually ends on. Ranking against the raw
     # sweep alone called a six first that the refinement had already beaten, so a
     # comp and a strictly better one both read rank 1.
-    feasible = solver.refine(sorted(feasible, key=Solver._rank_key))
+    feasible = solver.refine(sorted(swept.feasible, key=Solver._rank_key))
     rank = 1 + sum(1 for c in feasible if c.score > target.score + 1e-9)
-    return target, [solver.hydrate(c) for c in feasible[:5]], rank, solver
+    return Evaluated(target, [solver.hydrate(c) for c in feasible[:5]], rank, solver)
