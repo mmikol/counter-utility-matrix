@@ -9,13 +9,13 @@ loads ahead of release. kits/kit_store.py writes the kits. Runs after blizzard.h
 which owns the hero, ability and perk rows this fills in.
 """
 
-import re
 from collections.abc import Mapping
 
 import psycopg
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
+from db.data.names import slug
 from db.data.wiki import WIKI, cargo_query, fetch_articles
 from db.data.wiki.kits import kit_store
 from db.data.wiki.kits.hero_articles import Supplement, parse_announcement, supplement_kits
@@ -59,7 +59,6 @@ def _announce_heroes(
                 hero_name, upcoming.role, upcoming.subrole))
             continue
         subrole_id, role_id = row
-        slug = re.sub(r"[^a-z0-9]+", "-", hero_name.lower()).strip("-")
         cursor.execute(
             "INSERT INTO heroes (slug, name, role_id, subrole_id, health, status,"
             " release_date, source_id) VALUES (%s, %s, %s, %s, %s, 'announced', %s, %s)"
@@ -67,8 +66,8 @@ def _announce_heroes(
             " health = coalesce(EXCLUDED.health, heroes.health), cao = now()"
             " RETURNING hero_id",
             (
-                slug, hero_name, role_id, subrole_id, upcoming.health, upcoming.release_date,
-                source_id))
+                slug(hero_name), hero_name, role_id, subrole_id, upcoming.health,
+                upcoming.release_date, source_id))
         hero_ids[hero_name.lower()] = psql.scalar(cursor)
         stored.append(hero_name)
         pull.log("announced hero stored: %s (%s, %s%s)" % (

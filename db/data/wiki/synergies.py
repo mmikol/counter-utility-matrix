@@ -22,7 +22,7 @@ import psycopg
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
-from db.data.names import index, name_key
+from db.data.names import hero_key, index, name_key
 from db.data.wiki import WIKI, WikiError, fetch_articles, markup
 
 # --- extract: markup -> Python ---------------------------------------------
@@ -63,8 +63,6 @@ NO_SYNERGY_RE = re.compile(
     r"|\bstruggles?\b|\bsynergi[sz]ing\b[^.]*\bdifficult"
     r"|\bnot (?:the best|a good) (?:pair|match)|\bdon't really mix"
     r"|\bdo not share\b|\brarely interact|\b(?:low|weak\w*) (?:synerg|pairing)", re.I)
-# A hero the wiki's older rows still link under a former name.
-RENAMED = {"mccree": "cassidy"}
 
 
 def synergy_section(text: str) -> str:
@@ -234,8 +232,7 @@ def pair_up(claims_by_hero: Mapping[str, Sequence[Row]],
     for hero in sorted(claims_by_hero):
         hero_id = hero_ids[name_key(hero)]
         for teammate, advice in claims_by_hero[hero]:
-            key = name_key(teammate)
-            other_id = hero_ids.get(RENAMED.get(key, key))
+            other_id = hero_ids.get(hero_key(teammate))
             if other_id is None:
                 unmatched.append("%s: %s" % (hero, teammate))
             elif other_id != hero_id:

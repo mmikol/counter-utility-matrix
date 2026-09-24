@@ -4,7 +4,7 @@ once already."""
 
 import pytest
 
-from db.data.names import name_key
+from db.data.names import hero_key, name_key, slug
 from db.data.wiki import WikiError
 from db.data.wiki.kits.measurements import parse_measurements
 from db.data.wiki.maps import parse_phases, parse_stages, parse_stretches, stages_of
@@ -86,6 +86,20 @@ def test_name_key_reconciles_source_spellings():
     assert name_key("D.Va") == name_key("DVa")
     assert name_key("Soldier: 76") == name_key("soldier-76")
     assert name_key("King's Row") == name_key("Kings Row")
+
+
+@pytest.mark.parametrize(("name", "expected"), [
+    ("Lúcio", "lucio"), ("D.Va", "dva"), ("D.Mon", "dmon"), ("Soldier: 76", "soldier-76"),
+    ("Torbjörn", "torbjorn"), ("Jetpack Cat", "jetpack-cat"), ("Wrecking Ball", "wrecking-ball")])
+def test_a_slug_is_the_name_as_blizzards_links_write_it(name, expected):
+    # an announced hero's row upserts on its slug; one that differs from the
+    # slug Blizzard later lists misses ON CONFLICT and collides on the name
+    assert slug(name) == expected
+
+
+def test_a_renamed_hero_keys_as_its_current_name():
+    assert hero_key("McCree") == name_key("Cassidy")
+    assert hero_key("D.Va") == "dva"
 
 
 # --- map stages out of article wikitext ----------------------------------

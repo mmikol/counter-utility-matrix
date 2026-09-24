@@ -23,7 +23,6 @@ reloaded wholesale: one row means countered_by_id answers hero_id.
 """
 
 import re
-import unicodedata
 from collections.abc import Mapping
 from typing import NamedTuple
 
@@ -31,7 +30,7 @@ import psycopg
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
-from db.data.names import index, name_key
+from db.data.names import hero_key, index, name_key, unaccented
 from db.data.wiki import WIKI, WikiError, fetch_articles, synergies
 
 # --- extract: markup -> Python ---------------------------------------------
@@ -290,7 +289,7 @@ def prose(cell: str) -> str:
 def _aliases(hero: str) -> list[str]:
     """What the prose may call a hero, longest first: its name, that name without
     accents and without punctuation, its nicknames."""
-    plain = "".join(c for c in unicodedata.normalize("NFKD", hero) if not unicodedata.combining(c))
+    plain = unaccented(hero)
     names = {hero, plain, "".join(c for c in plain if c.isalnum() or c in " -")}
     return sorted(names | set(NICKNAMES.get(name_key(hero), ())), key=len, reverse=True)
 
@@ -402,7 +401,7 @@ def parse_matchups(text: str, hero: str,
     unknown = Known(name=None, pronoun=None)
     readings = []
     for row in synergies.section_rows(text, synergies.MATCHUP):
-        key = synergies.RENAMED.get(name_key(row.hero), name_key(row.hero))
+        key = hero_key(row.hero)
         if key == name_key(hero):
             continue
         enemy = known.get(key, unknown)
@@ -427,8 +426,7 @@ def combine(readings_by_hero: Mapping[str, list[tuple[str, Reading]]],
     for hero in sorted(readings_by_hero):
         hero_id = hero_ids[name_key(hero)]
         for other, reading in readings_by_hero[hero]:
-            key = name_key(other)
-            other_id = hero_ids.get(synergies.RENAMED.get(key, key))
+            other_id = hero_ids.get(hero_key(other))
             if other_id is None:
                 unmatched.append("%s: %s" % (hero, other))
             elif other_id != hero_id and reading.verdict:
