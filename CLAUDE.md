@@ -40,7 +40,7 @@ true}'` refetches everything from the network, minutes at the polite pace.
 
 Tests marked `invariant` need the database and skip without one, through
 the `db` fixture. The suite targets `db/psql/cluster` when that
-folder exists and `DATABASE_URL` is unset; `DATABASE_URL` or
+cluster is built and `DATABASE_URL` is unset; `DATABASE_URL` or
 `./docker-db <command>` points it at another Postgres. CI sets no
 variable: it has no cluster and no pgserver.
 

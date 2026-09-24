@@ -82,11 +82,12 @@ def test_service_infers_evaluates_and_lists(db):
     db.rollback()
 
 
-@pytest.mark.invariant                    # default_dsn() touches the embedded cluster
-def test_health_reports_the_catalog_and_the_database():
+@pytest.mark.invariant
+def test_health_reports_the_catalog_and_the_database(monkeypatch, dsn):
+    monkeypatch.setattr(serve.psql, "default_dsn", lambda: dsn)
     data, code = serve.handle_health()
     assert code == 200 and data["strategies"] == len(catalog.load())
-    assert data["status"] in ("ok", "degraded")
+    assert data["status"] == "ok" and data["heroes"] > 40
 
 
 def test_a_host_without_pgserver_is_told_to_set_database_url(monkeypatch, tmp_path):

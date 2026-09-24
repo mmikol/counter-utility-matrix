@@ -5,6 +5,7 @@ per client address and the audit line each call leaves."""
 
 import http.client
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -36,9 +37,10 @@ def http_server(tmp_path_factory):
     with log.open("wb") as err:
         proc = subprocess.Popen(
             [sys.executable, "-m", "door.mcp", "--http", "127.0.0.1:%d" % port],
-            cwd=ROOT, stdout=subprocess.DEVNULL, stderr=err)
+            cwd=ROOT, stdout=subprocess.DEVNULL, stderr=err,
+            env=dict(os.environ, DATABASE_URL="postgresql://127.0.0.1:1/none"))
         try:
-            # a cold pgserver boots behind /health
+            # DATABASE_URL points nowhere: /health answers degraded at once and starts no cluster
             deadline = time.monotonic() + 30
             while time.monotonic() < deadline:
                 if proc.poll() is not None:
@@ -99,9 +101,7 @@ def test_http_transport_guards_get_origin_and_health(http_server):
                          {"Origin": "https://evil.example"})
     assert status == 403
     health = json.load(urllib.request.urlopen(http_server + "/health", timeout=10))
-    assert health["status"] in ("ok", "degraded")
-    if health["status"] == "ok":
-        assert health["state"] in ("empty", "stale", "unfilled", "current")
+    assert health["status"] == "degraded" and health["error"]
     # a rebound page sends no Origin on a GET, but it names its own host
     with pytest.raises(urllib.error.HTTPError) as foreign:
         urllib.request.urlopen(urllib.request.Request(

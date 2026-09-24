@@ -10,14 +10,14 @@ tests/synthetic.py. The second kind defaults to the repo's own build at
 db/psql/cluster, the database `.venv/bin/python -m door.mcp call db_rebuild` produces,
 and skips itself when it is absent. COUNTRIX_LOCAL_SERVER or DATABASE_URL
 override the target; COUNTRIX_NO_DATABASE=1 runs the suite with no database,
-as CI does.
+as CI does. A run that starts with no cluster ends with none.
 """
 
 import os
 
 import pytest
 
-from db import DEFAULT_DB_DIR
+from db import DEFAULT_DB_DIR, psql
 from tests import synthetic
 
 
@@ -25,13 +25,28 @@ def _dsn():
     if os.environ.get("COUNTRIX_NO_DATABASE"):
         return None            # what CI sees: no cluster, the db-bound tests skip
     local = os.environ.get("COUNTRIX_LOCAL_SERVER")
-    if not local and not os.environ.get("DATABASE_URL") and os.path.isdir(DEFAULT_DB_DIR):
-        local = DEFAULT_DB_DIR
     if local:
         import pgserver
 
         return pgserver.get_server(os.path.abspath(local)).get_uri()
-    return os.environ.get("DATABASE_URL")
+    try:
+        return psql.default_dsn()   # the code's own answer, which creates no cluster
+    except psql.NoDatabaseError:
+        return None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def no_cluster_after_a_database_free_run():
+    """A run that starts with no cluster at db/psql/cluster ends with none:
+    only db_init and db_rebuild create one, through psql.boot, and a probe,
+    a served /health or a test that reads resolves through default_dsn,
+    which never does. CI never sets COUNTRIX_NO_DATABASE, and a fresh clone
+    with pgserver installed is where a first touch once created one, so the
+    check holds whatever that variable says."""
+    absent = not os.path.exists(DEFAULT_DB_DIR)
+    yield
+    if absent:
+        assert not os.path.exists(DEFAULT_DB_DIR), "a database-free run created db/psql/cluster"
 
 
 @pytest.fixture(scope="session")
