@@ -6,6 +6,7 @@ import re
 
 import pytest
 
+from db import Refusal
 from ui import board
 
 
@@ -105,8 +106,8 @@ def test_facts_endpoint_returns_the_board(db):
     assert "UNDER-HEALED" not in text["red", "team.hps_supports"]
     assert not any("UNDER-HEALED" in text[side, "team.heal_peak_supports"]
                    for side in ("blue", "red"))
-    data, code = board.api_facts(db, {"red": ["Saitama"]})
-    assert code == 400 and "Saitama" in data["error"]
+    with pytest.raises(Refusal, match="Saitama"):      # the boundary answers it 400
+        board.api_facts(db, {"red": ["Saitama"]})
     db.rollback()
 
 
@@ -131,8 +132,8 @@ def test_bans_ride_the_query_string(db):
                                       "bans": ["Widowmaker", "Sombra"]})
     assert code == 200 and data["bans"] == ["Widowmaker", "Sombra"]
     assert any(f["scope"] == "bans" for f in data["facts"])
-    data, code = board.api_infer(db, {"red": ["Zarya"], "blue": ["Ana"], "bans": ["Ana"]})
-    assert code == 400 and "banned" in data["error"]
+    with pytest.raises(Refusal, match="banned"):
+        board.api_infer(db, {"red": ["Zarya"], "blue": ["Ana"], "bans": ["Ana"]})
     data, _ = board.api_roster(db)
     assert any(m["name"] == "King's Row" and m["sided"] for m in data["maps"])
     assert any(m["name"] == "Ilios" and not m["sided"] for m in data["maps"])
@@ -342,5 +343,5 @@ def test_storing_a_weight_locally_runs_the_tune_tool_in_process(db, dsn, tmp_pat
                 if h.id == heuristic.id).weight == heuristic.weight
     log = (tmp_path / "tuning-log.md").read_text(encoding="utf-8")
     assert board.STORE_REASON in log and heuristic.id in log and "[the board]" in log
-    data, code = board.api_weight({"id": "no-such-strategy", "weight": 2})
-    assert code == 400 and "no strategy" in data["error"]
+    with pytest.raises(Refusal, match="no strategy"):  # the POST's boundary answers it 400
+        board.api_weight({"id": "no-such-strategy", "weight": 2})

@@ -71,6 +71,14 @@ one line in the audit log `db/raw/audit.jsonl`: when, transport (`stdio`,
 direct calls), client, tool, the names and sizes of its arguments (never
 their values), outcome, duration.
 
+**A failure says what failed, never where.** The board and the inference
+service answer a request that raises through `db/web.py`: a refusal - an
+unknown hero, a malformed weight - is 400 with its reason, and anything
+else is 500 with the error's type and message, its traceback written to
+stderr and never into the reply. The MCP door draws the same line in
+JSON-RPC's words: a refusal is `isError`, anything else `INTERNAL`, the
+traceback in its log.
+
 **SQL reads tables, not disks.** The `query` tool accepts one statement
 that starts `SELECT`, `WITH`, `EXPLAIN`, `SHOW`, `TABLE` or `VALUES`,
 refuses names that reach the file system or the network before the

@@ -30,6 +30,7 @@ db/
   __init__.py        where things live, and the scope; the package's map
   refresh.py         the daily refresh (the refresher container's process)
   sentry.py          the guard (the sentry container's process)
+  web.py             the reply an HTTP door gives a request that raised
   mcp/               the MCP server and the tools - the one door
   data/              the sources, page to table
     blizzard/        overwatch.blizzard.com
@@ -52,6 +53,7 @@ db/
 | `data/names.py` | `name_key` recognises the same hero or map across sites ("Lúcio", "Lucio"; "D.Va", "DVa") by folding accents and punctuation. `ability_key` recognises the same ability across Blizzard and the wiki by dropping one trailing parenthetical. |
 | `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied. Its report, `raw/sentry.json`, is what `orchestrator.py status` prints; `python -m db.sentry --once` is one pass from a shell. |
 | `refresh.py` | The clock: the daily refresh below, and the full one once the wiki cache is a week old. |
+| `web.py` | `failure`: the reply the inference service and the board give a request that raised. A `Refusal` is 400 with its message; anything else is 500 with the error's type and message, and its traceback goes to stderr, never to the caller. The MCP door draws the same line in JSON-RPC's words. Stdlib only. |
 
 ### `data/` - one package per source
 

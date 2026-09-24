@@ -2,27 +2,30 @@
 
     python -m inference.serve --port 8019
 
-    GET  /health                       the catalog size and the database state
+    GET  /health                       the catalog size and the database state; 200
+                                       and degraded, naming why, when either is out
+                                       of reach
     GET  /board?map=&side=&red=&blue=&bans=   both seats' optimal six + the current comp
     GET  /infer?map=&side=&red=&blue=&bans=[&top=&pool=]   blue's optimal six
     GET  /evaluate?map=&side=&red=&blue=&bans=   a full six scored against the field
     GET  /strategies                   the catalog
 
 The same functions ui/board.py calls in-process when no INFERENCE_URL is set.
-http.server, no web framework.
+http.server, no web framework. A request that raises is answered by
+db.web.failure: a Refusal 400 with its message, anything else 500 with its
+type and message, the traceback on stderr.
 """
 
 import argparse
 import json
 import os
-import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import psycopg
 
-from db import psql
+from db import psql, web
 from inference import catalog as catalog_module
 from inference import engine
 from ui.facts import tables
@@ -48,23 +51,16 @@ def handle_infer(cx: psycopg.Connection, query: Query) -> Answer:
     of the same name draws the line in the same place."""
     map_name, red, blue, bans, side = parse_board(query)
     world = tables.load(cx)
-    try:
-        pool, top = engine.clamp_search(_first(query, "pool"),
-                                        _first(query, "top"))
-        result = engine.infer(world, map_name, red, blue, bans=bans, side=side,
-                              pool_size=pool, top=top)
-    except ValueError as error:
-        return {"error": str(error)}, 400
+    pool, top = engine.clamp_search(_first(query, "pool"), _first(query, "top"))
+    result = engine.infer(world, map_name, red, blue, bans=bans, side=side,
+                          pool_size=pool, top=top)
     return result.to_dict(), 200
 
 
 def handle_evaluate(cx: psycopg.Connection, query: Query) -> Answer:
     map_name, red, blue, bans, side = parse_board(query)
     world = tables.load(cx)
-    try:
-        result = engine.evaluate(world, map_name, red, blue, bans=bans, side=side)
-    except ValueError as error:
-        return {"error": str(error)}, 400
+    result = engine.evaluate(world, map_name, red, blue, bans=bans, side=side)
     return result.to_dict(), 200
 
 
@@ -72,25 +68,32 @@ def handle_board(cx: psycopg.Connection, query: Query) -> Answer:
     """Both seats and the current comp - what the board's two displays show."""
     map_name, red, blue, bans, side = parse_board(query)
     world = tables.load(cx)
-    try:
-        weights = catalog_module.parse_weights(query.get("weights", []))
-        pool, _ = engine.clamp_search(_first(query, "pool"))
-        b = engine.board(world, map_name, red, blue, bans, side, pool_size=pool,
-                         weights=weights)
-    except ValueError as error:
-        return {"error": str(error)}, 400
+    weights = catalog_module.parse_weights(query.get("weights", []))
+    pool, _ = engine.clamp_search(_first(query, "pool"))
+    b = engine.board(world, map_name, red, blue, bans, side, pool_size=pool, weights=weights)
     return b.to_dict(), 200
 
 
 def handle_strategies() -> Answer:
+    """The catalog. A playbook that does not load is the server's fault: the
+    CatalogError reaches the request boundary, a 500."""
     return {"strategies": [h.to_dict() for h in catalog_module.load()],
             "playbook": catalog_module.playbook_name()}, 200
 
 
 def handle_health() -> Answer:
-    cat = catalog_module.load()
-    out: dict[str, Any] = {"status": "ok", "strategies": len(cat),
-                           "pending": sum(1 for h in cat if h.pending)}
+    """The catalog's size and the database's state, always 200: a playbook
+    that does not load leaves the strategy counts out, and it or a database
+    out of reach makes the status degraded, the error naming each - what
+    orchestrator.py prints while it waits."""
+    out: dict[str, Any] = {"status": "ok"}
+    errors: list[str] = []
+    try:
+        cat = catalog_module.load()
+    except catalog_module.CatalogError as error:
+        errors.append(str(error))
+    else:
+        out["strategies"], out["pending"] = len(cat), sum(1 for h in cat if h.pending)
     # Degraded is the answer to every way the database can be out of reach,
     # and finding it is one of them: default_dsn imports pgserver to locate
     # the embedded cluster, so a machine without that package raised
@@ -100,7 +103,9 @@ def handle_health() -> Answer:
         with psycopg.connect(psql.default_dsn()) as cx:
             out["heroes"] = psql.scalar(cx.execute("select count(*) from heroes"))
     except psql.UNREACHABLE as error:
-        out["status"], out["error"] = "degraded", str(error)
+        errors.append(str(error))
+    if errors:
+        out["status"], out["error"] = "degraded", "; ".join(errors)
     return out, 200
 
 
@@ -132,8 +137,8 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/infer":
                     return self._json(*handle_infer(cx, query))
                 return self._json(*handle_evaluate(cx, query))
-        except Exception:  # noqa: BLE001  # the request boundary
-            self._json({"error": traceback.format_exc()}, 500)
+        except Exception as error:  # noqa: BLE001  # the request boundary
+            self._json(*web.failure(error))
 
 
 def main() -> None:

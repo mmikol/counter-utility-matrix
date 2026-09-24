@@ -47,8 +47,8 @@ def test_service_infers_evaluates_and_lists(db):
     # /infer infers whatever blue holds; ranking a full six against the field is
     # /evaluate's question, and the MCP tool of the same name draws the line here too
     assert code == 200 and data["kind"] == "infer" and sorted(data["blue"]) == sorted(six)
-    data, code = serve.handle_evaluate(db, {"blue": ["Ana"]})
-    assert code == 400 and "exactly 6" in data["error"]
+    with pytest.raises(Refusal, match="exactly 6"):     # the boundary answers it 400
+        serve.handle_evaluate(db, {"blue": ["Ana"]})
     data, code = serve.handle_strategies()
     assert code == 200 and len(data["strategies"]) == len(catalog.load())
     data, code = serve.handle_board(db, {"map": ["King's Row"], "red": ["Zarya"],
@@ -91,10 +91,11 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
                                     "blue": [], "bans": []}, None)
     board.api_infer(None, {"map": ["Ilios"], "weights": ["healing-floor:9.99", "x:12"]})
     assert calls[-1][1]["weights"] == ["healing-floor:9.99", "x:10"]  # clamped
-    # a malformed weight is the caller's error, answered here and never forwarded
+    # a malformed weight is the caller's error, refused here and never forwarded
     forwarded = len(calls)
-    data, code = board.api_infer(None, {"map": ["Ilios"], "weights": ["junk"]})
-    assert code == 400 and "id:value" in data["error"] and len(calls) == forwarded
+    with pytest.raises(Refusal, match="id:value"):
+        board.api_infer(None, {"map": ["Ilios"], "weights": ["junk"]})
+    assert len(calls) == forwarded
     # the status rides along now: a 502 from the service is not served as a 200
     assert board.api_strategies() == ({"forwarded": True}, 200)
 
@@ -137,7 +138,21 @@ def test_health_and_strategies_are_served_without_a_database(served, monkeypatch
     assert code == 200 and len(data["strategies"]) == len(catalog.load())
     assert _get(served + "/nothing")[0] == 404
     code, data = _get(served + "/board?map=Ilios")           # no database: the error, as JSON
-    assert code == 500 and "error" in data
+    assert code == 500 and data["error"] and "Traceback" not in data["error"]
+
+
+def test_a_broken_playbook_degrades_health_and_fails_the_strategies_route(
+        served, monkeypatch, tmp_path):
+    """A playbook that does not load is the server's fault: /health stays 200
+    and says degraded with the catalog's own words, so orchestrator.py prints
+    them, and /strategies is a 500 naming the CatalogError."""
+    monkeypatch.setattr(serve.psql, "default_dsn", lambda: "postgresql://nobody@127.0.0.1:9/nowhere")
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))
+    code, data = _get(served + "/health")
+    assert code == 200 and data["status"] == "degraded"
+    assert "no strategies in" in data["error"] and "strategies" not in data
+    code, data = _get(served + "/strategies")
+    assert code == 500 and data["error"].startswith("CatalogError: no strategies in")
 
 
 @pytest.mark.invariant

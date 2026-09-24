@@ -1,13 +1,16 @@
 """The board over HTTP: the same handlers the unit tests call, served."""
 
+import http.client
 import json
 import threading
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from urllib.parse import urlparse
 
 import pytest
 
+from db import Refusal
 from ui import board
 
 
@@ -69,6 +72,32 @@ def test_the_weight_store_is_the_only_post_and_reads_a_small_json_body(served, m
     assert post(served + "/api/weight", b"{}", {"Content-Type": "text/plain"})[0] == 415
 
 
+def test_the_one_post_says_what_went_wrong_and_bad_json_means_only_that(served, monkeypatch):
+    """The header, the body and the store fail apart: a Content-Length that is
+    not a number is named, and what the store raises is its own answer - a
+    refusal 400 with its reason, anything else 500 - never "bad JSON"."""
+    monkeypatch.setattr(board, "READ_ONLY", False)
+    address = urlparse(served)
+    connection = http.client.HTTPConnection(address.hostname, address.port, timeout=60)
+    connection.request("POST", "/api/weight", body=b"{}", headers={
+        "Content-Type": "application/json", "Content-Length": "abc"})
+    response = connection.getresponse()
+    assert response.status == 400 and "Content-Length" in json.loads(response.read())["error"]
+    connection.close()
+    body = {"id": "coverage", "weight": 3}
+
+    def refused(payload):
+        raise Refusal("no strategy 'coverage'")
+    monkeypatch.setattr(board, "api_weight", refused)
+    assert post(served + "/api/weight", body) == (400, {"error": "no strategy 'coverage'"})
+
+    def broken(payload):
+        raise ValueError("inside")
+    monkeypatch.setattr(board, "api_weight", broken)
+    code, data = post(served + "/api/weight", body)
+    assert code == 500 and data["error"] == "ValueError: inside"
+
+
 def get(url):
     try:
         with urllib.request.urlopen(url, timeout=60) as response:
@@ -77,7 +106,8 @@ def get(url):
         return error.code, error.headers.get("Content-Type", ""), error.read()
 
 
-def test_the_page_the_statics_the_math_and_the_strategies_need_no_database(served, monkeypatch):
+def test_the_page_the_statics_the_math_and_the_strategies_need_no_database(
+        served, monkeypatch, tmp_path):
     monkeypatch.setattr(board, "dsn", lambda: "postgresql://nobody@127.0.0.1:9/nowhere")
     code, ctype, body = get(served + "/")
     assert code == 200 and "text/html" in ctype and b"Countrix" in body
@@ -91,10 +121,16 @@ def test_the_page_the_statics_the_math_and_the_strategies_need_no_database(serve
     assert code == 200 and b"The Counter Utility Matrix" in body
     code, _, body = get(served + "/api/strategies")
     assert code == 200 and json.loads(body)["strategies"]
+    with monkeypatch.context() as broken:                 # a playbook that does not load
+        broken.setenv("COUNTRIX_STRATEGIES", str(tmp_path))
+        code, _, body = get(served + "/api/strategies")
+    assert code == 500 and json.loads(body)["error"].startswith("CatalogError: no strategies in")
     assert get(served + "/nothing")[0] == 404
     # the database is not there. A JSON route answers JSON, as the sibling service does
     code, ctype, body = get(served + "/api/roster")
-    assert code == 500 and "application/json" in ctype and json.loads(body)["error"]
+    error = json.loads(body)["error"]
+    assert code == 500 and "application/json" in ctype and error
+    assert "Traceback" not in error                       # the stack goes to stderr only
     code, ctype, body = get(served + "/api/nothing")
     assert code == 404 and "application/json" in ctype and json.loads(body)["error"]
 

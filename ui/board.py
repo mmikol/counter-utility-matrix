@@ -10,13 +10,14 @@ the comps panel is the inference layer's board - red's most likely
 starting comp, blue's optimal counter to the current picks, each seat's
 picks scored as a share of its own optimal, the fight odds and the game
 plan; the playbook panel is the strategies catalog as it sits on disk.
-JSON endpoints under /api/ serve the same three things.
+JSON endpoints under /api/ serve the same three things. A request that
+raises is answered by db.web.failure: a Refusal 400 with its message,
+anything else 500 with its type and message, the traceback on stderr.
 """
 
 import html
 import json
 import os
-import traceback
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
@@ -27,7 +28,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import psycopg
 from psycopg.rows import TupleRow
 
-from db import Refusal, psql
+from db import psql, web
 from db.mcp.server import LOCAL_HOSTS
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
@@ -122,11 +123,7 @@ def api_roster(cx: psycopg.Connection[TupleRow]) -> Reply:
 def api_facts(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
     map_name, red, blue, bans, side = parse_board(query)
     world = tables.load(cx)
-    try:
-        fs = facts_engine.generate(world, map_name, red, blue, bans, side)
-    except ValueError as error:
-        return {"error": str(error)}, 400
-    return fs.to_dict(), 200
+    return facts_engine.generate(world, map_name, red, blue, bans, side).to_dict(), 200
 
 
 def api_infer(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
@@ -134,21 +131,16 @@ def api_infer(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
     `board()`. The playbook tab's sliders ride along as `weights=<id>:<0..10>`,
     one per heuristic set away from its file."""
     map_name, red, blue, bans, side = parse_board(query)
-    try:
-        weights = catalog_module.parse_weights(query.get("weights", []))
-    except ValueError as error:                  # a malformed weight: never forwarded
-        return {"error": str(error)}, 400
+    # a malformed weight is refused here, never forwarded
+    weights = catalog_module.parse_weights(query.get("weights", []))
     if INFERENCE_URL:
         forward = board_query(map_name, red, blue, bans, side)
         if weights:
             forward["weights"] = ["%s:%g" % kv for kv in sorted(weights.items())]
         return remote("/board", forward)
     world = tables.load(cx)
-    try:
-        b = inference_engine.board(world, map_name, red, blue, bans, side, weights=weights)
-    except ValueError as error:
-        return {"error": str(error)}, 400
-    return b.to_dict(), 200
+    return inference_engine.board(world, map_name, red, blue, bans, side,
+                                  weights=weights).to_dict(), 200
 
 
 def mcp_call(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any] | None, bool]:
@@ -182,7 +174,9 @@ def tool_context() -> "Context":
 def api_weight(payload: dict[str, Any]) -> Reply:
     """Store a heuristic's weight in its file - the slider's "store". The
     change goes through the `tune` tool (validated, logged in the tuning
-    log with its reason, mirrored into the database), never around it."""
+    log with its reason, mirrored into the database), never around it. The
+    tool's refusal is relayed as 400 over HTTP and raised in-process, where
+    the POST's boundary answers it 400 the same way."""
     hid = str((payload or {}).get("id") or "")
     if not catalog_module.ID_RE.fullmatch(hid):
         return {"error": "no such heuristic"}, 400
@@ -201,20 +195,15 @@ def api_weight(payload: dict[str, Any]) -> Reply:
             return {"error": text}, 400
         return {"line": text.split("\n")[0], "change": change}, 200
     from db.mcp import tools
-    try:
-        text, stored = tools.run_tool(tool_context(), "tune", **arguments)
-    except Refusal as error:
-        return {"error": str(error)}, 400
+    text, stored = tools.run_tool(tool_context(), "tune", **arguments)
     return {"line": text.split("\n")[0], "change": stored}, 200
 
 
 def api_strategies() -> Reply:
     if INFERENCE_URL:
         return remote("/strategies")
-    try:
-        catalog = catalog_module.load()
-    except ValueError as error:                  # a CatalogError is one
-        return {"error": str(error)}, 400
+    # a playbook that does not load is the server's fault: a 500, as on the service
+    catalog = catalog_module.load()
     return {"strategies": [h.to_dict() for h in catalog],
             "playbook": catalog_module.playbook_name()}, 200
 
@@ -358,13 +347,15 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return urlparse(origin).hostname in LOCAL_HOSTS
 
-    def _failed(self, path: str) -> None:
-        """A crash answers in the shape the route promised: JSON under /api/,
-        the error page for a page."""
+    def _failed(self, path: str, error: Exception) -> None:
+        """A request that raised answers in the shape the route promised: JSON
+        under /api/, the error page for a page, in the words and status
+        db.web.failure gives it - never a traceback."""
+        reply = web.failure(error)
         if path.startswith("/api/"):
-            return self._json({"error": traceback.format_exc()}, 500)
+            return self._json(reply.body, reply.status)
         return self._send(_page("error", "<pre class='warnbox'>%s</pre>"
-                                % esc(traceback.format_exc())), 500)
+                                % esc(reply.body["error"])), reply.status)
 
     def _not_found(self, path: str) -> None:
         if path.startswith("/api/"):
@@ -387,14 +378,19 @@ class Handler(BaseHTTPRequestHandler):
                                         " session only"}, 403)
         try:
             length = int(self.headers.get("Content-Length") or 0)
-            if not 0 < length <= 4096:
-                return self._json({"error": "a small JSON body is required"}, 400)
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            return self._json(*api_weight(payload if isinstance(payload, dict) else {}))
         except ValueError:
+            return self._json({"error": "a numeric Content-Length is required"}, 400)
+        if not 0 < length <= 4096:
+            return self._json({"error": "a small JSON body is required"}, 400)
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return self._json({"error": "bad JSON"}, 400)
-        except Exception:  # noqa: BLE001  # the request boundary
-            return self._failed(path)
+        # "bad JSON" means only that: what the store raises is its own answer
+        try:
+            return self._json(*api_weight(payload if isinstance(payload, dict) else {}))
+        except Exception as error:  # noqa: BLE001  # the request boundary
+            return self._failed(path, error)
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -421,8 +417,8 @@ class Handler(BaseHTTPRequestHandler):
                 if path == "/api/facts":
                     return self._json(*api_facts(cx, query))
                 return self._json(*api_infer(cx, query))
-        except Exception:  # noqa: BLE001  # the request boundary
-            return self._failed(path)
+        except Exception as error:  # noqa: BLE001  # the request boundary
+            return self._failed(path, error)
 
 def main() -> None:
     import argparse
