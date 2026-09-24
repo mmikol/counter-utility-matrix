@@ -106,7 +106,10 @@ db <- facts <- inference <- door <- ui.
   shipped playbook is five assumptions and nothing scored, on purpose, while
   it is rebuilt rule by rule from the citation record in
   `inference/README.md`. Solver behaviour is tested against the 19-file
-  reference playbook in `tests/fixtures/playbook/`.
+  reference playbook in `tests/fixtures/playbook/`, or its four assumptions
+  alone (`ASSUMPTIONS_ONLY` in tests/inference/__init__.py) where a test
+  needs a playbook that scores nothing; no solver test reads
+  `inference/strategies/`.
 - **The solver is deterministic.** `engine.board()` returns a Board of up to
   seven Results (blue, red, current, red_current, fill, countered, expected);
   fill is None unless one to five blue picks are locked, countered is None

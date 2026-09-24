@@ -11,7 +11,7 @@ from facts import compute
 from facts.draft import MAX_TANKS, Draft
 from facts.records import MapRate
 from inference import catalog
-from tests.inference import FIXTURE_PLAYBOOK
+from tests.inference import ASSUMPTIONS_ONLY, FIXTURE_PLAYBOOK
 
 
 def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(synthetic_world):
@@ -145,8 +145,8 @@ def test_legal_shapes_follow_the_playbook_and_the_board_carries_them(synthetic_w
 
 
 def test_the_queue_caps_tanks_at_two_whatever_the_playbook_holds(synthetic_world):
-    """The shipped playbook writes no shape limit and scores nothing, so every
-    six ties and the map's win rates rank the pools - tanks, once every tank
+    """A playbook of assumptions alone writes no shape limit and scores
+    nothing, so every six ties and the map's win rates rank the pools - tanks, once every tank
     here wins ten points more. The queue's own limit binds all the same: no
     six the board shows fields a third tank, the shapes the roster enforces
     stop at two, and a third tank is refused as the queue's."""
@@ -156,11 +156,11 @@ def test_the_queue_caps_tanks_at_two_whatever_the_playbook_holds(synthetic_world
         if h.role == "tank":
             h.win += 10
             h.map_rates = {mid: MapRate(r.win + 10, r.pick) for mid, r in h.map_rates.items()}
-    shipped = catalog.load()
-    assert not any(h.form == "limit" for h in shipped)       # the cap is the engine's
+    assert not any(h.form == "limit" for h in ASSUMPTIONS_ONLY)      # the cap is the engine's
     for map_name, blue in (("Harbor Gate", []), ("Ember Ruins", []),
                            ("Harbor Gate", ["Anvil", "Kite"])):
-        d = engine.board(world, Draft(map_name, (), tuple(blue)), catalog=shipped).to_dict()
+        d = engine.board(world, Draft(map_name, (), tuple(blue)),
+                         catalog=ASSUMPTIONS_ONLY).to_dict()
         sixes = [d[seat]["blue"] for seat in ("blue", "red", "fill", "expected") if d[seat]]
         assert len(sixes) == (4 if blue else 3)
         for six in sixes:
@@ -168,11 +168,12 @@ def test_the_queue_caps_tanks_at_two_whatever_the_playbook_holds(synthetic_world
         assert max(t for t, _, _ in d["shapes"]) == MAX_TANKS
     for blue in (["Anvil", "Kite", "Mortar"], ["Anvil", "Kite", "Mortar", "Balm"]):
         with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
-            engine.board(world, Draft("Harbor Gate", (), tuple(blue)), catalog=shipped)
+            engine.board(world, Draft("Harbor Gate", (), tuple(blue)),
+                         catalog=ASSUMPTIONS_ONLY)
     with pytest.raises(Refusal, match="the queue allows at most 2 tanks"):
         engine.evaluate(world, Draft("Harbor Gate", (),
                                      ("Anvil", "Kite", "Mortar", "Balm", "Tansy", "Needle")),
-                        catalog=shipped)
+                        catalog=ASSUMPTIONS_ONLY)
 
 
 def test_the_board_refuses_a_team_of_seven(synthetic_world):
@@ -188,21 +189,21 @@ def test_the_board_refuses_a_team_of_seven(synthetic_world):
         engine.board(synthetic_world, Draft("Harbor Gate", (), tuple(seven)), catalog=fix)
 
 
-def test_blue_counters_the_likely_six_until_red_reveals_a_pick(synthetic_world, monkeypatch):
+def test_blue_counters_the_likely_six_until_red_reveals_a_pick(synthetic_world):
     """With no red pick the board solves blue against red's likely six, so the
     opening suggestion is a counter to what the map and the meta say red
     fields; the first reveal replaces that with red's actual picks."""
-    from inference import engine, parallel
+    from inference import engine
     world = synthetic_world
-    monkeypatch.setattr(parallel, "available", lambda catalog=None: False)
+    fix = catalog.load(FIXTURE_PLAYBOOK)
     m = world.map("Harbor Gate")
     likely = [p["hero"] for p in compute.expected_picks(world, m)]
-    b = engine.board(world, Draft("Harbor Gate", (), ("Balm",)))
+    b = engine.board(world, Draft("Harbor Gate", (), ("Balm",)), catalog=fix)
     assert b.blue.red == likely and b.current.red == likely and b.fill.red == likely
     assert b.expected.blue == likely and b.expected.kind == "expected"
     assert [p["hero"] for p in b.expected.picks] == likely
     assert "their likely starting comp" in b.rendered()
-    revealed = engine.board(world, Draft("Harbor Gate", ("Mortar",), ("Balm",)))
+    revealed = engine.board(world, Draft("Harbor Gate", ("Mortar",), ("Balm",)), catalog=fix)
     assert revealed.blue.red == ["Mortar"] and revealed.current.red == ["Mortar"]
     assert revealed.expected.blue == likely                      # static
 

@@ -12,7 +12,7 @@ import pytest
 
 from db import Refusal
 from facts import compute
-from inference import catalog
+from inference import catalog, tune
 from inference.frontmatter import Parsed, parse_frontmatter
 from inference.strategy import KINDS, CatalogError, Strategy
 from tests.inference import FIXTURE_PLAYBOOK
@@ -168,6 +168,8 @@ def test_the_reference_and_the_live_playbooks_are_valid_and_reference_real_metri
     live = catalog.load()                       # the user's playbook: whatever it holds today
     assert live and {h.kind for h in live} <= set(KINDS)
     assert all(h.metric in compute.registry() for h in live if h.kind == "heuristic")
+    for h in live:                              # each file keeps to the add tool's limit
+        assert tune.sentence_count(h.body) <= tune.MAX_SENTENCES, h.id
     cat = catalog.load(FIXTURE_PLAYBOOK)        # the reference: every kind and every form
     kinds = {h.kind for h in cat}
     assert kinds == set(KINDS) == {"constraint", "heuristic", "assumption"}

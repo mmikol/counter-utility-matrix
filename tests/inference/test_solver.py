@@ -350,8 +350,9 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(syntheti
         assert ember.style_top == "brawl" and ember.style_margin == 0
     finally:
         ember.styles = derived
-    once = engine.infer(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm",)))
-    twice = engine.infer(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm",)))
+    fix = catalog.load(FIXTURE_PLAYBOOK)
+    once = engine.infer(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm",)), catalog=fix)
+    twice = engine.infer(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm",)), catalog=fix)
     assert once.blue == twice.blue and abs(once.score - twice.score) < 1e-12
 
 

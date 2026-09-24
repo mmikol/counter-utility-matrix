@@ -133,7 +133,8 @@ def test_a_mirror_pick_cites_its_own_facts_not_the_enemy_copy(synthetic_world):
     never "partner of Kite" (red's Kite)."""
     from inference import engine
     r = engine.evaluate(synthetic_world, Draft(
-        "Harbor Gate", ("Kite", "Gale"), ("Anvil", "Mortar", "Gale", "Rook", "Balm", "Sorrel")))
+        "Harbor Gate", ("Kite", "Gale"), ("Anvil", "Mortar", "Gale", "Rook", "Balm", "Sorrel")),
+        catalog=catalog.load(FIXTURE_PLAYBOOK))
     ours = next(p for p in r.picks if p["hero"] == "Gale")
     partners = [part for part in ours["why"].split("; ") if part.startswith("partner of")]
     assert "answers Anvil" not in ours["why"] and not any("Kite" in part for part in partners)

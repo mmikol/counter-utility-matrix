@@ -12,7 +12,7 @@ from db import Refusal
 from facts import board_facts
 from facts.draft import Draft
 from inference import catalog
-from tests.inference import FIXTURE_PLAYBOOK
+from tests.inference import ASSUMPTIONS_ONLY, FIXTURE_PLAYBOOK
 
 
 def test_infer_keeps_locked_picks_and_the_open_queue_shape(synthetic_world):
@@ -47,18 +47,15 @@ def test_infer_honours_a_hitscan_answer_to_a_flier(synthetic_world):
 
 
 def test_evaluate_ranks_a_full_six_against_the_field(synthetic_world):
-    """A scored six is ranked against the field; under a playbook that scores
-    nothing every six ties, and none is ranked."""
+    """A scored six is ranked against the field."""
     from inference import engine
     world = synthetic_world
+    fix = catalog.load(FIXTURE_PLAYBOOK)
     six = ("Anvil", "Mortar", "Rook", "Needle", "Balm", "Tansy")
-    draft = Draft("Harbor Gate", ("Mortar", "Gale"), six)
-    r = engine.evaluate(world, draft, catalog=catalog.load(FIXTURE_PLAYBOOK))
+    r = engine.evaluate(world, Draft("Harbor Gate", ("Mortar", "Gale"), six), catalog=fix)
     assert r.rank >= 1 and r.kind == "evaluate" and len(r.picks) == 6
-    shipped = engine.evaluate(world, draft)
-    assert shipped.rank is None if shipped.unscored() else shipped.rank >= 1
     with pytest.raises(Refusal, match="exactly 6"):
-        engine.evaluate(world, Draft(blue=("Balm",)))
+        engine.evaluate(world, Draft(blue=("Balm",)), catalog=fix)
 
 
 def test_a_board_no_six_satisfies_is_refused_by_infer_and_evaluate_alike(
@@ -82,13 +79,14 @@ def test_a_board_no_six_satisfies_is_refused_by_infer_and_evaluate_alike(
 def test_infer_never_drafts_a_banned_hero(synthetic_world):
     from inference import engine
     world = synthetic_world
+    fix = catalog.load(FIXTURE_PLAYBOOK)
     r = engine.infer(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm",),
-                                  ("Needle", "Rook", "Anvil")))
+                                  ("Needle", "Rook", "Anvil")), catalog=fix)
     assert not {"Needle", "Rook", "Anvil"} & set(r.blue)
     assert r.bans == ["Needle", "Rook", "Anvil"] and "banned" in r.rendered()
     assert r.facts.draft.bans == tuple(r.bans)
     with pytest.raises(Refusal, match="banned this match"):
-        engine.infer(world, Draft(None, ("Mortar",), ("Balm",), ("Mortar",)))
+        engine.infer(world, Draft(None, ("Mortar",), ("Balm",), ("Mortar",)), catalog=fix)
 
 
 def test_scores_share_one_scale_per_board(synthetic_world):
@@ -128,35 +126,36 @@ def test_an_announced_hero_is_described_but_never_picked(synthetic_world):
     early = [h for h in world.heroes.values() if not h.released]
     assert [h.name for h in early] == ["Wisp"]
     h = early[0]
+    fix = catalog.load(FIXTURE_PLAYBOOK)
     fs = board_facts.generate(world, Draft(blue=(h.name,)))       # the facts may describe it
     assert fs.find("hero.announced", h.name)
     with pytest.raises(Refusal, match="announced, not yet playable"):
-        engine.infer(world, Draft(blue=(h.name,)))                    # a pick may not
+        engine.infer(world, Draft(blue=(h.name,)), catalog=fix)      # a pick may not
     with pytest.raises(Refusal, match="announced"):
-        engine.board(world, Draft(red=(h.name,)), catalog=catalog.load())
-    r = engine.infer(world, Draft())
+        engine.board(world, Draft(red=(h.name,)), catalog=fix)
+    r = engine.infer(world, Draft(), catalog=fix)
     assert h.name not in r.blue and all(a["blue"] for a in r.alternatives)
     assert not any(h.name in a["blue"] for a in r.alternatives)   # nor does the field hold it
     # and under a playbook that ties most sixes, where the local search swaps freely:
     # the announced hero reached the alternatives through refine once
-    limit_only = [s for s in catalog.load(FIXTURE_PLAYBOOK) if s.form == "limit" and not s.soft]
+    limit_only = [s for s in fix if s.form == "limit" and not s.soft]
     r = engine.infer(world, Draft(), catalog=limit_only)
     assert h.name not in r.blue and not any(h.name in a["blue"] for a in r.alternatives)
 
 
 def test_the_fill_is_the_optimal_whenever_the_optimal_holds_every_lock(synthetic_world):
     """Locking a hero of the optimal six leaves the optimal six the best one
-    that keeps the lock, so the fill must find it again. Under the shipped
-    playbook every six scores zero and only the tie-break tells them apart: a
-    search that moved on score alone stood still there, and locking Reinhardt
-    on King's Row came back with Mizuki for Juno."""
+    that keeps the lock, so the fill must find it again. Under a playbook that
+    scores nothing every six scores zero and only the tie-break tells them
+    apart: a search that moved on score alone stood still there, and locking
+    Reinhardt on King's Row came back with Mizuki for Juno."""
     from inference import engine
     world = synthetic_world
-    shipped = catalog.load()
+    assert not catalog.has_scoring_terms(ASSUMPTIONS_ONLY)
     for map_name in ("Harbor Gate", "Ember Ruins"):
-        best = engine.infer(world, Draft(map_name), catalog=shipped)
+        best = engine.infer(world, Draft(map_name), catalog=ASSUMPTIONS_ONLY)
         for hero in best.blue:
-            fill = engine.infer(world, Draft(map_name, blue=(hero,)), catalog=shipped)
+            fill = engine.infer(world, Draft(map_name, blue=(hero,)), catalog=ASSUMPTIONS_ONLY)
             assert fill.blue == best.blue, (map_name, hero, fill.blue)
 
 
