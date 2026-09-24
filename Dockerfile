@@ -14,8 +14,11 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 COPY requirements.txt .
 # without pgserver: the embedded cluster is a host build target, and inside the
-# image every layer reaches a real postgres service over DATABASE_URL
-RUN grep -v '^pgserver' requirements.txt | pip install --no-cache-dir -r /dev/stdin
+# image every container reaches a real postgres service over DATABASE_URL. Nor
+# ruff and mypy, about 100 MB installed: nothing in the image lints or
+# type-checks (CI does). pytest and pytest-cov stay for `orchestrator.py test`,
+# which runs the suite here.
+RUN grep -vE '^(pgserver|ruff|mypy)' requirements.txt | pip install --no-cache-dir -r /dev/stdin
 
 COPY . .
 RUN mkdir -p db/raw .cache-blizzard .cache-wiki \
