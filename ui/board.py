@@ -43,8 +43,8 @@ from ui import pages
 from ui.facts import board_facts, tables
 from ui.facts.draft import Draft, board_query, is_sided, parse_board
 
-# a JSON endpoint answers with a JSON object and an HTTP status
-type Reply = tuple[dict[str, object], int]
+# a parsed query string; a JSON endpoint answers it with a db.web.Reply, a JSON
+# object and an HTTP status
 type Query = Mapping[str, Sequence[str]]
 
 STORE_REASON = "stored from the board's slider"
@@ -94,9 +94,9 @@ def read_only() -> bool:
 
 def remote(
         path: str, query: Mapping[str, str | Sequence[str]] | None = None,
-        payload: object = None) -> Reply:
-    """Forward to the inference service -> (json, status). A service that
-    does not answer is a 502, and a line on stderr naming why."""
+        payload: object = None) -> web.Reply:
+    """Forward to the inference service -> its reply. A service that does
+    not answer is a 502, and a line on stderr naming why."""
     url = inference_url() + path
     if query:
         url += "?" + urlencode(query, doseq=True)
@@ -106,22 +106,22 @@ def remote(
     try:
         # the scheme is http or https: inference_url() refuses any other
         with urllib.request.urlopen(request, timeout=REMOTE_TIMEOUT) as response:  # nosec B310
-            return json.loads(response.read().decode("utf-8")), response.status
+            return web.Reply(json.loads(response.read().decode("utf-8")), response.status)
     except urllib.error.HTTPError as error:
         try:
-            return json.loads(error.read().decode("utf-8")), error.code
+            return web.Reply(json.loads(error.read().decode("utf-8")), error.code)
         except (json.JSONDecodeError, UnicodeDecodeError):
-            return {"error": "inference service returned %d" % error.code}, error.code
+            return web.Reply({"error": "inference service returned %d" % error.code}, error.code)
     except (urllib.error.URLError, OSError) as error:
         sys.stderr.write(
             "countrix board: the inference service at %s did not answer %s: %s\n"
             % (inference_url(), path, error))
-        return {"error": "inference service unreachable: %s" % error}, 502
+        return web.Reply({"error": "inference service unreachable: %s" % error}, 502)
 
 
 # --- JSON endpoints ---------------------------------------------------------
 
-def api_roster(cx: psycopg.Connection[TupleRow]) -> Reply:
+def api_roster(cx: psycopg.Connection[TupleRow]) -> web.Reply:
     world = tables.load(cx)
     heroes = [
         {"name": h.name, "role": h.role, "subrole": h.subrole, "portrait": h.portrait,
@@ -129,17 +129,17 @@ def api_roster(cx: psycopg.Connection[TupleRow]) -> Reply:
         for h in world.heroes_by_role()]
     maps = [{"name": m.name, "mode": m.mode, "style": m.style_top, "sided": is_sided(m)}
             for m in world.maps_sorted()]
-    return {"heroes": heroes, "maps": maps, "role_icons": world.role_icons,
-            "newer_patches": world.newer_patches}, 200
+    return web.Reply({"heroes": heroes, "maps": maps, "role_icons": world.role_icons,
+                      "newer_patches": world.newer_patches}, 200)
 
 
-def api_facts(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
+def api_facts(cx: psycopg.Connection[TupleRow], query: Query) -> web.Reply:
     draft = parse_board(query)
     world = tables.load(cx)
-    return board_facts.generate(world, draft).to_dict(), 200
+    return web.Reply(board_facts.generate(world, draft).to_dict(), 200)
 
 
-def api_board(query: Query) -> Reply:
+def api_board(query: Query) -> web.Reply:
     """The board solved at this stage of the draft - the inference layer's
     `board()`: on the service when one is named, else in this process, the
     one branch that opens a connection. The playbook tab's sliders ride along
@@ -164,14 +164,14 @@ def api_board(query: Query) -> Reply:
 def solve_board(
         cx: psycopg.Connection[TupleRow], draft: Draft,
         weights: Mapping[str, float] | None = None,
-        superseded: Callable[[], bool] | None = None) -> Reply:
+        superseded: Callable[[], bool] | None = None) -> web.Reply:
     """The board solved in this process as the page asks for it: under the
     sliders' weights, without the countered case the page never reads, and
     stopped once `superseded` reports a newer board from the same page. A
     Refusal reaches the request's boundary, which answers it 400."""
     world = tables.load(cx)
     brief = inference_engine.Brief(weights=weights, countered=False, superseded=superseded)
-    return inference_engine.board(world, draft, brief=brief).to_dict(), 200
+    return web.Reply(inference_engine.board(world, draft, brief=brief).to_dict(), 200)
 
 
 def tool_context() -> tools.Context:
@@ -179,7 +179,7 @@ def tool_context() -> tools.Context:
     return tools.Context()
 
 
-def api_weight(payload: Mapping[str, object] | None) -> Reply:
+def api_weight(payload: Mapping[str, object] | None) -> web.Reply:
     """Store a heuristic's weight in its file - the slider's "store". The
     change goes through the `tune` tool (validated, logged in the tuning
     log with its reason, mirrored into the database), never around it. The
@@ -188,34 +188,34 @@ def api_weight(payload: Mapping[str, object] | None) -> Reply:
     payload = payload or {}
     hid = str(payload.get("id") or "")
     if not catalog_module.ID_RE.fullmatch(hid):
-        return {"error": "no such heuristic"}, 400
+        return web.Reply({"error": "no such heuristic"}, 400)
     raw = payload.get("weight")
     try:
         if not isinstance(raw, (int, float, str)):
             raise TypeError(raw)
         weight = round(float(raw), 2)
     except (TypeError, ValueError):
-        return {"error": "the weight must be a number"}, 400
+        return web.Reply({"error": "the weight must be a number"}, 400)
     if not 0.0 <= weight <= 10.0:
-        return {"error": "the weight must be within 0..10"}, 400
+        return web.Reply({"error": "the weight must be within 0..10"}, 400)
     arguments = {
         "id": hid, "field": "weight", "value": weight, "reason": STORE_REASON, "by": "the board"}
     if mcp_url():
         reply = web.call_tool(mcp_url(), "tune", arguments, token=mcp_token())
         if reply.is_error:
-            return {"error": reply.text}, 400
-        return {"line": reply.text.split("\n")[0], "change": reply.structured}, 200
+            return web.Reply({"error": reply.text}, 400)
+        return web.Reply({"line": reply.text.split("\n")[0], "change": reply.structured}, 200)
     text, stored = tools.run_tool(tool_context(), "tune", **arguments)
-    return {"line": text.split("\n")[0], "change": stored}, 200
+    return web.Reply({"line": text.split("\n")[0], "change": stored}, 200)
 
 
-def api_strategies() -> Reply:
+def api_strategies() -> web.Reply:
     if inference_url():
         return remote("/strategies")
     # a playbook that does not load is the server's fault: a 500, as on the service
     catalog = catalog_module.load()
-    return {"strategies": [h.to_dict() for h in catalog],
-            "playbook": catalog_module.playbook_name()}, 200
+    return web.Reply({"strategies": [h.to_dict() for h in catalog],
+                      "playbook": catalog_module.playbook_name()}, 200)
 
 
 # --- server -----------------------------------------------------------------

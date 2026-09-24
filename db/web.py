@@ -35,8 +35,9 @@ LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})  # nosec B
 
 
 class Reply(NamedTuple):
-    """A JSON reply: its body and its HTTP status."""
-    body: dict[str, str]
+    """A JSON reply: its body, a JSON object, and its HTTP status - what every
+    route of the board and the inference service answers, and failure()."""
+    body: dict[str, object]
     status: int
 
 

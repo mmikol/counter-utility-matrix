@@ -38,9 +38,9 @@ from inference.strategy import CatalogError
 from ui.facts import tables
 from ui.facts.draft import parse_board
 
-# A parsed query string, and a handler's answer: a JSON object and its status.
+# A parsed query string. A handler answers a db.web.Reply: a JSON object and
+# its status.
 Query = Mapping[str, Sequence[str]]
-Answer = tuple[dict[str, object], int]
 
 SOLVES = ("/board", "/infer", "/evaluate")     # the routes that search, and connect
 
@@ -62,7 +62,7 @@ def _first(query: Query, key: str) -> str | None:
     return values[0] if values else None
 
 
-def handle_infer(cx: psycopg.Connection, query: Query) -> Answer:
+def handle_infer(cx: psycopg.Connection, query: Query) -> web.Reply:
     """Blue's optimal six around its locked picks, at any stage of the draft.
     Ranking a full six against the field is /evaluate's question, so this door
     infers whatever blue holds and honours the `top` it was given. The MCP tool
@@ -70,17 +70,17 @@ def handle_infer(cx: psycopg.Connection, query: Query) -> Answer:
     draft = parse_board(query)
     world = tables.load(cx)
     pool, top = engine.clamp_search(_first(query, "pool"), _first(query, "top"))
-    return engine.infer(world, draft, pool_size=pool, top=top).to_dict(), 200
+    return web.Reply(engine.infer(world, draft, pool_size=pool, top=top).to_dict(), 200)
 
 
-def handle_evaluate(cx: psycopg.Connection, query: Query) -> Answer:
+def handle_evaluate(cx: psycopg.Connection, query: Query) -> web.Reply:
     """Blue's full six scored and ranked against the field."""
     draft = parse_board(query)
     world = tables.load(cx)
-    return engine.evaluate(world, draft).to_dict(), 200
+    return web.Reply(engine.evaluate(world, draft).to_dict(), 200)
 
 
-def handle_board(cx: psycopg.Connection, query: Query) -> Answer:
+def handle_board(cx: psycopg.Connection, query: Query) -> web.Reply:
     """Both seats and the current comp - what the board's two displays show -
     under the playbook tab's weights. The page never reads the countered case,
     so it is not solved here; a newer board from the same `client` (one lane
@@ -91,17 +91,17 @@ def handle_board(cx: psycopg.Connection, query: Query) -> Answer:
     weights = catalog_module.parse_weights(query.get("weights", []))
     pool, _ = engine.clamp_search(_first(query, "pool"))
     brief = engine.Brief(pool_size=pool, weights=weights, countered=False, superseded=superseded)
-    return engine.board(world, draft, brief=brief).to_dict(), 200
+    return web.Reply(engine.board(world, draft, brief=brief).to_dict(), 200)
 
 
-def handle_strategies() -> Answer:
+def handle_strategies() -> web.Reply:
     """The catalog. A playbook that does not load is the server's fault: the
     CatalogError reaches the request boundary, a 500."""
-    return {"strategies": [h.to_dict() for h in catalog_module.load()],
-            "playbook": catalog_module.playbook_name()}, 200
+    return web.Reply({"strategies": [h.to_dict() for h in catalog_module.load()],
+                      "playbook": catalog_module.playbook_name()}, 200)
 
 
-def handle_health() -> tuple[Health, int]:
+def handle_health() -> web.Reply:
     """The catalog's size and the database's state, always 200: a playbook
     that does not load leaves the strategy counts out, and it or a database
     out of reach makes the status degraded, the error naming each - what
@@ -126,7 +126,7 @@ def handle_health() -> tuple[Health, int]:
         errors.append(str(error))
     if errors:
         out["status"], out["error"] = "degraded", "; ".join(errors)
-    return out, 200
+    return web.Reply(dict(out), 200)
 
 
 class Handler(web.Handler):
