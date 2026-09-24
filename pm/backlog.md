@@ -87,8 +87,8 @@ keeps it current.
   wiki cells, and seven hero articles have no written cell. Cost: two
   days.
 - **Facts no metric reads.** `ability_modifiers` holds speed, damage-taken
-  and healing-received buffs; nothing in
-  `ui/facts/compute.py` reads `hero.modifiers`. Knockbacks as their own
+  and healing-received buffs; no metric in
+  `ui/facts/team.py` or `ui/facts/compute.py` reads `hero.modifiers`. Knockbacks as their own
   count (Control's edges), damage beams apart from healing beams, area
   healing apart from area damage. Cost: a day each.
 - **Off-shapes never win.** 2-1-3 and 2-3-1 land within 2-8 percent of the

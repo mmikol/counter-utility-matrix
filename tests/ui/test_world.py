@@ -9,6 +9,7 @@ import pytest
 
 from db import Refusal
 from ui.facts import compute, model, tables
+from ui.facts.team import FLIER_REACH, team_metrics
 
 pytestmark = pytest.mark.invariant
 
@@ -61,13 +62,13 @@ def test_kit_rows_are_read_in_their_own_units(world):
     assert world.hero("Sigma").overhealth == 400 and mauga.overhealth == 150
     assert world.hero("Lifeweaver").overhealth == 100 == world.hero("Brigitte").overhealth
     assert sombra.dmg_ult and sombra.ult_damage == 0 and sombra.dmg_amp == 0
-    assert compute.team_metrics(world, [reaper, mauga])["lifelines"] == 2
+    assert team_metrics(world, [reaper, mauga])["lifelines"] == 2
     # a sum, a volley and a window's total are not one hit or a rate
     hazard = world.hero("Hazard")
     assert hazard.burst == 75 and hazard.ult_damage == 90
     assert world.hero("Ramattra").burst == 65
     assert world.hero("Zenyatta").burst == 100 and world.hero("Widowmaker").burst >= 250
-    assert compute.team_metrics(world, [world.hero("Zenyatta")])["one_shots"] == 0
+    assert team_metrics(world, [world.hero("Zenyatta")])["one_shots"] == 0
     # an ultimate fired at its rate for its duration, under the roster's cap
     assert world.hero("Pharah").ult_damage == world.ult_cap
     assert 130 < world.hero("Venture").ult_damage < world.ult_cap
@@ -99,7 +100,7 @@ def test_the_weapon_a_hero_fights_with_sets_its_kind_and_reach(world):
     # An ultimate's armor (Rally) stays out
     assert ramattra.form_armor == 137.5 and ramattra.armor == 100 and ramattra.pool == 375
     assert [h.name for h in world.heroes.values() if h.form_armor] == ["Ramattra"]
-    t = compute.team_metrics(world, [ramattra])
+    t = team_metrics(world, [ramattra])
     assert t["armor_total"] == 237.5 and t["pool_total"] == 512.5 and t["weakest"] == "Ramattra"
     assert t["armor_share"] == pytest.approx(237.5 / 512.5)
     assert world.hero("Mei").max_range == 12 and world.hero("Sojourn").max_range == 60
@@ -140,20 +141,20 @@ def test_tools_are_counted_once_and_for_what_they_do(world):
     assert 2.5 not in world.hero("Emre").cooldowns
     # what lands on a teammate, apart from what saves only its owner
     picks = [world.hero(n) for n in ("Kiriko", "Reaper", "Venture", "Baptiste", "Mercy", "Moira")]
-    t = compute.team_metrics(world, picks)
+    t = team_metrics(world, picks)
     assert t["cleanse"] == 4 and t["team_cleanse"] == 1            # Protection Suzu alone
     assert t["invuln"] == 6 and t["team_saves"] == 3               # Suzu, the Field, Resurrect
     assert world.hero("Zenyatta").team_cleanse_tools == ["Transcendence"]
     five = [world.hero(n) for n in ("Reinhardt", "Ana", "Widowmaker", "Tracer", "Winston")]
-    t = compute.team_metrics(world, five)
+    t = team_metrics(world, five)
     assert t["burst_max"] == 300 and t["burst_hero"] == "Reinhardt"
     assert t["burst_ranged"] == world.hero("Widowmaker").burst
-    assert compute.team_metrics(world, [world.hero("Reinhardt")])["burst_ranged"] == 0
+    assert team_metrics(world, [world.hero("Reinhardt")])["burst_ranged"] == 0
     assert t["hitscan"] == 3 and t["hitscan_reach"] == 1            # Widowmaker's 70 m
     # 30 m answers a flier (Shion's pistols), 25 m does not
-    assert compute.FLIER_REACH == 30 and world.hero("Shion").hitscan_range == 30
+    assert FLIER_REACH == 30 and world.hero("Shion").hitscan_range == 30
     four = [world.hero(n) for n in ("Shion", "Wrecking Ball", "Junker Queen", "Cassidy")]
-    reach = compute.team_metrics(world, four)
+    reach = team_metrics(world, four)
     assert reach["hitscan"] == 4 and reach["hitscan_reach"] == 2
     # an explosion does not crit: Freja's bolt is 35 to the head, 75 flat
     assert world.hero("Freja").burst == 75

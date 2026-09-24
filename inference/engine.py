@@ -37,10 +37,10 @@ from inference.solver import (
 )
 from ui.facts import compute
 from ui.facts import engine as facts_engine
-from ui.facts.compute import text
 from ui.facts.draft import TEAM_SIZE, is_sided, opposite
 from ui.facts.engine import Fact, FactSet
 from ui.facts.model import ROLES, Hero, Map, World
+from ui.facts.team import team_metrics, text
 
 # A record of the payload as JSON: a pick, an alternative, the momentum, a
 # result or a board as to_dict() serves it.
@@ -686,7 +686,7 @@ def _plan(world: World, m: Map | None, side: str, bans: Sequence[str],
     # them
     if red_h:
         n = len(red_h)
-        theirs = compute.team_metrics(world, red_h, m, [])
+        theirs = team_metrics(world, red_h, m, [])
         red_lean = text(theirs["style_lean"]) or text(theirs["style_top"])
         them = "Their %d pick%s%s (%s)" % (n, "" if n == 1 else "s",
                                             " so far" if n < TEAM_SIZE else "",

@@ -5,6 +5,7 @@ import pytest
 from db import Refusal
 from ui.facts import compute, engine, model, tables
 from ui.facts.draft import EXPECTED_SHAPE, TEAM_SIZE, is_sided
+from ui.facts.team import TEAM_METRICS, team_metrics
 
 pytestmark = pytest.mark.invariant
 
@@ -78,17 +79,17 @@ def test_metrics_cover_the_registry_exactly(world):
     ns = compute.namespace(world, m, [world.hero("Zarya"), world.hero("Pharah")],
                            [world.hero("Ana"), world.hero("Reinhardt")], ban_count=0)
     team_keys = {k for k in ns["team"] if not k.startswith("_")}
-    assert team_keys == set(compute.TEAM_METRICS)
+    assert team_keys == set(TEAM_METRICS)
     assert set(ns["matchup"]) == set(compute.MATCHUP_METRICS)
     assert set(ns["map"]) == set(compute.MAP_METRICS)
     assert ns["team"]["tanks"] == 1 and ns["team"]["supports"] == 1
     assert ns["enemy"]["flyers"] == 1                     # Pharah
     # a flying tank is a flier, not one hitscan is picked to answer
     dva, pharah = world.hero("D.Va"), world.hero("Pharah")
-    red = compute.team_metrics(world, [dva, pharah])
+    red = team_metrics(world, [dva, pharah])
     assert red["flyers"] == 2 and red["light_flyers"] == 1
     assert compute.red_matchup(red)["flyers"] == 1
-    assert compute.red_matchup(compute.team_metrics(world, [dva]))["flyers"] == 0
+    assert compute.red_matchup(team_metrics(world, [dva]))["flyers"] == 0
     assert compute.registry()["matchup.flyers"] == "red picks that fly, tanks aside"
     assert ns["team"]["coverage"] >= 1                    # Reinhardt answers Zarya
     for key in compute.TEXT_METRICS:
@@ -97,8 +98,8 @@ def test_metrics_cover_the_registry_exactly(world):
     # the solver builds its bag lean: every key a strategy can name reads the same there
     blue = [world.hero("Ana"), world.hero("Reinhardt")]
     red = [world.hero("Zarya"), world.hero("Pharah")]
-    full = compute.team_metrics(world, blue, m, red)
-    lean = compute.team_metrics(world, blue, m, red, lean=True)
+    full = team_metrics(world, blue, m, red)
+    lean = team_metrics(world, blue, m, red, lean=True)
     for key in compute.registry():
         if key.startswith("team."):
             name = key.split(".", 1)[1]
@@ -389,7 +390,7 @@ def test_a_heros_best_maps_are_derived_from_blizzards_map_rates(world):
     on_map = engine.generate(world, top.name, [], ["Symmetra"])
     assert on_map.find("hero.map_strategy", "Symmetra")[0].value == 1
     assert any(f.value == "Symmetra" for f in on_map.find("map.playbook_pick"))
-    assert compute.team_metrics(world, [sym], top)["map_strategy_hits"] == 1
+    assert team_metrics(world, [sym], top)["map_strategy_hits"] == 1
     assert compute.registry()["team.map_strategy_hits"] == (
         "picks whose three best maps by rate include this map")
 
@@ -408,9 +409,9 @@ def test_the_map_fact_carries_this_maps_ban_rate_and_the_team_its_availability_h
     if world.hero("Sombra").map_ban(world.map("King's Row").id) is not None:
         assert ", banned " in fact.text
     picks = [world.hero("Sombra"), world.hero("Ana")]
-    t = compute.team_metrics(world, picks, world.map("King's Row"), [])
+    t = team_metrics(world, picks, world.map("King's Row"), [])
     assert 0 <= t["map_availability"] <= 1
-    anywhere = compute.team_metrics(world, picks, None, [])
+    anywhere = team_metrics(world, picks, None, [])
     assert anywhere["map_availability"] == anywhere["availability"]
 
 
@@ -451,14 +452,14 @@ def test_no_matchup_metric_restates_a_team_metric(world):
     blue = [world.hero(n) for n in ("Reinhardt", "D.Va", "Ashe", "Sojourn", "Ana", "Kiriko")]
     red = [world.hero(n) for n in ("Winston", "Zarya", "Genji", "Tracer", "Lucio", "Mercy")]
     m = next(iter(world.maps.values()))
-    blue_t = compute.team_metrics(world, blue, m, red)
-    red_t = compute.team_metrics(world, red, m, blue)
+    blue_t = team_metrics(world, blue, m, red)
+    red_t = team_metrics(world, red, m, blue)
     matchup = compute.matchup_metrics(blue_t, red_t)
 
     # a matchup key that equals blue's own is only proof of a copy if it also
     # moves when blue does and red does not: compare a second blue on one red
     other = [world.hero(n) for n in ("Orisa", "Ramattra", "Reaper", "Bastion", "Moira", "Brigitte")]
-    other_t = compute.team_metrics(world, other, m, red)
+    other_t = team_metrics(world, other, m, red)
     other_matchup = compute.matchup_metrics(other_t, red_t)
 
     copies = [key for key, value in matchup.items()

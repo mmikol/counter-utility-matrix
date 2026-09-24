@@ -81,8 +81,9 @@ flowchart LR
 
 The data layer owns every write to Postgres and the playbook. The UI
 layer reads, turns every table into facts, and defines every metric once
-(`ui/facts/compute.py`), so the number on the board and the number the
-solver scores are the same function; its one write, a heuristic's weight
+(`ui/facts/team.py` the team's, `ui/facts/compute.py` the rest, and
+`compute.registry()` gathers them), so the number on the board and the
+number the solver scores are the same function; its one write, a heuristic's weight
 stored from the board, is off by default (`COUNTRIX_READ_ONLY`)
 and, when turned on, is handed to the data layer's `tune` tool. The
 inference layer reads the facts, never the tables.

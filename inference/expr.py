@@ -42,9 +42,9 @@ class Section:
 
     The dict becomes the instance's own __dict__, so `team.tanks` in a
     compiled expression is a plain attribute lookup and not a call - the
-    solver makes millions of them. The values are the namespace's own:
-    compute fills every key it declares with a number, a name or a list,
-    never None."""
+    solver makes millions of them. The values are the namespace's own, of
+    any one type: the metric bags fill every key they declare with a
+    number, a name or a list, never None."""
 
     def __init__[V](self, values: dict[str, V]) -> None:
         self.__dict__ = values

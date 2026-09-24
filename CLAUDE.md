@@ -73,11 +73,12 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   to `.md.quarantined` outside the door. Reads bypass the door: `ui/` and `inference/` connect
   through `db.psql.default_dsn()` - `DATABASE_URL`, else the embedded
   pgserver cluster, which starts on first touch.
-- **One definition per metric.** `ui/facts/compute.py` defines every metric
-  in a registry. The facts engine words them as facts, the solver scores the
-  same functions, and the catalog validates a strategy's `metric` against the
-  registry, so the number on the board and the number the solver maximises
-  cannot drift. `ui/facts` is a shared library: `inference/` and
+- **One definition per metric.** `ui/facts/team.py` defines every team
+  metric and `ui/facts/compute.py` the matchup, map and world ones, each in a
+  registry, and `compute.registry()` gathers them. The facts engine words
+  them as facts, the solver scores the same functions, and the catalog
+  validates a strategy's `metric` against the registry, so the number on the
+  board and the number the solver maximises cannot drift. `ui/facts` is a shared library: `inference/` and
   `db/mcp/tools.py` import it.
 - **Facts are numbered.** `FactSet` numbers facts F1.. and the playbook's
   record S1.. in emission order; a solver contribution cites a fact by metric

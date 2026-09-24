@@ -13,6 +13,7 @@ from inference.engine import BrokenProcessPool
 from inference.expr import Expr, ExprError
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts import compute
+from ui.facts.team import team_metrics
 
 # --- the expression language (pure) --------------------------------------
 
@@ -762,7 +763,7 @@ def test_the_plan_says_nothing_the_board_contradicts(world):
     terms = [{"id": r.id, "applies": True, "weighted": 2.0} for r in rules[:4]]
     terms.append({"id": "unmet", "applies": True, "weighted": -0.5, "need": True})
     red_h = [world.hero("Reinhardt"), world.hero("Zarya")]
-    theirs = compute.team_metrics(world, red_h, m, [])
+    theirs = team_metrics(world, red_h, m, [])
     red_lean = theirs["style_lean"] or theirs["style_top"]
     assert red_lean == "brawl"
     # a real Result, not a stand-in: _plan reads .facts, which Result defines
@@ -855,7 +856,7 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
     and the same board solves to the same six twice in a row."""
     from inference import engine
     heroes = [world.hero(n) for n in ("Reinhardt", "Zarya", "Widowmaker", "Ana", "Lúcio", "Mercy")]
-    forward = compute.team_metrics(world, heroes, world.map("Ilios"), [])
+    forward = team_metrics(world, heroes, world.map("Ilios"), [])
 
     from ui.facts import model
 
@@ -863,7 +864,7 @@ def test_style_ties_break_by_name_so_hash_order_cannot_reach_the_answer(world):
         def __init__(self, hero):
             self.__dict__ = dict(hero.__dict__)
             self.styles = sorted(hero.styles, reverse=True)   # the other iteration order
-    backward = compute.team_metrics(world, [Reversed(h) for h in heroes], world.map("Ilios"), [])
+    backward = team_metrics(world, [Reversed(h) for h in heroes], world.map("Ilios"), [])
     for key in ("style_top", "style_lean", "style_counts", "style_fit"):
         assert forward[key] == backward[key], key
     ilios = world.map("Ilios")

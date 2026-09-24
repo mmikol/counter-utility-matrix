@@ -35,9 +35,9 @@ from typing import Any
 from inference.catalog import BOARD_SECTIONS, Strategy
 from inference.expr import Expr, Scope, Value, scope
 from ui.facts import compute
-from ui.facts.compute import MetricBag, number
 from ui.facts.draft import TEAM_SIZE
 from ui.facts.model import ROLES, Hero, Map, World
+from ui.facts.team import MetricBag, number, team_metrics
 
 REFERENCE_SIZE = 1200
 PARTNER_POINTS = 0.5              # a locked partner's worth when ranking a pool
@@ -131,7 +131,7 @@ class Solver:
         self.heuristics = [h for h in catalog if h.form == "heuristic"]
         self.scored_constraints = [h for h in catalog if h.form == "scored"]
         # the red side's metrics do not change across candidates
-        self.red_t = compute.team_metrics(world, self.red, m, ())
+        self.red_t = team_metrics(world, self.red, m, ())
         self.static: Namespace = {"enemy": self.red_t,
                                   "map": compute.map_metrics(m, side,
                                                              ban_count=len(self.banned)),
@@ -201,7 +201,7 @@ class Solver:
     # --- namespace and scoring -----------------------------------------------
 
     def namespace(self, heroes: Sequence[Hero]) -> Namespace:
-        team = compute.team_metrics(self.world, heroes, self.m, self.red, lean=True)
+        team = team_metrics(self.world, heroes, self.m, self.red, lean=True)
         ns = dict(self.static)
         ns["team"] = team
         ns["matchup"] = compute.matchup_metrics(team, self.red_t)

@@ -46,7 +46,8 @@ ui/
     kit.py         a kit piece's stat rows and the combat numbers read off them
     records.py     the typed records a Hero, a Map and the World hand on
     draft.py       the board's vocabulary and the Draft record the doors read and write
-    compute.py     the metrics registry: every number, one function each
+    team.py        the team metrics and the typed bag every metric section comes in
+    compute.py     the matchup, map and world metrics, and the registry of them all
     engine.py      the FactSet: the numbered facts for a board
 ```
 
@@ -249,30 +250,6 @@ crowd control and mobility, cleanses and saves, and the ultimate - so the
 metrics read fields, not SQL. The ultimate's raw damage waits for
 `cap_ult`, which the load calls once the roster's cap is known.
 
-### `compute.py` - the metrics registry
-
-Pure functions over a World, and the one place a number is defined. The
-board renders them as facts and the solver scores the same functions, so
-a change here changes both. Four registries, each key with a one-line
-meaning (`registry()` lists them all, and [inference.md](inference.md)
-prints them as the vocabulary a strategy may reference):
-
-| group | examples |
-| --- | --- |
-| `team.*` (also read as `enemy.*`) | shape (`tanks`, `damage`, `supports`, `shape_flags`), sustain (`hps_supports`, `hps_ratio`, `heal_peak_max`), damage (`dps_floor`, `burst_max`, `one_shots`), durability (`pool_total`, `squish_count`), tools (`mobility_count`, `cc_count`, `hitscan`, `antiheal`, `barrier_count`), coverage of the enemy (`coverage_share`), cohesion (`synergy_score`), map fit (`map_specialists`, `map_strategy_hits`), style (`style_lean`) |
-| `matchup.*` | the differences and ratios between the two teams: `dps_diff`, `burst_vs_heal`, `tempo_diff`, `ult_threat`, `style_lean_red` |
-| `map.*` | `known`, `mode`, `sided`, `side`, `style_top`, `style_margin`, `stages`, `bans` |
-| `world.*` | `heal_bench`, `hps_bench`, `roster_size` |
-
-`team_metrics(world, heroes, map, enemies)` computes a team's numbers
-(with `lean=True` for the solver, which leaves the answered-by lists empty);
-`matchup_metrics(blue, red)`, `map_metrics(map, side, ban_count=...)` and
-`world_metrics(world)` the rest; `namespace(...)` bundles them as the
-`team`, `enemy`, `matchup`, `map` and `world` sections a strategy's
-expression reads. `expected_picks` is red's likely six from the data
-alone, filled into `EXPECTED_SHAPE` (two per role) with a tie going to
-the alphabetically first name, each pick an `ExpectedPick` record.
-
 ### `draft.py` - the board's vocabulary
 
 The names every layer spells a board with: `TEAM_SIZE` (six, 6v6 Open
@@ -285,6 +262,52 @@ playbook draft is another thing: a strategy that awaits its frontmatter.
 `board_query(draft)` writes one back, so this board and the inference
 service spell a board the same way. The module imports only the model,
 so the metrics can take its names without a cycle.
+
+### `team.py` - the team metrics
+
+Pure functions over a World, and the one place a team's number is
+defined. `TEAM_METRICS` is the registry of `team.*` keys, each with a
+one-line meaning; a strategy reads the same keys for red as `enemy.*`.
+`team_metrics(world, heroes, map, enemies)` computes a team's bag, one
+helper per registry section - shape (`tanks`, `damage`, `supports`,
+`shape_flags`), durability (`pool_total`, `squish_count`), damage
+(`dps_floor`, `burst_max`, `one_shots`), sustain (`hps_supports`,
+`hps_ratio`, `heal_peak_max`), tools (`mobility_count`, `cc_count`,
+`barrier_count`), cohesion (`synergy_score`), meta (`win_mean`,
+`availability`), map fit (`map_specialists`, `map_strategy_hits`) and
+versus, the coverage of the enemy (`coverage_share`) - each writing its
+keys once and in registry order. Beside them rides `_answered`, the
+answering picks per enemy the facts engine words; the solver asks for
+the bag `lean=True`, which leaves it empty. `MetricBag` is the shape every
+metric section comes in: a dict of `MetricValue`, a count or figure, a
+name, a name list, the synergy pairs, the style tally or the answers.
+`number`, `text`, `names` and their siblings read a value as the kind a
+caller needs and refuse any other, so a text metric never reaches
+arithmetic unnoticed.
+
+### `compute.py` - the metrics registry
+
+The other three registries and the functions behind them, and the one
+list of every key a strategy may reference: `registry()` gathers
+`TEAM_METRICS` (as `team.*` and `enemy.*`) with its own, and
+[inference.md](inference.md) prints them as the vocabulary. The board
+renders them as facts and the solver scores the same functions, so a
+change here or in `team.py` changes both.
+
+| group | examples |
+| --- | --- |
+| `team.*` (also read as `enemy.*`) | see `team.py` |
+| `matchup.*` | the differences and ratios between the two teams: `dps_diff`, `burst_vs_heal`, `tempo_diff`, `ult_threat`, `style_lean_red` |
+| `map.*` | `known`, `mode`, `sided`, `side`, `style_top`, `style_margin`, `stages`, `bans` |
+| `world.*` | `heal_bench`, `hps_bench`, `roster_size` |
+
+`matchup_metrics(blue, red)`, `map_metrics(map, side, ban_count=...)` and
+`world_metrics(world)` compute the rest; `namespace(...)` bundles a
+board's bags as the `team`, `enemy`, `matchup`, `map` and `world`
+sections a strategy's expression reads. `expected_picks` is red's likely
+six from the data alone, filled into `EXPECTED_SHAPE` (two per role) with
+a tie going to the alphabetically first name, each pick an `ExpectedPick`
+record.
 
 ### `engine.py` - the FactSet
 
@@ -341,6 +364,7 @@ side each team holds.
 
 ## What reads this package
 
-The inference layer's solver (`compute`) and engine (`engine`, `model`),
-the inference service, and the MCP tools `roster`, `facts`, `infer`,
-`evaluate` and `board` - all through the same functions the board calls.
+The inference layer's solver (`compute`, `team`, `draft`) and engine
+(`engine`, `model`, `team`, `draft`), the inference service, and the MCP
+tools `roster`, `facts`, `infer`, `evaluate` and `board` - all through
+the same functions the board calls.

@@ -35,14 +35,10 @@ from typing import Any
 
 from db import Refusal
 from ui.facts import compute
-from ui.facts.compute import (
-    RANK_SENSITIVE,
-    SPECIALIST_DELTA,
-    TERRAIN_STANDOUT,
-    TREND_POINTS,
-)
+from ui.facts.compute import TERRAIN_STANDOUT, TREND_POINTS
 from ui.facts.draft import MAX_BANS, SIDES, is_sided, opposite
 from ui.facts.model import SQUISHY_POOL, TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
+from ui.facts.team import RANK_SENSITIVE, SPECIALIST_DELTA, TEAM_METRICS, team_metrics
 
 # a team's or a matchup's metrics as compute measures them: numbers, names and
 # lists, by key
@@ -188,8 +184,8 @@ def generate(world: World, map_name: str | None = None, red: Sequence[str] = (),
         _hero_facts(fs, world, h, "red", m, blue_h, [x for x in red_h if x is not h])
     for h in blue_h:
         _hero_facts(fs, world, h, "blue", m, red_h, [x for x in blue_h if x is not h])
-    red_t = compute.team_metrics(world, red_h, m, blue_h) if red_h else None
-    blue_t = compute.team_metrics(world, blue_h, m, red_h) if blue_h else None
+    red_t = team_metrics(world, red_h, m, blue_h) if red_h else None
+    blue_t = team_metrics(world, blue_h, m, red_h) if blue_h else None
     if red_t:
         _team_facts(fs, world, "red", red_h, red_t, m, blue_h)
     if blue_t:
@@ -601,7 +597,7 @@ def _team_facts(fs: FactSet, world: World, team: str, heroes: Sequence[Hero], t:
     def listed(key: str, unit: str | None = None) -> None:
         """A metric worded by its registry line, once compute carries it."""
         if t.get(key):
-            add(key, "%s %s: %g" % (label, compute.TEAM_METRICS[key], t[key]), unit)
+            add(key, "%s %s: %g" % (label, TEAM_METRICS[key], t[key]), unit)
 
     add("size", "%s: %d pick%s locked (%s), %d slot%s open" % (
         label, t["size"], "" if t["size"] == 1 else "s", names, t["open_slots"],
