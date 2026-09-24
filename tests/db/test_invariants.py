@@ -1,8 +1,15 @@
 """Invariants: properties the built database must hold, whoever loaded it."""
 
-import pytest
+import os
 
+import psycopg
+import pytest
+from psycopg.conninfo import make_conninfo
+from psycopg.sql import SQL, Identifier
+
+from db import psql
 from db.data.wiki.kits.measurements import CANONICAL_UNITS
+from db.psql import schema
 
 pytestmark = pytest.mark.invariant
 
@@ -264,8 +271,6 @@ def test_ability_keywords_are_stored_verbatim(one):
 def test_strategies_table_mirrors_the_files(rows):
     """The table names the playbook it mirrors - the shipped one or an
     experiment - and matches that folder's files."""
-    import os
-
     from db import ROOT
     from inference import catalog
     playbooks = [r[0] for r in rows("select distinct playbook from strategies")]
@@ -288,6 +293,28 @@ def test_the_playbook_column_names_the_setting_the_code_reads(one):
 
 
 def test_the_migration_ledger_matches_the_files(rows):
-    from db.psql import schema
     assert [r[0] for r in rows("select filename from schema_migrations order by 1")] == \
         [m.name for m in schema.read_migrations()]
+
+
+def test_the_migration_chain_builds_an_empty_database(db, dsn):
+    """The chain from 001 builds the schema the built database has, and
+    docker-entrypoint.sh relies on it when it answers a stale schema with
+    db_rebuild. It runs into a scratch database on the same server: 011 and
+    012 create the cluster-wide reader role only if it is missing and set it
+    as it already is, and no migration inserts a hero, so the scratch
+    database is unfilled."""
+    scratch = "countrix_chain_%d" % os.getpid()
+    with psycopg.connect(dsn, autocommit=True) as admin:
+        admin.execute(SQL("CREATE DATABASE {}").format(Identifier(scratch)))
+    try:
+        with psycopg.connect(make_conninfo(dsn, dbname=scratch)) as cx:
+            schema.apply(cx, schema.read_migrations())
+            assert schema.pending(cx) == []
+            assert schema.state(cx) == "unfilled"
+            assert psql.table_names(cx) == psql.table_names(db)
+    finally:
+        with psycopg.connect(dsn, autocommit=True) as admin:
+            admin.execute(SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
+                Identifier(scratch)))
+        db.rollback()

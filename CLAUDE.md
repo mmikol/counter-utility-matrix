@@ -145,7 +145,9 @@ db <- facts <- inference <- door <- ui.
   `os.environ` or `os.getenv` that runs at import fails
   `test_no_module_reads_the_environment_at_import`.
 - A new migration is named by its number in docs/db.md's `migrations/`
-  row, the one inventory of the schema's steps.
+  row, the one inventory of the schema's steps. The whole chain must build
+  an empty database: an invariant test applies it to a scratch database
+  on the target server and compares the tables with the built one.
 - Only a door tool in `door/mcp/` calls the playbook's writers -
   `catalog.mirror`, `tune.tune`/`add`/`complete`, `derive.derive` - and
   `inference/derive.py`, which completes drafts inside a run the door
