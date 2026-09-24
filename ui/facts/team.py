@@ -152,6 +152,12 @@ def number(value: MetricValue) -> float:
     raise TypeError("a metric read as a number holds %r" % (value,))
 
 
+def numbers(bag: MetricBag) -> dict[str, float]:
+    """The bag's numeric metrics, each the value itself: what a reader that
+    words many of them reads them from."""
+    return {k: v for k, v in bag.items() if isinstance(v, int | float)}
+
+
 def text(value: MetricValue) -> str:
     """A metric read as a name: a playstyle, a hero."""
     if isinstance(value, str):
