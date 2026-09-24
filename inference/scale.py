@@ -9,7 +9,8 @@ functions of an Objective.
                         a slice of it.
     reference_bounds    each heuristic's low and high over one slice of the sample
                         and of the board's field; the slices merge into the bounds
-                        freeze draws in one process
+                        freeze draws in one process, since both take them from
+                        _bounds_over
     reference_standing  each hero's summed score across one slice of the reference
                         sixes it is in: its mean is the playbook's own ranking of the
                         roster on this board
@@ -123,21 +124,31 @@ def _confidence_bounds(objective: Objective, spec: MetricKey, index: int,
     return _spanning(seen)
 
 
+def _bounds_over(objective: Objective, prepared: Sequence[Candidate]) -> Bounds:
+    """{heuristic id: Interval(low, high)} over prepared sixes, and under id +
+    CONFIDENCE_KEY the bounds of the confidence metric a heuristic names. A
+    heuristic no six here values is left out, its confidence entry with it:
+    the objective reads a missing id as (0, 0), and a slice that never saw a
+    value must not merge a (0, 0) into the other slices' bounds."""
+    out: Bounds = {}
+    for i, g in enumerate(objective.heuristics):
+        values = [value for c in prepared if (value := c.raw[i]) is not None]
+        if not values:
+            continue
+        out[g.id] = _spanning(values)
+        spec = objective.confidence_metrics[i]
+        if spec is not None:
+            out[g.id + CONFIDENCE_KEY] = _confidence_bounds(objective, spec, i, prepared)
+    return out
+
+
 def reference_bounds(objective: Objective, index: int = 0, count: int = 1) -> Bounds:
     """{heuristic id: Interval(low, high)} over one slice of the sample AND of the
     field, leaving out the heuristics the slice never valued. The slices
     partition both, so merging their lows and highs gives what one process
     freezes."""
     prepared = _prepared(objective, index, count) + _field_sample(objective, index, count)
-    out: Bounds = {}
-    for i, g in enumerate(objective.heuristics):
-        values = [value for c in prepared if (value := c.raw[i]) is not None]
-        if values:
-            out[g.id] = _spanning(values)
-        spec = objective.confidence_metrics[i]
-        if spec is not None:
-            out[g.id + CONFIDENCE_KEY] = _confidence_bounds(objective, spec, i, prepared)
-    return out
+    return _bounds_over(objective, prepared)
 
 
 def board_prior(objective: Objective, h: Hero, partners: int = 0) -> float:
@@ -215,15 +226,7 @@ def freeze(objective: Objective) -> Tally:
     standing. The sample is drawn once here, and nowhere else in one
     process."""
     reference = _prepared(objective)
-    over = reference + _field_sample(objective)
-    bounds: Bounds = {}
-    for i, g in enumerate(objective.heuristics):
-        values = [value for c in over if (value := c.raw[i]) is not None]
-        bounds[g.id] = _spanning(values)
-        spec = objective.confidence_metrics[i]
-        if spec is not None:
-            bounds[g.id + CONFIDENCE_KEY] = _confidence_bounds(objective, spec, i, over)
-    objective.adopt_bounds(bounds)
+    objective.adopt_bounds(_bounds_over(objective, reference + _field_sample(objective)))
     return _tally(objective, reference)
 
 

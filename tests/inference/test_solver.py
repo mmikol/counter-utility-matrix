@@ -1,7 +1,8 @@
 """The search on a board: shape limits, a need and its budget, partners that
 only pay together, the scale a ban leaves alone, the ranking order and its
-tie-breaks, a rule scaled by the metric it names, and the reference sample
-of a small roster. Every board is the synthetic World's: no database."""
+tie-breaks, a rule scaled by the metric it names and the bounds its slices
+merge into, and the reference sample of a small roster. Every board is the
+synthetic World's: no database."""
 
 import copy
 import dataclasses
@@ -294,6 +295,33 @@ def test_a_board_confidence_reads_the_boards_own_ban_count(synthetic_world, tmp_
                                   catalog=playbook)
     solver.freeze_bounds()
     assert solver.bounds["scale-by-the-bans" + scoring.CONFIDENCE_KEY] == (2.0, 2.0)
+
+
+def test_merged_slices_bound_a_confidence_metric_as_one_process_does(synthetic_world, tmp_path):
+    """A slice in which no six values a heuristic leaves out its confidence
+    bounds as well as its own, so merging it adds nothing: a confidence metric
+    below zero on every six that values it keeps its high below zero, as the
+    bounds drawn in one process do."""
+    from inference import parallel, scale, scoring
+    with open(os.path.join(FIXTURE_PLAYBOOK, "meta-strength.md"), encoding="utf-8") as handle:
+        text = handle.read()
+    (tmp_path / "meta-strength.md").write_text(
+        text.replace("weight: 1\n", "weight: 1\nconfidence: team.pick_mass\n", 1),
+        encoding="utf-8")
+    playbook = catalog.load(str(tmp_path))
+    assert [h.confidence for h in playbook] == ["team.pick_mass"]
+    objective = scoring.Objective(synthetic_world, None, red=[], catalog=playbook)
+    valued = []
+    for raw, sure in ((0.4, -2.0), (0.7, -1.0)):
+        cand = scoring.Candidate([])
+        cand.raw, cand.confidence = [raw], [sure]
+        valued.append(cand)
+    unvalued = scoring.Candidate([])
+    unvalued.raw, unvalued.confidence = [None], [None]
+    merged = parallel._widen(parallel._widen({}, scale._bounds_over(objective, valued)),
+                             scale._bounds_over(objective, [unvalued]))
+    assert merged == scale._bounds_over(objective, [*valued, unvalued])
+    assert merged["meta-strength" + scoring.CONFIDENCE_KEY] == scoring.Interval(-2.0, -1.0)
 
 
 def test_a_roster_with_fewer_legal_sixes_than_the_reference_is_sampled_whole(synthetic_world):
