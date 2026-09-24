@@ -144,7 +144,7 @@ class Solver:
             elif all(n.split(".", 1)[0] in STATIC_SECTIONS or n in compute.RED_MATCHUP
                      for n in h.when.names):
                 sc["params"] = h.params_section
-                gates[h.id] = bool(h.when.eval(sc))
+                gates[h.id] = bool(h.when.evaluate(sc))
             else:
                 gates[h.id] = None
                 try:
@@ -169,7 +169,7 @@ class Solver:
         """`when` on a Scope whose params slot is already h's."""
         if h.when is None:
             return True
-        return bool(h.when.eval(sc))
+        return bool(h.when.evaluate(sc))
 
     def prepare(self, cand):
         """Namespace, hard-limit check, raw heuristic values."""
@@ -182,10 +182,10 @@ class Solver:
                 gate = held[slot]
                 if gate is None:
                     sc["params"] = h.params_section
-                    gate = held[slot] = bool(h.when.eval(sc))
+                    gate = held[slot] = bool(h.when.evaluate(sc))
             if gate:
                 sc["params"] = h.params_section
-                if not bool(h.require.eval(sc)) and not h.soft:
+                if not bool(h.require.evaluate(sc)) and not h.soft:
                     violations.append(h.id)
         cand.violations = violations
         raw = []
@@ -195,7 +195,7 @@ class Solver:
                 gate = held[slot]
                 if gate is None:
                     sc["params"] = g.params_section
-                    gate = held[slot] = bool(g.when.eval(sc))
+                    gate = held[slot] = bool(g.when.evaluate(sc))
             if gate:
                 value = ns.get(section, _EMPTY).get(key)
                 keep(float(value) if value else 0.0)
@@ -457,13 +457,13 @@ class Solver:
                 applies = held[slot]
                 if applies is None:
                     sc["params"] = h.params_section
-                    applies = held[slot] = bool(h.when.eval(sc))
+                    applies = held[slot] = bool(h.when.evaluate(sc))
             ok, penalty = True, 0.0
             if applies:
                 sc["params"] = h.params_section
-                ok = bool(h.require.eval(sc))
+                ok = bool(h.require.evaluate(sc))
                 if h.soft and not ok:
-                    penalty = float(h.penalty.eval(sc))
+                    penalty = float(h.penalty.evaluate(sc))
             total -= penalty
             if detail:
                 contributions.append({"id": h.id, "kind": "constraint", "form": "limit",
@@ -517,14 +517,14 @@ class Solver:
                 applies = held[slot]
                 if applies is None:
                     sc["params"] = r.params_section
-                    applies = held[slot] = bool(r.when.eval(sc))
+                    applies = held[slot] = bool(r.when.evaluate(sc))
             bonus = penalty = 0.0
             if applies:
                 sc["params"] = r.params_section
                 if r.bonus is not None:
-                    bonus = float(r.bonus.eval(sc))
+                    bonus = float(r.bonus.evaluate(sc))
                 if r.penalty is not None:
-                    penalty = float(r.penalty.eval(sc))
+                    penalty = float(r.penalty.evaluate(sc))
             weighted = r.weight * (bonus - penalty)
             total += weighted
             if detail:
@@ -831,7 +831,7 @@ def legal_shapes(catalog, locked_counts=None):
             ok = True
             for h in shape_constraints:
                 stub["params"] = h.params_section
-                if Solver._holds(h, stub) and not bool(h.require.eval(stub)):
+                if Solver._holds(h, stub) and not bool(h.require.evaluate(stub)):
                     ok = False
                     break
             if ok:

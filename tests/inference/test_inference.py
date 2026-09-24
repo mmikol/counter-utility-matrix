@@ -17,18 +17,22 @@ from ui.facts import compute
 
 def test_expressions_read_dotted_names_and_arithmetic():
     ns = {"team": {"tanks": 1, "hitscan": 3}, "params": {"X": 2}}
-    assert Expr("team.tanks == 1 and team.hitscan >= params.X").eval(ns) is True
-    assert Expr("min(team.hitscan, 2) * 1.5").eval(ns) == 3.0
-    assert Expr("team.missing + 1").eval(ns) == 1          # unknown reads 0
-    assert Expr("'dive' if team.tanks else 'brawl'").eval(ns) == "dive"
-    assert Expr("team.tanks / 0").eval(ns) == 0.0
+    assert Expr("team.tanks == 1 and team.hitscan >= params.X").evaluate(ns) is True
+    assert Expr("min(team.hitscan, 2) * 1.5").evaluate(ns) == 3.0
+    assert Expr("team.missing + 1").evaluate(ns) == 1          # unknown reads 0
+    assert Expr("'dive' if team.tanks else 'brawl'").evaluate(ns) == "dive"
+    assert Expr("team.tanks / 0").evaluate(ns) == 0.0
 
 
 def test_expressions_refuse_anything_beyond_the_whitelist():
     for bad in ("__import__('os')", "team.__class__", "[x for x in y]",
                 "lambda: 1", "open('f')", "team.tanks = 2"):
         with pytest.raises(ExprError):
-            Expr(bad).eval({"team": {}})
+            Expr(bad).evaluate({"team": {}})
+    # an operator outside the whitelist's tuples is refused as the node it sits in
+    for bad, node in (("team.tanks | 1", "BinOp"), ("~team.tanks", "UnaryOp")):
+        with pytest.raises(ExprError, match="unsupported syntax %s" % node):
+            Expr(bad)
 
 
 def test_expression_names_are_the_full_dotted_keys():
@@ -629,8 +633,8 @@ def test_the_sandbox_refuses_what_would_hang_or_exhaust_it():
                  "'" + "s" * 201 + "' == team.style_lean", "-" * 45 + "1"):
         with pytest.raises(ExprError):
             Expr(bomb)
-    assert Expr("team.tanks ** 2").eval({"team": {"tanks": 3}}) == 9
-    assert Expr("team.style_lean == 'dive'").eval({"team": {"style_lean": "dive"}}) is True
+    assert Expr("team.tanks ** 2").evaluate({"team": {"tanks": 3}}) == 9
+    assert Expr("team.style_lean == 'dive'").evaluate({"team": {"style_lean": "dive"}}) is True
 
 
 def test_the_momentum_verdict_reads_the_two_current_comps():

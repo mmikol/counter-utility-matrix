@@ -14,14 +14,20 @@ into a namespace of dicts ({"team": {...}, "enemy": {...}, "matchup": ...,
 """
 
 import ast
+from collections.abc import Callable, Iterable, Mapping
+from types import CodeType
 
-FUNCTIONS = {"min": min, "max": max, "abs": abs, "round": round,
-             "len": len, "int": int, "float": float, "bool": bool}
+FUNCTIONS: dict[str, Callable[..., object]] = {
+    "min": min, "max": max, "abs": abs, "round": round,
+    "len": len, "int": int, "float": float, "bool": bool}
 
 # the operators the whitelist admits; the compiled code object does the arithmetic
 BINARY = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mod, ast.Pow)
 COMPARE = (ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.In, ast.NotIn)
 UNARY = (ast.Not, ast.USub, ast.UAdd)
+
+# what an expression evaluates to: the whitelist admits no other constant or display
+Value = int | float | bool | str | list | tuple | None
 
 
 class ExprError(ValueError):
@@ -40,20 +46,20 @@ class Section:
     compute fills every key it declares with a number, a name or a list,
     never None."""
 
-    def __init__(self, values):
+    def __init__(self, values: dict[str, object]) -> None:
         self.__dict__ = values
 
-    def __getattr__(self, key):
+    def __getattr__(self, key: str) -> int:
         if key.startswith("__"):
             raise AttributeError(key)
         return 0
 
 
-class Scope(dict):
+class Scope(dict[str, Section]):
     """The eval locals: every namespace a Section, absent ones empty, and
     the arithmetic helpers by name."""
 
-    def __missing__(self, key):
+    def __missing__(self, key: str) -> Section | Callable[..., object]:
         if key in FUNCTIONS:
             return FUNCTIONS[key]
         return Section({})
@@ -61,9 +67,9 @@ class Scope(dict):
 
 class Expr:
     """A compiled expression: its source, the dotted names it reads, and
-    eval(namespace)."""
+    evaluate(namespace)."""
 
-    def __init__(self, source):
+    def __init__(self, source: str) -> None:
         self.source = source.strip()
         try:
             tree = ast.parse(self.source, mode="eval").body
@@ -77,12 +83,12 @@ class Expr:
         self._guard(tree, 0)
         # the code object is what a candidate is evaluated against; the tree
         # is dropped, so a playbook keeps no syntax trees in any worker
-        self.code = compile(ast.Expression(body=tree), "<strategy>", "eval")
+        self.code: CodeType = compile(ast.Expression(body=tree), "<strategy>", "eval")
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return "Expr(%r)" % self.source
 
-    def _collect_names(self, node):
+    def _collect_names(self, node: ast.AST) -> set[str]:
         found = set()
         for child in ast.walk(node):
             if isinstance(child, ast.Attribute):
@@ -96,7 +102,7 @@ class Expr:
                                             for o in found)}
 
     @staticmethod
-    def _dotted(node):
+    def _dotted(node: ast.expr) -> str | None:
         parts = []
         while isinstance(node, ast.Attribute):
             parts.append(node.attr)
@@ -106,7 +112,9 @@ class Expr:
             return ".".join(reversed(parts))
         return None
 
-    def _guard(self, node, depth):
+    # --- the guards ------------------------------------------------------------
+
+    def _guard(self, node: ast.AST, depth: int) -> None:
         """What the whitelist alone would let through: an exponent tower, a
         string multiplied a billion times, an expression nested past reason -
         each a way to hang or exhaust the solver from one frontmatter line."""
@@ -115,69 +123,96 @@ class Expr:
         if isinstance(node, ast.Constant) and isinstance(node.value, str) and len(node.value) > 200:
             raise ExprError("%r: a string constant over 200 characters" % self.source)
         if isinstance(node, ast.BinOp):
-            if isinstance(node.op, ast.Pow):
-                exp = node.right
-                if not (isinstance(exp, ast.Constant) and isinstance(exp.value, (int, float))
-                        and not isinstance(exp.value, bool) and 0 <= exp.value <= 8):
-                    raise ExprError("%r: an exponent must be a number between 0 and 8"
-                                    % self.source)
-            if isinstance(node.op, (ast.Mult, ast.Add)):
-                for side in (node.left, node.right):
-                    if isinstance(side, ast.Constant) and isinstance(side.value, str):
-                        raise ExprError("%r: strings are compared, not added or multiplied"
-                                        % self.source)
+            self._guard_binop(node)
         for child in ast.iter_child_nodes(node):
             self._guard(child, depth + 1)
 
-    def _check(self, node):
-        """The whitelist, enforced once at compile time."""
-        if isinstance(node, ast.Constant):
-            if not (isinstance(node.value, (int, float, str, bool)) or node.value is None):
-                raise ExprError("unsupported constant %r" % (node.value,))
-        elif isinstance(node, ast.BoolOp):
-            for v in node.values:
-                self._check(v)
-        elif isinstance(node, ast.BinOp) and type(node.op) in BINARY:
-            self._check(node.left)
-            self._check(node.right)
-        elif isinstance(node, ast.UnaryOp) and type(node.op) in UNARY:
-            self._check(node.operand)
-        elif isinstance(node, ast.Compare):
-            if any(type(op) not in COMPARE for op in node.ops):
-                raise ExprError("unsupported comparison in %r" % self.source)
-            self._check(node.left)
-            for c in node.comparators:
-                self._check(c)
-        elif isinstance(node, ast.IfExp):
-            self._check(node.test)
-            self._check(node.body)
-            self._check(node.orelse)
-        elif isinstance(node, ast.Call):
-            if not isinstance(node.func, ast.Name) or node.func.id not in FUNCTIONS:
-                raise ExprError("unsupported call in %r" % self.source)
-            if node.keywords:
-                raise ExprError("keyword arguments are not supported")
-            for a in node.args:
-                self._check(a)
-        elif isinstance(node, (ast.List, ast.Tuple)):
-            for e in node.elts:
-                self._check(e)
-        elif isinstance(node, ast.Attribute):
-            if self._dotted(node) is None:
-                raise ExprError("unsupported attribute access in %r" % self.source)
-        elif isinstance(node, ast.Name):
-            if node.id not in NAMESPACES and node.id not in FUNCTIONS:
-                raise ExprError("unknown name %r in %r" % (node.id, self.source))
-        else:
-            raise ExprError("unsupported syntax %s in %r"
-                            % (type(node).__name__, self.source))
+    def _guard_binop(self, node: ast.BinOp) -> None:
+        """An exponent is a small constant; strings are compared, never added or
+        multiplied."""
+        if isinstance(node.op, ast.Pow):
+            exp = node.right
+            if not (isinstance(exp, ast.Constant) and isinstance(exp.value, (int, float))
+                    and not isinstance(exp.value, bool) and 0 <= exp.value <= 8):
+                raise ExprError("%r: an exponent must be a number between 0 and 8"
+                                % self.source)
+        if isinstance(node.op, (ast.Mult, ast.Add)):
+            for side in (node.left, node.right):
+                if isinstance(side, ast.Constant) and isinstance(side.value, str):
+                    raise ExprError("%r: strings are compared, not added or multiplied"
+                                    % self.source)
 
-    def eval(self, namespace):
+    # --- the whitelist: one rule per node type -------------------------------
+
+    def _check(self, node: ast.AST) -> None:
+        """The whitelist, enforced once at compile time: the node type's rule
+        checks the node and names the children to walk; a type with no rule is
+        refused."""
+        rule = _RULES.get(type(node))
+        if rule is None:
+            raise self._unsupported(node)
+        for child in rule(self, node):
+            self._check(child)
+
+    def _unsupported(self, node: ast.AST) -> ExprError:
+        return ExprError("unsupported syntax %s in %r" % (type(node).__name__, self.source))
+
+    def _constant(self, node: ast.Constant) -> Iterable[ast.AST]:
+        if not (isinstance(node.value, (int, float, str, bool)) or node.value is None):
+            raise ExprError("unsupported constant %r" % (node.value,))
+        return ()
+
+    def _boolop(self, node: ast.BoolOp) -> Iterable[ast.AST]:
+        return node.values
+
+    def _binop(self, node: ast.BinOp) -> Iterable[ast.AST]:
+        if type(node.op) not in BINARY:
+            raise self._unsupported(node)
+        return (node.left, node.right)
+
+    def _unaryop(self, node: ast.UnaryOp) -> Iterable[ast.AST]:
+        if type(node.op) not in UNARY:
+            raise self._unsupported(node)
+        return (node.operand,)
+
+    def _compare(self, node: ast.Compare) -> Iterable[ast.AST]:
+        if any(type(op) not in COMPARE for op in node.ops):
+            raise ExprError("unsupported comparison in %r" % self.source)
+        return (node.left, *node.comparators)
+
+    def _ifexp(self, node: ast.IfExp) -> Iterable[ast.AST]:
+        return (node.test, node.body, node.orelse)
+
+    def _call(self, node: ast.Call) -> Iterable[ast.AST]:
+        if not isinstance(node.func, ast.Name) or node.func.id not in FUNCTIONS:
+            raise ExprError("unsupported call in %r" % self.source)
+        if node.keywords:
+            raise ExprError("keyword arguments are not supported")
+        return node.args
+
+    def _sequence(self, node: ast.List | ast.Tuple) -> Iterable[ast.AST]:
+        return node.elts
+
+    def _attribute(self, node: ast.Attribute) -> Iterable[ast.AST]:
+        # the value is not walked: an unknown namespace is the catalog's
+        # registry check to refuse, by the dotted name
+        if self._dotted(node) is None:
+            raise ExprError("unsupported attribute access in %r" % self.source)
+        return ()
+
+    def _name(self, node: ast.Name) -> Iterable[ast.AST]:
+        if node.id not in NAMESPACES and node.id not in FUNCTIONS:
+            raise ExprError("unknown name %r in %r" % (node.id, self.source))
+        return ()
+
+    # --- evaluation ----------------------------------------------------------
+
+    def evaluate(self, namespace: Mapping[str, dict[str, object]] | Scope) -> Value:
         """Evaluate against {"team": {...}, ...}; a Scope is used as is."""
         scope = namespace if isinstance(namespace, Scope) else Scope(
             (k, Section(v)) for k, v in namespace.items())
         try:
-            return eval(self.code, _GLOBALS, scope)
+            return eval(self.code, _GLOBALS, scope)  # nosec B307  # whitelisted AST, no builtins
         except ZeroDivisionError:
             return 0.0
         except TypeError as error:            # e.g. a text metric in arithmetic
@@ -186,14 +221,23 @@ class Expr:
             raise ExprError("%r: %s" % (self.source, type(error).__name__)) from error
 
 
-_GLOBALS = dict(FUNCTIONS, __builtins__={})
+# each node type the whitelist admits, and the rule that checks it
+_RULES: dict[type[ast.AST], Callable[..., Iterable[ast.AST]]] = {
+    ast.Constant: Expr._constant, ast.BoolOp: Expr._boolop, ast.BinOp: Expr._binop,
+    ast.UnaryOp: Expr._unaryop, ast.Compare: Expr._compare, ast.IfExp: Expr._ifexp,
+    ast.Call: Expr._call, ast.List: Expr._sequence, ast.Tuple: Expr._sequence,
+    ast.Attribute: Expr._attribute, ast.Name: Expr._name,
+}
+
+_GLOBALS: dict[str, object] = dict(FUNCTIONS, __builtins__={})
 
 
-def scope(namespace):
+def scope(namespace: Mapping[str, dict[str, object]]) -> Scope:
     """A reusable Scope for many evaluations over one candidate; the caller
     sets its `params` slot per strategy."""
     return Scope((k, Section(v)) for k, v in namespace.items())
 
 
-def compile_expr(source):
-    return Expr(source) if source not in (None, "") else None
+def compile_expr(source: str | None) -> Expr | None:
+    """The expression a frontmatter value holds, or None for none."""
+    return Expr(source) if source else None
