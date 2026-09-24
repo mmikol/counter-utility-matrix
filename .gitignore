@@ -35,6 +35,9 @@ db/raw/
 .DS_Store
 ._*
 
+# Claude Code's worktrees for parallel agents: never part of the tree
+/.claude/worktrees/
+
 # desloppify: local scan state, never committed
 .desloppify/
 
