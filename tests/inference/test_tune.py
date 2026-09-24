@@ -36,8 +36,7 @@ def test_tune_edits_validates_and_logs(catalog_copy):
     assert cat["under-healed"].params["HEAL_MARGIN"] == 0.75 and change["old"] == "0.75"
     assert {h.id: h for h in catalog.load(catalog_copy)}[
         "under-healed"].params["HEAL_MARGIN"] == 0.8
-    tune.tune("anti-air", "when", "enemy.flyers >= 1 and map.known == 1", "test",
-              catalog_copy)
+    tune.tune("anti-air", "when", "enemy.flyers >= 1 and map.known == 1", "test", catalog_copy)
     assert {h.id: h for h in catalog.load(catalog_copy)}["anti-air"].when.source == \
         "enemy.flyers >= 1 and map.known == 1"
     tune.tune("map-fit", "params.NEW_DIAL", 2, "a dial added from nothing", catalog_copy)
@@ -73,8 +72,9 @@ def test_a_bare_file_is_a_draft_the_solver_ignores(catalog_copy):
     cat = catalog.load(catalog_copy)
     draft = next(h for h in cat if h.id == "heal-line")
     assert draft.form == "draft" and draft.pending and not draft.solver_reads
-    assert all(h.form == "assumption" and not h.pending for h in cat
-               if h.id in ("vintage", "objective", "locked-picks"))
+    assert all(
+        h.form == "assumption" and not h.pending for h in cat
+        if h.id in ("vintage", "objective", "locked-picks"))
     with pytest.raises(catalog.CatalogError, match="carries nothing to score"):
         with open(path, "w", encoding="utf-8") as handle:
             handle.write("---\nname: x\nkind: assumption\nmetric: team.tanks\n"
@@ -88,8 +88,9 @@ def test_a_bare_file_is_a_draft_the_solver_ignores(catalog_copy):
 
 
 def test_add_stores_a_validated_strategy_and_complete_finishes_a_draft(catalog_copy):
-    prose = ("When their support line heals at or above the roster bench, one\n"
-             "anti-heal pick is worth more than another damage dealer.")
+    prose = (
+        "When their support line heals at or above the roster bench, one\n"
+        "anti-heal pick is worth more than another damage dealer.")
     added = tune.add("shut-off-heals", "Shut off a heavy heal line", "constraint", prose,
                      {"when": "enemy.heal_ratio >= params.HEAL_RATIO",
                       "bonus": "min(team.antiheal, 1) * 1.5", "params": {"HEAL_RATIO": 1.0}},

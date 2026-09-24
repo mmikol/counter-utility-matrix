@@ -22,10 +22,10 @@ def test_every_hero_has_health(one):
 def test_every_hero_has_a_weapon_and_an_ultimate(one):
     for missing in (
         """select count(*) from heroes h where not exists
-           (select 1 from weapons w where w.hero_id = h.hero_id)""",
+            (select 1 from weapons w where w.hero_id = h.hero_id)""",
         """select count(*) from heroes h where not exists
-           (select 1 from abilities a join ability_kinds k using(kind_id)
-            where a.hero_id = h.hero_id and k.code = 'ultimate')""",
+            (select 1 from abilities a join ability_kinds k using(kind_id)
+                where a.hero_id = h.hero_id and k.code = 'ultimate')""",
     ):
         assert one(missing) == 0
 
@@ -46,13 +46,12 @@ def test_map_pool_is_standard_play_only(rows, one):
 def test_each_mode_has_its_stages(rows, one):
     # Control: three stages. Flashpoint: five points. Hybrid: two phases.
     # Escort: three stretches where the article names them. Push: whole.
-    allowed = {"control": {3}, "flashpoint": {5}, "hybrid": {2},
-               "escort": {0, 3}, "push": {0}}
+    allowed = {"control": {3}, "flashpoint": {5}, "hybrid": {2}, "escort": {0, 3}, "push": {0}}
     off = [(code, name, n) for code, name, n in rows(
         """select g.code, m.name, count(s.stage_id)
-           from maps m join map_modes mm using (map_id)
-           join game_modes g using (mode_id) left join map_stages s using (map_id)
-           group by g.code, m.name""") if n not in allowed[code]]
+            from maps m join map_modes mm using (map_id)
+            join game_modes g using (mode_id) left join map_stages s using (map_id)
+            group by g.code, m.name""") if n not in allowed[code]]
     assert not off, off
     # positions run 1..n in play order
     assert one("""select count(*) from (select map_id, array_agg(position order by position) p,
@@ -117,7 +116,7 @@ def test_delineators_predate_their_capture(one):
     assert one("""select count(*) from meta_snapshots ms
         join patches p using(patch_id) join seasons s using(season_id)
         where p.released > ms.captured_at::date
-           or s.started > ms.captured_at::date""") == 0
+            or s.started > ms.captured_at::date""") == 0
 
 
 def test_meta_records_the_queue_it_came_from(rows):
@@ -153,8 +152,9 @@ def test_a_maps_styles_are_derived_not_stored(rows):
 def test_synergies_are_the_wikis_scored_one_or_two_with_a_short_note(rows, one):
     from db.data.wiki.synergies import NOTE_LIMIT
     assert {r[0] for r in rows("select distinct score from synergies")} == {1, 2}
-    assert one("select count(*) from synergies where note is null"
-               " or length(note) >= %s", NOTE_LIMIT) == 0
+    assert one(
+        "select count(*) from synergies where note is null"
+        " or length(note) >= %s", NOTE_LIMIT) == 0
     assert one("""select count(*) from synergies s
                   join heroes a on a.hero_id = s.hero_id
                   join heroes b on b.hero_id = s.other_id
@@ -204,7 +204,7 @@ def test_most_released_heroes_answer_and_are_answered(one):
 def test_every_table_records_source_and_cao(rows):
     missing = rows("""select table_name from information_schema.columns
         where table_schema='public'
-          and table_name not in ('sources', 'schema_migrations')
+            and table_name not in ('sources', 'schema_migrations')
         group by table_name
         having count(*) filter (where column_name in ('source_id','cao')) < 2""")
     assert missing == []
@@ -248,8 +248,9 @@ def test_no_hero_has_two_abilities_that_fold_together(rows):
 # --- the three-layer additions ------------------------------------------------
 
 def test_every_hero_has_a_portrait_and_every_role_an_icon(one):
-    assert one("select count(*) from heroes"
-               " where portrait_url is null and status = 'released'") == 0
+    assert one(
+        "select count(*) from heroes"
+        " where portrait_url is null and status = 'released'") == 0
     assert one("select count(*) from roles where icon_url is null") == 0
 
 

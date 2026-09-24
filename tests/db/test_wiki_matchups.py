@@ -120,8 +120,9 @@ def test_a_wikitable_article_gives_a_reading_per_written_cell():
 
 
 def test_a_template_article_is_read_by_the_roster_name_and_pronoun():
-    known = {"pharah": Known("Pharah", "she"), "soldier76": Known("Soldier: 76", "he"),
-             "reinhardt": Known("Reinhardt", "he"), "roadhog": Known("Roadhog", "he")}
+    known = {
+        "pharah": Known("Pharah", "she"), "soldier76": Known("Soldier: 76", "he"),
+        "reinhardt": Known("Reinhardt", "he"), "roadhog": Known("Roadhog", "he")}
     readings = dict(matchups.parse_matchups(TEMPLATE, "Pharah", known))
     assert list(readings) == ["dva", "reinhardt", "soldier76", "roadhog"]
     assert readings["dva"] == (-1, -2.0, "rating", "VERY WEAK MATCHUP | EXTREME RISK")
@@ -149,15 +150,19 @@ def test_an_article_without_the_section_reads_nothing():
     # a negation reverses a cue
     ("<small>Reaper is not a threat to you at long distances.</small>", 1),
     ("<small>Reaper doesn't pose a huge threat to you.</small>", 1),
-    ("<small>Reaper's Wraith Form can't negate your Tesla Cannon, and he is not an easy target."
-     "</small>", 0),
+    (
+        "<small>Reaper's Wraith Form can't negate your Tesla Cannon, and he is not an easy target."
+        "</small>", 0),
     # a hedge after the verdict does not undo it; a verdict only hedged is none
-    ("<small>Reaper is one of your worst nightmares. That said, he is an easy target while he"
-     " reloads.</small>", -1),
-    ("<small>Use cover. Watch his flank routes. Save your cooldowns. Stay with your team. If you"
-     " are alone, he can kill you.</small>", 0),
-    ("<small>While Reaper is a threat up close, you are a strong counter to him at range.</small>",
-     1),
+    (
+        "<small>Reaper is one of your worst nightmares. That said, he is an easy target while he"
+        " reloads.</small>", -1),
+    (
+        "<small>Use cover. Watch his flank routes. Save your cooldowns. Stay with your team. If you"
+        " are alone, he can kill you.</small>", 0),
+    (
+        "<small>While Reaper is a threat up close, you are a strong counter to him at range."
+        "</small>", 1),
     # advice with no cue
     ("<small>Destroy his Shadow Step marker when you see it.</small>", 0),
 ])
@@ -209,9 +214,10 @@ def test_names_and_pronouns_are_put_in_the_heros_seat():
 
 
 def test_a_heros_pronoun_is_counted_outside_the_match_up_section():
-    article = ("He is a scientist. His cannon arcs. He leaps.\n"
-               "==Match-Ups and Team Synergy==\nShe snipes. Her mine. She hooks. Her. She.\n"
-               "==Story==\nHe left the moon.")
+    article = (
+        "He is a scientist. His cannon arcs. He leaps.\n"
+        "==Match-Ups and Team Synergy==\nShe snipes. Her mine. She hooks. Her. She.\n"
+        "==Story==\nHe left the moon.")
     assert matchups.pronoun(article) == "he"
     assert matchups.pronoun("They dig.") is None
 

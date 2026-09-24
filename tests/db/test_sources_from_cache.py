@@ -92,7 +92,7 @@ def test_wiki_kits_pull_from_the_cache_and_keep_the_announced(ctx):
 
 KIT_ROWS = """
     select h.name, a.name, k.code, s.value::float, s.unit_numerator,
-           s.unit_denominator, s.condition
+        s.unit_denominator, s.condition
     from ability_stats s join abilities a using (ability_id)
     join heroes h using (hero_id) join stat_keys k using (stat_key_id)
     where (h.name, a.name, k.code) in (('Symmetra', 'Sentry Turret', 'mspeed_slow'),

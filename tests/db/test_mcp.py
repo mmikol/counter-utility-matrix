@@ -31,9 +31,10 @@ def _talk(messages):
 
 def test_initialize_then_list_tools_over_stdio():
     replies = _talk([
-        {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-         "params": {"protocolVersion": "2025-06-18", "capabilities": {},
-                    "clientInfo": {"name": "test", "version": "0"}}},
+        {
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                       "clientInfo": {"name": "test", "version": "0"}}},
         {"jsonrpc": "2.0", "method": "notifications/initialized"},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
         {"jsonrpc": "2.0", "id": 3, "method": "ping"},
@@ -55,8 +56,9 @@ def test_initialize_then_list_tools_over_stdio():
 
 def test_tools_call_without_a_database_and_unknown_method():
     replies = _talk([
-        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-         "params": {"name": "list_sources", "arguments": {}}},
+        {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "list_sources", "arguments": {}}},
         {"jsonrpc": "2.0", "id": 2, "method": "no/such/method"},
         {"jsonrpc": "2.0", "id": 3, "method": "resources/list"},
     ])

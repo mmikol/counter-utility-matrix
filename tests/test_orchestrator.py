@@ -135,12 +135,13 @@ def test_drafts_are_derived_on_the_host_then_the_stack_remirrors(monkeypatch):
 def stubbed(monkeypatch):
     """Every side effect of the orchestrator recorded instead of run."""
     calls = []
-    healthy = {"data": {"status": "ok", "state": "current", "table_count": 36, "heroes": 54,
-                        "announced": 1, "pending_migrations": [],
-                        "newest_capture": "2026-09-14"},
-               "inference": {"status": "ok", "strategies": 38, "heroes": 54, "pending": 0},
-               "ui": {"heroes": [{}] * 54, "maps": [{}] * 30},
-               "board": {"seconds": 1.0, "picks": []}}
+    healthy = {
+        "data": {"status": "ok", "state": "current", "table_count": 36, "heroes": 54,
+                 "announced": 1, "pending_migrations": [],
+                 "newest_capture": "2026-09-14"},
+        "inference": {"status": "ok", "strategies": 38, "heroes": 54, "pending": 0},
+        "ui": {"heroes": [{}] * 54, "maps": [{}] * 30},
+        "board": {"seconds": 1.0, "picks": []}}
     # every command is given a timeout: a call without one raises TypeError here
     monkeypatch.setattr(orchestrator, "sh", lambda *a, timeout: calls.append(("sh", *a)) or "")
     monkeypatch.setattr(orchestrator, "wait_for", lambda url, s, what: calls.append(("wait", what)))
@@ -353,8 +354,9 @@ def test_readiness_solves_one_board_through_the_service(monkeypatch):
     monkeypatch.setattr(orchestrator, "get_json", lambda url, timeout=10: {"error": "died"})
     assert orchestrator.probe() is None
     inf = {"status": "ok", "strategies": 300, "heroes": 54}
-    served = {"data": {"status": "ok", "state": "current", "table_count": 36, "heroes": 54},
-              "inference": inf, "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
+    served = {
+        "data": {"status": "ok", "state": "current", "table_count": 36, "heroes": 54},
+        "inference": inf, "ui": {"heroes": [{}] * 54, "maps": [{}] * 30}}
     ok, lines = orchestrator.verdict(dict(served, board={"seconds": 2.4, "picks": six}))
     assert ok and any(line.endswith("a board in 2.4s") for line in lines)
     ok, lines = orchestrator.verdict(dict(served, board=None))

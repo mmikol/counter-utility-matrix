@@ -139,11 +139,11 @@ def test_an_article_without_the_section_claims_nothing():
 
 @pytest.mark.parametrize("cell, rating, advice", [
     ("'''STRONG SYNERGY''' Dive together.", "strong", "Dive together."),
-    ("'''TBA SYNERGY'''\n<small>Dive together.</small>", None,
-     "<small>Dive together.</small>"),
+    ("'''TBA SYNERGY'''\n<small>Dive together.</small>", None, "<small>Dive together.</small>"),
     ("(6v6 Exclusive Pairing - Ok Synergy) Both fold to poke.", "ok", "Both fold to poke."),
-    ("<small>Good synergy with his shield.</small>", None,
-     "<small>Good synergy with his shield.</small>"),
+    (
+        "<small>Good synergy with his shield.</small>", None,
+        "<small>Good synergy with his shield.</small>"),
 ])
 def test_a_rating_is_split_off_the_advice(cell, rating, advice):
     assert synergies.split_rating(cell) == (rating, advice)
@@ -179,8 +179,9 @@ def test_pairs_are_stored_once_and_scored_by_how_many_articles_claim_them():
 
 @pytest.mark.parametrize("text, started", [
     ("(4 October 2022 - 6 December 2022)", date(2022, 10, 4)),
-    ("[[File:Season 2.png|300px|thumb|Season 2 Roadmap]](6 December 2022 - 7 February 2023)",
-     date(2022, 12, 6)),
+    (
+        "[[File:Season 2.png|300px|thumb|Season 2 Roadmap]](6 December 2022 - 7 February 2023)",
+        date(2022, 12, 6)),
     ("(16 April 2024 - June 20 2024)", date(2024, 4, 16)),
     ("(June 20, 2024 - August 20, 2024)", date(2024, 6, 20)),
     ("(February 18 - 22 April 2025)", date(2025, 2, 18)),
