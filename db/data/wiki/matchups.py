@@ -6,16 +6,16 @@ either markup synergies.py reads. A cell becomes a verdict from the
 article hero's seat: +1 the hero answers the enemy, -1 the enemy answers
 the hero, 0 neither.
 
-    1  The wiki's MATCHUP or VS. rating decides: STRONG is +1, WEAK is -1,
-       EVEN, NEUTRAL, MEDIUM and MIRROR are 0. A range ("EVEN -> WEAK")
-       that averages under one step leaves the prose to decide.
-    2  Otherwise the prose is scored. The article hero's name becomes
-       "you" and the enemy's "foe"; he and she go to the one whose article
-       uses that pronoun of its hero. Each cue adds its weight: whole
-       in the first sentence, less in each later one, a fraction in a
-       concession ("While ...,"), reversed at half weight after a negation.
-       A RISK rating is one more cue. A PRIORITY TARGET rating is kill
-       order, not a verdict. A margin under MARGIN is 0.
+    1   The wiki's MATCHUP or VS. rating decides: STRONG is +1, WEAK is -1,
+        EVEN, NEUTRAL, MEDIUM and MIRROR are 0. A range ("EVEN -> WEAK")
+        that averages under one step leaves the prose to decide.
+    2   Otherwise the prose is scored. The article hero's name becomes
+        "you" and the enemy's "foe"; he and she go to the one whose article
+        uses that pronoun of its hero. Each cue adds its weight: whole
+        in the first sentence, less in each later one, a fraction in a
+        concession ("While ...,"), reversed at half weight after a negation.
+        A RISK rating is one more cue. A PRIORITY TARGET rating is kill
+        order, not a verdict. A margin under MARGIN is 0.
 
 A pair both articles speak about keeps its edge when they agree or one
 says neither; when they contradict there is no edge. `counters` is
@@ -69,13 +69,14 @@ RISK_WEIGHTS = {"extreme": -1.0, "extremely high": -1.0, "extermely high": -1.0,
 RISK_RATING_RE = re.compile(r"^(.*?)\s*RISK$", re.I)
 
 # Names the wiki's prose uses for a hero besides the article title.
-NICKNAMES = {"soldier76": ("Soldier 76", "Soldier"), "wreckingball": ("Hammond", "Ball"),
-             "junkerqueen": ("Queen",), "reinhardt": ("Rein",), "torbjorn": ("Torb",),
-             "roadhog": ("Hog",), "cassidy": ("McCree",), "jetpackcat": ("Fika",)}
+NICKNAMES = {
+    "soldier76": ("Soldier 76", "Soldier"), "wreckingball": ("Hammond", "Ball"),
+    "junkerqueen": ("Queen",), "reinhardt": ("Rein",), "torbjorn": ("Torb",),
+    "roadhog": ("Hog",), "cassidy": ("McCree",), "jetpackcat": ("Fika",)}
 # "her" before an article, a preposition or a stop is an object: "making her a threat".
 PRONOUN_RE = (r"he|she|him|her(?= (?:an?|the|to|at|in|on|with|from|for"
-              r"|if|when|and|or|but|as|out|off|down|up|while|before|after|is|are|was|will"
-              r"|can|would|should|has|does)\b|[.,;:!?]|$)|(?P<possessive>his|hers?)")
+        r"|if|when|and|or|but|as|out|off|down|up|while|before|after|is|are|was|will"
+        r"|can|would|should|has|does)\b|[.,;:!?]|$)|(?P<possessive>his|hers?)")
 HE_RE = re.compile(r"\b(?:he|him|his|himself)\b", re.I)
 SHE_RE = re.compile(r"\b(?:she|hers?|herself)\b", re.I)
 SECOND_PERSON_RE = re.compile(r"\byou(?:r|rself)?\b", re.I)
@@ -85,29 +86,29 @@ FOE = r"(?:the |an? )?(?:enemy )?foe"
 FOES = r"foe(?:'s [\w' -]{1,40}?)?"
 YOURS = r"you(?:r [\w' -]{1,40}?)?"
 BE = (r"(?:is|are|'s|'re|be|being|was|becomes?|remains?|serves?(?: as)?|acts? as|makes?"
-      r"|makes? for|can be|will be|can prove|will prove|proves?)(?: to be)?")
+        r"|makes? for|can be|will be|can prove|will prove|proves?)(?: to be)?")
 # Words between a verb and its cue word: "one of the most", "a very".
 VERY = r"(?:\w+ly |very |quite |too |so |much |far |a |an |the |of |one |most |more ){0,4}"
 # One describing word, not one that denies the noun: "huge", not "little".
 ADJ = r"(?:(?!no |little |minimal |less |zero )\w+ )?"
 # Words between a subject and its verb; a negation among them reverses the cue.
 MODAL = (r"(?:(?P<neg>can't|cannot|can not|won't|will not|doesn't|does not|don't|do not"
-         r"|isn't|is not|aren't|are not|never|rarely|hardly|no longer) |can |will |would |may "
-         r"|might |could |should |often |usually |generally |still |also |easily |simply "
-         r"|is able to |are able to |be able to )*")
+        r"|isn't|is not|aren't|are not|never|rarely|hardly|no longer) |can |will |would |may "
+        r"|might |could |should |often |usually |generally |still |also |easily |simply "
+        r"|is able to |are able to |be able to )*")
 DENIES = (r"(?:negates?|nullif(?:y|ies)|eats?|absorbs?|deletes?|deflects?|denies|deny|cancels?"
-          r"|interrupts?|blocks?|cleanses?|shuts? down|counters?|stops?|ruins?|ignores?"
-          r"|pierces?|bypass(?:es)?)")
+        r"|interrupts?|blocks?|cleanses?|shuts? down|counters?|stops?|ruins?|ignores?"
+        r"|pierces?|bypass(?:es)?)")
 DENIED = (r"(?:negated|nullified|eaten|absorbed|deleted|deflected|denied|cancelled|canceled"
-          r"|interrupted|blocked|cleansed|shut down|countered|stopped|ruined|ignored)")
+        r"|interrupted|blocked|cleansed|shut down|countered|stopped|ruined|ignored)")
 WINS = (r"(?:(?:has|have|holds?|gets?|gains?) (?:\w+ ){0,3}(?:advantage|upper hand|edge"
         r"|superiority|better chance)|wins?|beats?|excels?|outclass(?:es)?|outranges?|outguns?"
         r"|out-?damages?|out-?duels?|dominates?|outlasts?|out-?sustains?|thrives?)")
 KILL = (r"(?:kill|eliminate|shred|melt|destroy|dispatch|finish(?: off)?|pick off|hunt|bully"
         r"|bombard|pressure|punish|take (?:out|down)|deal with|one-?shot|burst(?: down)?)")
 KILLS = (r"(?:kills?|eliminates?|shreds?|melts?|destroys?|dispatch(?:es)?|finish(?:es)?"
-         r"|one-?shots?|bursts?|overpowers?|outguns?|outranges?|outclass(?:es)?|out-?duels?"
-         r"|out-?damages?|tears? through|rips? through|guns?|runs?)")
+        r"|one-?shots?|bursts?|overpowers?|outguns?|outranges?|outclass(?:es)?|out-?duels?"
+        r"|out-?damages?|tears? through|rips? through|guns?|runs?)")
 EASY = r"(?:easy|easier|prime|perfect|juicy|free|ideal)"
 WEAK = (r"(?:vulnerable|susceptible|helpless|defenceless|defenseless|useless|powerless"
         r"|harmless|outmatched|outclassed|outgunned|weak)")
@@ -115,9 +116,9 @@ HARD = (r"(?:dangerous|deadly|lethal|difficult|tough|troublesome|problematic|ann
         r"|frustrating|challenging|formidable|hard to (?:kill|deal with|fight))")
 MENACE = r"(?:threat|problem|danger|menace|nightmare)"
 BAD_FIGHT = (r"(?:difficult|tough|dangerous|formidable|hard|tricky|bad|poor|unfavou?rable"
-             r"|challenging|frustrating|annoying) (?:opponent|match-?up|enemy|adversary)")
+        r"|challenging|frustrating|annoying) (?:opponent|match-?up|enemy|adversary)")
 WORST = (r"(?:worst|biggest|greatest|main|primary|strongest|hardest|toughest|deadliest|top"
-         r"|number one|most \w+)")
+        r"|number one|most \w+)")
 
 # The weight of a cue about one exchange in the fight, not the fight: "kills
 # you", "blocks your". A verdict cue ("counters you", "easy target") weighs 1 to 2.
@@ -132,16 +133,15 @@ def _compiled(cues: list[tuple[str, float]]) -> list[tuple[re.Pattern[str], floa
 THREAT_CUES = _compiled([
     # "Sombra is one of your biggest counters", "a hard counter to you"
     (r"\byour (?:\w+ ){0,2}counters?\b|\byour %s (?:\w+ )?(?:threats?|nightmares?"
-     r"|enem(?:y|ies)|problems?|fears?|match-?ups?)\b" % WORST, 2.0),
+        r"|enem(?:y|ies)|problems?|fears?|match-?ups?)\b" % WORST, 2.0),
     (r"\bcounters? (?:to|for|against) you\b", 2.0),
     (r"\bfoe %scounters? you\b" % MODAL, 2.0),
     (r"\b%s %s%s %s(?:\w+ ){0,2}counters?\b(?! (?:to|for|against) foe)"
-     % (FOES, MODAL, BE, VERY), 1.5),
+        % (FOES, MODAL, BE, VERY), 1.5),
     (r"\byou(?:r \w+)? (?:is|are|'re) (?:\w+ ){0,3}countered by\b", 2.0),
     # "D.Va is a significant threat", "poses an extreme threat", "will prove dangerous"
     (r"\b%s %s(?:%s|poses?) %s%s%s\b(?! (?:to|for) foe)"
-     % (FOES, MODAL, BE, VERY, ADJ, MENACE),
-     1.5),
+        % (FOES, MODAL, BE, VERY, ADJ, MENACE), 1.5),
     (r"\b%s (?:to|for) you\b" % MENACE, 1.5),
     (r"\b%s %s%s %s%s\b(?! (?:to|for) foe)" % (FOES, MODAL, BE, VERY, HARD), 1.0),
     (r"\b%s\b(?! (?:to|for) foe)" % BAD_FIGHT, 1.0),
@@ -149,35 +149,35 @@ THREAT_CUES = _compiled([
     (r"\b%s %sstruggles?\b" % (YOURS, MODAL), 1.5),
     (r"\b(?:little|not much|nothing) (?:that )?you can do\b", 1.5),
     (r"\byou (?:stands?|ha(?:s|ve)) (?:no|little) chance\b|\bfavou?rs? foe\b"
-     r"|\bin foe's favou?r\b", 1.5),
+        r"|\bin foe's favou?r\b", 1.5),
     (r"\byou (?:are |'re |will be )?(?:unlikely|unable) to (?:win|kill|beat|reach|hit|escape"
-     r"|do much)\b", 1.5),
+        r"|do much)\b", 1.5),
     (r"\byou (?:can ?not|can't|won't|will not) (?:win|beat|kill|reach|hit|escape|out-?damage"
-     r"|outrun|do (?:much|anything))\b", 1.0),
+        r"|outrun|do (?:much|anything))\b", 1.0),
     (r"\bat a (?:\w+ )?disadvantage\b(?! against you)", 1.0),
     # "shuts you down", "can easily kill you", "tear through you", "has you beat"
     (r"\b(?:shuts?|shutting) (?:you|your [\w' -]{1,30}?) down\b", 1.5),
     (r"\b(?:easily|quickly|instantly|simply|just) %s you\b" % KILLS, 1.5),
     (r"\b%s you\b" % KILLS, DETAIL),
     (r"\bha(?:s|ve) you beat(?:en)?\b|\bthe (?:end|death) of you\b|\bdeath sentence\b"
-     r"|\b(?:quick|short) work of you\b", 1.0),
+        r"|\b(?:quick|short) work of you\b", 1.0),
     # "can negate your", "eats your", "deflects your", "absorbed by her"
     (r"\b%s %s%s (?:all (?:of )?|most (?:of )?|much (?:of )?)?your\b" % (FOES, MODAL, DENIES),
-     DETAIL),
+        DETAIL),
     (r"\b%s by foe" % DENIED, DETAIL),
     # "you make for an easy target", "you are extremely vulnerable to"
     (r"\b%s %s%s %s(?:%s|big|large) (?:target|prey|kill|pick)\b" % (YOURS, MODAL, BE, VERY, EASY),
-     1.5),
+        1.5),
     (r"\b%s (?:target|prey|kill|pick) for foe\b" % EASY, 1.5),
     (r"\byou %s%s %s%s\b" % (MODAL, BE, VERY, WEAK), 1.5),
     # "avoid him", "keep your distance", "stay away", "switch heroes"
     (r"\bavoid (?:foe(?!'s)|fighting|duel+ing|engaging|confront|facing|close|1v1|a 1v1)", 1.0),
     (r"\bstay(?:ing)? (?:far )?away from foe\b"
-     r"|\b(?:do not|don't|never) (?:try to )?(?:solo kill or )?(?:fight|duel|engage"
-     r"|challenge|chase|1v1) foe\b", 1.0),
+        r"|\b(?:do not|don't|never) (?:try to )?(?:solo kill or )?(?:fight|duel|engage"
+        r"|challenge|chase|1v1) foe\b", 1.0),
     (r"\bkeep(?:ing)? (?:your|a safe|a) distance\b", DETAIL),
     (r"\b(?:switch(?:ing)?|swap(?:ping)?|chang(?:e|ing)) (?:heroes|off|to (?:another|a "
-     r"different))\b", 1.5),
+        r"different))\b", 1.5),
     # "has the advantage over you", "superior to you", "beats you"
     (r"\b%s %s%s\b(?! against foe)" % (FOES, MODAL, WINS), 1.5),
     (r"\bsuperior(?:ity)? (?:to|over) you\b|\badvantage over you\b|\bbetter of you\b", 1.5),
@@ -188,53 +188,53 @@ THREAT_CUES = _compiled([
 ADVANTAGE_CUES = _compiled([
     # "you counter", "Pharah is the ultimate hard counter to Junkrat"
     (r"\byou %s(?:hard[- ]?|directly |completely |heavily )?counters? "
-     r"(?:foe|(?:most|all|many) of foe)" % MODAL, 2.0),
+        r"(?:foe|(?:most|all|many) of foe)" % MODAL, 2.0),
     (r"\bcounters? (?:to|for|against) %s\b" % FOE, 2.0),
     (r"\bfoe's (?!an? |the )(?:\w+ ){0,2}counters?\b|\bfoe's %s (?:\w+ )?(?:threats?"
-     r"|nightmares?|enem(?:y|ies)|problems?|fears?|match-?ups?)\b" % WORST, 2.0),
+        r"|nightmares?|enem(?:y|ies)|problems?|fears?|match-?ups?)\b" % WORST, 2.0),
     (r"\b%s %s%s %s(?:\w+ ){0,2}counters?\b(?! (?:to|for|against) you)"
-     % (YOURS, MODAL, BE, VERY), 1.5),
+        % (YOURS, MODAL, BE, VERY), 1.5),
     (r"\bfoe (?:is|are) (?:\w+ ){0,3}countered by you\b", 2.0),
     # "easy target", "free kill", "easy prey", "prime target for you"
     (r"\b%s %s%s %s(?:%s|good|great|excellent) (?:target|prey|kill|pick)"
-     r"(?! for foe)" % (FOES, MODAL, BE, VERY, EASY), 1.5),
+        r"(?! for foe)" % (FOES, MODAL, BE, VERY, EASY), 1.5),
     (r"\b(?:%s|good|great) (?:target|prey|kill|pick)(?: to \w+)? (?:for|with) you" % EASY, 1.5),
     (r"\bfoe %s%s %s(?:easy|simple|easier|simpler) (?:enough )?(?:to|for you to) %s"
-     % (MODAL, BE, VERY, KILL), 1.5),
+        % (MODAL, BE, VERY, KILL), 1.5),
     (r"\bmak(?:es?|ing) foe'?s? (?:a |an )?(?:\w+ly )?%s" % EASY, 1.5),
     # "vulnerable to your", "cannot escape your", "helpless against you", "struggles"
     (r"\b%s %s%s %s%s\b" % (FOES, MODAL, BE, VERY, WEAK), 1.5),
     (r"\b%s %s(?:fundamentally |traditionally )?struggles?\b" % (FOES, MODAL), 1.5),
     (r"\bfoe (?:can ?not|can't|won't|will not|is unable to|has no (?:way|means|tools?) (?:to"
-     r"|of)|lacks? (?:the |any )?(?:\w+ )?(?:means |tools? |options? |abilit\w+ )?(?:to|of)) "
-     r"(?:escap|flee|run|out-?run|get away|avoid|reach|hit|contest|deal with|touch|fight"
-     r"|retaliat|disengag|protect|defend|do (?:much|anything))", 1.0),
+        r"|of)|lacks? (?:the |any )?(?:\w+ )?(?:means |tools? |options? |abilit\w+ )?(?:to|of)) "
+        r"(?:escap|flee|run|out-?run|get away|avoid|reach|hit|contest|deal with|touch|fight"
+        r"|retaliat|disengag|protect|defend|do (?:much|anything))", 1.0),
     (r"\bfoe (?:lacks?|has no|does not have|doesn't have) (?:any |a |the |good |reliable )*"
-     r"(?:mobility|escapes?|range|way|means|self-?heal|defen[cs]e)", DETAIL),
+        r"(?:mobility|escapes?|range|way|means|self-?heal|defen[cs]e)", DETAIL),
     # "is not a threat to you", "poses little threat", "no match for you"
     (r"(?:\bnot|n't|\bnever|\bhardly|\brarely) (?:\w+ ){0,5}(?:threat|problem|danger)\b"
-     r"(?: (?:to|for) you)?", 1.5),
+        r"(?: (?:to|for) you)?", 1.5),
     (r"\b(?:no|little|minimal|almost no|barely any|low) (?:real |actual |direct )?"
-     r"(?:threat|danger|risk)\b(?: (?:to|for) you)?", 1.5),
+        r"(?:threat|danger|risk)\b(?: (?:to|for) you)?", 1.5),
     (r"\bno match for you\b|\bat your mercy\b|\bfavou?rs? you\b"
-     r"|\bin your favou?r\b", 1.5),
+        r"|\bin your favou?r\b", 1.5),
     (r"\b(?:little|not much|nothing) (?:that )?foe can do\b"
-     r"|\bfoe (?:stands?|ha(?:s|ve)) (?:no|little) chance\b", 1.5),
+        r"|\bfoe (?:stands?|ha(?:s|ve)) (?:no|little) chance\b", 1.5),
     # "you have the advantage", "you excel", "one of your best match-ups"
     (r"\b(?<!has )(?<!have )%s %s%s\b(?! against you)" % (YOURS, MODAL, WINS), 1.5),
     (r"\badvantage (?:over|against) foe\b|\bsuperior(?:ity)? (?:to|over) foe\b", 1.5),
     (r"\byour (?:\w+ )?(?:best|favou?rite|easiest|favou?rable) (?:match-?ups?|targets?|prey)\b"
-     r"|\b(?:easy|favou?rable|good|great|strong) match-?up\b", 1.5),
+        r"|\b(?:easy|favou?rable|good|great|strong) match-?up\b", 1.5),
     (r"\b(?:%s|trouble) (?:to|for) %s\b" % (MENACE, FOE), 1.5),
     (r"\b%s (?:to|for) foe\b" % BAD_FIGHT, 1.5),
     # "you can shut down", "easily kill him", "your X negates his", "absorbed by your"
     (r"\b%s %s%s (?:all (?:of )?|most (?:of )?|much (?:of )?)?foe" % (YOURS, MODAL, DENIES),
-     DETAIL),
+        DETAIL),
     (r"\b%s by you" % DENIED, DETAIL),
     (r"\b(?:easily|quickly|instantly|simply|effortlessly|freely) %s foe" % KILL, 1.5),
     (r"\b(?:quick|short) work of foe\b", 1.0),
     (r"\bfoe (?:will |should |may |might )?ha(?:s|ve) (?:a )?(?:hard|difficult|tough|rough)"
-     r" time\b|\bfoe (?:will |can )?ha(?:s|ve) (?:trouble|difficulty|problems?)\b", 1.0),
+        r" time\b|\bfoe (?:will |can )?ha(?:s|ve) (?:trouble|difficulty|problems?)\b", 1.0),
     (r"\bat a (?:\w+ )?disadvantage against you\b", 1.5),
 ])
 
@@ -303,8 +303,7 @@ def pronoun(text: str) -> str | None:
     return "he" if he > 2 * she else "she" if she > 2 * he else None
 
 
-def normalise(text: str, hero: str, other: str,
-              pronouns: Pronouns = (None, None)) -> str:
+def normalise(text: str, hero: str, other: str, pronouns: Pronouns = (None, None)) -> str:
     """The article hero -> you / your; the enemy -> foe / foe's. he, she, him,
     his, her -> the one of the two whose pronoun it is; where that does not
     tell them apart, the enemy where the text says you, else the last named."""
@@ -368,8 +367,7 @@ def score_sentence(sentence: str) -> tuple[float, float]:
     return totals[0], totals[1]
 
 
-def read_cell(cell: str, hero: str, other: str,
-              pronouns: Pronouns = (None, None)) -> Reading:
+def read_cell(cell: str, hero: str, other: str, pronouns: Pronouns = (None, None)) -> Reading:
     """One Match-Up cell -> Reading, from `hero`'s seat about the enemy `other`.
     pronouns is (the hero's, the enemy's), each 'he', 'she' or None."""
     label, advice = split_label(cell)
