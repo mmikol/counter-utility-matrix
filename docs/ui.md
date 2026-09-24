@@ -45,6 +45,7 @@ ui/
     scalars.py     a hero's numbers derived from its kit, one step per section
     kit.py         a kit piece's stat rows and the combat numbers read off them
     records.py     the typed records a Hero, a Map and the World hand on
+    draft.py       the board's vocabulary and the Draft record the doors read and write
     compute.py     the metrics registry: every number, one function each
     engine.py      the FactSet: the numbered facts for a board
 ```
@@ -269,12 +270,20 @@ prints them as the vocabulary a strategy may reference):
 `world_metrics(world)` the rest; `namespace(...)` bundles them as the
 `team`, `enemy`, `matchup`, `map` and `world` sections a strategy's
 expression reads. `expected_picks` is red's likely six from the data
-alone, filled into `EXPECTED_SHAPE` (two per role). `TEAM_SIZE` (six,
-6v6 Open Queue), `MAX_BANS` (five), `SIDED_MODES` (Escort, Hybrid),
-`SIDES`, `is_sided` and `opposite` live here too, and with them the
-board's query vocabulary: `parse_board(query)` reads a board off a parsed
-query string and `board_query(...)` writes one back, so this board and
-the inference service spell a board the same way.
+alone, filled into `EXPECTED_SHAPE` (two per role).
+
+### `draft.py` - the board's vocabulary
+
+The names every layer spells a board with: `TEAM_SIZE` (six, 6v6 Open
+Queue), `MAX_BANS` (five), `EXPECTED_SHAPE` (two per role), `SIDED_MODES`
+(Escort, Hybrid), `SIDES`, `is_sided` and `opposite`. `Draft` is the
+board at one stage of the pick-and-ban draft - the map, red's and blue's
+picks, the bans and blue's side, in that order, each list a tuple. A
+playbook draft is another thing: a strategy that awaits its frontmatter.
+`parse_board(query)` reads a Draft off a parsed query string and
+`board_query(draft)` writes one back, so this board and the inference
+service spell a board the same way. The module imports only the model,
+so the metrics can take its names without a cycle.
 
 ### `engine.py` - the FactSet
 

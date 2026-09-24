@@ -34,11 +34,11 @@ from inference import catalog as catalog_module
 from inference import engine as inference_engine
 from ui.facts import engine as facts_engine
 from ui.facts import tables
-from ui.facts.compute import (
+from ui.facts.draft import (
     MAX_BANS,
-    SIDED_MODES,
     TEAM_SIZE,
     board_query,
+    is_sided,
     parse_board,
 )
 
@@ -113,8 +113,7 @@ def api_roster(cx: psycopg.Connection[TupleRow]) -> Reply:
                "portrait": h.portrait, "status": h.status,
                "release_date": str(h.release_date) if h.release_date else None}
               for h in world.heroes_by_role()]
-    maps = [{"name": m.name, "mode": m.mode, "style": m.style_top,
-             "sided": (m.mode or "") in SIDED_MODES}
+    maps = [{"name": m.name, "mode": m.mode, "style": m.style_top, "sided": is_sided(m)}
             for m in world.maps_sorted()]
     return {"heroes": heroes, "maps": maps, "role_icons": world.role_icons,
             "newer_patches": world.newer_patches}, 200
@@ -130,17 +129,16 @@ def api_infer(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
     """The board solved at this stage of the draft - the inference layer's
     `board()`. The playbook tab's sliders ride along as `weights=<id>:<0..10>`,
     one per heuristic set away from its file."""
-    map_name, red, blue, bans, side = parse_board(query)
+    draft = parse_board(query)
     # a malformed weight is refused here, never forwarded
     weights = catalog_module.parse_weights(query.get("weights", []))
     if INFERENCE_URL:
-        forward = board_query(map_name, red, blue, bans, side)
+        forward = board_query(draft)
         if weights:
             forward["weights"] = ["%s:%g" % kv for kv in sorted(weights.items())]
         return remote("/board", forward)
     world = tables.load(cx)
-    return inference_engine.board(world, map_name, red, blue, bans, side,
-                                  weights=weights).to_dict(), 200
+    return inference_engine.board(world, *draft, weights=weights).to_dict(), 200
 
 
 def mcp_call(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any] | None, bool]:

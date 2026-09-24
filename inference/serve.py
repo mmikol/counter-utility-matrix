@@ -29,7 +29,7 @@ from db import psql, web
 from inference import catalog as catalog_module
 from inference import engine
 from ui.facts import tables
-from ui.facts.compute import parse_board
+from ui.facts.draft import parse_board
 
 PORT = int(os.environ.get("COUNTRIX_INFERENCE_PORT", "8019"))
 

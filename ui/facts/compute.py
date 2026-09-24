@@ -12,21 +12,14 @@ vocabulary a strategy's frontmatter may use: `team.<key>`,
 Unknowns are numeric, never None: a metric that needs a map reads 0 (or
 falls back to the roster-wide figure where that is the honest substitute,
 which the description says) and `map.known` tells a strategy which.
-
-The board's own vocabulary sits here too - TEAM_SIZE, MAX_BANS, the sides,
-and the parse_board/board_query pair the two HTTP doors read and write a
-board with - because both packages already import this module.
 """
 
 import statistics
 from collections import Counter, OrderedDict
 
+from ui.facts.draft import EXPECTED_SHAPE, TEAM_SIZE, is_sided
 from ui.facts.model import ROLES, SQUISHY_POOL, TERRAIN_FEATURES
 
-TEAM_SIZE = 6             # 6v6 Open Queue
-MAX_BANS = 5              # each team's two and the lobby's
-SIDED_MODES = ("Escort", "Hybrid")   # modes with an attacking and a defending side
-SIDES = ("attack", "defense")
 ROLE_COUNT = {"tank": "tanks", "damage": "damage", "support": "supports"}   # role -> its count key
 SPECIALIST_DELTA = 2.5
 RANK_SENSITIVE = 6.0
@@ -214,7 +207,6 @@ def _mean(values):
     return sum(values) / len(values) if values else 0.0
 
 
-EXPECTED_SHAPE = {"tank": 2, "damage": 2, "support": 2}   # what a lobby fields: two of each
 SYNERGY_PULL = 2.0        # pick-rate points a hero gains per synergy partner already on the six
 
 
@@ -521,36 +513,6 @@ def matchup_metrics(blue_t, red_t):
     x.update(red_matchup(red_t))
     x["ult_answers"] = blue_t["invuln"] + blue_t["cleanse"]
     return x
-
-
-# --- the board as query parameters ---------------------------------------------
-#
-# Both doors - ui/board.py and inference/serve.py - name a board the same way on
-# the wire, and the two halves live here, beside the limits they enforce, so
-# neither door owns the other's spelling.
-
-def parse_board(query):
-    """The board a parsed query names: (map, red, blue, bans, side)."""
-    map_name = (query.get("map") or [None])[0] or None
-    red = [x for x in query.get("red", []) if x]
-    blue = [x for x in query.get("blue", []) if x]
-    bans = [x for x in query.get("bans", []) if x][:MAX_BANS]
-    side = (query.get("side") or [""])[0]
-    return map_name, red, blue, bans, side
-
-
-def board_query(map_name=None, red=(), blue=(), bans=(), side=""):
-    """A board as query parameters, in the spelling parse_board reads back."""
-    return {"map": map_name or "", "side": side, "red": list(red),
-            "blue": list(blue), "bans": list(bans)}
-
-
-def is_sided(m):
-    return m is not None and (m.mode or "") in SIDED_MODES
-
-
-def opposite(side):
-    return {"attack": "defense", "defense": "attack"}.get(side, "")
 
 
 def arenas(m):

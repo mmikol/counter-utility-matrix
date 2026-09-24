@@ -36,15 +36,12 @@ from typing import Any
 from db import Refusal
 from ui.facts import compute
 from ui.facts.compute import (
-    MAX_BANS,
     RANK_SENSITIVE,
-    SIDES,
     SPECIALIST_DELTA,
     TERRAIN_STANDOUT,
     TREND_POINTS,
-    is_sided,
-    opposite,
 )
+from ui.facts.draft import MAX_BANS, SIDES, is_sided, opposite
 from ui.facts.model import SQUISHY_POOL, TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
 
 # a team's or a matchup's metrics as compute measures them: numbers, names and

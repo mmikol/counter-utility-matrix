@@ -7,6 +7,8 @@
     kit         a kit piece's stat rows and the combat numbers read off them;
                 the one reader of the wiki's prose
     records     the typed records a Hero, a Map and the World hand on
+    draft       the board's vocabulary - the lobby's limits, the sides - and
+                the Draft, the board at one stage of the pick-and-ban draft
     compute     the metrics - pure functions over a World, shared with the
                 inference layer's solver so both compute the same numbers
     engine      the FactSet - every fact, numbered F1.., for a map and two

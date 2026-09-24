@@ -35,7 +35,8 @@ from typing import Any
 from inference.catalog import BOARD_SECTIONS, Strategy
 from inference.expr import Expr, Scope, Value, scope
 from ui.facts import compute
-from ui.facts.compute import ROLE_COUNT, TEAM_SIZE
+from ui.facts.compute import ROLE_COUNT
+from ui.facts.draft import TEAM_SIZE
 from ui.facts.model import Hero, Map, World
 
 REFERENCE_SIZE = 1200

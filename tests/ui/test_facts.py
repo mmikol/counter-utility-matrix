@@ -4,6 +4,7 @@ import pytest
 
 from db import Refusal
 from ui.facts import compute, engine, model, tables
+from ui.facts.draft import EXPECTED_SHAPE, TEAM_SIZE, is_sided
 
 pytestmark = pytest.mark.invariant
 
@@ -225,7 +226,7 @@ def test_map_stages_counts_arenas_and_map_phases_counts_parts_of_a_route(world):
     for m in world.maps.values():
         x = compute.map_metrics(m)
         assert (x["stages"], x["phases"]) == (
-            (0, len(m.stages)) if compute.is_sided(m) else (len(m.stages), 0)), m.name
+            (0, len(m.stages)) if is_sided(m) else (len(m.stages), 0)), m.name
         assert (x["stages"] >= 3) == (m.mode in ("Control", "Flashpoint")), m.name
     assert compute.map_metrics(world.map("Havana"))["phases"] == 3
     assert compute.map_metrics(world.map("King's Row"))["phases"] == 2
@@ -298,7 +299,8 @@ def test_a_stage_without_text_of_its_own_gets_no_stage_fact(world):
 
 
 def test_sides_exist_only_on_escort_and_hybrid(world):
-    from ui.facts.compute import is_sided, map_metrics, opposite
+    from ui.facts.compute import map_metrics
+    from ui.facts.draft import opposite
     kings, ilios = world.map("King's Row"), world.map("Ilios")
     assert is_sided(kings) and not is_sided(ilios)
     assert map_metrics(kings, "attack")["side"] == "attack"
@@ -408,8 +410,8 @@ def test_expected_picks_read_the_map_and_the_meta_and_no_strategy(world):
     zarya, sombra = world.hero("Zarya"), world.hero("Sombra")
     six = compute.expected_picks(world, m, [zarya], [sombra])
     assert six[0]["hero"] == "Zarya" and six[0]["locked"] and six[0]["why"] == "revealed"
-    assert len(six) == compute.TEAM_SIZE and "Sombra" not in [p["hero"] for p in six]
-    assert Counter(p["role"] for p in six) == compute.EXPECTED_SHAPE      # a two-two-two
+    assert len(six) == TEAM_SIZE and "Sombra" not in [p["hero"] for p in six]
+    assert Counter(p["role"] for p in six) == EXPECTED_SHAPE      # a two-two-two
     rest = [p for p in six if not p["locked"]]
     assert all(p["why"].startswith("picked in ") and "King's Row" in p["why"] for p in rest
                if p["rate"] is not None)
@@ -419,7 +421,7 @@ def test_expected_picks_read_the_map_and_the_meta_and_no_strategy(world):
     paired = any(world.synergy(x.id, y.id) for x in heroes for y in heroes if x is not y)
     assert paired == any("pairs with" in p["why"] for p in rest)
     anywhere = compute.expected_picks(world, None, [], [])
-    assert Counter(p["role"] for p in anywhere) == compute.EXPECTED_SHAPE
+    assert Counter(p["role"] for p in anywhere) == EXPECTED_SHAPE
     assert all("overall" in p["why"] for p in anywhere if p["rate"] is not None)
     # no strategy is read: nothing here takes a catalog
     import inspect

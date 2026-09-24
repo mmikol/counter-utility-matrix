@@ -37,7 +37,7 @@ from inference.solver import (
 )
 from ui.facts import compute
 from ui.facts import engine as facts_engine
-from ui.facts.compute import TEAM_SIZE, is_sided, opposite
+from ui.facts.draft import TEAM_SIZE, is_sided, opposite
 from ui.facts.engine import Fact, FactSet
 from ui.facts.model import ROLES, Hero, Map, World
 

@@ -21,12 +21,11 @@ Shion do not, as of the scale that stopped moving with the bans.
 from typing import TypedDict
 
 from inference import engine
-from ui.facts import compute
+from ui.facts.draft import MAX_BANS, SIDES, is_sided
 from ui.facts.model import Hero, Map, World
 
 MAPS = 4
-MAX_BANS = compute.MAX_BANS       # a match bans up to five; a rival banned is a real board
-CLOSEST = 5                       # boards the ban search starts from
+CLOSEST = 5         # boards the ban search starts from
 
 
 class Reach(TypedDict):
@@ -85,7 +84,7 @@ def search(world: World, name: str) -> Reach:
     near: list[tuple[float, str, list[str], str]] = []
     for m in maps(world, hero):
         for red in reds(world, hero):
-            for side in (compute.SIDES if compute.is_sided(m) else ("",)):
+            for side in (SIDES if is_sided(m) else ("",)):
                 top = engine.infer(world, m.name, red, [], side=side, top=1)
                 if hero.name in top.blue:
                     return {"hero": hero.name, "bans": 0, "map": m.name, "side": side,

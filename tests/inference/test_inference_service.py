@@ -15,11 +15,11 @@ def test_the_board_survives_the_round_trip_through_a_query_string():
     so the two doors cannot drift apart on a spelling."""
     from urllib.parse import parse_qs, urlencode
 
-    from ui.facts.compute import board_query, parse_board
-    for named in (("King's Row", ["Zarya", "Pharah"], ["Ana"], ["Widowmaker"], "attack"),
-                  (None, [], [], [], "")):
-        written = urlencode(board_query(*named), doseq=True)
-        assert parse_board(parse_qs(written)) == named
+    from ui.facts.draft import Draft, board_query, parse_board
+    for draft in (Draft("King's Row", ("Zarya", "Pharah"), ("Ana",), ("Widowmaker",), "attack"),
+                  Draft()):
+        written = urlencode(board_query(draft), doseq=True)
+        assert parse_board(parse_qs(written)) == draft
 
 
 def test_both_doors_bound_the_search_with_one_clamp():
