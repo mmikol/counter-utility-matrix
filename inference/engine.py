@@ -18,19 +18,40 @@ import pickle
 import threading
 import time
 from collections import namedtuple
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from concurrent.futures import Future, ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
+from typing import Any
 
 from inference import catalog as catalog_module
 from inference.catalog import Strategy
-from inference.solver import Candidate, Solver, evaluate_comp, legal_shapes
+from inference.solver import (
+    Bounds,
+    Candidate,
+    Contribution,
+    Solver,
+    Tally,
+    evaluate_comp,
+    legal_shapes,
+)
 from ui.facts import compute
 from ui.facts import engine as facts_engine
 from ui.facts.compute import TEAM_SIZE, is_sided, opposite
-from ui.facts.model import ROLES, World
+from ui.facts.engine import Fact, FactSet
+from ui.facts.model import ROLES, Hero, Map, World
+
+# A record of the payload as JSON: a pick, an alternative, the momentum, a
+# result or a board as to_dict() serves it.
+Payload = dict[str, Any]
+# what a board's search hands on: the solver and its ranked winners, or the
+# solver, the field's size and every feasible six
+Solved = tuple[Solver, list[Candidate]]
+Swept = tuple[Solver, int, list[Candidate]]
+# a candidate as the pool ships it: hero ids, score, tie-break
+Verdict = tuple[tuple[int, ...], float, float]
 
 
-def _pct(score, best):
+def _pct(score: float, best: float) -> int:
     """A score as a share of the board's best, 0-100: the optimal six is 100,
     the current comp its percentage of blue's optimal, an alternative its
     share of the winner. A best at or below zero makes the scale meaningless,
@@ -44,7 +65,12 @@ UNSCORED = ("unscored - the playbook in force holds no heuristic, scored constra
             " limit, so every legal six ties at zero; add one and the board scores")
 
 
-def _unscored(result):
+def _best(result: "Result") -> float:
+    """What 100 means for a result: the board's best score, else its own."""
+    return result.best if result.best is not None else result.score
+
+
+def _unscored(result: "Result") -> str | None:
     """Why this result carries no share of a best, or None when it does. The
     optimal six is 100 by definition - it is the reference, and scored
     always; any other comp reads unscored when nothing can be a share of
@@ -56,12 +82,12 @@ def _unscored(result):
     return _waiting(result)
 
 
-def _waiting(result):
+def _waiting(result: "Result") -> str | None:
     """The reason nothing on this board scores, or None: read off any result,
     the optimal included (a seat with no picks has no comp to read it from)."""
     if not catalog_module.has_scoring_terms(result.catalog):
         return UNSCORED
-    best = result.best if result.best is not None else result.score
+    best = _best(result)
     if best > 0:
         return None
     by_id = {h.id: h for h in result.catalog}
@@ -79,7 +105,7 @@ def _waiting(result):
             + (": " + "; ".join(waiting) if waiting else ""))
 
 
-def _finish(result, best):
+def _finish(result: "Result", best: float) -> None:
     result.best = best
     scoring = _unscored(result) is None
     for alt in result.alternatives:
@@ -87,27 +113,28 @@ def _finish(result, best):
 
 
 class Result:
-    def __init__(self, kind, map_name, red, blue, locked, catalog, bans=(), side="",
-                 seat="blue"):
+    def __init__(self, kind: str, map_name: str | None, red: list[str], blue: list[str],
+                 locked: list[str], catalog: list[Strategy], bans: Iterable[str] = (),
+                 side: str = "", seat: str = "blue") -> None:
         self.kind, self.map_name = kind, map_name
         self.red, self.blue, self.locked = red, blue, locked
         self.bans, self.side, self.seat = list(bans), side, seat
         self.partial = False
         self.catalog = catalog
         self.score = 0.0
-        self.picks = []
-        self.contributions = []
-        self.violations = []
-        self.alternatives = []
-        self.facts = None
+        self.picks: list[Payload] = []
+        self.contributions: list[Contribution] = []
+        self.violations: list[str] = []
+        self.alternatives: list[Payload] = []
+        self.facts: FactSet | None = None
         self.considered = 0
         self.seconds = 0.0
-        self.rank = None
+        self.rank: int | None = None
         self.playstyle = ""
-        self.best = None            # the board's best score: what 100 means here
+        self.best: float | None = None     # the board's best score: what 100 means here
         # the Solver that produced this result, set by infer(): current() scores a
         # partial team against the bounds its seat's optimal search froze
-        self.solver = None
+        self.solver: Solver | None = None
         # the assumptions - nothing to score: what the agent reconciles the
         # facts against beyond the arithmetic
         self.considerations = [{"id": h.id, "name": h.name}
@@ -115,7 +142,7 @@ class Result:
         # drafts: name, kind and prose only - shown, not scored, until /strategy
         self.pending = [h.id for h in catalog if h.pending]
 
-    def to_dict(self, include_facts=False):
+    def to_dict(self, include_facts: bool = False) -> Payload:
         cited = {}
         if self.facts is not None:
             ids = {fid for p in self.picks for fid in p["evidence"]}
@@ -132,7 +159,7 @@ class Result:
                 # it has, so a perfectly played draft reads 16 after one pick and can
                 # fall when the right third pick lands. The fill result carries the
                 # number that means something - the best six reachable from here
-                "normalized": (_pct(self.score, self.best if self.best is not None else self.score)
+                "normalized": (_pct(self.score, _best(self))
                                if scoring and not self.partial else None),
                 "playstyle": self.playstyle, "picks": self.picks,
                 "contributions": self.contributions, "violations": self.violations,
@@ -142,7 +169,7 @@ class Result:
                 "considerations": self.considerations, "pending": self.pending,
                 "facts": self.facts.to_dict() if (include_facts and self.facts) else None}
 
-    def rendered(self):
+    def rendered(self) -> str:
         head = "%s for %s%s%s vs %s%s%s" % (
             {"infer": "optimal comp", "evaluate": "evaluation",
              "current": "current comp", "countered": "if countered optimally",
@@ -156,7 +183,7 @@ class Result:
             " (banned: %s)" % ", ".join(self.bans) if self.bans else "")
         counts = catalog_module.counts(self.catalog)
         unscored = _unscored(self)
-        share = ("(%d/100)" % _pct(self.score, self.best if self.best is not None else self.score)
+        share = ("(%d/100)" % _pct(self.score, _best(self))
                  if unscored is None and not self.partial else
                  "(unscored)" if unscored is not None else
                  "(partial - see the filled six for a share)")
@@ -193,17 +220,18 @@ class Result:
         return "\n".join(lines)
 
 
-def _reasons(fs, hero_name, locked):
+def _reasons(fs: FactSet, hero_name: str, locked: bool) -> tuple[str, list[str]]:
     """The facts that justify one pick, from the board's own FactSet - the
     facts about OUR copy of the hero: a mirror pick has facts on both sides
     (red's Tracer answers our Ana; ours partners our D.Va), and only the
     facts the FactSet filed under the seat's own side (its "blue") count."""
-    why, evidence = [], []
+    why: list[str] = []
+    evidence: list[str] = []
 
-    def own(key):
+    def own(key: str) -> list[Fact]:
         return [f for f in fs.find(key, hero_name) if f.team in (None, "blue")]
 
-    def cite(key, template):
+    def cite(key: str, template: Callable[[Fact], str]) -> bool:
         for f in own(key):
             why.append(template(f))
             evidence.append(f.id)
@@ -230,7 +258,9 @@ def _reasons(fs, hero_name, locked):
     return "; ".join(why), evidence
 
 
-def _fill(result, cand, fs, solver):
+def _fill(result: Result, cand: Candidate, fs: FactSet, solver: Solver) -> None:
+    if cand.ns is None:
+        raise RuntimeError("_fill() takes a scored candidate: hydrate() a slim one")
     result.score = cand.score
     result.contributions = cand.contributions
     result.violations = cand.violations
@@ -247,9 +277,11 @@ def _fill(result, cand, fs, solver):
     # cite the team/matchup fact behind each contribution
     by_id = {h.id: h for h in result.catalog}
     for c in result.contributions:
-        h = by_id.get(c["id"])
-        keys = [h.metric] if (h and h.kind == "heuristic") else []
-        for e in ((h.require, h.bonus, h.penalty, h.when) if h else ()):
+        strategy = by_id.get(c["id"])
+        keys = ([strategy.metric] if strategy and strategy.kind == "heuristic" and strategy.metric
+                else [])
+        for e in ((strategy.require, strategy.bonus, strategy.penalty, strategy.when)
+                  if strategy else ()):
             if e is not None:
                 keys += [n for n in e.names if n.startswith(("team.", "matchup."))]
         fact = _cited_fact(fs, keys)
@@ -257,7 +289,7 @@ def _fill(result, cand, fs, solver):
             c["fact"], c["text"] = fact.id, fact.text
 
 
-def _cited_fact(fs, keys):
+def _cited_fact(fs: FactSet, keys: Iterable[str]) -> Fact | None:
     """The first board fact that states one of these metrics. A fact is indexed
     under the key it is worded around and under every other metric its sentence
     carries (FactSet.add's `also`), so the lookup is the metric itself. A team
@@ -271,17 +303,18 @@ def _cited_fact(fs, keys):
     return None
 
 
-def _order(heroes):
+def _order(heroes: Iterable[Hero]) -> list[str]:
     return [h.name for h in sorted(heroes, key=lambda h: (ROLES.index(h.role), h.name))]
 
 
-def _side(m, side):
+def _side(m: Map | None, side: str) -> str:
     if side not in ("", "attack", "defense"):
         raise ValueError("side must be attack or defense, got %r" % side)
     return side if is_sided(m) else ""
 
 
-def clamp_search(pool=None, top=None):
+def clamp_search(pool: str | float | None = None,
+                 top: str | float | None = None) -> tuple[int, int]:
     """Bounds on the search: pool 2..12 candidates per role, top 1..20
     alternatives. Every door that takes the two from a caller - the MCP tools
     and the HTTP service - passes them through here, so the search is bounded
@@ -296,7 +329,7 @@ def clamp_search(pool=None, top=None):
 def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
           blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "", *,
           catalog: list[Strategy] | None = None, pool_size: int = 6, top: int = 5,
-          seat: str = "blue", solved: tuple | None = None) -> "Result":
+          seat: str = "blue", solved: Solved | None = None) -> Result:
     """The optimal six for `seat` around its locked picks (`blue`) against
     the other seat's revealed picks (`red`), on `side` of a sided map.
     `solved` takes a (solver, ranked) the caller already has - a board's
@@ -335,7 +368,7 @@ def infer(world: World, map_name: str | None = None, red: Sequence[str] = (),
 def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
              blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "", *,
              catalog: list[Strategy] | None = None, pool_size: int = 6,
-             seat: str = "blue", swept: tuple | None = None) -> "Result":
+             seat: str = "blue", swept: Swept | None = None) -> Result:
     """A full six for `seat`, scored and ranked against the field the solver
     would have searched. `swept` takes that field from a search the caller
     already ran on this board."""
@@ -365,10 +398,10 @@ def evaluate(world: World, map_name: str | None = None, red: Sequence[str] = (),
     return result
 
 
-def current(world: World, blue_result: "Result", map_name: str | None = None,
+def current(world: World, blue_result: Result, map_name: str | None = None,
             red: Sequence[str] = (), blue: Sequence[str] = (), bans: Sequence[str] = (),
             side: str = "", *, catalog: list[Strategy] | None = None, pool_size: int = 6,
-            seat: str = "blue", swept: tuple | None = None) -> "Result":
+            seat: str = "blue", swept: Swept | None = None) -> Result:
     """`seat`'s current picks (`blue`, from that seat's perspective) as they
     stand against the other seat's (`red`): a full six is evaluated against
     the field; a partial team is scored with the bounds of the optimal
@@ -412,8 +445,10 @@ class Board:
     Carries the same to_dict()/rendered() pair as Result, so the shells hand a
     board to the caller the way they hand a single seat."""
 
-    def __init__(self, map_name, side, bans, blue, red, current, red_current, fill,
-                 countered, momentum, plan, shapes, expected):
+    def __init__(self, map_name: str | None, side: str, bans: list[str], blue: Result,
+                 red: Result, current: Result, red_current: Result, fill: Result | None,
+                 countered: Result | None, momentum: Payload, plan: str,
+                 shapes: list[list[int]], expected: Result) -> None:
         self.map_name, self.side, self.bans = map_name, side, bans
         self.blue, self.red = blue, red
         self.current, self.red_current = current, red_current
@@ -421,7 +456,7 @@ class Board:
         self.momentum, self.plan = momentum, plan
         self.shapes, self.expected = shapes, expected
 
-    def to_dict(self):
+    def to_dict(self) -> Payload:
         """The board as JSON-ready data."""
         return {"map": self.map_name, "side": self.side, "bans": self.bans, "plan": self.plan,
                 "blue": self.blue.to_dict(), "red": self.red.to_dict(),
@@ -431,7 +466,7 @@ class Board:
                 "shapes": self.shapes,
                 "expected": self.expected.to_dict()}
 
-    def rendered(self):
+    def rendered(self) -> str:
         parts = ["game plan:\n" + self.plan]
         parts += [r.rendered() for r in (self.blue, self.red, self.current, self.red_current)
                   if r.blue or r.kind != "current"]
@@ -443,7 +478,9 @@ class Board:
         return "\n\n".join([*parts, "momentum: " + self.momentum["verdict"]])
 
 
-def _momentum(cur, red_cur, countered, blue_r=None, red_r=None, fill=None):
+def _momentum(cur: Result, red_cur: Result, countered: Result | None,
+              blue_r: Result | None = None, red_r: Result | None = None,
+              fill: Result | None = None) -> Payload:
     """Who the picks favour, read off the two current comps on their own
     optimals' scales: blue's share of its best counter to red's selection,
     red's share of its best counter to blue's. A seat with no picks has no
@@ -465,12 +502,13 @@ def _momentum(cur, red_cur, countered, blue_r=None, red_r=None, fill=None):
     # pick lands. Red has no fill, so its half-drafted share keeps that bias: the
     # seat with more picks is flattered. Known, and not fixed here.
     blue_now = fill if (fill is not None and cur.partial and cur.blue) else cur
-    n = _pct(blue_now.score, blue_now.best) if cur.blue and not blue_why else None
-    m = _pct(red_cur.score, red_cur.best) if red_cur.blue and not red_why else None
-    k = (_pct(countered.score, countered.best)
+    n = _pct(blue_now.score, _best(blue_now)) if cur.blue and not blue_why else None
+    m = _pct(red_cur.score, _best(red_cur)) if red_cur.blue and not red_why else None
+    k = (_pct(countered.score, _best(countered))
          if countered is not None and countered.blue and not _unscored(countered) else None)
-    out = {"blue": n, "red": m, "countered": k,
-           "partial": bool((cur.blue and cur.partial) or (red_cur.blue and red_cur.partial))}
+    out: Payload = {"blue": n, "red": m, "countered": k,
+                    "partial": bool((cur.blue and cur.partial)
+                                    or (red_cur.blue and red_cur.partial))}
     # fight odds: the two shares pitted against each other - each side's share of
     # the two shares' sum, so the pair reads as a split of 100; defined only when
     # both seats score
@@ -478,19 +516,21 @@ def _momentum(cur, red_cur, countered, blue_r=None, red_r=None, fill=None):
                    if n is not None and m is not None and n + m > 0 else None)
     short = lambda why: "unscored: " + why.split(": ", 1)[-1]   # noqa: E731
     if (blue_why and cur.blue) or (red_why and red_cur.blue):   # one seat scores, the other waits
-        sides = ["blue " + (short(blue_why) if blue_why else "%d / 100 of its optimal" % n)
-                 if cur.blue else "no blue picks yet",
-                 "red " + (short(red_why) if red_why else "%d / 100 of its best counter" % m)
-                 if red_cur.blue else "no red picks revealed yet"]
+        # a seat's share is set exactly where it has picks and nothing waits
+        sides = ["blue %d / 100 of its optimal" % n if n is not None else
+                 "blue " + short(blue_why) if blue_why and cur.blue else "no blue picks yet",
+                 "red %d / 100 of its best counter" % m if m is not None else
+                 "red " + short(red_why) if red_why and red_cur.blue else
+                 "no red picks revealed yet"]
         out["verdict"] = "; ".join(sides)
     elif n is None and m is None:
         out["verdict"] = "no picks yet on either side"
-    elif n is None:
+    elif n is None and m is not None:
         out["verdict"] = ("red has revealed picks and blue has none:"
                           " red %d / 100 of its best counter" % m)
-    elif m is None:
+    elif m is None and n is not None:
         out["verdict"] = "no red picks revealed yet: blue %d / 100 of its optimal" % n
-    else:
+    elif n is not None and m is not None:
         gap = n - m
         if abs(gap) < 5:
             out["verdict"] = "even - blue %d, red %d" % (n, m)
@@ -558,12 +598,12 @@ TERRAIN_NAMED = 3   # standout features the plan names, largest first
 STAGES_NAMED = 3    # stages the plan names for their terrain, largest first, in play order
 
 
-def _and(items):
+def _and(items: Iterable[str]) -> str:
     items = list(items)
     return ", ".join(items[:-1]) + " and " + items[-1] if len(items) > 1 else "".join(items)
 
 
-def _sentence(text):
+def _sentence(text: str) -> str:
     text = text.strip().rstrip(".")
     return text[:1].upper() + text[1:] + "."
 
@@ -571,12 +611,13 @@ def _sentence(text):
 FAMILY_SIZE = 5     # heroes the plan names per role
 
 
-def _family(world, m, style, role, bans):
+def _family(world: World, m: Map | None, style: str, role: str,
+            bans: Iterable[str]) -> list[str]:
     """A style's heroes in one role, by the wiki's playstyle tags: released
     and unbanned, fewest tags first, then best win rate here."""
     out = {h.name for h in map(world.hero, bans) if h is not None}
 
-    def rate(h):
+    def rate(h: Hero) -> float:
         return (h.map_win(m.id) if m is not None else None) or h.win or 0.0
     heroes = [h for h in world.heroes.values()
               if h.role == role and style in h.styles and h.released and h.name not in out]
@@ -584,7 +625,8 @@ def _family(world, m, style, role, bans):
             ][:FAMILY_SIZE]
 
 
-def _plan(world, m, side, bans, red_h, blue_r):
+def _plan(world: World, m: Map | None, side: str, bans: Sequence[str],
+          red_h: Sequence[Hero], blue_r: Result) -> str:
     """The game plan in prose - the ground, what to play on it, what red's
     picks mean (their likely six until one is revealed), the family of heroes
     to stay in when you stray from the six, and what the six is built for -
@@ -646,7 +688,7 @@ def _plan(world, m, side, bans, red_h, blue_r):
             them += " lean%s %s: %s." % (s, red_lean, THEIR_LEAN[red_lean])
         else:
             them += " show%s no lean yet." % s
-        answered = {}
+        answered: dict[str, list[str]] = {}
         for p in blue_r.picks:
             for part in p["why"].split("; "):
                 if part.startswith("answers "):
@@ -677,7 +719,7 @@ def _plan(world, m, side, bans, red_h, blue_r):
         if parts:
             lines.append("If you stray from the six, stay in its family. " + " ".join(parts))
     # what it is built for
-    names = {h.id: h.name for h in blue_r.catalog}
+    titles = {h.id: h.name for h in blue_r.catalog}
     # not the shape every legal six pays, nor a rule named for another style
     # ("Dive the pocket" on a poke six); a rule on the map's style is about the map
     skip = {h.id for h in blue_r.catalog
@@ -690,7 +732,8 @@ def _plan(world, m, side, bans, red_h, blue_r):
                  key=lambda c: -c["weighted"])[:4]
     if top:
         lines.append("Above all: "
-                     + "; ".join(names.get(c["id"], c["id"]).lower() for c in top) + ".")
+                     + "; ".join(titles.get(str(c["id"]), str(c["id"])).lower() for c in top)
+                     + ".")
     # what it rests on
     basis = ["the rates and counters"]
     if m is not None:
@@ -732,7 +775,7 @@ WORKER_CEILING = 12          # a worker holds about 70 MB, and past a dozen slic
                              # rounds' own overhead eats what a finer slice saves
 
 
-def _worker_count():
+def _worker_count() -> int:
     """Six workers, or one per core where there are more, capped at
     WORKER_CEILING. COUNTRIX_WORKERS overrides."""
     override = os.environ.get("COUNTRIX_WORKERS", "").strip()
@@ -742,11 +785,11 @@ def _worker_count():
 
 
 WORKERS = _worker_count()
-_pool = None
+_pool: ProcessPoolExecutor | None = None
 _pool_lock = threading.Lock()
 
 
-def _workers():
+def _workers() -> ProcessPoolExecutor:
     """The pool, created on first use. Spawned, not forked."""
     global _pool
     with _pool_lock:
@@ -756,7 +799,7 @@ def _workers():
         return _pool
 
 
-def _drop_workers():
+def _drop_workers() -> None:
     global _pool
     with _pool_lock:
         pool, _pool = _pool, None
@@ -764,7 +807,7 @@ def _drop_workers():
         pool.shutdown(wait=False, cancel_futures=True)
 
 
-def parallel_available(catalog=None):
+def parallel_available(catalog: list[Strategy] | None = None) -> bool:
     """Whether board() splits its search across workers here. A caller's own
     catalog keeps the solve in this process: a strategy carries compiled
     expressions, which do not pickle, so a worker can only rebuild the playbook
@@ -772,7 +815,7 @@ def parallel_available(catalog=None):
     return PARALLEL and catalog is None and (os.cpu_count() or 1) > 1
 
 
-def warm(world=None):
+def warm(world: World | None = None) -> int:
     """Start the workers now, so the first board does not pay for it: they
     read the playbook, and take a copy of the world when one is given.
     Returns the number started, 0 when the board runs sequentially here."""
@@ -785,11 +828,11 @@ def warm(world=None):
     return WORKERS
 
 
-def _prime(token=None, data=None):
+def _prime(token: str | None = None, data: bytes | None = None) -> int:
     """In a worker: read the playbook and hold the world, so the first slice
     does not."""
     _playbook()
-    if token is not None:
+    if token is not None and data is not None:
         _world(token, data)
     return os.getpid()
 
@@ -797,10 +840,11 @@ def _prime(token=None, data=None):
 # --- what crosses the boundary ---------------------------------------------
 
 _blob_lock = threading.Lock()
-_blob = (None, None, None)              # the world, its token, its bytes
+# the world, its token, its bytes
+_blob: tuple[World | None, str | None, bytes | None] = (None, None, None)
 
 
-def _world_blob(world):
+def _world_blob(world: World) -> tuple[str, bytes]:
     """The world pickled once for a run of tasks: the bytes, and their digest
     as the token the workers cache it under - a server loads a fresh world per
     request, and the same rows keep the workers' copy. The world is held here
@@ -809,46 +853,53 @@ def _world_blob(world):
     global _blob
     with _blob_lock:
         held, token, data = _blob
-        if held is not world:
+        if held is not world or token is None or data is None:
             data = pickle.dumps(world, pickle.HIGHEST_PROTOCOL)
             token = hashlib.sha1(data, usedforsecurity=False).hexdigest()
             _blob = (world, token, data)
         return token, data
 
 
-_held_world = (None, None)              # in a worker: the token and the world
-_held_playbook = (None, None)           # in a worker: the files' stamp and the catalog
+# a playbook folder's stamp: each file's name, modification time and size
+Stamp = list[tuple[str, int, int]]
+# in a worker: the token and the world, and the files' stamp and the catalog
+_held_world: tuple[str | None, World | None] = (None, None)
+_held_playbook: tuple[Stamp | None, list[Strategy] | None] = (None, None)
 
 
-def _world(token, data):
+def _world(token: str, data: bytes) -> World:
     global _held_world
-    if _held_world[0] != token:
-        _held_world = (token, pickle.loads(data))
-    return _held_world[1]
+    held, world = _held_world
+    if held != token or world is None:
+        world = pickle.loads(data)
+        _held_world = (token, world)
+    return world
 
 
-def _playbook():
+def _playbook() -> list[Strategy]:
     """The playbook, read once per worker and again whenever a file changes."""
     global _held_playbook
     directory = catalog_module.strategies_dir()
     stamp = sorted((e.name, e.stat().st_mtime_ns, e.stat().st_size)
                    for e in os.scandir(directory)
                    if e.name.endswith(".md")) if os.path.isdir(directory) else None
-    if stamp is None or _held_playbook[0] != stamp:
-        _held_playbook = (stamp, catalog_module.load(directory))
-    return _held_playbook[1]
+    held, playbook = _held_playbook
+    if stamp is None or held != stamp or playbook is None:
+        playbook = catalog_module.load(directory)
+        _held_playbook = (stamp, playbook)
+    return playbook
 
 
-def _verdict(cand):
+def _verdict(cand: Candidate) -> Verdict:
     """A candidate as the pool ships it: who is in it, what it scored, how it
     breaks a tie. Everything else is rebuilt where it is needed."""
     return (tuple(h.id for h in cand.heroes), cand.score, cand.tiebreak)
 
 
-def _revive(world, verdict):
+def _revive(world: World, verdict: Verdict) -> Candidate:
     ids, score, tiebreak = verdict
     cand = Candidate([world.heroes[i] for i in ids])
-    cand.score, cand.tiebreak, cand.raw = score, tiebreak, None
+    cand.score, cand.tiebreak, cand.raw = score, tiebreak, ()
     return cand
 
 
@@ -856,14 +907,15 @@ def _revive(world, verdict):
 Spec = namedtuple("Spec", "map_name enemy locked pool_size bans side")
 
 
-def _solver(world, catalog, spec):
+def _solver(world: World, catalog: list[Strategy], spec: Spec) -> Solver:
     m, red_h, locked_h, bans_h = world.resolve(spec.map_name, spec.enemy, spec.locked,
                                                spec.bans)
     return Solver(world, m, red_h, locked_h, bans_h, _side(m, spec.side),
                   catalog=catalog, pool_size=spec.pool_size)
 
 
-def _bounds(token, data, spec, weights, index, count):
+def _bounds(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
+            index: int, count: int) -> Bounds:
     """One slice of the reference sample, in a worker: the low and high it
     sees for each heuristic."""
     world = _world(token, data)
@@ -871,7 +923,8 @@ def _bounds(token, data, spec, weights, index, count):
     return solver.reference_bounds(index, count)
 
 
-def _standing(token, data, spec, weights, bounds, index, count):
+def _standing(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
+              bounds: Bounds, index: int, count: int) -> Tally:
     """One slice of the reference sample scored under the merged bounds, in a
     worker: each hero's tally in it."""
     world = _world(token, data)
@@ -880,7 +933,7 @@ def _standing(token, data, spec, weights, bounds, index, count):
     return solver.reference_standing(index, count)
 
 
-def _add(tally, part):
+def _add(tally: Tally, part: Mapping[int, Sequence[int]]) -> Tally:
     for hid, (total, n) in part.items():
         seen = tally.setdefault(hid, [0, 0])
         seen[0] += total
@@ -888,14 +941,16 @@ def _add(tally, part):
     return tally
 
 
-def _widen(bounds, part):
+def _widen(bounds: Bounds, part: Mapping[str, tuple[float, float]]) -> Bounds:
     for hid, (lo, hi) in part.items():
         seen = bounds.get(hid)
         bounds[hid] = (min(lo, seen[0]), max(hi, seen[1])) if seen else (lo, hi)
     return bounds
 
 
-def _sweep(token, data, spec, weights, bounds, standing, index, count):
+def _sweep(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
+           bounds: Bounds, standing: Tally | None, index: int,
+           count: int) -> tuple[int, list[Verdict]]:
     """One slice of one search, in a worker."""
     world = _world(token, data)
     solver = _solver(world, catalog_module.weighted(_playbook(), weights), spec)
@@ -904,7 +959,9 @@ def _sweep(token, data, spec, weights, bounds, standing, index, count):
     return size, [_verdict(c) for c in feasible]
 
 
-def _rank(token, data, spec, weights, bounds, standing, verdicts, top):
+def _rank(token: str, data: bytes, spec: Spec, weights: Mapping[str, float] | None,
+          bounds: Bounds, standing: Tally | None, verdicts: Iterable[Verdict],
+          top: int) -> tuple[list[Verdict], int]:
     """The tail of a split search, in a worker: the merged field ranked and
     refined. -> (the winners, how many candidates refining added)."""
     world = _world(token, data)
@@ -919,20 +976,30 @@ class _Split:
     sample, then the enumeration, then the tail. A caller starts several and
     walks them through the rounds together, so the pool stays full."""
 
-    def __init__(self, pool, world, catalog, spec, weights, top, slices, bounds=None,
-                 standing=None):
+    def __init__(self, pool: ProcessPoolExecutor, world: World, catalog: list[Strategy],
+                 spec: Spec, weights: Mapping[str, float] | None, top: int, slices: int,
+                 bounds: Bounds | None = None, standing: Tally | None = None) -> None:
         self.pool, self.world, self.catalog = pool, world, catalog
         self.spec, self.weights, self.top = spec, weights, top
-        self.bounds, self.size, self.verdicts = bounds, 0, []
-        self.standing, self.tallies = standing, None
+        self.bounds, self.size = bounds, 0
+        self.verdicts: list[Verdict] = []
+        self.standing = standing
+        self.tallies: list[Future[Tally]] | None = None
         self.token, self.data = _world_blob(world)
         self.count = slices
-        self.scale = None if bounds is not None else [
+        self.scale: list[Future[Bounds]] | None = None if bounds is not None else [
             pool.submit(_bounds, self.token, self.data, spec, weights, i, slices)
             for i in range(slices)]
-        self.slices = self.tail = None
+        self.slices: list[Future[tuple[int, list[Verdict]]]] | None = None
+        self.tail: Future[tuple[list[Verdict], int]] | None = None
 
-    def rank_roster(self):
+    def _scale(self) -> Bounds:
+        """The bounds the search runs under: set once rank_roster() has run."""
+        if self.bounds is None:
+            raise RuntimeError("the split has no scale before rank_roster()")
+        return self.bounds
+
+    def rank_roster(self) -> None:
         """Take the scale the slices drew, and send the sample out again to be
         scored under it: each hero's standing, which ranks the pools."""
         if self.scale is not None:
@@ -942,10 +1009,10 @@ class _Split:
             self.scale = None
         if self.standing is None and self.tallies is None:
             self.tallies = [self.pool.submit(_standing, self.token, self.data, self.spec,
-                                             self.weights, self.bounds, i, self.count)
+                                             self.weights, self._scale(), i, self.count)
                             for i in range(self.count)]
 
-    def sweep(self):
+    def sweep(self) -> None:
         """Take the standing, and send the enumeration out."""
         self.rank_roster()
         if self.tallies is not None:
@@ -954,31 +1021,35 @@ class _Split:
                 _add(self.standing, future.result())
             self.tallies = None
         self.slices = [self.pool.submit(_sweep, self.token, self.data, self.spec, self.weights,
-                                        self.bounds, self.standing, i, self.count)
+                                        self._scale(), self.standing, i, self.count)
                        for i in range(self.count)]
 
-    def merge(self):
+    def merge(self) -> None:
         """Collect the slices and send the merged field off to be ranked."""
+        if self.slices is None:
+            raise RuntimeError("merge() follows sweep()")
         self.verdicts = []
         for future in self.slices:
             self.size, part = future.result()
             self.verdicts.extend(part)
         self.tail = self.pool.submit(_rank, self.token, self.data, self.spec, self.weights,
-                                     self.bounds, self.standing, self.verdicts, self.top)
+                                     self._scale(), self.standing, self.verdicts, self.top)
 
-    def _solver(self):
+    def _solver(self) -> Solver:
         solver = _solver(self.world, self.catalog, self.spec)
-        solver.adopt_bounds(self.bounds, self.standing)
+        solver.adopt_bounds(self._scale(), self.standing)
         return solver
 
-    def solved(self):
+    def solved(self) -> Solved:
         """(solver, ranked), as Solver.solve() would have returned them."""
+        if self.tail is None:
+            raise RuntimeError("solved() follows merge()")
         winners, refined = self.tail.result()
         solver = self._solver()
         solver.considered = self.size + refined
         return solver, [solver.hydrate(_revive(self.world, v)) for v in winners]
 
-    def swept(self):
+    def swept(self) -> Swept:
         """(solver, field size, every feasible candidate), as Solver.sweep()
         would have left them: what a six is ranked against."""
         return (self._solver(), self.size,
@@ -988,8 +1059,10 @@ class _Split:
 COUNTERED_POOL = 4          # a what-if: a smaller field is enough
 
 
-def _countered(world, map_name, red_optimal, blue, bans=(), side="", *,
-               catalog=None, pool_size=6, top=5, solved=None, swept=None):
+def _countered(world: World, map_name: str | None, red_optimal: Sequence[str],
+               blue: Sequence[str], bans: Sequence[str] = (), side: str = "", *,
+               catalog: list[Strategy] | None = None, pool_size: int = 6, top: int = 5,
+               solved: Solved | None = None, swept: Swept | None = None) -> Result:
     """Blue's picks against red's optimal six: how they hold if red answers
     perfectly."""
     hypothetical = min(pool_size, COUNTERED_POOL)
@@ -1005,7 +1078,7 @@ def _countered(world, map_name, red_optimal, blue, bans=(), side="", *,
 def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
           blue: Sequence[str] = (), bans: Sequence[str] = (), side: str = "", *,
           catalog: list[Strategy] | None = None, pool_size: int = 6, top: int = 5,
-          weights: dict[str, float] | None = None) -> "Board":
+          weights: dict[str, float] | None = None) -> Board:
     """The whole board in one pass, at whatever stage the draft is - no map
     (the meta's best six), a map, a map and a side, bans, red's picks as
     they reveal:
@@ -1060,8 +1133,12 @@ def board(world: World, map_name: str | None = None, red: Sequence[str] = (),
     # drops the pool and runs the very same sequence here.
     for pooled in [True, False] if parallel else [False]:
         try:
-            fill = countered = None
-            blue_split = red_split = fill_split = countered_split = None
+            fill: Result | None = None
+            countered: Result | None = None
+            blue_split: _Split | None = None
+            red_split: _Split | None = None
+            fill_split: _Split | None = None
+            countered_split: _Split | None = None
             if pooled:
                 pool = _workers()
                 want = max(top, 1) + 1
