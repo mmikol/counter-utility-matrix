@@ -222,7 +222,7 @@ def test_on_a_map_a_hero_reads_its_rates_there_against_its_own(synthetic_world):
         "Anvil on Harbor Gate (this map): wins 52.5%, picked 12.0%"]
     assert _texts(harbor, "hero.map_delta", "Anvil") == [
         "Anvil runs +2.5 on Harbor Gate vs their own overall 50.0% - map specialist"]
-    assert _texts(harbor, "hero.map_strategy", "Anvil") == [
+    assert _texts(harbor, "hero.home_map", "Anvil") == [
         "this map is Anvil's top-1 by Blizzard's map rates"]
     assert _texts(harbor, "hero.map_style_fit", "Anvil") == [
         "Anvil fits the brawl style Harbor Gate rewards"]
@@ -230,7 +230,7 @@ def test_on_a_map_a_hero_reads_its_rates_there_against_its_own(synthetic_world):
     assert _texts(ember, "hero.map_delta", "Anvil") == [
         "Anvil runs +0.0 on Ember Ruins vs their own overall 50.0% - in line with their"
         " baseline"]
-    assert not ember.find("hero.map_strategy") and not ember.find("hero.map_style_fit")
+    assert not ember.find("hero.home_map") and not ember.find("hero.map_style_fit")
     salt = _facts(w, "Anvil", map_name="Salt Flats")
     assert salt.find("hero.map_delta")[0].text.endswith("- off-map liability")
     # a map's ban rate rides the line where the rates publish one

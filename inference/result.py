@@ -398,7 +398,7 @@ def _reasons(fs: FactSet, hero_name: str, locked: bool) -> tuple[str, list[str]]
             why.append("map specialist (%+.1f)" % f.value)
             evidence.append(f.id)
     cite("hero.map_style_fit", lambda f: "fits the %s style" % f.value)
-    cite("hero.map_strategy", lambda f: "top-%d map by rate" % f.value)
+    cite("hero.home_map", lambda f: "top-%d map by rate" % f.value)
     cite("hero.vs_answered_by", lambda f: "CAUTION: answered by %s" % ", ".join(f.value))
     if not evidence:
         cite("hero.rate", lambda f: "wins %.1f%% across all ranks%s" % (f.value["win"], rated))

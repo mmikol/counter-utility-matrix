@@ -50,8 +50,7 @@ TEAM_METRICS = OrderedDict([
     ("style_top", "the modal playstyle among the picks"),
     ("style_lean", "the playstyle a strict majority of picks carry, else none"),
     ("style_fit", "share of picks tagged with the map's rewarded style (0 without a map)"),
-    ("archetype_deviation",
-        "picks over EXPECTED_SHAPE's two per role (0 without a map)"),
+    ("shape_excess", "picks over EXPECTED_SHAPE's two per role"),
     # durability
     ("pool_total", "team effective HP: sum of health + shield + armor, plus a form's armor by"
                    " its uptime"),
@@ -135,7 +134,7 @@ TEAM_METRICS = OrderedDict([
     ("map_pick_mass", "summed pick rate on the map"),
     ("map_specialists", "picks running %g+ points over their own baseline here" % SPECIALIST_DELTA),
     ("map_offmap", "picks running %g+ points under their own baseline here" % SPECIALIST_DELTA),
-    ("map_strategy_hits", "picks whose three best maps by rate include this map"),
+    ("home_map_hits", "picks whose three best maps by rate include this map"),
     # versus the other team
     *VERSUS_METRICS.items(),
 ])
@@ -269,9 +268,7 @@ def _shape(heroes: list[Hero], m: Map | None) -> MetricBag:
                            if majority else ""),
             "style_fit": (sum(1 for h in heroes if map_style in h.styles) / n
                           if n and map_style else 0.0),
-            "archetype_deviation": (
-                sum(max(0, roles[r] - slots) for r, slots in EXPECTED_SHAPE.items())
-                if map_style else 0)}
+            "shape_excess": sum(max(0, roles[r] - slots) for r, slots in EXPECTED_SHAPE.items())}
 
 
 def _shape_flags(tanks: int, damage: int, supports: int) -> list[str]:
@@ -421,7 +418,7 @@ def _on_map(heroes: list[Hero], m: Map | None, win_mean: float,
     meta section read, and zeros."""
     if m is None:
         return {"map_known": 0, "map_win_mean": win_mean, "map_pick_mass": pick_mass,
-                "map_specialists": 0, "map_offmap": 0, "map_strategy_hits": 0}
+                "map_specialists": 0, "map_offmap": 0, "home_map_hits": 0}
     wins = [h.map_win(m.id) for h in heroes]
     deltas = [
         win - h.win for h, win in zip(heroes, wins, strict=True)
@@ -431,7 +428,7 @@ def _on_map(heroes: list[Hero], m: Map | None, win_mean: float,
             "map_pick_mass": sum(h.map_pick(m.id) or 0 for h in heroes),
             "map_specialists": sum(1 for d in deltas if d >= SPECIALIST_DELTA),
             "map_offmap": sum(1 for d in deltas if d <= -SPECIALIST_DELTA),
-            "map_strategy_hits": sum(1 for h in heroes if m.id in h.best_maps)}
+            "home_map_hits": sum(1 for h in heroes if m.id in h.best_maps)}
 
 
 def _versus(world: World, heroes: list[Hero], enemies: list[Hero], top_ban: Hero | None,

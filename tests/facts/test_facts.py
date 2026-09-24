@@ -211,8 +211,8 @@ def test_a_heros_best_maps_are_derived_from_blizzards_map_rates(world):
     assert line.value == [world.maps[mid].name for mid in sym.best_maps]
     assert line.source == "derived:hero.best_map"
     on_map = board_facts.generate(world, Draft(top.name, (), ("Symmetra",)))
-    assert on_map.find("hero.map_strategy", "Symmetra")[0].value == 1
-    assert any(f.value == "Symmetra" for f in on_map.find("map.playbook_pick"))
+    assert on_map.find("hero.home_map", "Symmetra")[0].value == 1
+    assert any(f.value == "Symmetra" for f in on_map.find("map.home_map_of"))
 
 
 def test_the_provenance_is_one_line_per_source(world):

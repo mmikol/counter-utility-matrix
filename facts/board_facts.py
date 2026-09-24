@@ -235,9 +235,9 @@ def _map_heroes(fs: FactSet, world: World, m: Map) -> None:
             value=[h.name for h in ranked[-6:]], source="map_meta")
     for h in world.heroes_by_role():
         if m.id in h.best_maps:
-            fs.add("map", m.name, "map.playbook_pick", "%s is %s's top-%d map by Blizzard's"
+            fs.add("map", m.name, "map.home_map_of", "%s is %s's top-%d map by Blizzard's"
                 " map rates" % (m.name, h.name, h.best_maps.index(m.id) + 1),
-                value=h.name, source="derived:map.playbook_pick")
+                value=h.name, source="derived:map.home_map_of")
     for style in sorted(m.styles, key=lambda s: (-m.styles[s].score, s)):
         fits = [h for h in ranked if style in h.styles][:6]
         if fits:

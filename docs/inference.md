@@ -236,7 +236,7 @@ the `team.*` metrics computed for the red side.
 | `team.style_top` (text) | the modal playstyle among the picks |
 | `team.style_lean` (text) | the playstyle a strict majority of picks carry, else none |
 | `team.style_fit` | share of picks tagged with the map's rewarded style (0 without a map) |
-| `team.archetype_deviation` | picks over EXPECTED_SHAPE's two per role (0 without a map) |
+| `team.shape_excess` | picks over EXPECTED_SHAPE's two per role |
 | `team.pool_total` | team effective HP: sum of health + shield + armor, plus a form's armor by its uptime |
 | `team.pool_min` | the weakest pick's pool - focus fire finds the minimum |
 | `team.weakest` (text) | who holds the smallest pool |
@@ -312,7 +312,7 @@ the `team.*` metrics computed for the red side.
 | `team.map_pick_mass` | summed pick rate on the map |
 | `team.map_specialists` | picks running 2.5+ points over their own baseline here |
 | `team.map_offmap` | picks running 2.5+ points under their own baseline here |
-| `team.map_strategy_hits` | picks whose three best maps by rate include this map |
+| `team.home_map_hits` | picks whose three best maps by rate include this map |
 | `team.coverage` | enemies answered by at least one pick |
 | `team.coverage_share` | coverage / enemies revealed |
 | `team.unanswered` (text) | enemies no pick answers |

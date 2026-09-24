@@ -22,7 +22,9 @@ def test_the_shape_counts_roles_and_subroles_and_flags_what_is_off(synthetic_wor
     assert t["style_counts"] == {"brawl": 2, "dive": 1, "poke": 1} and t["style_top"] == "brawl"
     assert t["style_lean"] == ""                  # two of four is no strict majority
     assert t["style_fit"] == 0.5                  # Harbor Gate rewards brawl
-    assert t["archetype_deviation"] == 1          # one tank over two
+    assert t["shape_excess"] == 1                 # one tank over two
+    bare = team_metrics(w, _picks(w, "Anvil", "Kite", "Mortar", "Needle"))
+    assert bare["shape_excess"] == 1              # no map: the same count
     assert team_metrics(w, _picks(w, "Balm"))["shape_flags"] == ["TANKLESS", "solo heal"]
 
 
@@ -140,10 +142,10 @@ def test_the_map_section_reads_each_picks_rates_on_the_map(synthetic_world):
     assert t["map_win_mean"] == pytest.approx((52.5 + 53.5 + 46.5) / 3)
     # Anvil runs exactly SPECIALIST_DELTA over: a specialist; Gale 3 under
     assert t["map_specialists"] == 1 and t["map_offmap"] == 1
-    assert t["map_strategy_hits"] == 2                    # Anvil's and Rook's best map
+    assert t["home_map_hits"] == 2                        # Anvil's and Rook's best map
     t = team_metrics(w, _picks(w, "Rook", "Myrrh"), w.map("Ember Ruins"))
-    assert (t["map_specialists"], t["map_offmap"], t["map_strategy_hits"]) == (0, 1, 1)
-    assert compute.registry()["team.map_strategy_hits"] == (
+    assert (t["map_specialists"], t["map_offmap"], t["home_map_hits"]) == (0, 1, 1)
+    assert compute.registry()["team.home_map_hits"] == (
         "picks whose three best maps by rate include this map")
 
 

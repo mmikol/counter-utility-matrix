@@ -315,9 +315,9 @@ def _hero_on_map(fs: FactSet, h: Hero, team: str, m: Map) -> None:
                 " overall %.1f%% - %s" % (name, delta, m.name, h.win, label),
                 value=delta, source="derived:hero.map_delta", team=team)
     if m.id in h.best_maps:
-        fs.add("hero", name, "hero.map_strategy", "this map is %s's top-%d by Blizzard's"
+        fs.add("hero", name, "hero.home_map", "this map is %s's top-%d by Blizzard's"
             " map rates" % (name, h.best_maps.index(m.id) + 1),
-            value=h.best_maps.index(m.id) + 1, source="derived:hero.map_strategy",
+            value=h.best_maps.index(m.id) + 1, source="derived:hero.home_map",
             team=team)
     if m.style_top and m.style_top in h.styles:
         fs.add("hero", name, "hero.map_style_fit", "%s fits the %s style %s rewards"

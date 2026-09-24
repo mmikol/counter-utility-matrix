@@ -42,7 +42,9 @@ def test_a_side_is_worded_metric_by_metric(synthetic_world):
         "blue team style profile: brawl 2/4, dive 1/4, poke 1/4 - no majority style")
     assert said["team.style_fit"] == (
         "blue team fit with the brawl style Harbor Gate rewards: 50% of picks")
-    assert said["team.archetype_deviation"] == "blue team over two per role: 1 pick"
+    assert said["team.shape_excess"] == "blue team over two per role: 1 pick"
+    bare = _said(_facts(synthetic_world, None, (), ("Anvil", "Kite", "Mortar", "Needle")), "blue")
+    assert bare["team.shape_excess"] == "blue team over two per role: 1 pick"   # no map needed
     assert said["team.pool_total"] == "blue team effective HP: 2062 across 4 picks"
     assert said["team.pool_min"] == (
         "blue team weakest link: Needle at 200 pool - focus fire finds the minimum")

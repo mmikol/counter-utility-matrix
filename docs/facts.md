@@ -141,7 +141,7 @@ helper per registry section - shape (`tanks`, `damage`, `supports`,
 (`dps_floor`, `burst_max`, `one_shots`), sustain (`hps_supports`,
 `hps_ratio`, `heal_peak_max`), tools (`mobility_count`, `cc_count`,
 `barrier_count`), cohesion (`synergy_score`), meta (`win_mean`,
-`availability`), map fit (`map_specialists`, `map_strategy_hits`) and
+`availability`), map fit (`map_specialists`, `home_map_hits`) and
 versus, the coverage of the enemy (`coverage_share`) - each writing its
 keys once and in registry order. Beside them rides `_answered`, the
 answering picks per enemy the facts engine words; the solver asks for

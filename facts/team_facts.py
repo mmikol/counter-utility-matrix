@@ -125,8 +125,9 @@ def _shape_facts(
     if m is not None and m.style_top:
         w.fact("style_fit", "%s fit with the %s style %s rewards: %.0f%% of picks"
             % (label, m.style_top, m.name, 100 * figures["style_fit"]))
-        w.fact("archetype_deviation", "%s over two per role: %s"
-            % (label, _count(figures["archetype_deviation"])))
+    if metrics["shape_excess"]:
+        w.fact("shape_excess", "%s over two per role: %s"
+            % (label, _count(figures["shape_excess"])))
 
 
 def _durability_facts(w: _TeamWriter, figures: dict[str, float]) -> None:
@@ -305,8 +306,8 @@ def _map_facts(w: _TeamWriter, figures: dict[str, float], m: Map) -> None:
     w.fact("map_specialists", "%s map fit on %s: %s, %d off-map, %d with"
         " this map among their three best by rate"
         % (label, m.name, _count(figures["map_specialists"], "specialist"),
-            figures["map_offmap"], figures["map_strategy_hits"]),
-        also=("team.map_strategy_hits", "team.map_offmap"))
+            figures["map_offmap"], figures["home_map_hits"]),
+        also=("team.home_map_hits", "team.map_offmap"))
 
 
 def _versus_facts(w: _TeamWriter, figures: dict[str, float], enemies: Sequence[Hero]) -> None:
