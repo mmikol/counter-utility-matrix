@@ -348,8 +348,9 @@ class _RejectedError(Exception):
     """A POST the door turns away before any message in it is handled: the
     status, the JSON body and any headers the reply carries."""
 
-    def __init__(self, code: int, payload: dict[str, object],
-                 headers: Mapping[str, str] | None = None) -> None:
+    def __init__(
+            self, code: int, payload: dict[str, object],
+            headers: Mapping[str, str] | None = None) -> None:
         super().__init__(code)
         self.code, self.payload, self.headers = code, payload, dict(headers or {})
 
@@ -363,9 +364,9 @@ class HttpHandler(web.Handler):
         if path == "/health":
             return self._json(self.server.status())
         if path == "/mcp":
-            return self._json({"error": "this server has no server-initiated"
-                                        " stream; POST JSON-RPC to /mcp"},
-                              405, {"Allow": "POST, DELETE"})
+            return self._json(
+                {"error": "this server has no server-initiated stream; POST JSON-RPC to /mcp"},
+                405, {"Allow": "POST, DELETE"})
         self._json({"error": "nothing here"}, 404)
 
     def _authorized(self) -> bool:
@@ -437,15 +438,16 @@ class HttpHandler(web.Handler):
             raise _RejectedError(413, {"error": "at most %d messages per batch" % MAX_BATCH})
         calls = sum(1 for m in messages if isinstance(m, dict) and m.get("method") == "tools/call")
         if calls and not self.server.admit(self.client_address[0], calls):
-            raise _RejectedError(429, {"error": "too many calls; try again in a minute"},
-                                 {"Retry-After": str(RATE_WINDOW)})
+            raise _RejectedError(
+                429, {"error": "too many calls; try again in a minute"},
+                {"Retry-After": str(RATE_WINDOW)})
 
     def _dispatch(self, messages: list[object], *, batched: bool) -> None:
         """Handle each message as this client, then reply: 202 when nothing
         needs an answer, else the answers - a list for a batch - with a new
         Mcp-Session-Id after an initialize."""
-        _client.id = "http:%s/%s" % (self.client_address[0],
-                                     (self.headers.get("Mcp-Session-Id") or "-")[:8])
+        session = (self.headers.get("Mcp-Session-Id") or "-")[:8]
+        _client.id = "http:%s/%s" % (self.client_address[0], session)
         responses = [r for r in (self.server.mcp.handle(m) for m in messages) if r is not None]
         headers: dict[str, str] = {}
         if any(isinstance(m, dict) and m.get("method") == "initialize" for m in messages):
@@ -484,13 +486,14 @@ class HttpServer(web.LocalServer):
             recent.extend([now] * calls)
             self._calls[client] = recent
             if len(self._calls) > MAX_TRACKED_CLIENTS:
-                self._calls = {c: ts for c, ts in self._calls.items()
-                               if ts and now - ts[-1] < RATE_WINDOW}
+                self._calls = {
+                    c: ts for c, ts in self._calls.items() if ts and now - ts[-1] < RATE_WINDOW}
         return True
 
 
-def serve_http(mcp: Server, host: str, port: int, status: Callable[[], Mapping[str, object]],
-               allowed_hosts: Iterable[str] = ()) -> None:
+def serve_http(
+        mcp: Server, host: str, port: int, status: Callable[[], Mapping[str, object]],
+        allowed_hosts: Iterable[str] = ()) -> None:
     """Serve `mcp` (a Server) over HTTP until interrupted, answering to the
     local names and `allowed_hosts`."""
     httpd = HttpServer((host, port), mcp, status, allowed_hosts)

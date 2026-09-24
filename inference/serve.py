@@ -146,8 +146,7 @@ def command_line(argv: list[str] | None = None) -> argparse.Namespace:
     starts; --allow-host, repeated, names a host it answers to beside the
     local ones."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--host", default=os.environ.get("COUNTRIX_INFERENCE_HOST",
-                                                         "127.0.0.1"))
+    parser.add_argument("--host", default=os.environ.get("COUNTRIX_INFERENCE_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int,
                         default=int(os.environ.get("COUNTRIX_INFERENCE_PORT", "8019")))
     parser.add_argument("--allow-host", action="append", default=[], metavar="NAME")

@@ -63,9 +63,8 @@ def request_allowed(headers: Message, allowed: frozenset[str]) -> bool:
     """Whether a request names a server that answers to `allowed`: its Host
     header's host name is one of them, and so is its Origin's when it sends
     one. A missing or unparsable Host is refused, and so is `Origin: null`.
-    The Host check is what stops DNS rebinding: a page rebound to this
-    address sends a same-origin GET with no Origin, but under its own host
-    name."""
+    The Host check stops DNS rebinding: a page rebound to this address
+    sends a same-origin GET with no Origin, but under its own host name."""
     host = headers.get("Host")
     if not host or _hostname("//" + host) not in allowed:
         return False
@@ -78,8 +77,9 @@ class LocalServer(ThreadingHTTPServer):
     `allowed_hosts` it is published under - the compose service name another
     container calls it by, or a public host name."""
 
-    def __init__(self, address: tuple[str, int], handler: type[BaseHTTPRequestHandler],
-                 allowed_hosts: Iterable[str] = ()) -> None:
+    def __init__(
+            self, address: tuple[str, int], handler: type[BaseHTTPRequestHandler],
+            allowed_hosts: Iterable[str] = ()) -> None:
         super().__init__(address, handler)
         self.allowed_hosts = LOCAL_HOSTS | frozenset(h.lower() for h in allowed_hosts)
 
@@ -106,8 +106,9 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"error": "host or origin not allowed"}, 403)
         return False
 
-    def _send(self, data: bytes, ctype: str | None, code: int = 200,
-              headers: Mapping[str, str] | None = None) -> None:
+    def _send(
+            self, data: bytes, ctype: str | None, code: int = 200,
+            headers: Mapping[str, str] | None = None) -> None:
         """One reply: the status, the extra headers, the content type (none
         for an empty body) and length, and the body."""
         self.send_response(code)
@@ -120,14 +121,15 @@ class Handler(BaseHTTPRequestHandler):
         if data:
             self.wfile.write(data)
 
-    def _json(self, payload: object, code: int = 200,
-              headers: Mapping[str, str] | None = None) -> None:
+    def _json(
+            self, payload: object, code: int = 200,
+            headers: Mapping[str, str] | None = None) -> None:
         """A JSON reply; a payload of None is an empty body with no content
         type - the MCP door's 202, and its DELETE."""
         if payload is None:
             return self._send(b"", None, code, headers)
-        self._send(json.dumps(payload, ensure_ascii=False).encode("utf-8"), "application/json",
-                   code, headers)
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self._send(data, "application/json", code, headers)
 
     def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
         """One line on stderr for a request that failed - a status of 400 or
@@ -162,8 +164,8 @@ def _refused_by_door(error: urllib.error.HTTPError) -> CallReply:
     said = body.get("error") if isinstance(body, dict) else None
     if isinstance(said, dict):                       # a JSON-RPC error object
         said = said.get("message")
-    return CallReply("the MCP server answered %d: %s" % (error.code, said or error.msg),
-                     None, True)
+    reason = said or error.msg
+    return CallReply("the MCP server answered %d: %s" % (error.code, reason), None, True)
 
 
 def _answer(reply: object) -> CallReply:
@@ -173,27 +175,31 @@ def _answer(reply: object) -> CallReply:
         return CallReply("the MCP server answered with no JSON-RPC response", None, True)
     if "error" in reply:
         error = reply["error"]
-        return CallReply(str(error.get("message", error) if isinstance(error, dict) else error),
-                         None, True)
+        said = error.get("message", error) if isinstance(error, dict) else error
+        return CallReply(str(said), None, True)
     result = reply.get("result")
     if not isinstance(result, dict):
         result = {}
-    text = "\n".join(str(c.get("text", "")) for c in result.get("content", [])
-                     if isinstance(c, dict) and c.get("type") == "text")
+    text = "\n".join(
+        str(c.get("text", "")) for c in result.get("content", [])
+        if isinstance(c, dict) and c.get("type") == "text")
     structured = result.get("structuredContent")
-    return CallReply(text, structured if isinstance(structured, dict) else None,
-                     bool(result.get("isError")))
+    if not isinstance(structured, dict):
+        structured = None
+    return CallReply(text, structured, bool(result.get("isError")))
 
 
-def call_tool(url: str, name: str, arguments: Mapping[str, object], token: str | None = None,
-              timeout: float = 60) -> CallReply:
+def call_tool(
+        url: str, name: str, arguments: Mapping[str, object], token: str | None = None,
+        timeout: float = 60) -> CallReply:
     """One tools/call on the MCP server at `url`, with the bearer token when
     one is given. A URL that is not http or https is a ValueError: urlopen
     would read a file: URL as a path."""
     if urlsplit(url).scheme not in ("http", "https"):
         raise ValueError("the MCP server's URL must be http or https, got %r" % url)
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                       "params": {"name": name, "arguments": dict(arguments)}})
+    body = json.dumps({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": {"name": name, "arguments": dict(arguments)}})
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     if token:
         headers["Authorization"] = "Bearer " + token

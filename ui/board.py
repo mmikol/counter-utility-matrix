@@ -111,8 +111,9 @@ def remote(path: str, query: Mapping[str, object] | None = None, payload: object
         except (json.JSONDecodeError, UnicodeDecodeError):
             return {"error": "inference service returned %d" % error.code}, error.code
     except (urllib.error.URLError, OSError) as error:
-        sys.stderr.write("countrix board: the inference service at %s did not answer %s: %s\n"
-                         % (inference_url(), path, error))
+        sys.stderr.write(
+            "countrix board: the inference service at %s did not answer %s: %s\n"
+            % (inference_url(), path, error))
         return {"error": "inference service unreachable: %s" % error}, 502
 
 
@@ -120,10 +121,10 @@ def remote(path: str, query: Mapping[str, object] | None = None, payload: object
 
 def api_roster(cx: psycopg.Connection[TupleRow]) -> Reply:
     world = tables.load(cx)
-    heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
-               "portrait": h.portrait, "status": h.status,
-               "release_date": str(h.release_date) if h.release_date else None}
-              for h in world.heroes_by_role()]
+    heroes = [
+        {"name": h.name, "role": h.role, "subrole": h.subrole, "portrait": h.portrait,
+            "status": h.status, "release_date": str(h.release_date) if h.release_date else None}
+        for h in world.heroes_by_role()]
     maps = [{"name": m.name, "mode": m.mode, "style": m.style_top, "sided": is_sided(m)}
             for m in world.maps_sorted()]
     return {"heroes": heroes, "maps": maps, "role_icons": world.role_icons,
@@ -195,8 +196,8 @@ def api_weight(payload: Mapping[str, object] | None) -> Reply:
         return {"error": "the weight must be a number"}, 400
     if not 0.0 <= weight <= 10.0:
         return {"error": "the weight must be within 0..10"}, 400
-    arguments = {"id": hid, "field": "weight", "value": weight, "reason": STORE_REASON,
-                 "by": "the board"}
+    arguments = {
+        "id": hid, "field": "weight", "value": weight, "reason": STORE_REASON, "by": "the board"}
     if mcp_url():
         reply = web.call_tool(mcp_url(), "tune", arguments, token=mcp_token())
         if reply.is_error:
@@ -230,8 +231,8 @@ class Handler(web.Handler):
         reply = web.failure(error)
         if path.startswith("/api/"):
             return self._json(reply.body, reply.status)
-        return self._html(pages.page("error", "<pre class='warnbox'>%s</pre>"
-                                     % pages.esc(reply.body["error"])), reply.status)
+        page = pages.page("error", "<pre class='warnbox'>%s</pre>" % pages.esc(reply.body["error"]))
+        return self._html(page, reply.status)
 
     def _not_found(self, path: str) -> None:
         if path.startswith("/api/"):
