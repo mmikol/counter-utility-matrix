@@ -25,9 +25,10 @@ boundary does not draw it.
     raw/          the CSV mirror the tools export (gitignored)
 
 This file holds what the whole layer must agree on: where things live (ROOT
-and the paths under it), the scope every rates snapshot is pinned to, and
-embed, which rewrites one generated section of a markdown file for every
-layer that generates docs. docs/db.md walks the tree.
+and the paths under it), the shape of a `sources` row (Source), the scope
+every rates snapshot is pinned to, and embed, which rewrites one generated
+section of a markdown file for every layer that generates docs. docs/db.md
+walks the tree.
 
 Every row carries a source_id, and that is the only distinction drawn
 between what was measured, what was judged and what was written by hand.
@@ -36,6 +37,7 @@ source.
 """
 
 import os
+from dataclasses import dataclass
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -50,6 +52,16 @@ CACHE_DIRS = {
     "blizzard": os.path.join(ROOT, ".cache-blizzard"),
     "wiki": os.path.join(ROOT, ".cache-wiki"),
 }
+
+
+
+@dataclass(frozen=True)
+class Source:
+    """A `sources` row: the code every row a source's pages become carries
+    (through its source_id), its name, and where it is read from."""
+    code: str
+    name: str
+    url: str
 
 
 # The ability vocabulary: db/psql/migrations/002_heroes.sql seeds ability_kinds

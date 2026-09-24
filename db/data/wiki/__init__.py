@@ -26,9 +26,12 @@ import json
 import os
 import re
 import time
+from collections.abc import Sequence
+from typing import Any
 
 import requests
 
+from db import Source
 from db.data.fetch import is_stale, keep_stale
 
 WIKI_API = "https://overwatch.fandom.com/api.php"
@@ -36,7 +39,7 @@ CARGO_PAGE_SIZE = 500
 CARGO_RETRIES = 6
 
 # The sources row this module's pages become.
-WIKI = ("wiki", "Overwatch Wiki", "https://overwatch.fandom.com/")
+WIKI = Source("wiki", "Overwatch Wiki", "https://overwatch.fandom.com/")
 REQUEST_DELAY = 0.5
 
 
@@ -44,7 +47,12 @@ class WikiError(Exception):
     pass
 
 
-def cargo_query(session, table, fields, cache_dir):
+# One Cargo row as the API's JSON gives it: {field name: value}.
+CargoRow = dict[str, Any]
+
+
+def cargo_query(session: requests.Session, table: str, fields: Sequence[str],
+                cache_dir: str | None) -> list[CargoRow]:
     """Every row of a Cargo table, paginated.
 
     Cargo exposes the wiki's structured data directly, which is far steadier
@@ -70,10 +78,12 @@ def cargo_query(session, table, fields, cache_dir):
     return rows
 
 
-def _cargo_pages(session, table, fields):
-    rows, offset = [], 0
+def _cargo_pages(session: requests.Session, table: str,
+                 fields: Sequence[str]) -> list[CargoRow]:
+    rows: list[CargoRow] = []
+    offset = 0
     while True:
-        payload = None
+        payload: dict[str, Any] | None = None
         for attempt in range(CARGO_RETRIES):
             response = session.get(
                 WIKI_API,
@@ -109,7 +119,7 @@ def _cargo_pages(session, table, fields):
     return rows
 
 
-def fetch_wikitext(session, title, cache_dir):
+def fetch_wikitext(session: requests.Session, title: str, cache_dir: str | None) -> str:
     """Raw wikitext of one article, cached so reruns don't re-hit the wiki."""
     cache_path = None
     if cache_dir:

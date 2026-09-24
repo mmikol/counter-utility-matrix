@@ -5,6 +5,8 @@ Every other table is pulled from a source. This package declares the
 mirror from the files (inference.catalog.mirror).
 """
 
+from db import Source
+
 # The sources row of the strategies table. Nothing is downloaded: the "url"
 # is the playbook's folder. No other table may carry this source.
-AUTHORED = ("user", "The playbook", "inference/strategies/")
+AUTHORED = Source("user", "The playbook", "inference/strategies/")

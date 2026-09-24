@@ -63,6 +63,18 @@ def test_health_reports_the_catalog_and_the_database():
     assert data["status"] in ("ok", "degraded")
 
 
+def test_a_host_without_pgserver_is_told_to_set_database_url(monkeypatch):
+    """The image and CI carry no pgserver. With no DATABASE_URL either there is
+    no database, and the one useful answer names the variable to set: an
+    ImportError, which /health reports as degraded rather than crashing."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setattr(serve.psql, "pgserver", None)
+    with pytest.raises(ImportError, match="DATABASE_URL"):
+        serve.psql.default_dsn()
+    data, code = serve.handle_health()
+    assert code == 200 and data["status"] == "degraded" and "DATABASE_URL" in data["error"]
+
+
 def test_board_forwards_to_a_named_inference_service(monkeypatch):
     calls = []
 

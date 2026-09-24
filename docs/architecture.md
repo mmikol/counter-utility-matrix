@@ -112,7 +112,7 @@ mistaken for the other.
 | `Dockerfile` | the one image, run as an unprivileged user (uid 1000, or `COUNTRIX_UID`/`GID` from `.env` on a Linux host whose checkout is owned by someone else); `docker-entrypoint.sh` takes the role as its argument and, for `data`, builds the database when it is empty, unfilled or behind the migrations |
 | `docker-db` | run any host command against the compose database: `./docker-db .venv/bin/python -m db.mcp call infer '{"map": "Ilios"}'` |
 | `.mcp.json` | registers the two MCP servers a Claude Code session sees: `countrix` (stdio, the local cluster) and `countrix-docker` (HTTP, the stack's database) - [mcp.md](mcp.md) |
-| `requirements.txt` | psycopg, requests, beautifulsoup4, pytest, pytest-cov, ruff, and pgserver (the embedded PostgreSQL a host build uses; the image and CI filter it out, since neither starts a cluster) |
+| `requirements.txt` | psycopg, requests, beautifulsoup4 and pgserver pinned (pgserver is the embedded PostgreSQL a host build uses; the image and CI filter it out, since neither starts a cluster), then pytest, pytest-cov and ruff |
 | `pyproject.toml` | ruff's rules (line length 100); the coverage bar, 75% where a database exists |
 | `pytest.ini` | the `invariant` marker for tests that need a built database |
 | `CLAUDE.md` | what a Claude Code session reads before it changes code: the commands, the layers in brief, what the tests hold a change to, the house rules and style |

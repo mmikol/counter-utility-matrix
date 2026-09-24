@@ -110,12 +110,12 @@ def list_sources(ctx):
     from db.data.blizzard import BLIZZARD
     from db.data.wiki import WIKI
     rows = []
-    for code, name, url in (BLIZZARD, WIKI):
-        path = ctx.caches[code]
+    for source in (BLIZZARD, WIKI):
+        path = ctx.caches[source.code]
         cached = len(os.listdir(path)) if os.path.isdir(path) else 0
-        rows.append({"code": code, "name": name, "url": url,
+        rows.append({"code": source.code, "name": source.name, "url": source.url,
                      "cached_pages": cached,
-                     "tools": [t for t, s in PULLS if s == code]})
+                     "tools": [t for t, s in PULLS if s == source.code]})
     text = "\n".join("%-12s %-24s %4d cached pages  tools: %s"
                      % (r["code"], r["name"], r["cached_pages"],
                         ", ".join(r["tools"])) for r in rows)
@@ -341,7 +341,7 @@ def export_csv(ctx):
     with ctx.connect() as cx:
         counts = psql.export(cx)
     return ("export_csv: %d tables mirrored to db/raw" % len(counts),
-            {"row_counts": dict(counts)})
+            {"row_counts": counts})
 
 
 def write_tool_docs(path=None):

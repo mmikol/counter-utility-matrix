@@ -8,9 +8,11 @@ Ordinary web pages fetched with db.data.fetch.cached_get; the endpoints and
 the `sources` row its pages become are named here, once.
 """
 
+from db import Source
+
 BASE_URL = "https://overwatch.blizzard.com/en-us"
 HEROES_URL = BASE_URL + "/heroes/"
 RATES_URL = BASE_URL + "/rates/"
 
 # The sources row this module's pages become.
-BLIZZARD = ("blizzard", "Blizzard Overwatch site", "https://overwatch.blizzard.com/en-us/")
+BLIZZARD = Source("blizzard", "Blizzard Overwatch site", "https://overwatch.blizzard.com/en-us/")

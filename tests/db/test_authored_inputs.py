@@ -21,9 +21,9 @@ def test_the_authored_csvs_are_gone():
 
 
 def test_the_authored_package_holds_the_source_row_and_no_loader():
-    assert authored.AUTHORED[0] == "user"
-    assert authored.AUTHORED[2] == "inference/strategies/"
-    assert os.path.isdir(os.path.join(db.ROOT, authored.AUTHORED[2]))
+    assert authored.AUTHORED.code == "user"
+    assert authored.AUTHORED.url == "inference/strategies/"
+    assert os.path.isdir(os.path.join(db.ROOT, authored.AUTHORED.url))
     for name in ("LOADERS", "load_seasons", "load_synergies", "load_archetypes",
                  "load_map_playstyle", "read_seasons", "read_synergies",
                  "read_archetypes", "read_map_playstyle"):
