@@ -170,12 +170,12 @@ def validate(directory: str, hid: str, new_text: str) -> list[catalog_module.Str
 
 def _number(value: object, message: str) -> float:
     """A number, or a TuneError saying so. A bool is an int, as float() reads it."""
-    if isinstance(value, (str, int, float)):
-        try:
-            return float(value)
-        except ValueError:
-            pass
-    raise TuneError(message)
+    if not isinstance(value, (str, int, float)):
+        raise TuneError(message)
+    try:
+        return float(value)
+    except ValueError:
+        raise TuneError(message) from None
 
 
 def _coerce(field: str, value: object) -> object:
