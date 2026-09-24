@@ -4,10 +4,10 @@ and the inference layer.
 
     python -m ui.board            # serves http://localhost:8017
 
-http.server and psycopg, no web framework. This module is the board's
-server - its settings, its JSON endpoints and the handler that routes to
-them and to the pages ui/pages.py renders. Every click re-reads the
-database: the facts panel is the FactSet for (map, side, red, blue, bans);
+http.server and psycopg, no web framework, no build step. This module is
+the board's server - its settings, its JSON endpoints and the handler that
+routes to them and to the pages ui/pages.py renders. Every click re-reads
+the database: the facts panel is the FactSet for (map, side, red, blue, bans);
 the comps panel is the inference layer's board - red's most likely starting
 comp, blue's picks filled and its optimal counter to red's, each seat's
 picks scored as a share of its own optimal, the fight odds and the game

@@ -22,8 +22,8 @@ every domain it touches, and every selection added opens new joins.
 COUNTRIX_INFERENCE_URL=http://localhost:8019 .venv/bin/python -m ui.board   # comps from the service
 ```
 
-Standard library only: an `http.server` handler, no framework, no build
-step. In the compose stack the `ui` container runs the same module with
+An `http.server` handler over psycopg, no web framework, no build step -
+the footprint `ui/board.py`'s docstring states. In the compose stack the `ui` container runs the same module with
 `COUNTRIX_INFERENCE_URL` pointing at the `inference` container, so the board
 computes facts in-process and asks the service for comps.
 

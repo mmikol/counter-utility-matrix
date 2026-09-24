@@ -11,8 +11,8 @@ error, 400 with its message; anything else is the server's fault, 500 with
 the error's type and message, and the traceback goes to stderr, never to the
 caller. call_tool() is a tools/call over the MCP door's HTTP transport.
 
-Stdlib only, besides db.Refusal: orchestrator.py imports it on the host's
-python.
+Stdlib only, besides db.Refusal, so the MCP server that stands on it
+(db/mcp/server.py) stays dependency-free.
 """
 
 import json
