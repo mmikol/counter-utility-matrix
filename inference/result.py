@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from typing import Literal, NotRequired, TypedDict
 
 from inference import catalog as catalog_module
-from inference.catalog import Strategy
 from inference.scoring import Candidate, Contribution
+from inference.strategy import Strategy
 from ui.facts.draft import TEAM_SIZE
 from ui.facts.factset import Fact, FactSet
 from ui.facts.model import ROLES

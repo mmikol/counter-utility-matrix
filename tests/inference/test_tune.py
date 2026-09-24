@@ -8,6 +8,7 @@ import pytest
 
 from db import Refusal
 from inference import catalog, tune
+from inference.strategy import CatalogError
 
 # --- tuning --------------------------------------------------------------------------
 
@@ -75,7 +76,7 @@ def test_a_bare_file_is_a_draft_the_solver_ignores(catalog_copy):
     assert all(
         h.form == "assumption" and not h.pending for h in cat
         if h.id in ("vintage", "objective", "locked-picks"))
-    with pytest.raises(catalog.CatalogError, match="carries nothing to score"):
+    with pytest.raises(CatalogError, match="carries nothing to score"):
         with open(path, "w", encoding="utf-8") as handle:
             handle.write("---\nname: x\nkind: assumption\nmetric: team.tanks\n"
                          "direction: maximize\n---\nx\n")
@@ -156,7 +157,7 @@ def test_frontmatter_cannot_be_injected_through_a_field_or_a_value(catalog_copy)
         "---\nname: h\nkind: heuristic\nmetric: team.tanks\ndirection: maximize\n"
         "weight: 1e308\n---\nx\n",
         encoding="utf-8")
-    with pytest.raises(catalog.CatalogError, match=r"within 0\.\.10"):
+    with pytest.raises(CatalogError, match=r"within 0\.\.10"):
         catalog.load(catalog_copy)
 
 
@@ -175,4 +176,4 @@ def test_a_catalog_error_is_the_operators_fault_and_a_tune_error_the_callers():
     """A tuning change the caller got wrong is a Refusal every door answers as
     the caller's error; a playbook that does not load is the operator's."""
     assert issubclass(tune.TuneError, Refusal)
-    assert not issubclass(catalog.CatalogError, Refusal)
+    assert not issubclass(CatalogError, Refusal)

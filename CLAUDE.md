@@ -100,8 +100,9 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
   the id; frontmatter sets the kind (constraint, heuristic, assumption). The
   form is derived, never written: limit (`require:`), scored
   (`bonus:`/`penalty:`), heuristic (`metric:`), assumption, or draft (name,
-  kind and prose only). `inference/catalog.py` parses
-  and validates it; one bad file makes `catalog.load` raise everywhere. The
+  kind and prose only). `inference/catalog.py` reads it, each file parsed
+  by `frontmatter.py` and checked by `strategy.py` (`Strategy`,
+  `CatalogError`); one bad file makes `catalog.load` raise everywhere. The
   shipped playbook is five assumptions and nothing scored, on purpose, while
   it is rebuilt rule by rule from the citation record in
   `inference/README.md`. Solver behaviour is tested against the 19-file

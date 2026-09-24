@@ -8,6 +8,7 @@ from concurrent.futures.process import BrokenProcessPool
 import pytest
 
 from inference import catalog
+from inference.strategy import CatalogError
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts.draft import Draft
 
@@ -261,7 +262,7 @@ def test_warm_reports_a_worker_that_cannot_start_and_falls_back_to_one_process(
     says so on stderr, drops the pool and reports no workers, so the server
     boots and its boards solve in its own process."""
     from inference import parallel
-    dropped = _priming_pool(monkeypatch, catalog.CatalogError("no strategy files in x/"))
+    dropped = _priming_pool(monkeypatch, CatalogError("no strategy files in x/"))
     assert parallel.warm() == 0
     assert ("the solver workers did not start (CatalogError: no strategy files in x/);"
             " boards solve in this process") in capsys.readouterr().err

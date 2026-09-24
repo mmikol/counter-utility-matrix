@@ -34,6 +34,7 @@ import psycopg
 from db import psql, web
 from inference import catalog as catalog_module
 from inference import engine, parallel
+from inference.strategy import CatalogError
 from ui.facts import tables
 from ui.facts.draft import parse_board
 
@@ -109,7 +110,7 @@ def handle_health() -> tuple[Health, int]:
     errors: list[str] = []
     try:
         cat = catalog_module.load()
-    except catalog_module.CatalogError as error:
+    except CatalogError as error:
         errors.append(str(error))
     else:
         out["strategies"], out["pending"] = len(cat), sum(1 for h in cat if h.pending)

@@ -12,11 +12,13 @@ import pytest
 
 from db import Refusal
 from inference import catalog
+from inference.frontmatter import parse_frontmatter
+from inference.strategy import KINDS, CatalogError, Strategy
 from tests.inference import FIXTURE_PLAYBOOK
 from ui.facts import compute
 
 
-def _fights(strategies: Iterable[catalog.Strategy]) -> list[str]:
+def _fights(strategies: Iterable[Strategy]) -> list[str]:
     """Each unguarded heuristic against every heuristic that weighs its metric
     the other way, worded for the failure."""
     by_metric = {}
@@ -73,7 +75,7 @@ def test_a_filename_that_is_not_lowercase_kebab_is_refused_before_the_folder_cou
     for its name."""
     (tmp_path / "Bad_Name.md").write_text("---\nname: x\nkind: assumption\n---\nx\n",
                                           encoding="utf-8")
-    with pytest.raises(catalog.CatalogError, match="lowercase-kebab"):
+    with pytest.raises(CatalogError, match="lowercase-kebab"):
         catalog.load(str(tmp_path))
 
 
@@ -106,7 +108,7 @@ def test_a_file_named_for_another_id_cannot_hijack_it(catalog_copy):
     Path(catalog_copy, "aaa.md").write_text(
         "---\nname: x\nkind: assumption\nid: coverage\n---\nx\n",
         encoding="utf-8")
-    with pytest.raises(catalog.CatalogError) as caught:
+    with pytest.raises(CatalogError) as caught:
         catalog.load(catalog_copy)
     assert caught.value.file == "aaa.md" and "id: is the filename" in str(caught.value)
 
@@ -144,14 +146,14 @@ def test_a_playbooks_digest_reads_its_strategy_files_and_nothing_beside_them(cat
 
 
 def test_a_folder_that_is_not_there_holds_no_playbook(tmp_path):
-    with pytest.raises(catalog.CatalogError, match="no strategies directory"):
+    with pytest.raises(CatalogError, match="no strategies directory"):
         catalog.strategy_files(str(tmp_path / "gone"))
-    with pytest.raises(catalog.CatalogError, match="no strategies directory"):
+    with pytest.raises(CatalogError, match="no strategies directory"):
         catalog.playbook_digest(str(tmp_path / "gone"))
 
 
 def test_frontmatter_parses_scalars_lists_and_params():
-    meta, body = catalog.parse_frontmatter(
+    meta, body = parse_frontmatter(
         "---\nname: X\nweight: 2.5\nsoft: true\ntags: [a, b]\nn: -4\nf: 1e3\nw: word\nz: ~\n"
         "params:\n  K: 3\n---\n# X\nbody\n")
     assert meta == {"name": "X", "weight": 2.5, "soft": True, "tags": ["a", "b"], "n": -4,
@@ -162,11 +164,11 @@ def test_frontmatter_parses_scalars_lists_and_params():
 
 def test_the_reference_and_the_live_playbooks_are_valid_and_reference_real_metrics():
     live = catalog.load()                       # the user's playbook: whatever it holds today
-    assert live and {h.kind for h in live} <= set(catalog.KINDS)
+    assert live and {h.kind for h in live} <= set(KINDS)
     assert all(h.metric in compute.registry() for h in live if h.kind == "heuristic")
     cat = catalog.load(FIXTURE_PLAYBOOK)        # the reference: every kind and every form
     kinds = {h.kind for h in cat}
-    assert kinds == set(catalog.KINDS) == {"constraint", "heuristic", "assumption"}
+    assert kinds == set(KINDS) == {"constraint", "heuristic", "assumption"}
     forms = {h.form for h in cat}
     assert forms == {"limit", "scored", "heuristic", "assumption"}
     assert all(h.form == "heuristic" for h in cat if h.kind == "heuristic")
@@ -187,12 +189,12 @@ def test_catalog_rejects_a_goal_on_an_unknown_metric(tmp_path):
     (tmp_path / "bad.md").write_text(
         "---\nname: bad\nkind: heuristic\ndirection: maximize\nmetric: team.nope\n---\nx\n",
         "utf-8")
-    with pytest.raises(catalog.CatalogError, match="not a registered fact key"):
+    with pytest.raises(CatalogError, match="not a registered fact key"):
         catalog.load(str(tmp_path))
     (tmp_path / "bad.md").write_text(
         "---\nname: bad\nkind: constraint\nwhen: team.tanks > params.T\nbonus: 1\n---\nx\n",
         "utf-8")
-    with pytest.raises(catalog.CatalogError, match="params"):
+    with pytest.raises(CatalogError, match="params"):
         catalog.load(str(tmp_path))
 
 
@@ -219,7 +221,7 @@ def test_a_constraint_is_a_limit_or_scored_and_an_assumption_is_prose(tmp_path):
                 "---\nname: b\nkind: assumption\nrequire: team.tanks <= 2\n---\nx\n",
                 "---\nname: b\nkind: goal\ndirection: maximize\nmetric: team.tanks\n---\nx\n",
                 "---\nname: b\nkind: strategy\n---\nx\n"):
-        with pytest.raises(catalog.CatalogError):
+        with pytest.raises(CatalogError):
             load_one(bad)
 
 

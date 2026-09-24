@@ -35,6 +35,7 @@ from typing import TypedDict
 
 from db import Refusal
 from inference import catalog as catalog_module
+from inference.strategy import KINDS, CatalogError, Form, Strategy
 
 SCALARS = (
     "weight", "direction", "soft", "when", "require", "bonus", "penalty", "metric",
@@ -68,7 +69,7 @@ class Change(TypedDict):
 class Completion(TypedDict):
     """What complete() set: the form the strategy took and each field's text."""
     id: str
-    form: catalog_module.Form
+    form: Form
     set: dict[str, str]
     line: str
 
@@ -76,7 +77,7 @@ class Completion(TypedDict):
 class Addition(TypedDict):
     """What add() stored: the new file's form and path."""
     id: str
-    form: catalog_module.Form
+    form: Form
     path: str
     line: str
 
@@ -152,7 +153,7 @@ def edit_frontmatter(text: str, field: str, value: object) -> tuple[str, str | N
     return "---" + "\n".join(lines) + rest, old
 
 
-def validate(directory: str, hid: str, new_text: str) -> list[catalog_module.Strategy]:
+def validate(directory: str, hid: str, new_text: str) -> list[Strategy]:
     """Load a copy of the catalog with this one file replaced; raise on error."""
     tmp = tempfile.mkdtemp(prefix="tune-")
     try:
@@ -161,7 +162,7 @@ def validate(directory: str, hid: str, new_text: str) -> list[catalog_module.Str
         with open(os.path.join(tmp, hid + ".md"), "w", encoding="utf-8") as handle:
             handle.write(new_text)
         return catalog_module.load(tmp)
-    except catalog_module.CatalogError as error:
+    except CatalogError as error:
         raise TuneError(str(error)) from error
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -192,8 +193,8 @@ def _coerce(field: str, value: object) -> object:
         return _required_number(value, "a param must be a number")
     if field == "soft" and not isinstance(value, bool):
         raise TuneError("soft must be true or false")
-    if field == "kind" and value not in catalog_module.KINDS:
-        raise TuneError("kind must be one of %s" % "/".join(catalog_module.KINDS))
+    if field == "kind" and value not in KINDS:
+        raise TuneError("kind must be one of %s" % "/".join(KINDS))
     if field in TEXT_FIELDS and not (isinstance(value, str) and len(value) <= MAX_EXPRESSION):
         raise TuneError("%s is a string under %d characters" % (field, MAX_EXPRESSION))
     return value
@@ -233,7 +234,7 @@ def _where(directory: str | None) -> tuple[str, str]:
     return directory, os.path.join(directory, "tuning-log.md")
 
 
-def _document(directory: str, loaded: list[catalog_module.Strategy]) -> None:
+def _document(directory: str, loaded: list[Strategy]) -> None:
     """The catalog document follows the files, for the shipped playbook only."""
     if os.path.abspath(directory) == os.path.abspath(catalog_module.strategies_dir()):
         catalog_module.write_docs(loaded)
@@ -256,8 +257,8 @@ def _existing(directory: str, hid: str) -> str:
 
 
 def _commit(directory: str, hid: str, text: str,
-            what: Callable[[catalog_module.Strategy], str], reason: str,
-            by: str) -> tuple[catalog_module.Strategy, str]:
+            what: Callable[[Strategy], str], reason: str,
+            by: str) -> tuple[Strategy, str]:
     """The one write order: the catalog loaded with the new text, the file
     written, the docs regenerated, one line logged -> (the strategy as loaded,
     the line). `what` words the change from the loaded strategy; it is a
@@ -325,8 +326,8 @@ def _check_new(hid: str, name: str, kind: str, body: str) -> None:
     kind, a name and prose within their limits, three sentences at most."""
     if not catalog_module.ID_RE.fullmatch(hid or ""):
         raise TuneError("id must be lowercase-kebab, got %r" % hid)
-    if kind not in catalog_module.KINDS:
-        raise TuneError("kind must be one of %s" % "/".join(catalog_module.KINDS))
+    if kind not in KINDS:
+        raise TuneError("kind must be one of %s" % "/".join(KINDS))
     if not (name or "").strip() or not (body or "").strip():
         raise TuneError("a strategy needs a name and its prose")
     if len(name) > MAX_NAME or len(body) > MAX_PROSE:

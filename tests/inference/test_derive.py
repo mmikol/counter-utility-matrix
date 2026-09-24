@@ -9,6 +9,7 @@ import pytest
 
 from db import Refusal
 from inference import catalog, derive, tune
+from inference.strategy import CatalogError
 
 
 def _draft(directory, hid="heal-line", kind="constraint"):
@@ -150,12 +151,12 @@ def test_a_fault_past_the_answer_is_raised_and_never_sent_back_as_an_objection(
     model nothing more."""
     _draft(catalog_copy, "heal-line", "heuristic")
     def broken(*args, **kwargs):
-        raise catalog.CatalogError("no strategies in the copy")
+        raise CatalogError("no strategies in the copy")
     monkeypatch.setattr(derive.tune, "complete", broken)
     asked = []
     def runner(text):
         asked.append(text)
         return '{"fields": {"metric": "team.heal_peak_total", "direction": "maximize"}}'
-    with pytest.raises(catalog.CatalogError, match="no strategies"):
+    with pytest.raises(CatalogError, match="no strategies"):
         derive.derive(directory=catalog_copy, runner=runner, log=lambda m: None)
     assert len(asked) == 1

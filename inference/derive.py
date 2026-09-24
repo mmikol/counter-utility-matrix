@@ -36,7 +36,7 @@ from typing import TypedDict
 from db import Refusal
 from inference import catalog as catalog_module
 from inference import tune
-from inference.catalog import Form, Strategy
+from inference.strategy import Form, Strategy
 from ui.facts import compute
 
 CLI_CANDIDATES = ("claude",                                   # on PATH, any OS

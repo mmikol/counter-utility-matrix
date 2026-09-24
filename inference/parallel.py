@@ -43,10 +43,10 @@ from typing import Concatenate, NamedTuple, Protocol
 
 from db import Refusal
 from inference import catalog as catalog_module
-from inference.catalog import Strategy
 from inference.scale import Standing, Tally, reference_bounds, reference_standing
 from inference.scoring import Bounds, Candidate
 from inference.solver import Solved, Solver, Swept
+from inference.strategy import Strategy
 from ui.facts.draft import Draft
 from ui.facts.model import World
 

@@ -8,7 +8,11 @@
                   a comp to
     README.md     the citation record the playbook is rebuilt from: a line
                   per strategy id, shipped or removed
-    catalog       reads, validates and mirrors the strategies
+    frontmatter   the dialect a strategy file's frontmatter is written in
+    strategy      one strategy: its fields, its kind and form, and the rules
+                  every file keeps
+    catalog       reads the playbook's files into strategies, orders, mirrors
+                  and documents them
     expr          the safe expression language the frontmatter uses
     scoring       the objective: what one six scores on one board, and the legal
                   shapes

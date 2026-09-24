@@ -127,7 +127,9 @@ inference/
                    was drawn from, or the user's word for an assumption
   strategies/      the playbook: one markdown file per constraint, heuristic
                    or assumption, and tuning-log.md
-  catalog.py       reads, validates and mirrors the strategy files
+  frontmatter.py   the dialect a strategy file's frontmatter is written in
+  strategy.py      one strategy: its fields, kind and form, and the checks it passes
+  catalog.py       reads, orders, mirrors and documents the strategy files
   expr.py          the expression language the frontmatter uses
   scoring.py       the objective: prepare, prune, normalise, score; the legal shapes
   scale.py         the board's one scale: the reference sample, the bounds, the standing
@@ -144,7 +146,9 @@ inference/
 
 | file | purpose |
 | --- | --- |
-| `catalog.py` | Parses each file's frontmatter (a flat dialect plus one `params:` block), builds a `Strategy` with `kind`, `form`, compiled expressions and validation against the metrics registry, orders the catalog (constraints - limits, then scored - heuristics, assumptions), mirrors it into the `strategies` table, and writes the catalog at the end of this document. `strategy_files` names a playbook's strategy files (its markdown less `README.md` and `tuning-log.md`), and `playbook_digest` hashes them, names and bytes, into the digest a proven fixture records. |
+| `frontmatter.py` | The dialect a strategy file opens with: flat `key: value` lines between two `---` fences and one indented mapping (`params:`), each value a string, a number, a boolean, null or a list (`parse_frontmatter`); text outside it is a `FrontmatterError`. |
+| `strategy.py` | One strategy (`Strategy`): a file's fields, its `kind`, the `form` they make it, its compiled expressions and the checks every file passes against the metrics registry, the first failure raised as a `CatalogError`; `to_dict` is the `StrategyRecord` the tools, the service and the board serve. |
+| `catalog.py` | Reads the playbook in force (`strategies_dir`: the shipped folder, or the one `COUNTRIX_STRATEGIES` names), each file parsed and checked into a `Strategy` and any failure a `CatalogError` naming the file, orders the catalog (constraints - limits, then scored - heuristics, assumptions), mirrors it into the `strategies` table, and writes the catalog at the end of this document. `strategy_files` names a playbook's strategy files (its markdown less `README.md` and `tuning-log.md`), and `playbook_digest` hashes them, names and bytes, into the digest a proven fixture records. |
 | `expr.py` | A safe subset of Python expressions: the AST is checked once, compiled, and evaluated over a scope whose missing keys read as zero, so a metric that does not apply to a board never crashes a score. |
 | `scoring.py` | The objective on one board (`Objective`): each strategy's `when` read once where the board settles it, then every candidate prepared (namespace, limit check, raw metric values) and scored with the frozen bounds - a hard limit prunes, a soft one charges, a heuristic normalises and weighs, a scored constraint adds - its breakdown one `Contribution` per strategy; and `legal_shapes`, every (tanks, damage, supports) triple the queue (at most two tanks, whatever the playbook holds) and the hard shape limits allow around the locked picks. |
 | `scale.py` | The board's one scale: a seeded reference sample of 1200 legal sixes (every one, on a roster that holds fewer) for that map and side, prepared against the enemy, and the field the board would search with nothing locked, which together bound each heuristic, so `infer`, `evaluate` and the current comp share one scale and a score means the same thing across calls; and each hero's standing, its mean score across the reference sixes it is in. Both are drawn in slices, so the pool spreads them across workers. |

@@ -46,6 +46,7 @@ from db import RAW_DIR, psql
 from db.mcp.audit import default_audit_path  # the door's own, one definition
 from db.mcp.http import RATE_LIMIT  # the door's own, one definition
 from inference import catalog as catalog_module
+from inference.strategy import CatalogError, Strategy
 
 EVERY = 30.0                 # seconds between passes; COUNTRIX_SENTRY_EVERY, read by main()
 
@@ -136,7 +137,7 @@ class PlaybookCheck(NamedTuple):
     """What one look at the playbook found: the files it quarantined, and the
     catalog, or None while the playbook will not load."""
     quarantined: list[str]
-    catalog: list[catalog_module.Strategy] | None
+    catalog: list[Strategy] | None
 
 
 def check_playbook(directory: str | None = None, log: Log = print) -> PlaybookCheck:
@@ -147,7 +148,7 @@ def check_playbook(directory: str | None = None, log: Log = print) -> PlaybookCh
     for _ in range(100):
         try:
             cat = catalog_module.load(directory)
-        except catalog_module.CatalogError as error:
+        except CatalogError as error:
             text = str(error)
             name = error.file
             if not name or not os.path.exists(os.path.join(directory, name)):
@@ -271,7 +272,7 @@ def check_door(audit_path: str | None = None, offset: int = 0) -> DoorTally:
 
 
 def _report(
-        quarantined: list[str], cat: list[catalog_module.Strategy] | None, flags: list[str],
+        quarantined: list[str], cat: list[Strategy] | None, flags: list[str],
         door: DoorTally) -> Report:
     """The report of one pass: ok when the playbook loads whole, nothing was
     quarantined and nothing is flagged."""

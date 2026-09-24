@@ -13,8 +13,8 @@
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal, NamedTuple, NotRequired, TypedDict
 
-from inference.catalog import BOARD_SECTIONS, Strategy
 from inference.expr import Expr, Scope, Value, scope
+from inference.strategy import BOARD_SECTIONS, Strategy
 from ui.facts import compute
 from ui.facts.draft import MAX_TANKS, TEAM_SIZE
 from ui.facts.model import ROLES, Hero, Map, World

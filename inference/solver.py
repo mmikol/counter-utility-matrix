@@ -25,8 +25,8 @@ from typing import NamedTuple
 
 from db import Refusal
 from inference import scale
-from inference.catalog import Strategy
 from inference.scoring import Candidate, Objective, Shape, legal_shapes
+from inference.strategy import Strategy
 from ui.facts.model import ROLES, Hero, Map, World
 
 PARTNER_POINTS = 0.5              # a locked partner's worth when ranking a pool
