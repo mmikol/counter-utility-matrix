@@ -16,3 +16,23 @@ def test_a_fact_is_found_under_every_metric_its_sentence_states():
         assert found.id == fid and found.key == "team.tanks"   # the key it is worded around
     assert fs.find("team.damage", "red") == []                 # the subject still narrows
     assert fs.count == 1                                       # one fact, three ways in
+
+
+def test_a_metric_alone_finds_every_fact_a_subject_finds():
+    """find(key) is every fact that states the metric, whoever it is about;
+    a subject narrows that list and never reaches past it."""
+    fs = FactSet()
+    blue = fs.add("team", "blue", "team.coverage", "blue team coverage: answers 2/2 red picks",
+                  also=("team.coverage_share",))
+    red = fs.add("team", "red", "team.coverage", "red team coverage: answers 1/2 blue picks",
+                 also=("team.coverage_share",))
+    assert [f.id for f in fs.find("team.coverage_share")] == [blue, red]    # id order
+    assert [f.id for f in fs.find("team.coverage_share", "blue")] == [blue]
+    for key in ("team.coverage", "team.coverage_share"):
+        for subject in ("blue", "red"):
+            assert {f.id for f in fs.find(key, subject)} <= {f.id for f in fs.find(key)}
+    # an `also` that repeats the key files the fact once
+    own = fs.add("team", "blue", "team.tanks", "blue team shape: 2 tank",
+                 also=("team.tanks", "team.damage"))
+    assert [f.id for f in fs.find("team.tanks")] == [own]
+    assert [f.id for f in fs.find("team.tanks", "blue")] == [own]

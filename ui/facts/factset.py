@@ -63,7 +63,7 @@ class FactSet:
         self.map_name, self.red, self.blue = map_name, list(red), list(blue)
         self.bans, self.side = list(bans), side
         self.facts: list[Fact] = []
-        self._by_key: dict[tuple[str, str], list[Fact]] = {}
+        self._by_key: dict[str, list[Fact]] = {}
         self._n = {"F": 0, "S": 0}
 
     def add(self, scope: str, subject: str, key: str, text: str, value: object = None,
@@ -77,8 +77,8 @@ class FactSet:
         fid = "%s%d" % (prefix, self._n[prefix])
         fact = Fact(fid, scope, subject, team, key, text, value, unit, source)
         self.facts.append(fact)
-        for under in (key, *also):
-            self._by_key.setdefault((under, subject), []).append(fact)
+        for under in dict.fromkeys((key, *also)):
+            self._by_key.setdefault(under, []).append(fact)
         return fid
 
     @property
@@ -90,10 +90,12 @@ class FactSet:
         return [f for f in self.facts if f.scope == PLAYBOOK_SCOPE]
 
     def find(self, key: str, subject: str | None = None) -> list[Fact]:
-        """Facts with this key (and subject, if given)."""
-        if subject is not None:
-            return list(self._by_key.get((key, subject), ()))
-        return [f for f in self.facts if f.key == key]
+        """Facts that state this metric - worded around it or carrying it in
+        `also` - in id order; a subject narrows them."""
+        stating = self._by_key.get(key, [])
+        if subject is None:
+            return list(stating)
+        return [f for f in stating if f.subject == subject]
 
     def rendered(self) -> str:
         lines = ["[%s] %s" % (f.id, f.text) for f in self.facts if f.scope != PLAYBOOK_SCOPE]
