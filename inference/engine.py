@@ -116,6 +116,10 @@ def _pct(score: float, best: float) -> int:
     return max(0, min(100, round(100.0 * score / best)))
 
 
+# what each kind of result is, as its rendered heading names it
+HEADINGS = {"infer": "optimal comp", "evaluate": "evaluation", "current": "current comp",
+            "countered": "if countered optimally", "fill": "your picks, the rest filled",
+            "expected": "their likely starting comp"}
 UNSCORED = ("unscored - the playbook in force holds no heuristic, scored constraint or soft"
             " limit, so every legal six ties at zero; add one and the board scores")
 
@@ -263,29 +267,12 @@ class Result:
     def rendered(self) -> str:
         """The result as text: the heading, the six and its score, and a line
         each for the picks, the breakdown and the alternatives."""
-        head = "%s for %s%s%s vs %s%s%s" % (
-            {"infer": "optimal comp", "evaluate": "evaluation",
-             "current": "current comp", "countered": "if countered optimally",
-             "fill": "your picks, the rest filled",
-             "expected": "their likely starting comp"}[self.kind],
-            "red" if self.seat == "red" else "blue",
-            " on %s" % self.side if self.side else "",
-            " on %s" % self.map_name if self.map_name else "",
-            ", ".join(self.red) or "an unknown enemy",
-            " (locked: %s)" % ", ".join(self.locked) if self.locked else "",
-            " (banned: %s)" % ", ".join(self.bans) if self.bans else "")
         counts = catalog_module.counts(self.catalog)
         unscored = _unscored(self)
-        share = ("(%d/100)" % _pct(self.score, _best(self))
-                 if unscored is None and not self.partial else
-                 "(unscored)" if unscored is not None else
-                 "(partial - see the filled six for a share)")
-        if self.kind == "expected":                # a likelihood, not a score
-            share = "(from the map's pick rates and the synergies, no strategy read)"
-        lines = [head, "  %s%s - score %.2f %s%s, %d candidates considered in %.1fs"
+        lines = [self._headline(), "  %s%s - score %.2f %s%s, %d candidates considered in %.1fs"
                  " under %d constraints, %d heuristics and %d assumptions"
                  % (", ".join(self.blue), " (%s)" % self.playstyle if self.playstyle else "",
-                    self.score, share,
+                    self.score, self._share(unscored),
                     " (rank %d among the feasible field)" % self.rank
                     if self.rank else "", self.considered, self.seconds,
                     counts["constraint"], counts["heuristic"], counts["assumption"])]
@@ -296,21 +283,46 @@ class Result:
                          % (len(self.blue), TEAM_SIZE))
         if self.violations:
             lines.append("  VIOLATES: " + ", ".join(self.violations))
-        for p in self.picks:
-            lines.append("  %-8s %-14s %s" % (p["role"], p["hero"] + ("*" if p["locked"] else ""),
-                                            p["why"]))
-        parts = ["%s %+.2f%s" % (c["id"], c["weighted"], " (need)" if c.get("need") else "")
-                 for c in self.contributions
-                 if c["applies"] and abs(c["weighted"]) >= 0.005]
-        lines.append("  breakdown: " + " · ".join(parts))
-        for i, alt in enumerate(self.alternatives, start=1):
-            lines.append("  alt %d: %s (%.2f)" % (i, ", ".join(alt["blue"]), alt["score"]))
+        lines += ["  %-8s %-14s %s" % (p["role"], p["hero"] + ("*" if p["locked"] else ""),
+                                       p["why"])
+                  for p in self.picks]
+        lines.append(self._breakdown())
+        lines += ["  alt %d: %s (%.2f)" % (i, ", ".join(alt["blue"]), alt["score"])
+                  for i, alt in enumerate(self.alternatives, start=1)]
         if self.considerations:
             lines.append("  ground rules to reconcile against: " + ", ".join(
                 c["id"] for c in self.considerations))
         if self.pending:
             lines.append("  drafts not yet scored (run /strategy): " + ", ".join(self.pending))
         return "\n".join(lines)
+
+    def _headline(self) -> str:
+        """What the result is, for which seat, where and against whom."""
+        return "%s for %s%s%s vs %s%s%s" % (
+            HEADINGS[self.kind],
+            "red" if self.seat == "red" else "blue",
+            " on %s" % self.side if self.side else "",
+            " on %s" % self.map_name if self.map_name else "",
+            ", ".join(self.red) or "an unknown enemy",
+            " (locked: %s)" % ", ".join(self.locked) if self.locked else "",
+            " (banned: %s)" % ", ".join(self.bans) if self.bans else "")
+
+    def _share(self, unscored: str | None) -> str:
+        """The score's share of the best, or why there is none."""
+        if self.kind == "expected":                # a likelihood, not a score
+            return "(from the map's pick rates and the synergies, no strategy read)"
+        if unscored is not None:
+            return "(unscored)"
+        if self.partial:
+            return "(partial - see the filled six for a share)"
+        return "(%d/100)" % _pct(self.score, _best(self))
+
+    def _breakdown(self) -> str:
+        """Each applying term's weighted part of the score, a need marked."""
+        parts = ["%s %+.2f%s" % (c["id"], c["weighted"], " (need)" if c.get("need") else "")
+                 for c in self.contributions
+                 if c["applies"] and abs(c["weighted"]) >= 0.005]
+        return "  breakdown: " + " · ".join(parts)
 
 
 def _reasons(fs: FactSet, hero_name: str, locked: bool) -> tuple[str, list[str]]:
@@ -586,58 +598,87 @@ def _momentum(cur: Result, red_cur: Result, countered: Result | None,
     if blue_why and red_why:                       # neither seat can be a share of anything
         return Momentum(blue=None, red=None, countered=None, partial=False, odds=None,
                         verdict=blue_why)
-    # A half-drafted seat is read through its fill where one was computed - the
-    # best six reachable from its picks. Scoring the picks alone sums over a
-    # smaller team, so a well-played draft reads low and can fall when the right
-    # pick lands. Red has no fill, so its half-drafted share keeps that bias: the
-    # seat with more picks is flattered. Known, and not fixed here.
+    n, m, k = _shares(cur, red_cur, countered, fill, blue_why, red_why)
+    odds = _odds(n, m)
+    partial = bool((cur.blue and cur.partial) or (red_cur.blue and red_cur.partial))
+    verdict = _verdict_line(cur, red_cur, n, m, partial, odds, blue_why, red_why)
+    if k is not None:
+        verdict += "; if red plays its best counter, your picks hold %d / 100" % k
+    return Momentum(blue=n, red=m, countered=k, partial=partial, odds=odds, verdict=verdict)
+
+
+def _shares(cur: Result, red_cur: Result, countered: Result | None, fill: Result | None,
+            blue_why: str | None,
+            red_why: str | None) -> tuple[int | None, int | None, int | None]:
+    """Blue's share of its optimal, red's of its best counter, and blue's
+    against red's best counter; None where a seat has no picks or its share
+    waits. A half-drafted blue is read through its fill where one was
+    computed - the best six reachable from its picks. Scoring the picks alone
+    sums over a smaller team, so a well-played draft reads low and can fall
+    when the right pick lands. Red has no fill, so its half-drafted share
+    keeps that bias: the seat with more picks is flattered. Known, and not
+    fixed here."""
     blue_now = fill if (fill is not None and cur.partial and cur.blue) else cur
     n = _pct(blue_now.score, _best(blue_now)) if cur.blue and not blue_why else None
     m = _pct(red_cur.score, _best(red_cur)) if red_cur.blue and not red_why else None
     k = (_pct(countered.score, _best(countered))
          if countered is not None and countered.blue and not _unscored(countered) else None)
-    # fight odds: the two shares pitted against each other - each side's share of
-    # the two shares' sum, so the pair reads as a split of 100; defined only when
-    # both seats score
-    odds = (Odds(blue=round(100.0 * n / (n + m)), red=100 - round(100.0 * n / (n + m)))
-            if n is not None and m is not None and n + m > 0 else None)
-    out = Momentum(blue=n, red=m, countered=k,
-                   partial=bool((cur.blue and cur.partial) or (red_cur.blue and red_cur.partial)),
-                   odds=odds, verdict="")
-    short = lambda why: "unscored: " + why.split(": ", 1)[-1]   # noqa: E731
+    return n, m, k
+
+
+def _odds(n: int | None, m: int | None) -> Odds | None:
+    """The fight odds: the two shares pitted against each other - each side's
+    share of the two shares' sum, so the pair reads as a split of 100; defined
+    only when both seats score."""
+    if n is None or m is None or n + m <= 0:
+        return None
+    blue = round(100.0 * n / (n + m))
+    return Odds(blue=blue, red=100 - blue)
+
+
+def _verdict_line(cur: Result, red_cur: Result, n: int | None, m: int | None, partial: bool,
+                  odds: Odds | None, blue_why: str | None, red_why: str | None) -> str:
+    """The verdict in words, before the countered hedge."""
     if (blue_why and cur.blue) or (red_why and red_cur.blue):   # one seat scores, the other waits
-        # a seat with picks has its share, unless its reason for none waits
-        sides = ["no blue picks yet" if not cur.blue else
-                 "blue %d / 100 of its optimal" % n if n is not None else
-                 "blue " + short(blue_why),
-                 "no red picks revealed yet" if not red_cur.blue else
-                 "red %d / 100 of its best counter" % m if m is not None else
-                 "red " + short(red_why)]
-        out["verdict"] = "; ".join(sides)
-    elif n is None or m is None:
-        if m is not None:
-            out["verdict"] = ("red has revealed picks and blue has none:"
-                              " red %d / 100 of its best counter" % m)
-        elif n is not None:
-            out["verdict"] = "no red picks revealed yet: blue %d / 100 of its optimal" % n
-        else:
-            out["verdict"] = "no picks yet on either side"
+        return _one_seat_waits(cur, red_cur, n, m, blue_why, red_why)
+    if n is not None and m is not None:
+        return _gap_line(n, m, partial, odds)
+    if m is not None:
+        return "red has revealed picks and blue has none: red %d / 100 of its best counter" % m
+    if n is not None:
+        return "no red picks revealed yet: blue %d / 100 of its optimal" % n
+    return "no picks yet on either side"
+
+
+def _one_seat_waits(cur: Result, red_cur: Result, n: int | None, m: int | None,
+                    blue_why: str | None, red_why: str | None) -> str:
+    """Each seat on its own: a seat with picks has its share, unless its
+    reason for none waits."""
+    def waits(why: str | None) -> str:
+        return "unscored: " + (why or "").split(": ", 1)[-1]
+    sides = ["no blue picks yet" if not cur.blue else
+             "blue %d / 100 of its optimal" % n if n is not None else
+             "blue " + waits(blue_why),
+             "no red picks revealed yet" if not red_cur.blue else
+             "red %d / 100 of its best counter" % m if m is not None else
+             "red " + waits(red_why)]
+    return "; ".join(sides)
+
+
+def _gap_line(n: int, m: int, partial: bool, odds: Odds | None) -> str:
+    """Both seats scored: who is ahead and by how much, and the fight odds."""
+    gap = n - m
+    if abs(gap) < 5:
+        line = "even - blue %d, red %d" % (n, m)
+    elif gap > 0:
+        line = "blue ahead by %d - blue %d, red %d" % (gap, n, m)
     else:
-        gap = n - m
-        if abs(gap) < 5:
-            out["verdict"] = "even - blue %d, red %d" % (n, m)
-        elif gap > 0:
-            out["verdict"] = "blue ahead by %d - blue %d, red %d" % (gap, n, m)
-        else:
-            out["verdict"] = "red ahead by %d - blue %d, red %d" % (-gap, n, m)
-        if out["partial"]:
-            out["verdict"] += " (partial picks)"
-        if out["odds"]:
-            out["verdict"] += "; fight odds blue %d%%, red %d%%" % (out["odds"]["blue"],
-                                                                    out["odds"]["red"])
-    if k is not None:
-        out["verdict"] += "; if red plays its best counter, your picks hold %d / 100" % k
-    return out
+        line = "red ahead by %d - blue %d, red %d" % (-gap, n, m)
+    if partial:
+        line += " (partial picks)"
+    if odds:
+        line += "; fight odds blue %d%%, red %d%%" % (odds["blue"], odds["red"])
+    return line
 
 
 MODE_GROUND = {
@@ -724,97 +765,146 @@ def _plan(world: World, m: Map | None, side: str, bans: Sequence[str],
     to stay in when you stray from the six, and what the six is built for -
     from the same facts and strategies the solver scored, so that picks can be
     tailored toward the optimal without matching it. Ends with what it rests on."""
-    lines = []
-    # the ground
-    if m is None:
-        read = ["No map yet, so this is the meta's best six: what is winning right now, built"
-                " to fit together."]
-    else:
-        ground = MODE_GROUND.get(m.mode or "", "the fight follows the objective")
-        read = ["%s is a %s map: %s." % (m.name, m.mode, ground)]
-        # the ground the wiki's article stresses: the map.terrain facts above the ordinary map
-        facts = blue_r.facts
-        stressed = [f.value["feature"] for f in (facts.find("map.terrain", m.name)
-                                                 if facts is not None else ())
-                    if f.value["z"] > 0][:TERRAIN_NAMED]
-        if stressed:
-            read.append("The wiki's article stresses %s."
-                        % _and(TERRAIN_GROUND[f] for f in stressed))
-        # the stages whose own text stresses a feature: the map.stage_terrain facts
-        stressing = sorted((facts.find("map.stage_terrain", m.name)
-                            if facts is not None else ()),
-                           key=lambda f: -f.value["features"][0]["z"])[:STAGES_NAMED]
-        staged = [(f.value["stage"], _and(TERRAIN_GROUND[x["feature"]]
-                                          for x in f.value["features"]))
-                  for f in sorted(stressing, key=lambda f: m.stages.index(f.value["stage"]))]
-        if staged:
-            read.append("; ".join(("%s has the %s" if i == 0 else "%s the %s") % pair
-                                  for i, pair in enumerate(staged)) + ".")
-        if side in SIDE_PLAY:
-            read.append("You are " + SIDE_PLAY[side] + ".")
-    # what to play
-    map_style = m.style_top if m is not None else ""
     lean = blue_r.playstyle
+    read = _ground(m, side, blue_r.facts)
+    style = _style_read(m, lean, red_h)
+    if style is not None:
+        read.append(style)
+    lines = [" ".join(read)]
+    for line in (_them(world, m, red_h, lean, blue_r), _family_line(world, m, lean, bans),
+                 _above_all(blue_r, lean)):
+        if line is not None:
+            lines.append(line)
+    lines.append(_basis(m, side, bans, red_h))
+    return "\n".join(lines)
+
+
+def _ground(m: Map | None, side: str, facts: FactSet | None) -> list[str]:
+    """The ground: the map's mode, the terrain its facts stress, and the side."""
+    if m is None:
+        return ["No map yet, so this is the meta's best six: what is winning right now, built"
+                " to fit together."]
+    ground = MODE_GROUND.get(m.mode or "", "the fight follows the objective")
+    read = ["%s is a %s map: %s." % (m.name, m.mode, ground)]
+    if facts is not None:
+        read += _terrain(m, facts)
+    if side in SIDE_PLAY:
+        read.append("You are " + SIDE_PLAY[side] + ".")
+    return read
+
+
+def _terrain(m: Map, facts: FactSet) -> list[str]:
+    """The ground the wiki's article stresses - the map.terrain facts above
+    the ordinary map - and the stages whose own text stresses a feature, the
+    map.stage_terrain facts."""
+    read = []
+    stressed = [f.value["feature"] for f in facts.find("map.terrain", m.name)
+                if f.value["z"] > 0][:TERRAIN_NAMED]
+    if stressed:
+        read.append("The wiki's article stresses %s."
+                    % _and(TERRAIN_GROUND[f] for f in stressed))
+    stressing = sorted(facts.find("map.stage_terrain", m.name),
+                       key=lambda f: -f.value["features"][0]["z"])[:STAGES_NAMED]
+    staged = [(f.value["stage"], _and(TERRAIN_GROUND[x["feature"]] for x in f.value["features"]))
+              for f in sorted(stressing, key=lambda f: m.stages.index(f.value["stage"]))]
+    if staged:
+        read.append("; ".join(("%s has the %s" if i == 0 else "%s the %s") % pair
+                              for i, pair in enumerate(staged)) + ".")
+    return read
+
+
+def _style_read(m: Map | None, lean: str, red_h: Sequence[Hero]) -> str | None:
+    """What to play: the style the map rewards against the six's lean."""
+    map_style = m.style_top if m is not None else ""
     if map_style and lean == map_style:
-        read.append("The map rewards %s and the six leans into it: %s." % (lean, STYLE_PLAY[lean]))
-    elif map_style and lean:
-        read.append("The map rewards %s, but %sthe six leans %s: %s."
-                    % (map_style, "against this red " if red_h else "", lean,
-                       STYLE_PLAY.get(lean, "play to its picks")))
-    elif lean:
-        read.append("The six leans %s: %s." % (lean, STYLE_PLAY.get(lean, "play to its picks")))
-    elif map_style:
-        read.append("The map rewards %s: %s." % (map_style, STYLE_PLAY[map_style]))
-    lines.append(" ".join(read))
-    # them
-    if red_h:
-        n = len(red_h)
-        theirs = team_metrics(world, red_h, m, [])
-        red_lean = text(theirs["style_lean"]) or text(theirs["style_top"])
-        them = "Their %d pick%s%s (%s)" % (n, "" if n == 1 else "s",
-                                            " so far" if n < TEAM_SIZE else "",
-                                            ", ".join(h.name for h in red_h))
-        s = "s" if n == 1 else ""
-        if red_lean in THEIR_LEAN and red_lean == lean:
-            them += " lean%s %s too: %s." % (s, red_lean, SAME_LEAN[red_lean])
-        elif red_lean in THEIR_LEAN:
-            them += " lean%s %s: %s." % (s, red_lean, THEIR_LEAN[red_lean])
-        else:
-            them += " show%s no lean yet." % s
-        answered: dict[str, list[str]] = {}
-        for p in blue_r.picks:
-            for part in p["why"].split("; "):
-                if part.startswith("answers "):
-                    for name in part[len("answers "):].split(", "):
-                        answered.setdefault(name, []).append(p["hero"])
-        names = [h.name for h in red_h]
-        pairs = sorted(((k, v) for k, v in answered.items() if k in names),
-                       key=lambda kv: -len(kv[1]))
-        if pairs:
-            them += " " + _sentence("; ".join(
-                "%s answer%s %s" % (_and(v), "" if len(v) > 1 else "s", k)
-                                              for k, v in pairs[:4]))
-        missing = [k for k in names if k not in answered]
-        if missing:
-            them += " Nobody in the six answers %s - respect %s." % (
-                _and(missing), "them" if len(missing) > 1 else "that pick")
-        lines.append(them)
-    elif blue_r.red:
-        lines.append("No red pick yet: the six counters their likely six (%s)."
-                     % ", ".join(blue_r.red))
-    # the family to stay in
+        return "The map rewards %s and the six leans into it: %s." % (lean, STYLE_PLAY[lean])
+    if map_style and lean:
+        return ("The map rewards %s, but %sthe six leans %s: %s."
+                % (map_style, "against this red " if red_h else "", lean,
+                   STYLE_PLAY.get(lean, "play to its picks")))
     if lean:
-        parts = []
-        for role, plural in (("tank", "Tanks"), ("damage", "Damage"), ("support", "Supports")):
-            names = _family(world, m, lean, role, bans)
-            if names:
-                parts.append("%s: %s." % (plural, ", ".join(names)))
-        if parts:
-            lines.append("If you stray from the six, stay in its family. " + " ".join(parts))
-    # what it is built for
+        return "The six leans %s: %s." % (lean, STYLE_PLAY.get(lean, "play to its picks"))
+    if map_style:
+        return "The map rewards %s: %s." % (map_style, STYLE_PLAY[map_style])
+    return None
+
+
+def _them(world: World, m: Map | None, red_h: Sequence[Hero], lean: str,
+          blue_r: Result) -> str | None:
+    """What red's picks mean: their lean against the six's, and which picks
+    of the six answer which of theirs - read off the hero.vs_answers facts
+    the picks cite. With nothing revealed, the likely six the six counters."""
+    if not red_h:
+        if blue_r.red:
+            return ("No red pick yet: the six counters their likely six (%s)."
+                    % ", ".join(blue_r.red))
+        return None
+    n = len(red_h)
+    theirs = team_metrics(world, red_h, m, [])
+    red_lean = text(theirs["style_lean"]) or text(theirs["style_top"])
+    them = "Their %d pick%s%s (%s)" % (n, "" if n == 1 else "s",
+                                        " so far" if n < TEAM_SIZE else "",
+                                        ", ".join(h.name for h in red_h))
+    s = "s" if n == 1 else ""
+    if red_lean in THEIR_LEAN and red_lean == lean:
+        them += " lean%s %s too: %s." % (s, red_lean, SAME_LEAN[red_lean])
+    elif red_lean in THEIR_LEAN:
+        them += " lean%s %s: %s." % (s, red_lean, THEIR_LEAN[red_lean])
+    else:
+        them += " show%s no lean yet." % s
+    return them + _answers([h.name for h in red_h], _answered(blue_r))
+
+
+def _answered(six: Result) -> dict[str, list[str]]:
+    """Each enemy the six answers, and the picks of the six that answer it,
+    in pick order: the hero.vs_answers facts filed under the six's own side,
+    the facts its picks' reasons cite."""
+    answered: dict[str, list[str]] = {}
+    if six.facts is None:
+        return answered
+    for p in six.picks:
+        for f in six.facts.find("hero.vs_answers", p["hero"]):
+            if f.team == "blue":
+                for enemy in f.value:
+                    answered.setdefault(enemy, []).append(p["hero"])
+    return answered
+
+
+def _answers(names: Sequence[str], answered: Mapping[str, Sequence[str]]) -> str:
+    """Who in the six answers each of red's picks, most answered first, and
+    the picks nobody answers."""
+    out = ""
+    pairs = sorted(((k, v) for k, v in answered.items() if k in names),
+                   key=lambda kv: -len(kv[1]))
+    if pairs:
+        out += " " + _sentence("; ".join(
+            "%s answer%s %s" % (_and(v), "" if len(v) > 1 else "s", k) for k, v in pairs[:4]))
+    missing = [k for k in names if k not in answered]
+    if missing:
+        out += " Nobody in the six answers %s - respect %s." % (
+            _and(missing), "them" if len(missing) > 1 else "that pick")
+    return out
+
+
+def _family_line(world: World, m: Map | None, lean: str, bans: Sequence[str]) -> str | None:
+    """The family to stay in: the six's style's heroes in each role."""
+    if not lean:
+        return None
+    parts = []
+    for role, plural in (("tank", "Tanks"), ("damage", "Damage"), ("support", "Supports")):
+        names = _family(world, m, lean, role, bans)
+        if names:
+            parts.append("%s: %s." % (plural, ", ".join(names)))
+    if not parts:
+        return None
+    return "If you stray from the six, stay in its family. " + " ".join(parts)
+
+
+def _above_all(blue_r: Result, lean: str) -> str | None:
+    """What the six is built for: its four heaviest scoring terms - not the
+    shape every legal six pays, nor a rule named for another style ("Dive the
+    pocket" on a poke six); a rule on the map's style is about the map."""
     titles = {h.id: h.name for h in blue_r.catalog}
-    # not the shape every legal six pays, nor a rule named for another style
-    # ("Dive the pocket" on a poke six); a rule on the map's style is about the map
     skip = {h.id for h in blue_r.catalog
             if (h.kind == "constraint" and h.category == "shape")
             or (h.name.split()[0].lower() in STYLE_PLAY and h.name.split()[0].lower() != lean
@@ -823,11 +913,14 @@ def _plan(world: World, m: Map | None, side: str, bans: Sequence[str],
                   if c["applies"] and c["weighted"] > 0.05
                   and c["id"] not in skip),
                  key=lambda c: -c["weighted"])[:4]
-    if top:
-        lines.append("Above all: "
-                     + "; ".join(titles.get(str(c["id"]), str(c["id"])).lower() for c in top)
-                     + ".")
-    # what it rests on
+    if not top:
+        return None
+    return ("Above all: "
+            + "; ".join(titles.get(str(c["id"]), str(c["id"])).lower() for c in top) + ".")
+
+
+def _basis(m: Map | None, side: str, bans: Sequence[str], red_h: Sequence[Hero]) -> str:
+    """What the plan rests on."""
     basis = ["the rates and counters"]
     if m is not None:
         basis.append("the map")
@@ -837,8 +930,7 @@ def _plan(world: World, m: Map | None, side: str, bans: Sequence[str],
         basis.append("%d ban%s" % (len(bans), "" if len(bans) == 1 else "s"))
     if red_h:
         basis.append("red's %d revealed pick%s" % (len(red_h), "" if len(red_h) == 1 else "s"))
-    lines.append("Based on: %s." % ", ".join(basis))
-    return "\n".join(lines)
+    return "Based on: %s." % ", ".join(basis)
 
 
 # --- the board's search, split across workers ------------------------------
