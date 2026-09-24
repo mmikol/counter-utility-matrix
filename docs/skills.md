@@ -40,8 +40,8 @@ most.
 playbook's record below as `S1..`. Then it decides: you are the agent in
 `COMP = ARGMAX[ STRATEGIES( FACTS ) ]`, so it adopts the solver's optimum
 and says why or improves on it and says why, holding the comp to the
-assumptions and inside the limits (six picks, at most two tanks, no
-banned hero). It answers tersely: the playstyle, six picks each with one
+assumptions and to the rules the solver keeps whatever the playbook holds
+(six picks, at most two tanks, no banned hero). It answers tersely: the playstyle, six picks each with one
 line of why and its `[F#]` tags, a short argument, the vintage warning if
 the facts opened with one. A follow-up ("what if they swap to Pharah?")
 re-runs the inference.
@@ -64,8 +64,11 @@ moved. One change per request; never a strategy you did not name.
 
 **Ground rules:** players are assumed to play optimally, so a lobby's
 habits are not strategies to add; a weight of 0 silences a heuristic, and
-deleting a file is a human decision; the `queue-allows-two-tanks` limit
-is the game's own rule.
+deleting a file is a human decision; at most two tanks is the queue's own
+rule - the solver keeps it whatever the playbook holds, the
+`open-queue-ranked` assumption states it - so no weight tunes it. A
+playbook of assumptions alone has nothing to tune, and the skill offers
+`/strategy` instead.
 
 ## `/strategy` - grow the playbook from three things
 

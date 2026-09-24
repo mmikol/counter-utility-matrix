@@ -218,7 +218,10 @@ is a lesson the next run relearns.
   a skill's worked example tuned a strategy the playbook no longer holds.
   Now: a doc pass reads `board.css`, `ls inference/strategies` and the
   `strategies` tool before trusting a sentence about the look or the
-  playbook, and a skill's example names a rule that exists.
+  playbook, and a skill's example names a rule that exists -
+  `test_the_skills_name_only_strategies_the_playbook_holds` fails on a
+  backticked id in a house skill or a doc that the record cites and the
+  playbook no longer holds.
 
 ## The report
 

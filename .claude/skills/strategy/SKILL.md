@@ -42,7 +42,7 @@ files through `strategies` first, then bring the inputs to the standard.
   about the game, no engine words. "Peel when they dive", "Two supports
   must actually heal". Not "Heuristic for CC vs dive comps".
 - **Id:** lowercase-kebab from the name, at most four words, unique in
-  the catalog - `peel-against-dive`, `heal-line-answer`.
+  the catalog - `peel-when-they-dive`, `two-supports-must-heal`.
 - **Category:** one of the catalog's - matchup, sustain, damage,
   durability, shape, map, side, tempo, synergy, meta, uncertainty,
   assumptions - chosen from what the prose is about.

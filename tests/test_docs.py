@@ -1,7 +1,8 @@
-"""Every link resolves, every skill names real tools, the root overview names
-what is at the root, every shallow indent sits on a four-column stop, and the
-sections db_docs generates match what the code generates today. Pure, except
-the schema check."""
+"""Every link resolves, every skill names real tools and only strategies the
+playbook holds, the root overview and every package map name what they hold,
+only the door calls the playbook's writers, every shallow indent sits on a
+four-column stop, and the sections db_docs generates match what the code
+generates today. Pure, except the schema check."""
 
 import ast
 import json
@@ -278,16 +279,39 @@ def test_the_skills_document_covers_every_skill(copy_of):
         assert "## `/%s`" % name in doc, name
 
 
+def _record_and_shipped():
+    """The ids inference/README.md cites, and the ids of the strategy files
+    in inference/strategies/."""
+    from inference import catalog
+    cited = set(re.findall(r"^- `([a-z0-9-]+)`", _read("inference", "README.md"), re.M))
+    shipped = {name[:-3] for name in catalog.strategy_files(catalog.SHIPPED_DIR)}
+    return cited, shipped
+
+
 def test_every_shipped_strategy_is_in_the_playbook_sources():
     """inference/README.md is the record the playbook is rebuilt from, so it
     holds more ids than the folder does. The other direction has to hold: a
     file in inference/strategies/ that the record does not cite came from
     nowhere."""
-    from inference import catalog
-    record = _read("inference", "README.md")
-    cited = set(re.findall(r"^- `([a-z0-9-]+)`", record, re.M))
-    shipped = {name[:-3] for name in catalog.strategy_files(catalog.SHIPPED_DIR)}
+    cited, shipped = _record_and_shipped()
     assert shipped and shipped <= cited, sorted(shipped - cited)
+
+
+@needs_skills
+def test_the_skills_name_only_strategies_the_playbook_holds():
+    """A skill's worked example or a doc's rule names a strategy by its id;
+    an id the record cites and inference/strategies/ no longer holds is a
+    rule the playbook dropped, and a session told to tune it is refused."""
+    cited, shipped = _record_and_shipped()
+    skills = _skills()
+    texts = {"%s skill" % name: skills[name] for name in MUST_NAME}
+    texts.update(("docs/" + n, _read("docs", n)) for n in os.listdir(DOCS) if n.endswith(".md"))
+    dropped = {}
+    for name, text in sorted(texts.items()):
+        named = set(re.findall(r"`([a-z0-9]+(?:-[a-z0-9]+)+)`", text))
+        if (named & cited) - shipped:
+            dropped[name] = sorted((named & cited) - shipped)
+    assert not dropped, dropped
 
 
 def test_the_tool_reference_is_current(copy_of):

@@ -53,8 +53,10 @@ shows). Prefer whichever is connected; they expose the same tools.
    optimum and say why, or improve on it and say why - a user's stated
    problem ("we lose the first fight") can outweigh a heuristic the solver
    weighted; the result's "ground rules to reconcile against" are the
-   assumptions to hold it to. Stay inside the limits (at most two tanks),
-   keep the locked picks, and respect CAUTION facts.
+   assumptions to hold it to. Stay inside the queue's limit (at most two
+   tanks, which the solver keeps whatever the playbook holds) and any
+   limit the playbook adds, keep the locked picks, and respect CAUTION
+   facts.
 5. Answer in chat, tersely: the playstyle, six picks each with one line of
    why and its [F#] tags, then a short overall argument. Note the vintage
    warning if the facts opened with one.
