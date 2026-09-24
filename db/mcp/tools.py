@@ -7,13 +7,14 @@ dependency order. A session, the refresher or a shell (`python -m db.mcp
 call`) decides what to pull and when, and reads the summary back.
 """
 
+import datetime
 import functools
 import json
 import os
 import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypedDict
 
 import psycopg
 from psycopg.sql import SQL
@@ -484,6 +485,8 @@ SQL_DENIED = re.compile(r"\b(pg_read_file|pg_read_binary_file|pg_ls_dir|pg_stat_
                         r"set_config|query_to_xml|query_to_xmlschema|query_to_xml_and_xmlschema|"
                         r"cursor_to_xml|cursor_to_xmlschema|pg_reload_conf)\b", re.I)
 READER_ROLE = "matrix_reader"          # a login of its own (migration 012): SELECT, nothing else
+MAX_SQL_CHARS = 20000                  # what one statement may run to
+MAX_ROWS = 200                         # rows one reply carries
 MAX_QUERY_BYTES = 1 << 20              # what one query may return
 MAX_CELL = 2000                        # characters per cell
 # What Postgres says of a statement the caller can fix: a syntax error, an
@@ -491,6 +494,9 @@ MAX_CELL = 2000                        # characters per cell
 # the ten-second timeout.
 QUERY_REFUSED = (psycopg.errors.ProgrammingError, psycopg.errors.DataError,
                  psycopg.errors.QueryCanceled)
+
+# A cell as JSON carries it.
+type Cell = str | int | float | bool | list[Cell] | dict[str, Cell] | None
 
 
 def reader_dsn(dsn: str) -> str:
@@ -503,66 +509,92 @@ def reader_dsn(dsn: str) -> str:
 
 
 @tool("query", "Run read-only SQL against the database (SELECT/WITH only,"
-      " one statement, first 200 rows). Every table is documented in"
-      " the data dictionary in docs/db.md.",
+      " one statement, first %d rows). Every table is documented in"
+      " the data dictionary in docs/db.md." % MAX_ROWS,
       {"sql": {"type": "string", "description": "the statement"}}, ["sql"])
 def query(ctx: Context, sql: str) -> Reply:
+    columns, rows = _read_only(ctx.dsn, _checked_sql(sql))
+    kept, truncated = _page(rows)
+    text = "\t".join(columns) + "\n" + "\n".join(
+        "\t".join(str(v) for v in row) for row in kept) if columns else "(no rows)"
+    if truncated:
+        text += "\n(truncated: %d rows shown)" % len(kept)
+    return text, {"columns": columns, "rows": kept, "truncated": truncated}
+
+
+def _checked_sql(sql: str) -> str:
+    """The statement a caller sent, once it is one read-only statement no
+    longer than MAX_SQL_CHARS that names no file or server function -> its
+    body, the trailing semicolon dropped. Anything else is a Refusal, before
+    a connection is opened."""
     body = sql.strip().rstrip(";").strip()
     if ";" in body or not body.lower().startswith(READ_ONLY_STARTS):
         raise Refusal("query is read-only: one SELECT/WITH statement")
-    if len(body) > 20000:
+    if len(body) > MAX_SQL_CHARS:
         raise Refusal("query too long")
     denied = SQL_DENIED.search(body)
     if denied:
         raise Refusal("query refuses %r: SQL here reads tables, not files or servers"
                       % denied.group(1))
-    columns, rows = _read_only(ctx.dsn, body)
-    out: list[list[object]] = []
-    size = 0
-    for row in rows:
-        cells: list[object] = []
-        for v in row:
-            v = _plain(v)
-            if isinstance(v, str) and len(v) > MAX_CELL:
-                v = v[:MAX_CELL] + "…"
-            cells.append(v)
-            size += len(str(v))
-        if size > MAX_QUERY_BYTES:
-            break
-        out.append(cells)
-    text = "\t".join(columns) + "\n" + "\n".join(
-        "\t".join(str(v) for v in row) for row in out) if columns else "(no rows)"
-    return text, {"columns": columns, "rows": out, "truncated": len(rows) == 200}
+    return body
 
 
-def _read_only(dsn: str, body: str) -> tuple[list[str], list[tuple[Any, ...]]]:
+def _read_only(dsn: str, body: str) -> tuple[list[str], list[tuple[object, ...]]]:
     """One checked statement, run as the reader in a read-only transaction
-    under the timeout -> (its column names, its first 200 rows). A statement
-    Postgres rejects is the caller's to fix, like the checks before it: a
-    Refusal in Postgres's own words. A connection that fails is the server's
-    fault and is not caught."""
+    under the timeout -> (its column names, its first MAX_ROWS + 1 rows: one
+    more than a reply carries, so _page can tell the rest were cut). A
+    statement Postgres rejects is the caller's to fix, like the checks before
+    it: a Refusal in Postgres's own words. A connection that fails is the
+    server's fault and is not caught."""
     with psycopg.connect(reader_dsn(dsn)) as cx:
         cx.execute("SET TRANSACTION READ ONLY")
         cx.execute("SET LOCAL statement_timeout = '10s'")
         try:
             cursor = cx.execute(body)
             columns = [d.name for d in cursor.description] if cursor.description else []
-            rows = cursor.fetchmany(200)
+            rows = cursor.fetchmany(MAX_ROWS + 1)
         except QUERY_REFUSED as error:
             raise Refusal("query: %s" % str(error).partition("\n")[0]) from error
         cx.rollback()
     return columns, rows
 
 
-def _plain(value: object) -> object:
-    """A cell as JSON carries it: dates and times as ISO text, the rest as is."""
-    isoformat = getattr(value, "isoformat", None)
-    if isoformat is not None:
-        return isoformat()
-    if isinstance(value, (int, float, str, bool)) or value is None:
+def _page(rows: Sequence[Sequence[object]]) -> tuple[list[list[Cell]], bool]:
+    """The rows a reply carries -> (at most MAX_ROWS of them, each cell as
+    JSON carries it and a string cut to MAX_CELL characters, until the
+    MAX_QUERY_BYTES budget is spent; whether any row was left out - past
+    MAX_ROWS or past the budget)."""
+    kept: list[list[Cell]] = []
+    size = 0
+    for row in rows[:MAX_ROWS]:
+        cells = [_cut(_cell(value)) for value in row]
+        size += sum(len(str(cell)) for cell in cells)
+        if size > MAX_QUERY_BYTES:
+            return kept, True
+        kept.append(cells)
+    return kept, len(rows) > MAX_ROWS
+
+
+def _cut(cell: Cell) -> Cell:
+    """A string cell cut to MAX_CELL characters, marked with an ellipsis."""
+    if isinstance(cell, str) and len(cell) > MAX_CELL:
+        return cell[:MAX_CELL] + "…"
+    return cell
+
+
+def _cell(value: object) -> Cell:
+    """A cell as JSON carries it: a date or a time as ISO text; a list, tuple
+    or dict cell by cell, so an array or JSONB column arrives as JSON; a
+    string, number, boolean or None as it is; anything else through str()."""
+    if isinstance(value, (datetime.date, datetime.time)):
+        return value.isoformat()
+    if isinstance(value, (list, tuple)):
+        return [_cell(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _cell(v) for k, v in value.items()}
+    if value is None or isinstance(value, (str, int, float, bool)):
         return value
     return str(value)
-
 
 # --- the board: UI layer and inference layer through the same door -------
 
@@ -666,7 +698,8 @@ COMPACT_TERMS = 15        # the heaviest terms a compact reply carries
                          "description": "true: a reply small enough to carry under a"
                                         " playbook of hundreds. The structured payload"
                                         " then has its own keys: map, side, red, blue,"
-                                        " score, strategies, idle, silent (applying,"
+                                        " score, terms (how many scoring terms the full"
+                                        " reply carries), idle, silent (applying,"
                                         " metric not varying on this board) and largest"
                                         " (the %d heaviest terms, each an id and its"
                                         " weighted value)" % COMPACT_TERMS}})
@@ -681,23 +714,44 @@ def infer(ctx: Context, draft: Draft, top: int = 5, pool: int = 6,
     return result.rendered(), result.to_dict()
 
 
-def _compact(result: Result) -> Reply:
+class WeightedTerm(TypedDict):
+    """One scoring term of a compact reply: its strategy and its weighted part
+    of the score."""
+    id: str
+    weighted: float
+
+
+class CompactInfer(TypedDict):
+    """A compact infer reply's payload: the board and the six with its score;
+    how many scoring terms the full reply's contributions carry (terms), how
+    many of them do not apply here (idle), the applying heuristics whose
+    metric does not vary on this board (silent), and the heaviest terms."""
+    map: str | None
+    side: str
+    red: list[str]
+    blue: list[str]
+    score: float
+    terms: int
+    idle: int
+    silent: list[str]
+    largest: list[WeightedTerm]
+
+
+def _compact(result: Result) -> tuple[str, CompactInfer]:
     """A result small enough for a tool reply under a playbook of hundreds:
     the comp, the heuristics that apply but whose metric does not vary on this
     board, and the largest terms."""
-    full = result.to_dict()
-    terms = full["contributions"]
+    terms = result.contributions
     silent = sorted(c["id"] for c in terms if c.get("spread") is False)   # applying heuristics
     idle = sum(1 for c in terms if not c["applies"])
     largest = sorted((c for c in terms if c["weighted"]),
                      key=lambda c: (-abs(c["weighted"]), c["id"]))[:COMPACT_TERMS]
-    payload = {"map": result.map_name, "side": result.side, "red": list(result.red),
-               "blue": list(result.blue), "score": full["score"],
-               "strategies": len(terms), "idle": idle, "silent": silent,
-               "largest": [{"id": c["id"], "weighted": round(c["weighted"], 4)}
-                           for c in largest]}
+    payload = CompactInfer(
+        map=result.map_name, side=result.side, red=list(result.red), blue=list(result.blue),
+        score=round(result.score, 3), terms=len(terms), idle=idle, silent=silent,
+        largest=[WeightedTerm(id=c["id"], weighted=round(c["weighted"], 4)) for c in largest])
     lines = result.rendered().split("\n")[:2]
-    lines.append("  %d strategies, %d not applying here" % (len(terms), idle))
+    lines.append("  %d terms, %d not applying here" % (len(terms), idle))
     lines.append("  silent (applies, metric does not vary here): %s"
                  % (", ".join(silent) or "none"))
     lines += ["  %+.2f  %s" % (c["weighted"], c["id"]) for c in largest]

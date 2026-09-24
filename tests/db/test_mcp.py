@@ -4,6 +4,8 @@ server as a subprocess and need no database (tools/list and list_sources
 read nothing); the tool tests need the built database."""
 
 import contextlib
+import datetime
+import decimal
 import json
 import os
 import shutil
@@ -202,6 +204,11 @@ def ctx(db, dsn):
 def test_query_is_read_only(ctx):
     _text, data = tools.run_tool(ctx, "query", sql="select count(*) from heroes")
     assert data["rows"][0][0] > 40
+    text, data = tools.run_tool(ctx, "query", sql="select generate_series(1, 300)")
+    assert len(data["rows"]) == 200 and data["truncated"] is True
+    assert text.endswith("\n(truncated: 200 rows shown)")
+    _text, data = tools.run_tool(ctx, "query", sql="select generate_series(1, 200)")
+    assert len(data["rows"]) == 200 and data["truncated"] is False
     with pytest.raises(Refusal, match="read-only"):
         tools.run_tool(ctx, "query", sql="delete from heroes")
     with pytest.raises(Refusal, match="read-only"):
@@ -246,6 +253,7 @@ def test_a_compact_infer_names_the_silent_heuristics_and_fits_a_reply(ctx):
     silent = sorted(c["id"] for c in full["contributions"] if c.get("spread") is False)
     assert data["silent"] == silent
     assert data["idle"] == sum(1 for c in full["contributions"] if not c["applies"])
+    assert data["terms"] == len(full["contributions"]) and "strategies" not in data
     assert len(data["largest"]) <= tools.COMPACT_TERMS
     assert len(text) + len(json.dumps(data)) < 10000
 
@@ -595,6 +603,36 @@ def test_query_refuses_file_and_server_reaching_sql_before_connecting():
                 "COPY heroes TO PROGRAM 'id'", "select pg_sleep(10)"):
         with pytest.raises(Refusal, match=r"refuses|read-only"):
             tools.run_tool(nowhere, "query", sql=sql)
+    long = "select '%s'" % ("x" * (tools.MAX_SQL_CHARS - 8))       # one character over
+    assert len(long) == tools.MAX_SQL_CHARS + 1
+    with pytest.raises(Refusal, match="too long"):
+        tools.run_tool(nowhere, "query", sql=long)
+
+
+def test_a_query_cell_arrives_as_json():
+    """A date as ISO text, an array or JSONB cell as JSON all the way down, and
+    anything JSON has no type for as its text."""
+    day = datetime.date(2026, 9, 24)
+    assert tools._cell(day) == "2026-09-24"
+    assert tools._cell(datetime.datetime(2026, 9, 24, 5, 0)) == "2026-09-24T05:00:00"
+    assert tools._cell([1, [day, "x"], None]) == [1, ["2026-09-24", "x"], None]
+    assert tools._cell({"when": day, 3: (True, 1.5)}) == {"when": "2026-09-24",
+                                                         "3": [True, 1.5]}
+    assert tools._cell(decimal.Decimal("0.515")) == "0.515"
+
+
+def test_a_query_page_says_truncated_exactly_when_a_row_is_left_out():
+    """Past MAX_ROWS rows, or past the byte budget; never at exactly MAX_ROWS."""
+    rows, truncated = tools._page([(n,) for n in range(tools.MAX_ROWS + 1)])
+    assert len(rows) == tools.MAX_ROWS and truncated is True
+    rows, truncated = tools._page([(n,) for n in range(tools.MAX_ROWS)])
+    assert len(rows) == tools.MAX_ROWS and truncated is False
+    # each cell is cut to MAX_CELL characters and an ellipsis before the budget
+    # counts it: a row of 300 is about 600 KB, so the second row spends the MiB
+    wide = ["x" * 5000] * 300
+    rows, truncated = tools._page([wide, wide, wide])
+    assert len(rows) == 1 and truncated is True
+    assert {len(cell) for cell in rows[0]} == {tools.MAX_CELL + 1}
 
 
 @pytest.mark.invariant
