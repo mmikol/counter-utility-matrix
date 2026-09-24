@@ -25,6 +25,8 @@
                   facts the UI layer generated
     plan          the game plan and the verdict in prose
     parallel      the process pool the board splits its searches across
+    supersede     latest wins: a board a newer request replaced stops at its
+                  next round
     tune          one validated, logged edit to a strategy file; add and complete
     derive        the engine asking the model for a draft's frontmatter
     reach         the board each released hero is optimal on, within a match's bans

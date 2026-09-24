@@ -261,12 +261,12 @@ def test_a_newer_board_from_the_same_client_supersedes_the_older_one(
     """The page's boards take a ticket per client: a newer ticket supersedes
     the older one under the same name only, and a board whose ticket is
     superseded stops before its first search, in this process too."""
-    from inference import engine, parallel
-    latest = parallel.Latest()
+    from inference import engine, supersede
+    latest = supersede.Latest()
     first, elsewhere = latest.take("tab-1"), latest.take("tab-2")
     assert not first() and not elsewhere()
     second = latest.take("tab-1")
     assert first() and not second() and not elsewhere()
-    with pytest.raises(parallel.Superseded):
+    with pytest.raises(supersede.Superseded):
         engine.board(synthetic_world, Draft("Harbor Gate", ("Anvil",), ("Balm",)),
                      catalog=scratch_playbook, brief=engine.Brief(superseded=first))

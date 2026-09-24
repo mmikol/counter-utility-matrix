@@ -38,7 +38,7 @@ from db import psql, web
 from db.mcp import tools
 from inference import catalog as catalog_module
 from inference import engine as inference_engine
-from inference import parallel
+from inference import parallel, supersede
 from ui import pages
 from ui.facts import board_facts, tables
 from ui.facts.draft import Draft, board_query, is_sided, parse_board
@@ -156,7 +156,7 @@ def api_board(query: Query) -> Reply:
         if client:
             forward["client"] = client
         return remote("/board", forward)
-    superseded = parallel.LATEST.take(client)
+    superseded = supersede.LATEST.take(client)
     with psycopg.connect(psql.default_dsn()) as cx:
         return solve_board(cx, draft, weights, superseded)
 

@@ -19,7 +19,7 @@ from typing import NamedTuple
 
 from db import Refusal
 from inference import catalog as catalog_module
-from inference import parallel
+from inference import parallel, supersede
 from inference.plan import Seats, momentum, plan
 from inference.result import Alternative, Board, Pick, Result, ResultKind, Seat
 from inference.scoring import Candidate, legal_shapes
@@ -289,7 +289,7 @@ def board(
     together; in this process each seat searches for itself. A worker dying
     anywhere in the pooled pass drops the pool and runs the same pass here. A
     board the brief's check reports superseded stops at its next round, its
-    unstarted tasks cancelled, and raises parallel.Superseded.
+    unstarted tasks cancelled, and raises supersede.Superseded.
     """
     brief = brief or Brief()
     pooled = parallel.available(catalog)
@@ -379,7 +379,7 @@ class _Pass:
     def __init__(self, world: World, catalog: list[Strategy], brief: Brief,
                  workers: parallel.Workers | None) -> None:
         self.world, self.catalog, self.brief = world, catalog, brief
-        self.watch = parallel.Watch(brief.superseded)
+        self.watch = supersede.Watch(brief.superseded)
         size = workers.size if workers is not None else 0
         self.half = max(1, size // 2)
         self.rest = max(1, size - self.half)

@@ -17,10 +17,9 @@ case's two - blue's best counter to red's six, and blue's picks filled on
 its scale - follow red's six. A full six is ranked against the field its
 seat's search already swept.
 
-A board a newer request replaced stops at its next round: Latest hands a
-server one ticket per request and client, and each board's Watch, which
-sees every task its searches submit, cancels the ones no worker has taken
-and raises Superseded.
+Each round first asks the board's Watch (inference.supersede) whether a
+newer request replaced the board; the Watch sees every task the searches
+submit, so a superseded board's queued tasks are cancelled.
 
 The world crosses as bytes pickled once and cached per worker; so is the
 playbook, reread when a file changes. Off with COUNTRIX_PARALLEL=0 (read on
@@ -39,14 +38,14 @@ import threading
 import time
 from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
-from typing import Concatenate, NamedTuple, Protocol
+from typing import Concatenate, NamedTuple
 
-from db import Refusal
 from inference import catalog as catalog_module
 from inference.scale import Standing, Tally, reference_bounds, reference_standing
 from inference.scoring import Bounds, Candidate
 from inference.solver import Solved, Solver, Swept
 from inference.strategy import Strategy
+from inference.supersede import Watch
 from ui.facts.draft import Draft
 from ui.facts.model import World
 
@@ -156,7 +155,7 @@ def _prime(token: str | None = None, data: bytes | None = None) -> int:
     does not."""
     _HELD.playbook()
     if token is not None and data is not None:
-        _HELD.world(token, data)
+        _HELD.world_of(token, data)
     return os.getpid()
 
 
@@ -173,7 +172,7 @@ class _Held:
         self._world: tuple[str | None, World | None] = (None, None)
         self._playbook: tuple[Stamp | None, list[Strategy] | None] = (None, None)
 
-    def world(self, token: str, data: bytes) -> World:
+    def world_of(self, token: str, data: bytes) -> World:
         """The world these bytes pickle, unpickled once per token."""
         held, world = self._world
         if held != token or world is None:
@@ -239,7 +238,7 @@ def _worker_solver(token: str, data: bytes, spec: Spec, weights: Mapping[str, fl
     """In a worker: the Solver for a spec's board, on the world the worker
     holds and the playbook under the board's weights - on the scale the
     merged slices froze, when `bounds` is given."""
-    solver = _solver(_HELD.world(token, data),
+    solver = _solver(_HELD.world_of(token, data),
                      catalog_module.weighted(_HELD.playbook(), weights), spec)
     if bounds is not None:
         solver.adopt_bounds(bounds, standing)
@@ -298,66 +297,6 @@ def _rank(
     solver = _worker_solver(token, data, spec, weights, bounds, standing)
     ranked = solver.rank([_revive(solver.world, v) for v in verdicts], top)
     return [_verdict(c) for c in ranked], solver.considered
-
-
-class Superseded(Refusal):
-    """A board a newer request from the same client replaced before it was
-    solved. It is answered as the caller's, a 400 with no traceback: the
-    caller has already asked for the board it wants."""
-
-
-class Latest:
-    """Latest wins, per client: each board request takes a ticket under its
-    client's name, and a ticket is superseded as soon as a newer one is taken
-    under the same name. A server hands the ticket to board() as
-    Brief.superseded, so a board the page has already moved past stops at
-    its next round instead of holding the pool."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._newest: dict[str, int] = {}
-
-    def take(self, client: str) -> Callable[[], bool]:
-        """A new ticket for `client`: a check that turns true once another
-        is taken under the same name."""
-        with self._lock:
-            mine = self._newest.get(client, 0) + 1
-            self._newest[client] = mine
-
-        def superseded() -> bool:
-            with self._lock:
-                return self._newest[client] != mine
-        return superseded
-
-
-# the page's boards, one lane per client, in whichever server solves them
-LATEST = Latest()
-
-
-class Cancellable(Protocol):
-    """A submitted task as a Watch holds it: whatever it returns, it can be
-    cancelled until a worker takes it."""
-
-    def cancel(self) -> bool: ...
-
-
-class Watch:
-    """One board's check against being superseded, and every future its
-    searches submitted. Each round of each search calls check(): once the
-    board is superseded, the futures that have not started are cancelled and
-    the round raises Superseded, so a stale board stops holding the pool."""
-
-    def __init__(self, superseded: Callable[[], bool] | None = None) -> None:
-        self.superseded = superseded
-        self.futures: list[Cancellable] = []
-
-    def check(self) -> None:
-        """Raise Superseded, cancelling what has not started, once a newer
-        request has replaced this board."""
-        if self.superseded is not None and self.superseded():
-            for future in self.futures:
-                future.cancel()
-            raise Superseded("a newer board from the same client superseded this one")
 
 
 class Run:
