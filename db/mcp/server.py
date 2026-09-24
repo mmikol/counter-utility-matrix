@@ -408,8 +408,8 @@ class HttpHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             length = -1
-        if length < 0:
-            return self._reply(400, {"error": "a Content-Length is required"})
+        if length <= 0:             # missing, not a number, or no body at all
+            return self._reply(400, {"error": "a positive Content-Length is required"})
         if length > MAX_BODY:
             drained = 0
             while drained < min(length, 16 * MAX_BODY):     # let the client finish sending
@@ -420,8 +420,8 @@ class HttpHandler(BaseHTTPRequestHandler):
             self.close_connection = True
             return self._reply(413, {"error": "request too large"})
         try:
-            message = json.loads(self.rfile.read(length) or b"")
-        except ValueError:
+            message = json.loads(self.rfile.read(length))
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return self._reply(400, {"jsonrpc": "2.0", "id": None,
                                      "error": {"code": PARSE_ERROR,
                                                "message": "bad JSON"}})

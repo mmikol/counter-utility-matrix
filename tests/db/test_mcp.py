@@ -470,6 +470,28 @@ def test_the_door_refuses_huge_bodies_and_rate_limits_a_client_and_audits_every_
     httpd.shutdown()
 
 
+def test_a_missing_content_length_is_refused_as_required(tmp_path):
+    """A POST with no Content-Length, or one that is not a number, is told so
+    - not answered as bad JSON after reading an empty body. urllib always sets
+    the header, so the requests are built by hand."""
+    import http.client
+    from urllib.parse import urlparse
+    httpd, url = _http_server(tmp_path)
+    address = urlparse(url)
+    for length in (None, "abc"):
+        connection = http.client.HTTPConnection(address.hostname, address.port, timeout=10)
+        connection.putrequest("POST", "/mcp")
+        connection.putheader("Content-Type", "application/json")
+        if length is not None:
+            connection.putheader("Content-Length", length)
+        connection.endheaders()
+        response = connection.getresponse()
+        assert response.status == 400
+        assert "Content-Length" in json.loads(response.read())["error"]
+        connection.close()
+    httpd.shutdown()
+
+
 def test_query_refuses_file_and_server_reaching_sql_before_connecting():
     nowhere = tools.Context(dsn="postgresql://nowhere")
     for sql in ("select pg_read_file('/etc/passwd')", "select * from pg_ls_dir('.')",
