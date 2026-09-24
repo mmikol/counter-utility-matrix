@@ -16,7 +16,8 @@ Each fetched source's domain module ends in a run(connection, pull) - pull
 a fetch.PullContext: the page cache, the session, the log and how old a
 cached page may be - that returns a PullSummary: the tables it wrote, and
 for a pull that reads one article or page per entity, the ones that would
-not fetch (ArticlePullSummary).
+not fetch (ArticlePullSummary). A run() fetches every page before its
+first write, so no row stays locked across a fetch.
 authored/ has no run - the strategies mirror is inference.catalog.mirror.
 The MCP pull tools (door/mcp) import and call them. Nothing here is an entry
 point of its own.
