@@ -19,10 +19,13 @@ import os
 import traceback
 import urllib.error
 import urllib.request
+from collections.abc import Mapping
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import psycopg
+from psycopg.rows import TupleRow
 
 from db import psql
 from db.mcp.server import LOCAL_HOSTS
@@ -37,6 +40,13 @@ from ui.facts.compute import (
     board_query,
     parse_board,
 )
+
+if TYPE_CHECKING:
+    from db.mcp.tools import Context
+
+# a JSON endpoint answers with a JSON object and an HTTP status
+type Reply = tuple[dict[str, Any], int]
+type Query = dict[str, list[str]]
 
 PORT = int(os.environ.get("COUNTRIX_UI_PORT", "8017"))
 
@@ -64,11 +74,13 @@ GITHUB_MARK = ("<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='tru
                ".29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z'/></svg>")  # noqa: E501
 
 
-def dsn():
+def dsn() -> str:
     return psql.default_dsn()
 
 
-def remote(path, query=None, payload=None):
+def remote(
+        path: str, query: Mapping[str, str | list[str]] | None = None,
+        payload: dict[str, Any] | None = None) -> Reply:
     """Forward to the inference service -> (json, status)."""
     url = INFERENCE_URL + path
     if query:
@@ -88,13 +100,13 @@ def remote(path, query=None, payload=None):
         return {"error": "inference service unreachable: %s" % error}, 502
 
 
-def esc(x):
+def esc(x: object) -> str:
     return html.escape(str(x if x is not None else ""))
 
 
 # --- JSON endpoints ---------------------------------------------------------
 
-def api_roster(cx):
+def api_roster(cx: psycopg.Connection[TupleRow]) -> Reply:
     world = tables.load(cx)
     heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
                "portrait": h.portrait, "status": h.status,
@@ -107,7 +119,7 @@ def api_roster(cx):
             "newer_patches": world.newer_patches}, 200
 
 
-def api_facts(cx, query):
+def api_facts(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
     map_name, red, blue, bans, side = parse_board(query)
     world = tables.load(cx)
     try:
@@ -117,17 +129,17 @@ def api_facts(cx, query):
     return fs.to_dict(), 200
 
 
-def api_infer(cx, query):
+def api_infer(cx: psycopg.Connection[TupleRow], query: Query) -> Reply:
     """The board solved at this stage of the draft - the inference layer's
     `board()`. The playbook tab's sliders ride along as `weights=<id>:<0..10>`,
     one per heuristic set away from its file."""
     map_name, red, blue, bans, side = parse_board(query)
     weights = catalog_module.parse_weights(query.get("weights", []))
     if INFERENCE_URL:
-        query = board_query(map_name, red, blue, bans, side)
+        forward = board_query(map_name, red, blue, bans, side)
         if weights:
-            query["weights"] = ["%s:%g" % kv for kv in sorted(weights.items())]
-        return remote("/board", query)
+            forward["weights"] = ["%s:%g" % kv for kv in sorted(weights.items())]
+        return remote("/board", forward)
     world = tables.load(cx)
     try:
         b = inference_engine.board(world, map_name, red, blue, bans, side, weights=weights)
@@ -136,7 +148,7 @@ def api_infer(cx, query):
     return b.to_dict(), 200
 
 
-def mcp_call(name, arguments):
+def mcp_call(name: str, arguments: dict[str, Any]) -> tuple[str, dict[str, Any] | None, bool]:
     """One tools/call on the MCP server -> (text, structured, is_error)."""
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                        "params": {"name": name, "arguments": arguments}}).encode("utf-8")
@@ -159,12 +171,12 @@ def mcp_call(name, arguments):
     return text, result.get("structuredContent"), bool(result.get("isError"))
 
 
-def tool_context():
+def tool_context() -> "Context":
     from db.mcp import tools
     return tools.Context(dsn=dsn())
 
 
-def api_weight(payload):
+def api_weight(payload: dict[str, Any]) -> Reply:
     """Store a heuristic's weight in its file - the slider's "store". The
     change goes through the `tune` tool (validated, logged in the tuning
     log with its reason, mirrored into the database), never around it."""
@@ -172,8 +184,9 @@ def api_weight(payload):
     hid = str((payload or {}).get("id") or "")
     if not tune.ID_RE.fullmatch(hid):
         return {"error": "no such heuristic"}, 400
+    raw: Any = payload.get("weight")         # any JSON: float() refuses what is not a number
     try:
-        weight = round(float(payload.get("weight")), 2)
+        weight = round(float(raw), 2)
     except (TypeError, ValueError):
         return {"error": "the weight must be a number"}, 400
     if not 0.0 <= weight <= 10.0:
@@ -193,7 +206,7 @@ def api_weight(payload):
     return {"line": text.split("\n")[0], "change": change}, 200
 
 
-def api_strategies():
+def api_strategies() -> Reply:
     if INFERENCE_URL:
         return remote("/strategies")
     try:
@@ -215,7 +228,7 @@ STATIC_TYPES = {".css": "text/css; charset=utf-8",
                 ".js": "application/javascript; charset=utf-8"}
 
 
-def static_file(name):
+def static_file(name: str) -> tuple[bytes, str] | None:
     """(bytes, content type) for a file under ui/static, or None."""
     ext = os.path.splitext(name)[1]
     if "/" in name or ".." in name or ext not in STATIC_TYPES:
@@ -232,7 +245,7 @@ HEAD = ("<!doctype html><meta charset='utf-8'>"
         "<link rel='stylesheet' href='/static/board.css'>")
 
 
-def view_board():
+def view_board() -> str:
     return (HEAD + "<title>Countrix</title><main>"
             "<header class='top'><h1>Countrix"
             "<span class='expand'> the counter utility matrix</span></h1>"
@@ -295,19 +308,19 @@ def view_board():
 
 # --- the math page -------------------------------------------------------------
 
-def _page(title, body):
+def _page(title: str, body: str) -> str:
     return (HEAD + "<title>%s</title>"
             "<main><header class='top'><h1><a href='/'>Counter <span>Utility Matrix</span></a></h1>"
             "</header>%s</main>" % (esc(title), body))
 
 
-def view_math():
+def view_math() -> str:
     """The math page: ui/static/math.html, the article alone, in the page shell."""
     with open(os.path.join(STATIC_DIR, "math.html"), encoding="utf-8") as handle:
         return _page("the math", handle.read())
 
 
-def view_tests():
+def view_tests() -> str:
     """The tests page: what is checked, how, and what none of it proves."""
     with open(os.path.join(STATIC_DIR, "tests.html"), encoding="utf-8") as handle:
         return _page("the tests", handle.read())
@@ -316,7 +329,7 @@ def view_tests():
 # --- server -----------------------------------------------------------------
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, body, code=200, ctype="text/html; charset=utf-8"):
+    def _send(self, body: str, code: int = 200, ctype: str = "text/html; charset=utf-8") -> None:
         data = body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -324,7 +337,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _send_bytes(self, data, ctype):
+    def _send_bytes(self, data: bytes, ctype: str) -> None:
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-cache")
@@ -332,10 +345,10 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _json(self, payload, code=200):
+    def _json(self, payload: dict[str, Any], code: int = 200) -> None:
         self._send(json.dumps(payload, ensure_ascii=False), code, "application/json")
 
-    def _origin_allowed(self):
+    def _origin_allowed(self) -> bool:
         """The same DNS-rebinding guard the data layer's door applies: a browser
         sends Origin, and only a local one may reach the board's one write."""
         origin = self.headers.get("Origin")
@@ -343,7 +356,7 @@ class Handler(BaseHTTPRequestHandler):
             return True
         return urlparse(origin).hostname in LOCAL_HOSTS
 
-    def _failed(self, path):
+    def _failed(self, path: str) -> None:
         """A crash answers in the shape the route promised: JSON under /api/,
         the error page for a page."""
         if path.startswith("/api/"):
@@ -351,15 +364,15 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(_page("error", "<pre class='warnbox'>%s</pre>"
                                 % esc(traceback.format_exc())), 500)
 
-    def _not_found(self, path):
+    def _not_found(self, path: str) -> None:
         if path.startswith("/api/"):
             return self._json({"error": "nothing here"}, 404)
         return self._send(_page("not found", "<p>Nothing here.</p>"), 404)
 
-    def log_message(self, fmt, *args):
+    def log_message(self, fmt: str, *args: object) -> None:
         pass
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         path = urlparse(self.path).path
         if path != "/api/weight":
             return self._json({"error": "nothing here"}, 404)
@@ -381,7 +394,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return self._failed(path)
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path, query = parsed.path, parse_qs(parsed.query)
         try:
@@ -409,7 +422,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return self._failed(path)
 
-def main():
+def main() -> None:
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=os.environ.get("COUNTRIX_UI_HOST", "127.0.0.1"))

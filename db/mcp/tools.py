@@ -441,7 +441,7 @@ def query(ctx: Context, sql: str) -> Reply:
     out: list[list[object]] = []
     size = 0
     for row in rows:
-        cells = []
+        cells: list[object] = []
         for v in row:
             v = _plain(v)
             if isinstance(v, str) and len(v) > MAX_CELL:
@@ -490,7 +490,7 @@ BOARD = {
 def roster(ctx: Context) -> Reply:
     with ctx.connect() as cx:
         world = tables.load(cx)
-    heroes = [{"name": h.name, "role": h.role, "subrole": h.subrole,
+    heroes: list[dict[str, Any]] = [{"name": h.name, "role": h.role, "subrole": h.subrole,
                "pool": h.pool, "portrait": h.portrait, "status": h.status,
                "release_date": str(h.release_date) if h.release_date else None}
               for h in world.heroes_by_role()]
