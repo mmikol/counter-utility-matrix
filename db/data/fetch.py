@@ -150,7 +150,8 @@ def request[T](session: requests.Session, url: str, params: Mapping[str, str] | 
                 time.sleep(min(MAX_BACKOFF, policy.backoff * 2 ** attempt))
         else:
             # Jittered, so a few hundred sequential requests do not arrive as a clock.
-            time.sleep(policy.delay * random.uniform(0.75, 1.5))
+            # The jitter is politeness and not a secret, so B311 does not apply.
+            time.sleep(policy.delay * random.uniform(0.75, 1.5))  # nosec B311
             return result
     raise FetchError("%s failed after %d attempts: %s" % (url, policy.attempts, last_error))
 
