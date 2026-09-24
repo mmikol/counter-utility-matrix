@@ -118,3 +118,20 @@ def test_call_tool_reads_the_answer_the_refusal_and_the_door_turning_it_away(tmp
     assert nobody.is_error and "unreachable" in nobody.text
     with pytest.raises(ValueError, match="http or https"):
         web.call_tool("file:///etc/passwd", "hello", {})
+
+
+def test_a_tools_call_response_is_read_field_by_field():
+    """The client reads each field of the door's answer for its type: a
+    response with no result says nothing and is no error, content that is not
+    a list and a payload that is not an object read as none, and content
+    items that are not text are left out."""
+    nothing = web.CallReply("", None, False)
+    assert web._answer({"jsonrpc": "2.0", "id": 1}) == nothing
+    assert web._answer({"jsonrpc": "2.0", "id": 1, "result": [1]}) == nothing
+    assert web._answer({"result": {"content": 5, "structuredContent": [1]}}) == nothing
+    items = [{"type": "image"}, {"type": "text", "text": "a"}, "b", {"type": "text", "text": "c"}]
+    assert web._answer({"result": {"content": items, "isError": True}}) == web.CallReply(
+        "a\nc", None, True)
+    assert web._answer({"error": {"code": -32602, "message": "no tool named 'x'"}}) == (
+        web.CallReply("no tool named 'x'", None, True))
+    assert web._answer([]).is_error

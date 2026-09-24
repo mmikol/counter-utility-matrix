@@ -169,24 +169,32 @@ def _refused_by_door(error: urllib.error.HTTPError) -> CallReply:
 
 
 def _answer(reply: object) -> CallReply:
-    """A JSON-RPC response to tools/call, read: its error's message, or the
-    text items of its content joined by newlines and its structured payload."""
+    """A JSON-RPC response to tools/call, read: its error's message, or its
+    result."""
     if not isinstance(reply, dict):
         return CallReply("the MCP server answered with no JSON-RPC response", None, True)
     if "error" in reply:
         error = reply["error"]
         said = error.get("message", error) if isinstance(error, dict) else error
         return CallReply(str(said), None, True)
-    result = reply.get("result")
+    return _tool_result(reply.get("result"))
+
+
+def _tool_result(result: object) -> CallReply:
+    """A tools/call result as the door sends it (db.mcp.server.ToolResult),
+    read off the wire into the record a caller gets: the text items of its
+    content joined by newlines, its structured payload, and whether it is an
+    error. A result that is not an object says nothing and is no error, and
+    content or a payload that is not what the door sends reads as none."""
     if not isinstance(result, dict):
-        result = {}
+        return CallReply("", None, False)
+    content = result.get("content")
+    items = content if isinstance(content, list) else []
     text = "\n".join(
-        str(c.get("text", "")) for c in result.get("content", [])
-        if isinstance(c, dict) and c.get("type") == "text")
+        str(c.get("text", "")) for c in items if isinstance(c, dict) and c.get("type") == "text")
     structured = result.get("structuredContent")
-    if not isinstance(structured, dict):
-        structured = None
-    return CallReply(text, structured, bool(result.get("isError")))
+    payload = structured if isinstance(structured, dict) else None
+    return CallReply(text, payload, bool(result.get("isError")))
 
 
 def call_tool(
