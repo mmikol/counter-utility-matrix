@@ -46,9 +46,9 @@ validates.
 **The board's one write is off by default, and knocks at the door when
 it is on.** `COUNTRIX_READ_ONLY` defaults to `1`: the board offers
 no *store* button and answers `POST /api/weight` with 403, so a weight
-set on a slider is the session's own and reaches no file. The data
-layer's `tune` tool is deliberately unaffected - a Claude Code session
-still writes weights through it. With `COUNTRIX_READ_ONLY=0` the
+set on a slider is the session's own and reaches no file. The door's
+`tune` tool is deliberately unaffected - a Claude Code session still
+writes weights through it. With `COUNTRIX_READ_ONLY=0` the
 write comes back: `POST /api/weight` on the board (bound to 127.0.0.1
 like everything else, behind the guard below, and refusing a body that
 does not claim `application/json` with 415), which the board turns into a

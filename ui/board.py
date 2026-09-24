@@ -73,8 +73,8 @@ def inference_url() -> str:
     return _http_url("COUNTRIX_INFERENCE_URL")
 
 
-# the board's one write - storing a heuristic's weight - goes to the data
-# layer's `tune` tool: over HTTP to the MCP server when a URL is set (the
+# the board's one write - storing a heuristic's weight - goes to the door's
+# `tune` tool: over HTTP to the MCP server when a URL is set (the
 # compose stack), in-process through the same registry otherwise. read_only()
 # below is what decides whether that write is offered at all.
 def mcp_url() -> str:

@@ -18,11 +18,11 @@ DOCS = os.path.join(ROOT, "docs")
 SKILLS = os.path.join(ROOT, ".claude", "skills")
 LINK_RE = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 
-# the git index and the .claude folder are not in the Docker image; the two
-# tests that read them skip there, not fail
+# the git index and the .claude folder are not in the Docker image; the
+# tests that read them skip there, not fail. A worktree's .git is a file.
 needs_git = pytest.mark.skipif(
-    not os.path.isdir(os.path.join(ROOT, ".git")) or not shutil.which("git"),
-                               reason="needs the git checkout")
+    not os.path.exists(os.path.join(ROOT, ".git")) or not shutil.which("git"),
+    reason="needs the git checkout")
 needs_skills = pytest.mark.skipif(not os.path.isdir(SKILLS),
                                   reason="the skills are not in the image")
 
@@ -35,6 +35,16 @@ def _read(*parts):
 def _section(text, name):
     start, end = "<!-- generated:%s -->" % name, "<!-- /generated:%s -->" % name
     return text[text.index(start) + len(start):text.index(end)].strip()
+
+
+def _python_files(*folders):
+    """Every .py file under the folders, and orchestrator.py, sorted."""
+    paths = [os.path.join(ROOT, "orchestrator.py")]
+    for folder in folders:
+        for base, dirs, files in os.walk(os.path.join(ROOT, folder)):
+            dirs[:] = [d for d in dirs if d != "__pycache__"]
+            paths += [os.path.join(base, name) for name in files if name.endswith(".py")]
+    return sorted(paths)
 
 
 @pytest.fixture()
@@ -72,14 +82,9 @@ ENV_DOCS = ("architecture.md", "db.md")
 def test_every_setting_the_code_reads_is_documented():
     assert ENV_RE.findall('CLI = "COUNTRIX_X"') == ["COUNTRIX_X"]   # a name kept in a constant
     names = set()
-    for folder in ("db", "ui", "inference"):
-        for base, _, files in os.walk(os.path.join(ROOT, folder)):
-            for name in files:
-                if name.endswith(".py"):
-                    path = os.path.join(base, name)
-                    with open(path, encoding="utf-8") as handle:
-                        names |= set(ENV_RE.findall(handle.read()))
-    names |= set(ENV_RE.findall(_read("orchestrator.py")))
+    for path in _python_files("db", "ui", "inference"):
+        with open(path, encoding="utf-8") as handle:
+            names |= set(ENV_RE.findall(handle.read()))
     documented = "".join(_read("docs", doc) for doc in ENV_DOCS)
     # the two that only the tests set are the suite's own, not a setting to document
     missing = sorted(n for n in names - {"COUNTRIX_NO_DATABASE", "COUNTRIX_LOCAL_SERVER"}
@@ -87,17 +92,35 @@ def test_every_setting_the_code_reads_is_documented():
     assert not missing, missing
 
 
+# a call that writes the playbook's files or reloads the strategies table
+WRITER_RE = re.compile(r"\b(?:catalog|catalog_module)\.mirror\(|\btune\.(?:tune|add|complete)\("
+                       r"|\bderive\.derive\(")
+
+
+def test_only_the_door_calls_the_playbook_writers():
+    """docs/architecture.md's rule: the door gates every write. The code that
+    writes the playbook and its table lives in inference/ (catalog.mirror,
+    tune.tune, tune.add, tune.complete, and derive.derive over them), and only
+    a door tool calls it - or inference/derive.py, inside a run the door
+    started. The board stores a weight through tools.run_tool, not tune."""
+    assert WRITER_RE.search("        catalog.mirror(cx, cat)")
+    assert not WRITER_RE.search('tools.run_tool(ctx, "tune", **arguments)')
+    outside = []
+    for path in _python_files("db", "ui", "inference", "scripts"):
+        relative = os.path.relpath(path, ROOT)
+        with open(path, encoding="utf-8") as handle:
+            calls = WRITER_RE.search(handle.read())
+        if calls and not relative.startswith("db/mcp/") and relative != "inference/derive.py":
+            outside.append(relative)
+    assert not outside, outside
+
+
 def test_every_shallow_indent_sits_on_a_four_column_stop():
     """desloppify reads a file's indent unit as the GCD of its indents of 1 to
     16 columns and counts nesting in that unit: one line off a multiple of 4
     makes the unit 1 and every column a level. Docstrings and strings count."""
-    paths = [os.path.join(ROOT, "orchestrator.py")]
-    for folder in ("db", "ui", "inference", "tests", "scripts"):
-        for base, dirs, files in os.walk(os.path.join(ROOT, folder)):
-            dirs[:] = [d for d in dirs if d != "__pycache__"]
-            paths += [os.path.join(base, name) for name in files if name.endswith(".py")]
     off = []
-    for path in sorted(paths):
+    for path in _python_files("db", "ui", "inference", "tests", "scripts"):
         with open(path, encoding="utf-8") as handle:
             for number, line in enumerate(handle, 1):
                 text = line.lstrip()
@@ -139,13 +162,8 @@ def test_no_module_reads_the_environment_at_import():
     assert _import_time_reads(ast.parse("import os\nX = os.environ.get('A')\n"
                                         "def f(y=os.getenv('B')):\n"
                                         "    return os.environ['C']\n")) == [2, 3]
-    paths = [os.path.join(ROOT, "orchestrator.py")]
-    for folder in ("db", "ui", "inference", "scripts"):
-        for base, dirs, files in os.walk(os.path.join(ROOT, folder)):
-            dirs[:] = [d for d in dirs if d != "__pycache__"]
-            paths += [os.path.join(base, name) for name in files if name.endswith(".py")]
     frozen = []
-    for path in sorted(paths):
+    for path in _python_files("db", "ui", "inference", "scripts"):
         with open(path, encoding="utf-8") as handle:
             tree = ast.parse(handle.read(), path)
         frozen += ["%s:%d" % (os.path.relpath(path, ROOT), line)

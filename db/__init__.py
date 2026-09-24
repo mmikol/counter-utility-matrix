@@ -3,9 +3,12 @@
 `data/`, `psql/` and `refresh` are the layer itself: pull, clean, store. `mcp/`
 and `sentry` sit above it and are the only code here that imports upward - the
 door serves the UI layer's facts and the inference layer's solver through the
-same tools, and the guard watches the playbook beside the database. So "the
-data layer owns every write" is a rule about which code writes; the folder
-boundary does not draw it.
+same tools, and the guard watches the playbook beside the database. The door
+gates every write to Postgres and the playbook, the sentry's quarantine rename
+aside; the code that writes lives with what it writes, above this layer too:
+inference.catalog.mirror reloads the strategies table and inference.tune edits
+the playbook's files, each called only from a door tool or from
+inference.derive inside a run the door started.
 
     data/         the sources, one package each (blizzard, wiki; authored
                   names the playbook's source row), and what they

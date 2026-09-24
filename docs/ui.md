@@ -5,8 +5,8 @@ hero on either roster - becomes a request; the database is read; back
 come every fact about that board, the optimal six for both seats with the
 current picks scored, and the playbook as it sits on disk. This layer
 reads: its one write, a heuristic's weight stored from its slider, is
-off by default (`COUNTRIX_READ_ONLY`) and, when turned on, is
-handed to the data layer's `tune` tool.
+off by default (`COUNTRIX_READ_ONLY`) and, when turned on, is a `tune`
+call through the door.
 
 It owns FACTS, the left-hand side of the equation in
 [architecture.md](architecture.md): for each domain, the independent

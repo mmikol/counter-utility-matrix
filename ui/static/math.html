@@ -138,7 +138,8 @@ slider, 0 to 10; a scored constraint keeps the weight in its file.</p>
 tools as the one door. A sentry watches the strategy files, the database's free text and the
 audit log.</p>
 <p><b>The inference layer</b> (<code>inference/</code>): the playbook and the solver.
-Expressions are compiled once and whitelisted; it runs no model and opens no connection.</p>
+Expressions are compiled once and whitelisted. The solver runs no model and opens no connection;
+serve.py reads the World per request, and derive.py asks the claude CLI for a draft's frontmatter.</p>
 <p><b>The board</b> (<code>ui/</code>): the facts of one board and the inference layer's answer
 at each stage of a draft. It never calls a language model.</p>
 <p><b>Claude</b>: runs when you ask. It refreshes the sources, derives a strategy's mathematics

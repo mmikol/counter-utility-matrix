@@ -18,7 +18,7 @@ function weightRow(h) {
 }
 /* store: only reachable when READ_ONLY is false - the button is not rendered
    otherwise and the server answers 403. The weight goes into the heuristic's
-   file through the data layer's tune tool (validated, logged, mirrored); the
+   file through the door's tune tool (validated, logged, mirrored); the
    file's weight is then the inferred default, so the browser's setting is
    dropped and the cards re-read */
 function storeWeight(id, value, button) {

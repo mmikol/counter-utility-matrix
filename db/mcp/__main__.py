@@ -1,6 +1,6 @@
-"""python -m db.mcp                       serve the data layer over stdio
+"""python -m db.mcp                       serve the tools over stdio
 python -m db.mcp --http [HOST:]PORT [NAME ...]
-                                        serve it over Streamable HTTP (/mcp, /health),
+                                        serve them over Streamable HTTP (/mcp, /health),
                                         answering to the local names and each NAME
 python -m db.mcp list                   list the tools
 python -m db.mcp call NAME [JSON-ARGS]  run one tool and print its text"""
