@@ -16,9 +16,9 @@ import sys
 
 import pytest
 
-from db import ROOT, Refusal
+from db import RAW_DIR, ROOT, Refusal
 from door.mcp import stdio, tools
-from door.mcp.audit import audit, audited
+from door.mcp.audit import audit, audited, default_audit_path
 from door.mcp.schema import Tool, tool_schema
 from door.mcp.server import Server
 from inference import catalog, tune
@@ -278,3 +278,10 @@ def test_an_audit_line_records_sizes_and_type_names_never_values(tmp_path):
     assert line["args"] == {"weight": "float", "top": "int", "flag": "bool", "none": "NoneType",
                             "names": 1, "sql": 8}
     assert line["ok"] is True and line["client"] == "shell"
+
+
+def test_the_suite_audits_to_a_temporary_file_never_the_repos_log():
+    """conftest's audit_log points every call the suite makes away from
+    db/raw/audit.jsonl, the log the sentry reads."""
+    assert not os.path.abspath(default_audit_path()).startswith(
+        os.path.abspath(RAW_DIR) + os.sep)

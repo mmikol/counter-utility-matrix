@@ -119,7 +119,6 @@ def test_only_db_init_and_db_rebuild_create_the_cluster(tmp_path, monkeypatch):
     create the embedded cluster; every other tool resolves through
     default_dsn, which never does. A dsn given to the Context is used as it
     is, and neither is asked."""
-    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
 
     def refuse(said):
         def stub():
@@ -155,7 +154,6 @@ def test_every_playbook_write_mirrors_the_catalog_once(tmp_path, monkeypatch):
     for name in catalog.strategy_files(FIXTURE_PLAYBOOK):
         shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
     monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))
-    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
     mirrored = []
     monkeypatch.setattr(catalog, "mirror", lambda cx, cat, directory=None: mirrored.append(
         (cx, len(cat))))
@@ -189,7 +187,6 @@ def test_add_strategy_stores_a_soft_limit_with_a_numeric_penalty(tmp_path, monke
     for name in catalog.strategy_files(FIXTURE_PLAYBOOK):
         shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
     monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))
-    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
     monkeypatch.setattr(catalog, "mirror", lambda cx, cat, directory=None: None)
 
     class Offline(tools.Context):
@@ -208,7 +205,6 @@ def test_the_tuning_log_tool_refuses_fewer_than_one_line(tmp_path, monkeypatch):
     for name in catalog.strategy_files(FIXTURE_PLAYBOOK):
         shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
     monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))
-    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
     ctx = tools.Context(dsn="postgresql://nowhere", client="test")
     for lines in (0, -3):
         with pytest.raises(Refusal, match="lines is 1 or more"):
@@ -220,7 +216,6 @@ def test_a_board_tool_hands_its_function_one_draft(tmp_path, monkeypatch):
     """The board tools share BOARD's five properties, first and in order, and
     each function gets them as one Draft: tuples, with what the call left out
     empty."""
-    monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
     seen = []
 
     class Stub:

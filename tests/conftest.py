@@ -10,7 +10,9 @@ tests/synthetic.py. The second kind defaults to the repo's own build at
 db/psql/cluster, the database `.venv/bin/python -m door.mcp call db_rebuild` produces,
 and skips itself when it is absent. COUNTRIX_LOCAL_SERVER or DATABASE_URL
 override the target; COUNTRIX_NO_DATABASE=1 runs the suite with no database,
-as CI does. A run that starts with no cluster ends with none.
+as CI does. A run that starts with no cluster ends with none. The suite
+audits its tool calls to a temporary file and leaves db/raw/audit.jsonl,
+which the sentry reads, alone.
 """
 
 import os
@@ -33,6 +35,18 @@ def _dsn():
         return psql.default_dsn()   # the code's own answer, which creates no cluster
     except psql.NoDatabaseError:
         return None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def audit_log(tmp_path_factory):
+    """The suite's audit log, a temporary file: COUNTRIX_AUDIT is read on
+    every call and the servers the suite spawns inherit it, so no tool call
+    here reaches db/raw/audit.jsonl, the log the sentry reads. A test that
+    reads its own lines points the variable at a file of its own."""
+    with pytest.MonkeyPatch.context() as patch:
+        path = tmp_path_factory.mktemp("audit") / "audit.jsonl"
+        patch.setenv("COUNTRIX_AUDIT", str(path))
+        yield path
 
 
 @pytest.fixture(scope="session", autouse=True)

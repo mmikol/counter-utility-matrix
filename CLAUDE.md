@@ -42,7 +42,9 @@ Tests marked `invariant` need the database and skip without one, through
 the `db` fixture. The suite targets `db/psql/cluster` when that
 cluster is built and `DATABASE_URL` is unset; `DATABASE_URL` or
 `./docker-db <command>` points it at another Postgres. CI sets no
-variable: it has no cluster and no pgserver.
+variable: it has no cluster and no pgserver. The suite audits its tool
+calls to a temporary file (`audit_log` in `tests/conftest.py`) and leaves
+`db/raw/audit.jsonl`, which the sentry reads, alone.
 
 The solver's pool (`inference/parallel.py`) spawns `max(6, min(cores, 12))`
 worker processes (12 here) in any process that calls `engine.board()`
