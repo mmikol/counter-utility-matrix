@@ -236,7 +236,7 @@ def test_a_playbook_that_scores_nothing_gets_a_plan_that_claims_no_counter(
             n = roles.count(role)
             assert ("%d %s" % (n, role) if n else "no %s" % role) in b.plan, (draft, role)
     lacking = {"tank": 2, "damage": 4, "support": 0}
-    assert plan._shape(lacking) == "2 tanks, 4 damage and no support"
+    assert plan._roles_in_words(lacking) == "2 tanks, 4 damage and no support"
     assert "supports who can follow" not in plan._advice("dive", lacking)
     assert "no support can follow" in plan._advice("dive", lacking)
 

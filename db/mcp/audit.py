@@ -38,7 +38,7 @@ def audit(entry: Mapping[str, object], path: str | None = None) -> None:
         sys.stderr.write("countrix mcp: the audit log %s was not written: %s\n" % (path, error))
 
 
-def _shape(arguments: Mapping[str, object] | None) -> dict[str, object]:
+def _sizes(arguments: Mapping[str, object] | None) -> dict[str, object]:
     """{argument name: size} - never the value."""
     out: dict[str, object] = {}
     for key, value in (arguments or {}).items():
@@ -59,7 +59,7 @@ def audited[T](
     audited as refused; anything else as crashed."""
     entry: dict[str, object] = {
         "t": datetime.now(UTC).isoformat(timespec="seconds"), "transport": transport,
-        "client": client, "tool": name, "args": _shape(arguments)}
+        "client": client, "tool": name, "args": _sizes(arguments)}
     started = time.monotonic()
 
     def spent() -> int:

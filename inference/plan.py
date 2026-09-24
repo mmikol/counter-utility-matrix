@@ -343,7 +343,7 @@ def _style_read(
     `roles`, the six's count per role where the playbook scores nothing, the
     lean names them and the advice is worded from them."""
     map_style = m.style_top if m is not None else ""
-    shape = " with %s" % _shape(roles) if roles is not None else ""
+    shape = " with %s" % _roles_in_words(roles) if roles is not None else ""
     if map_style and lean == map_style:
         return ("The map rewards %s and the six leans into it%s: %s."
                 % (lean, shape, _advice(lean, roles)))
@@ -363,7 +363,7 @@ def _roles(six: Result) -> dict[str, int]:
     return {role: sum(1 for p in six.picks if p["role"] == role) for role in ROLES}
 
 
-def _shape(roles: Mapping[str, int]) -> str:
+def _roles_in_words(roles: Mapping[str, int]) -> str:
     """A six's roles in words: "2 tanks, 2 damage and 2 supports", "no support"."""
     words = []
     for role, plural in (("tank", "tanks"), ("damage", "damage"), ("support", "supports")):

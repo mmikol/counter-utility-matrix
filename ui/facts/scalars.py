@@ -47,7 +47,7 @@ def derive_scalars(hero: Hero) -> None:
                 (crowd control, area damage, saves, overhealth, anti-heal)
         perks   one of two choices a tier: never a baseline number
 
-    The steps run in order: the body, damage, burst, healing (the one step
+    The steps run in order: the body, dps, burst, healing (the one step
     that reads an earlier one's result, dps), reach, weapon kinds, area,
     barriers, amps, control, saves and the ultimate."""
     ults = hero.ults
@@ -57,7 +57,7 @@ def derive_scalars(hero: Hero) -> None:
     steady = [w for w in hero.weapons if w.name not in FORM_GATED]
     guns = [w for w in steady if w.damages]
     _body(hero, base)
-    _damage(hero, steady, guns)
+    _dps(hero, steady, guns)
     _burst(hero, base)
     _healing(hero, fought, hero.dps)
     _reach(hero, guns)
@@ -90,7 +90,7 @@ def _body(hero: Hero, base: list[Kit]) -> None:
     hero.median_cooldown = statistics.median(cds) if cds else None
 
 
-def _damage(hero: Hero, steady: list[Kit], guns: list[Kit]) -> None:
+def _dps(hero: Hero, steady: list[Kit], guns: list[Kit]) -> None:
     """dps: the weapon the hero fights with, sustained."""
     held = [w for w in steady if w.extra.get("slot") in PRIMARY_SLOTS and w.damages]
     rates = [r for r in (w.rate("dps", "damage") for w in (held or steady)) if r]

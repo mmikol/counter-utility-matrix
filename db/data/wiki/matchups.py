@@ -125,12 +125,12 @@ WORST = (r"(?:worst|biggest|greatest|main|primary|strongest|hardest|toughest|dea
 DETAIL = 0.5
 
 
-def _compiled(cues: list[tuple[str, float]]) -> list[tuple[re.Pattern[str], float]]:
+def _compiled_cues(cues: list[tuple[str, float]]) -> list[tuple[re.Pattern[str], float]]:
     return [(re.compile(pattern, re.I), weight) for pattern, weight in cues]
 
 
 # What the enemy does to the hero. Each: (pattern over the normalised text, weight).
-THREAT_CUES = _compiled([
+THREAT_CUES = _compiled_cues([
     # "Sombra is one of your biggest counters", "a hard counter to you"
     (r"\byour (?:\w+ ){0,2}counters?\b|\byour %s (?:\w+ )?(?:threats?|nightmares?"
         r"|enem(?:y|ies)|problems?|fears?|match-?ups?)\b" % WORST, 2.0),
@@ -185,7 +185,7 @@ THREAT_CUES = _compiled([
 ])
 
 # What the hero does to the enemy.
-ADVANTAGE_CUES = _compiled([
+ADVANTAGE_CUES = _compiled_cues([
     # "you counter", "Pharah is the ultimate hard counter to Junkrat"
     (r"\byou %s(?:hard[- ]?|directly |completely |heavily )?counters? "
         r"(?:foe|(?:most|all|many) of foe)" % MODAL, 2.0),
@@ -287,7 +287,7 @@ def prose(cell: str) -> str:
     return " ".join(" ".join(synergies.paragraphs(cell)).split())
 
 
-def _names(hero: str) -> list[str]:
+def _aliases(hero: str) -> list[str]:
     """What the prose may call a hero, longest first: its name, that name without
     accents and without punctuation, its nicknames."""
     plain = "".join(c for c in unicodedata.normalize("NFKD", hero) if not unicodedata.combining(c))
@@ -307,7 +307,7 @@ def normalise(text: str, hero: str, other: str, pronouns: Pronouns = (None, None
     """The article hero -> you / your; the enemy -> foe / foe's. he, she, him,
     his, her -> the one of the two whose pronoun it is; where that does not
     tell them apart, the enemy where the text says you, else the last named."""
-    sides = [("you", "your", _names(hero)), ("foe", "foe's", _names(other))]
+    sides = [("you", "your", _aliases(hero)), ("foe", "foe's", _aliases(other))]
     named = "|".join("(?P<side%d>%s)" % (i, "|".join(re.escape(n) for n in names))
                      for i, (_, _, names) in enumerate(sides))
     token = re.compile(r"\b(?:(?:%s)|%s)(?P<owns>'s)?(?!\w)" % (named, PRONOUN_RE), re.I)
