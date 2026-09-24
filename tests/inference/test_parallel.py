@@ -1,10 +1,18 @@
 """The process pool the board splits its searches across: the round order,
 a dying worker's board run again in this process, the pooled board against
-the sequential one, the workers' start, and the two settings. A superseded
-board's cancelled rounds are test_supersede's."""
+the sequential one, the workers' start, a worker's exit with its parent,
+and the two settings. A superseded board's cancelled rounds are
+test_supersede's."""
+
+import os
+import signal
+import subprocess
+import sys
+import time
 
 import pytest
 
+import db
 from facts.draft import Draft
 from inference import catalog
 from inference.strategy import CatalogError
@@ -168,6 +176,54 @@ def test_warm_returns_the_worker_count_when_every_worker_starts(monkeypatch):
     from inference import parallel
     dropped = _priming_pool(monkeypatch, 4242)
     assert parallel.warm() == 6 and dropped == []
+
+
+def _alive(pid):
+    """Whether a process still runs. A zombie no parent has reaped yet answers
+    kill 0 too, so where /proc exists its state says whether it has exited."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    if not os.path.isdir("/proc"):
+        return True
+    try:
+        with open("/proc/%d/stat" % pid, encoding="ascii") as handle:
+            state = handle.read().rsplit(")", 1)[1].split()[0]
+    except FileNotFoundError:
+        return False
+    return state != "Z"
+
+
+def test_a_worker_exits_when_its_parent_is_killed():
+    """A kill skips the exit hook that stops the pool, and a worker never
+    sees the parent go on its own; it watches the parent's pid, and is gone
+    within a second or two of the kill."""
+    script = (
+        "import os, time\n"
+        "from inference import parallel\n"
+        "workers = parallel.POOL.executor()\n"
+        "print(workers.executor.submit(os.getpid).result(), flush=True)\n"
+        "time.sleep(60)\n")
+    parent = subprocess.Popen([sys.executable, "-c", script], cwd=db.ROOT,
+                              env={**os.environ, "COUNTRIX_WORKERS": "1"},
+                              stdout=subprocess.PIPE, text=True)
+    worker = None
+    try:
+        worker = int(parent.stdout.readline())
+        assert worker != parent.pid and _alive(worker)
+        parent.kill()
+        parent.wait()
+        deadline = time.monotonic() + 10
+        while _alive(worker) and time.monotonic() < deadline:
+            time.sleep(0.1)
+        assert not _alive(worker)
+    finally:
+        parent.kill()
+        parent.wait()
+        parent.stdout.close()
+        if worker is not None and _alive(worker):
+            os.kill(worker, signal.SIGKILL)
 
 
 def test_countrix_workers_sets_the_worker_count(monkeypatch):

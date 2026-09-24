@@ -51,8 +51,8 @@ and `inference.serve` at launch, the stdio MCP server and `door.mcp call board`
 on the first board, pytest on the first board test. `COUNTRIX_WORKERS=6` is
 the lowest cap that keeps that test green; `COUNTRIX_PARALLEL=0` solves
 in-process. `COUNTRIX_PARALLEL` is read on every board, `COUNTRIX_WORKERS`
-when the pool starts. The pool is spawn-context: killing the parent leaves
-`spawn_main` workers orphaned under launchd, so stop them too.
+when the pool starts. The pool is spawn-context, and a worker exits within
+a second of its parent, a kill included.
 
 Without the database, two generated sections regenerate on their own:
 `.venv/bin/python -c "from door.mcp import tools; tools.REGISTRY.write_docs()"`

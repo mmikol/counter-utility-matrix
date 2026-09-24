@@ -2,13 +2,14 @@
 
 CPython holds the GIL for this pure-Python work, so parallelism means
 processes: a pool of workers, spawned once and kept - the servers that call
-this are threaded, and forking a threaded process is unsafe. Each search
-runs in four rounds, a slice per worker: the reference sample, for the low
-and high each heuristic takes on this board; the sample again, scored under
-those bounds, for each hero's standing, which ranks the pools; the
-enumeration, prepared and scored; then one worker ranks and refines the
-merged field. Only verdicts cross - hero ids, score, tie-break - and slices
-partition their round, so nothing depends on how the work was split.
+this are threaded, and forking a threaded process is unsafe. A worker exits
+within a second of its parent, a kill included. Each search runs in four
+rounds, a slice per worker: the reference sample, for the low and high each
+heuristic takes on this board; the sample again, scored under those bounds,
+for each hero's standing, which ranks the pools; the enumeration, prepared
+and scored; then one worker ranks and refines the merged field. Only
+verdicts cross - hero ids, score, tie-break - and slices partition their
+round, so nothing depends on how the work was split.
 
 A board runs up to six searches. Blue's and red's go first. A seat's fill
 is that seat's board (same map, side, enemies and bans), so it takes the
@@ -73,7 +74,7 @@ class _Pool:
     """The parent's side of the process pool: the executor, created on first
     use and spawned, not forked, with the worker count it was created with,
     under one lock; and the world pickled once for a run of tasks, under its
-    own."""
+    own. Each worker exits within a second of this process, a kill included."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -90,7 +91,8 @@ class _Pool:
             if self._executor is None:
                 self._size = worker_count()
                 self._executor = concurrent.futures.ProcessPoolExecutor(
-                    max_workers=self._size, mp_context=multiprocessing.get_context("spawn"))
+                    max_workers=self._size, mp_context=multiprocessing.get_context("spawn"),
+                    initializer=_follow_parent, initargs=(os.getpid(),))
             return Workers(self._executor, self._size)
 
     def drop(self) -> None:
@@ -157,6 +159,18 @@ def _prime(token: str | None = None, data: bytes | None = None) -> int:
     if token is not None and data is not None:
         _HELD.world_of(token, data)
     return os.getpid()
+
+
+def _follow_parent(parent: int) -> None:
+    """In a worker, as it starts: exit within a second of `parent`, the
+    process that spawned it. A worker holds its own end of the call queue's
+    pipe, so it never sees the parent go; a kill skips the exit hook that
+    would stop it, and it would carry on under launchd or init."""
+    def watch() -> None:
+        while os.getppid() == parent:
+            time.sleep(1.0)
+        os._exit(0)
+    threading.Thread(target=watch, name="countrix-follow-parent", daemon=True).start()
 
 
 # a playbook folder's stamp: each file's name, modification time and size
