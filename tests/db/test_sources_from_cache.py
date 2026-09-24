@@ -8,6 +8,7 @@ import os
 
 import psycopg
 import pytest
+import requests
 
 from db import CACHE_DIRS
 from db.mcp import tools
@@ -50,11 +51,35 @@ def snapshots(db):
     return db.execute("select count(*) from meta_snapshots").fetchone()[0]
 
 
+def _offline(self, url, params=None, **kwargs):
+    """requests.Session.get for a pull that must read only the page cache."""
+    raise AssertionError("%s %s is not in the page cache" % (url, params or ""))
+
+
 @needs_caches
 def test_blizzard_roster_pulls_from_the_cache(ctx):
     text, data = tools.run_tool(ctx, "pull_heroes")
     assert text.startswith("pull_heroes: roster stored") and data["heroes"] >= 50
     assert "heroes" in data["tables"]
+
+
+@needs_caches
+def test_blizzard_rates_pull_from_the_cache_and_leave_no_snapshot(ctx, snapshots, db, monkeypatch):
+    # a page missing from the cache fails at once: the request loop retries
+    # only a requests failure, so the pull neither waits out six attempts nor
+    # reads the live site at 5 s a page
+    monkeypatch.setattr(requests.Session, "get", _offline)
+    text, data = tools.run_tool(ctx, "pull_rates")
+    assert text.startswith("pull_rates: snapshot stored")
+    assert data["tables"] == ["regions", "competitive_tiers", "meta_snapshots",
+                              "hero_meta", "map_meta"]
+    assert data["queue"] == "competitive_role_queue" and data["tiers"] >= 8
+    assert data["hero_rows"] > 0 and data["map_rows"] > 0
+    assert data["unmatched"] == [] and data["skipped_maps"] == []
+    # the pull counts inside its own transaction, which holds the snapshot it stamped
+    assert data["snapshots"] == snapshots + 1
+    db.rollback()
+    assert db.execute("select count(*) from meta_snapshots").fetchone()[0] == snapshots
 
 
 @needs_caches
