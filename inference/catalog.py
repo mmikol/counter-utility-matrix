@@ -45,6 +45,7 @@ reads as params.NAME - tuning is editing the file.
 """
 
 import copy
+import hashlib
 import os
 import re
 from collections.abc import Iterable, Mapping, Sequence
@@ -393,17 +394,23 @@ def _read(directory: str, name: str, ids: set[str]) -> Strategy:
         raise wrapped from error
 
 
+def strategy_files(directory: str) -> list[str]:
+    """The names of a playbook's strategy files, sorted: its .md files less
+    the markdown that lives beside them. Everything that copies, reads or
+    fingerprints a playbook takes its files from here."""
+    if not os.path.isdir(directory):
+        raise CatalogError("no strategies directory at %s" % directory)
+    return sorted(name for name in os.listdir(directory)
+                  if name.endswith(".md") and name not in NOT_STRATEGIES)
+
+
 def load(directory: str | None = None) -> list[Strategy]:
     """Every strategy file, validated, ordered constraints (limits, scored) then
     heuristics, then assumptions; drafts sit last within their kind."""
     directory = directory or strategies_dir()
-    if not os.path.isdir(directory):
-        raise CatalogError("no strategies directory at %s" % directory)
     out: list[Strategy] = []
     ids: set[str] = set()
-    for name in sorted(os.listdir(directory)):
-        if not name.endswith(".md") or name in NOT_STRATEGIES:
-            continue
+    for name in strategy_files(directory):
         strategy = _read(directory, name, ids)
         ids.add(strategy.id)
         out.append(strategy)
@@ -477,6 +484,21 @@ def counts(catalog: Iterable[Strategy]) -> dict[str, int]:
 def playbook_name(directory: str | None = None) -> str:
     """How the database names a playbook: its folder, relative to the repo."""
     return os.path.relpath(directory or strategies_dir(), ROOT).replace(os.sep, "/")
+
+
+def playbook_digest(directory: str | None = None) -> str:
+    """The playbook's fingerprint: a sha256 over its strategy files in
+    strategy_files order, each name and then its bytes. A fixture proved
+    under a playbook records this value, so a test can tell the playbook it
+    was proved under from the one in force. README.md and tuning-log.md
+    never move it."""
+    directory = directory or strategies_dir()
+    digest = hashlib.sha256()
+    for name in strategy_files(directory):
+        digest.update(name.encode("utf-8") + b"\0")
+        with open(os.path.join(directory, name), "rb") as handle:
+            digest.update(handle.read() + b"\0")
+    return digest.hexdigest()
 
 
 class MirrorSummary(TypedDict):

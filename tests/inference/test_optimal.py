@@ -3,40 +3,35 @@
 Proving one costs a full enumeration of every legal six - about 18 million
 candidates, minutes of CPU - so it is done offline and the answer recorded.
 `tests/fixtures/optimal.json` holds, per board, the six a brute force found and
-what it scored. This re-solves each and checks the solver still reaches it.
+what it scored, beside the digest of the playbook it was proved under. This
+re-solves each and checks the solver still reaches it.
 
 It is the regression gate on the search: a change that quietly stops finding a
 two-swap, or narrows the pool, or breaks a constraint, shows up here as a board
 that used to be exact and is not. Regenerate with `scripts/optimal.py` after a
 deliberate change to the objective, and say in the commit why every number moved.
 """
-import json
-import os
-
 import pytest
 
 from inference import catalog, engine
-from tests.inference import FIXTURES
-
-FIXTURE = os.path.join(FIXTURES, "optimal.json")
-
-
-def _boards():
-    with open(FIXTURE, encoding="utf-8") as handle:
-        return json.load(handle)
+from tests.inference import recorded
 
 
 @pytest.mark.invariant
 def test_the_solver_reaches_the_proven_maximum(world):
-    # the boards were proven under the 239 rules 9328429 removed; a playbook that
-    # scores nothing ties every six at zero and has no maximum to reach. When rules
-    # return this runs again and fails until the boards are re-proven under them.
+    # the boards were proven under the 239 rules 9328429 removed, and the fixture
+    # names that playbook; a playbook that scores nothing ties every six at zero and
+    # has no maximum to reach. When rules return this fails at the digest until the
+    # boards are re-proven under them.
     if not catalog.has_scoring_terms(catalog.load()):
         pytest.skip("the shipped playbook scores nothing: no optimum to reach")
-    proven = _boards()
-    assert proven, "no proven boards recorded"
+    proven = recorded("optimal")
+    in_force = catalog.playbook_digest()
+    assert proven["playbook"] == in_force, (
+        "recorded under a different playbook (%s, in force %s): re-prove the boards"
+        % (proven["playbook"][:12], in_force[:12]))
     missed = []
-    for row in proven:
+    for row in proven["boards"]:
         b = row["board"]
         got = engine.infer(world, b["map"], b["red"], b["locked"],
                            side=b["side"], bans=b["bans"], top=1)
@@ -53,8 +48,9 @@ def test_the_proven_boards_cover_every_input():
     not among the shapes: a board proved under the old scale was proved against
     an objective that read the bans, so scripts/optimal.py holds them out
     (OPTIMAL_STALE_BANNED) until they are enumerated again. Needs no database -
-    it reads the fixture - so the pull-request gate checks it."""
-    boards = [row["board"] for row in _boards()]
+    it reads the fixture, its playbook digest included - so the pull-request
+    gate checks it."""
+    boards = [row["board"] for row in recorded("optimal")["boards"]]
     assert len({b["map"] for b in boards}) >= 5
     assert {len(b["red"]) for b in boards} >= {0, 2}
     assert max(len(b["locked"]) for b in boards) >= 2

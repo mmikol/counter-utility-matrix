@@ -154,9 +154,8 @@ def validate(directory: str, hid: str, new_text: str) -> list[catalog_module.Str
     """Load a copy of the catalog with this one file replaced; raise on error."""
     tmp = tempfile.mkdtemp(prefix="tune-")
     try:
-        for name in os.listdir(directory):
-            if name.endswith(".md") and name not in catalog_module.NOT_STRATEGIES:
-                shutil.copy(os.path.join(directory, name), os.path.join(tmp, name))
+        for name in catalog_module.strategy_files(directory):
+            shutil.copy(os.path.join(directory, name), os.path.join(tmp, name))
         with open(os.path.join(tmp, hid + ".md"), "w", encoding="utf-8") as handle:
             handle.write(new_text)
         return catalog_module.load(tmp)

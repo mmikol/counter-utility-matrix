@@ -1,5 +1,6 @@
 """The catalog's guards: what a strategy file may be named, how the
-playbook in force is chosen, and how the catalog reads as text."""
+playbook in force is chosen, how the catalog reads as text, and the files
+a playbook reads and fingerprints."""
 
 import os
 import shutil
@@ -94,3 +95,25 @@ def test_another_playbook_is_chosen_by_the_environment(monkeypatch, tmp_path):
     assert {h.id for h in one} == {"open-queue-tanks"}
     assert catalog.write_docs(one, path=str(tmp_path / "never.md")) is None
     assert not (tmp_path / "never.md").exists()
+
+
+def test_a_playbooks_digest_reads_its_strategy_files_and_nothing_beside_them(catalog_copy):
+    """A proven fixture records the digest of the playbook it was proved under.
+    The tuning log, the README and anything that is not markdown never move
+    it; a line added to one strategy file does."""
+    digest = catalog.playbook_digest(catalog_copy)
+    assert digest == catalog.playbook_digest(FIXTURE_PLAYBOOK)
+    for name in ("tuning-log.md", "README.md", "notes.txt"):
+        Path(catalog_copy, name).write_text("# beside the playbook\n", encoding="utf-8")
+    assert catalog.strategy_files(catalog_copy) == catalog.strategy_files(FIXTURE_PLAYBOOK)
+    assert catalog.playbook_digest(catalog_copy) == digest
+    with Path(catalog_copy, "cohesion.md").open("a", encoding="utf-8") as handle:
+        handle.write("One more line.\n")
+    assert catalog.playbook_digest(catalog_copy) != digest
+
+
+def test_a_folder_that_is_not_there_holds_no_playbook(tmp_path):
+    with pytest.raises(catalog.CatalogError, match="no strategies directory"):
+        catalog.strategy_files(str(tmp_path / "gone"))
+    with pytest.raises(catalog.CatalogError, match="no strategies directory"):
+        catalog.playbook_digest(str(tmp_path / "gone"))

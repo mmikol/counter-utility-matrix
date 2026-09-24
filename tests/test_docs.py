@@ -167,8 +167,7 @@ def test_every_shipped_strategy_is_in_the_playbook_sources():
     from inference import catalog
     record = _read("inference", "README.md")
     cited = set(re.findall(r"^- `([a-z0-9-]+)`", record, re.M))
-    shipped = {name[:-3] for name in os.listdir(catalog.SHIPPED_DIR)
-               if name.endswith(".md") and name not in catalog.NOT_STRATEGIES}
+    shipped = {name[:-3] for name in catalog.strategy_files(catalog.SHIPPED_DIR)}
     assert shipped and shipped <= cited, sorted(shipped - cited)
 
 

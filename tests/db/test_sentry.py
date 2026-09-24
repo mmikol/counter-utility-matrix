@@ -16,9 +16,8 @@ from inference import catalog
 
 def _playbook(tmp_path):
     shipped = catalog.strategies_dir()
-    for name in os.listdir(shipped):
-        if name.endswith(".md") and name not in catalog.NOT_STRATEGIES:
-            shutil.copy(os.path.join(shipped, name), tmp_path / name)
+    for name in catalog.strategy_files(shipped):
+        shutil.copy(os.path.join(shipped, name), tmp_path / name)
     return str(tmp_path)
 
 
