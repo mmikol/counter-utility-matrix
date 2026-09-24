@@ -332,8 +332,7 @@ def db_init(ctx: Context) -> Reply:
 def db_migrate(ctx: Context) -> Reply:
     with ctx.connect() as cx:
         names = schema.pending(cx)
-        todo = [(p, sql) for p, sql in schema.read_migrations()
-                if os.path.basename(p) in names]
+        todo = [m for m in schema.read_migrations() if m.name in names]
         schema.apply(cx, todo, quiet=True)
     return ("db_migrate: applied %d migration(s)%s"
             % (len(names), ": " + ", ".join(names) if names else ""), {"applied": names})

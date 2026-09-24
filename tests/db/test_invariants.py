@@ -276,8 +276,6 @@ def test_strategies_table_mirrors_the_files(rows):
 
 
 def test_the_migration_ledger_matches_the_files(rows):
-    import os
-
     from db.psql import schema
     assert [r[0] for r in rows("select filename from schema_migrations order by 1")] == \
-        [os.path.basename(p) for p, _ in schema.read_migrations()]
+        [m.name for m in schema.read_migrations()]

@@ -210,6 +210,37 @@ def test_the_schema_sections_match_the_live_database(db, copy_of):
         "docs/db.md's data dictionary is behind the database: run `python -m db.mcp call db_docs`"
 
 
+def test_a_tables_prose_is_the_comment_block_directly_above_it():
+    from db.psql import schema
+    text = "\n".join([
+        "-- THE FILE: a header that is no table's.",
+        "BEGIN;",
+        "",
+        "-- One row per hero.",
+        "--",
+        "-- The roster, from Blizzard.",
+        "CREATE TABLE heroes (",
+        "    hero_id serial PRIMARY KEY",
+        ");",
+        "",
+        "-- Not this one: a blank line follows it.",
+        "",
+        "CREATE TABLE maps (map_id serial PRIMARY KEY);",
+        "-- Nor this one:",
+        "    -- an indented line ends the block.",
+        "CREATE TABLE modes (mode_id serial PRIMARY KEY);",
+        "-- Two lines,",
+        "-- one sentence.",
+        "CREATE TABLE stages (stage_id serial PRIMARY KEY);",
+        "COMMIT;",
+    ])
+    assert schema.table_prose(text) == {
+        "heroes": "One row per hero. The roster, from Blizzard.",   # the bare -- is dropped
+        "maps": "", "modes": "",
+        "stages": "Two lines, one sentence.",
+    }
+
+
 def test_embed_replaces_only_the_marked_section(tmp_path):
     from db import embed
     path = tmp_path / "doc.md"
