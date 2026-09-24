@@ -18,28 +18,46 @@ Shion do not, as of the scale that stopped moving with the bans.
            most exposed to it first; the same without the heroes that answer it back
 """
 
+from typing import TypedDict
+
 from inference import engine
 from ui.facts import compute
+from ui.facts.model import Hero, Map, World
 
 MAPS = 4
 MAX_BANS = compute.MAX_BANS       # a match bans up to five; a rival banned is a real board
 CLOSEST = 5                       # boards the ban search starts from
 
 
-def maps(world, hero):
+class Reach(TypedDict):
+    """A board a search found for a hero - the reach tool's answer and a row of
+    tests/fixtures/reach.json. bans counts the rivals banned (banned names them);
+    None means no board seated the hero, and the rest is the closest it came,
+    gap the score it fell short by."""
+    hero: str
+    bans: int | None
+    map: str
+    side: str
+    red: list[str]
+    banned: list[str]
+    six: list[str]
+    gap: float
+
+
+def maps(world: World, hero: Hero) -> list[Map]:
     base = hero.win or 50.0
 
-    def lift(m):
+    def lift(m: Map) -> float:
         return (hero.map_win(m.id) or base) - base
 
     return sorted(world.maps.values(), key=lambda m: (-lift(m), m.name))[:MAPS]
 
 
-def reds(world, hero):
+def reds(world: World, hero: Hero) -> list[list[str]]:
     others = [h for h in world.heroes.values() if h.released and h.id != hero.id]
-    out = [[]]
+    out: list[list[str]] = [[]]
     for strict in (False, True):
-        red = []
+        red: list[str] = []
         for role in ("tank", "damage", "support"):
             pool = [h for h in others if h.role == role
                     and not (strict and world.counters_of(hero.id, h.id))]
@@ -52,11 +70,11 @@ def reds(world, hero):
     return out
 
 
-def search(world, name):
-    """-> {"hero", "bans": 0..MAX_BANS or None, "map", "side", "red", "banned", "six",
-    "gap"}: the first board that seats the hero; with none, the closest it came."""
+def search(world: World, name: str) -> Reach:
+    """The first board that seats the hero, bans 0..MAX_BANS; with none, bans
+    None and the closest it came."""
     hero = world.hero(name)
-    near = []
+    near: list[tuple[float, str, list[str], str]] = []
     for m in maps(world, hero):
         for red in reds(world, hero):
             for side in (compute.SIDES if compute.is_sided(m) else ("",)):
@@ -68,7 +86,7 @@ def search(world, name):
                 near.append((top.score - held.score, m.name, red, side))
     near.sort(key=lambda t: (t[0], t[1], t[3]))
     for _, map_name, red, side in near[:CLOSEST]:
-        banned = []
+        banned: list[str] = []
         # one solve of this board per ban, not two: the board a ban produces is
         # the board the next round starts from, so the round reads it
         for _ in range(MAX_BANS + 1):
@@ -90,7 +108,7 @@ def search(world, name):
             "banned": [], "six": [], "gap": round(gap, 3)}
 
 
-def seated(world, board):
+def seated(world: World, board: Reach) -> bool:
     """Is the hero still in the optimal six of the board a search recorded for it?"""
     top = engine.infer(world, board["map"], board["red"], [], side=board["side"],
                        bans=board["banned"], top=1)

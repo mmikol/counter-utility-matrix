@@ -1,9 +1,9 @@
 """Every hero is the right pick somewhere: the playbook may make a hero rare, never
 impossible. tests/fixtures/reach.json records, per released hero, the board
 inference.reach.search seated it on (a tool: `reach`), within the five bans a match has,
-beside the digest of the playbook that seated it. Rates move daily and the two databases
-differ, so a few boards may tip; a hero that falls off its board is searched for again, and
-none may be lost."""
+beside the digest of the playbook that seated it; `python -m scripts.reach` re-records it.
+Rates move daily and the two databases differ, so a few boards may tip; a hero that falls
+off its board is searched for again, and none may be lost."""
 
 import pytest
 

@@ -8,12 +8,19 @@ re-solves each and checks the solver still reaches it.
 
 It is the regression gate on the search: a change that quietly stops finding a
 two-swap, or narrows the pool, or breaks a constraint, shows up here as a board
-that used to be exact and is not. Regenerate with `scripts/optimal.py` after a
-deliberate change to the objective, and say in the commit why every number moved.
+that used to be exact and is not. Regenerate with `python -m scripts.optimal` after
+a deliberate change to the objective, and say in the commit why every number moved.
+The recorder's own choices - which proofs it takes and which it holds out - are
+tested here too, on rows written for the test.
 """
+import json
+import os
+import re
+
 import pytest
 
 from inference import catalog, engine
+from scripts import optimal
 from tests.inference import recorded
 
 
@@ -55,3 +62,74 @@ def test_the_proven_boards_cover_every_input():
     assert {len(b["red"]) for b in boards} >= {0, 2}
     assert max(len(b["locked"]) for b in boards) >= 2
     assert not any(b["bans"] for b in boards), "re-proven with bans: restore the bans clause"
+
+
+SIX = ["Ana", "Juno", "Mei", "Reinhardt", "Sojourn", "Tracer"]
+
+
+def _proof(map_name, red=0, bans=0, locked=0, outside=False):
+    return {"board": {"map": map_name, "side": None, "red": ["Ana"] * red,
+                      "bans": ["Mercy"] * bans, "locked": ["Mei"] * locked},
+            "six": SIX, "score": 1.5, "needed_outside": outside}
+
+
+def _brute_force_rows(path, *rows):
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    return str(path)
+
+
+def test_the_recorder_takes_the_boards_the_pool_cut_first_and_one_per_shape():
+    plain = _proof("Busan", red=1)
+    cut = _proof("Busan", red=1, outside=True)
+    two_red = _proof("Busan", red=2)
+    locked = _proof("Busan", red=2, locked=1)
+    ilios = _proof("Ilios")
+    rows = [plain, ilios, two_red, cut, locked]
+    # the cut board takes its shape from the plain one; a lock or a second red is a
+    # shape of its own
+    assert optimal.spread(rows, 10) == [cut, two_red, locked, ilios]
+    assert optimal.spread(rows, 2) == [cut, two_red]
+    assert optimal.spread(rows, 0) == []
+
+
+def test_the_recorder_holds_out_banned_and_unproven_rows(tmp_path):
+    board = {"map": "Busan", "side": "attack", "red": [], "bans": [], "locked": []}
+    banned = dict(board, bans=["Mercy"])
+    path = _brute_force_rows(
+        tmp_path / "proof.jsonl",
+        {"board": banned, "exact": True, "true_six": SIX, "true_score": 3.0},
+        {"board": board, "exact": False, "true_six": SIX, "true_score": 2.0},
+        {"board": board, "exact": True},
+        {"board": board, "exact": True, "true_six": SIX, "true_score": 1.0,
+         "true_six_outside_pool": True})
+    proven = {"board": board, "six": SIX, "score": 1.0, "needed_outside": True}
+    assert optimal.read_proofs([path], stale_banned=True) == [proven]
+    assert optimal.read_proofs([path], stale_banned=False) == [
+        {"board": banned, "six": SIX, "score": 3.0, "needed_outside": False}, proven]
+
+
+def test_the_recorder_stamps_the_playbook_in_force_and_refuses_a_vacuous_gate(
+        tmp_path, monkeypatch):
+    board = {"map": "Busan", "side": "attack", "red": [], "bans": [], "locked": []}
+    source, gone = tmp_path / "proof.jsonl", tmp_path / "gone.jsonl"
+    source.write_text("not json\n", encoding="utf-8")
+    monkeypatch.setattr(optimal, "OUT", str(tmp_path / "optimal.json"))
+    monkeypatch.delenv("OPTIMAL_SOURCES", raising=False)
+    with pytest.raises(SystemExit, match="set OPTIMAL_SOURCES"):
+        optimal.main()
+    # every path is checked before any is read: the first file is never parsed
+    monkeypatch.setenv("OPTIMAL_SOURCES", os.pathsep.join((str(source), str(gone))))
+    with pytest.raises(SystemExit, match="no such file: %s" % re.escape(str(gone))):
+        optimal.main()
+    monkeypatch.setenv("OPTIMAL_SOURCES", str(source))
+    _brute_force_rows(source, {"board": board, "exact": True, "true_six": SIX,
+                               "true_score": 1.0})
+    with pytest.raises(SystemExit, match="vacuous"):
+        optimal.main()
+    _brute_force_rows(source, {"board": board, "exact": True, "true_six": SIX,
+                               "true_score": 1.0, "true_six_outside_pool": True})
+    assert optimal.main() == 0
+    written = json.loads((tmp_path / "optimal.json").read_text(encoding="utf-8"))
+    assert written == {"playbook": catalog.playbook_digest(),
+                       "boards": [{"board": board, "six": SIX, "score": 1.0,
+                                   "needed_outside": True}]}
