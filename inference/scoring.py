@@ -16,13 +16,10 @@ from facts import compute
 from facts.model import Hero, Map, World
 from facts.team import NUMBER_TYPES, MetricBag, MetricValue, number, team_metrics
 from inference.expr import Expr, Scope, Value, scope
-from inference.strategy import BOARD_SECTIONS, Strategy
+from inference.strategy import Strategy, settled_by_board
 
 CONFIDENCE_KEY = "\x00confidence"   # a rule's scale bounds, beside its own
 NEED_BUDGET = 2.0                 # the most one guarded state can cost
-
-# the namespaces that do not change across the candidates of one board
-STATIC_SECTIONS = BOARD_SECTIONS
 
 
 class Interval(NamedTuple):
@@ -223,6 +220,8 @@ class Objective:
         self._limits: list[tuple[Strategy, Expr, bool | None, int]] = [
             (h, h.require, gates[h.id], slots.get(h.id, 0)) for h in self.limits
             if h.require is not None]
+        # the limits prepare() prunes by: a soft one only charges, in score()
+        self._hard_limits = [limit for limit in self._limits if not limit[0].soft]
         self._scored = [(r, gates[r.id], slots.get(r.id, 0))
                         for r in self.scored_constraints]
         self._heuristics = [(g, gates[g.id], slots.get(g.id, 0), *_split_key(g.metric))
@@ -234,7 +233,7 @@ class Objective:
         # Needs that share a guard share NEED_BUDGET: the state costs at most
         # that much however many rules the playbook writes about it
         guards = {g.id: g.when.source for g in self.heuristics
-                  if gates[g.id] is None and g.when is not None}
+                  if g.need and g.when is not None}
         written: dict[str, float] = {}
         for g in self.heuristics:
             if g.id in guards:
@@ -245,11 +244,11 @@ class Objective:
 
     def _gates(self) -> tuple[dict[str, bool | None], dict[str, int], int]:
         """Every strategy's `when`, read once per board: True where there is
-        none, True or False where it touches only the static sections, None
-        where the candidate decides it. -> (gate per id, slot per undecided
-        id, how many slots). Strategies whose `when` and params are the same
-        answer together, so they share a slot: a guard a dozen strategies
-        write is evaluated once per candidate."""
+        none, True or False where the board settles it, None where the
+        candidate decides it. -> (gate per id, slot per undecided id, how many
+        slots). Strategies whose `when` and params are the same answer
+        together, so they share a slot: a guard a dozen strategies write is
+        evaluated once per candidate."""
         sc = scope(self.static)
         gates: dict[str, bool | None] = {}
         slots: dict[str, int] = {}
@@ -257,7 +256,7 @@ class Objective:
         for h in self.catalog:
             if h.when is None:
                 gates[h.id] = True
-            elif all(n.split(".", 1)[0] in STATIC_SECTIONS for n in h.when.names):
+            elif settled_by_board(h.when.names):
                 sc["params"] = h.params_section
                 gates[h.id] = bool(h.when.evaluate(sc))
             else:
@@ -281,17 +280,18 @@ class Objective:
         return ns
 
     def prepare(self, cand: Candidate) -> Candidate:
-        """Namespace, hard-limit check, raw heuristic values."""
+        """Namespace, hard-limit check, raw heuristic values. A soft limit
+        never prunes, so neither its gate nor its require is read here."""
         ns = cand.ns = self.namespace(cand.heroes)
         sc = cand.scope = scope(ns)
         held: list[bool | None] = [None] * self.gate_slots
         violations = []
-        for h, require, gate, slot in self._limits:
+        for h, require, gate, slot in self._hard_limits:
             if gate is None:
                 gate = _slot_gate(held, slot, h, sc)
             if gate:
                 sc["params"] = h.params_section
-                if not bool(require.evaluate(sc)) and not h.soft:
+                if not require.evaluate(sc):
                     violations.append(h.id)
         cand.violations = violations
         raw: list[float | None] = []

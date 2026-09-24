@@ -14,7 +14,7 @@ from db import Refusal
 from facts import compute
 from inference import catalog, tune
 from inference.frontmatter import Parsed, parse_frontmatter
-from inference.strategy import KINDS, CatalogError, Strategy
+from inference.strategy import KINDS, CatalogError, Strategy, settled_by_board
 from tests.inference import FIXTURE_PLAYBOOK
 
 
@@ -234,6 +234,12 @@ def test_a_constraint_is_a_limit_or_scored_and_an_assumption_is_prose(tmp_path):
                 "---\nname: b\nkind: constraint\nbonus: params.x\nparams:\n  x: 1\n---\nx\n"):
         with pytest.raises(CatalogError):
             load_one(bad)
+
+
+def test_a_guard_is_settled_by_the_board_when_it_reads_only_red_the_map_the_world_and_params():
+    assert settled_by_board(["enemy.size", "map.known", "world.heal_bench", "params.X"])
+    assert not settled_by_board(["enemy.size", "team.supports"])
+    assert not settled_by_board(["matchup.pool_diff"])
 
 
 def test_weights_override_a_heuristic_for_one_board_and_never_the_file():

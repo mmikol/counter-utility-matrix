@@ -53,7 +53,7 @@ writer (inference.tune) checks a value by them before a file changes.
 
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Literal, NamedTuple, TypedDict
 
 from facts import compute
@@ -70,7 +70,15 @@ FORMS: tuple[Form, ...] = ("limit", "scored", "heuristic", "assumption", "draft"
 DIRECTIONS = ("maximize", "minimize")      # which end of a heuristic's metric is good
 
 # the namespaces one board settles for every candidate six
-BOARD_SECTIONS = ("enemy", "map", "world", "params")
+_BOARD_SECTIONS = ("enemy", "map", "world", "params")
+
+
+def settled_by_board(names: Iterable[str]) -> bool:
+    """Whether an expression over these names is decided once per board: each
+    name is red's, the map's, the world's or a param. Strategy.need and the
+    solver's gates both ask it."""
+    return all(n.split(".", 1)[0] in _BOARD_SECTIONS for n in names)
+
 
 WEIGHT_RANGE = (0.0, 10.0)
 MAX_NAME = 120             # characters in a strategy's name and its category
@@ -405,10 +413,10 @@ class Strategy:
     @property
     def need(self) -> bool:
         """A heuristic guarded on the six's own state: the solver charges what it
-        misses (weight x (norm - 1)) instead of paying what it has. Guards on red
-        or the map leave it a reward."""
+        misses (weight x (norm - 1)) instead of paying what it has. A guard the
+        board settles leaves it a reward."""
         return (self.form == "heuristic" and self.when is not None
-                and any(n.split(".", 1)[0] not in BOARD_SECTIONS for n in self.when.names))
+                and not settled_by_board(self.when.names))
 
     def to_dict(self) -> StrategyRecord:
         """The record the tools, the service and the board serve."""

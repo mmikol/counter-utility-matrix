@@ -1,9 +1,9 @@
 """The search on a board: the enumerated maximum it must reach, shape
-limits, a need and its budget, partners that only pay together, the scale a
-ban leaves alone, the ranking order and its tie-breaks, a rule scaled by the
-metric it names and the bounds its slices merge into, and the reference
-sample of a small roster. Every board is the synthetic World's: no
-database."""
+limits, a soft limit that charges and never prunes, a need and its budget,
+partners that only pay together, the scale a ban leaves alone, the ranking
+order and its tie-breaks, a rule scaled by the metric it names and the
+bounds its slices merge into, and the reference sample of a small roster.
+Every board is the synthetic World's: no database."""
 
 import copy
 import dataclasses
@@ -127,6 +127,21 @@ def test_shape_limits_bound_the_search_and_a_stricter_one_narrows_it(synthetic_w
                      catalog=cat)
     roles = sorted(world.hero(n).role for n in r.blue)
     assert roles == ["damage", "damage", "support", "support", "tank", "tank"]
+
+
+def test_a_soft_limit_charges_its_penalty_and_never_prunes(synthetic_world):
+    """The reference playbook's anti-air is soft: against red's flier, a six
+    with no hitscan breaks it, stays a candidate and pays its 2.5."""
+    from inference import scoring
+    w = synthetic_world
+    objective = scoring.Objective(w, w.map("Harbor Gate"), red=[w.hero("Gale")],
+                                  catalog=catalog.load(FIXTURE_PLAYBOOK))
+    cand = scoring.Candidate(
+        [w.hero(n) for n in ("Anvil", "Mortar", "Balm", "Myrrh", "Sorrel", "Tansy")])
+    objective.score(objective.prepare(cand))
+    assert cand.violations == []
+    [term] = [c for c in cand.contributions if c["id"] == "anti-air"]
+    assert term["applies"] and term["ok"] is False and term["weighted"] == -2.5
 
 
 def test_a_rule_guarded_on_the_six_itself_is_a_need_and_a_state_has_a_budget(
