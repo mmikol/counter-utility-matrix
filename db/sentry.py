@@ -51,6 +51,32 @@ REPORT_PATH = os.path.join(RAW_DIR, "sentry.json")
 AUDIT_TAIL_BYTES = 262144  # 256 KiB: the last minute's lines with room to spare
 QUARANTINE = ".quarantined"
 
+
+@dataclass(frozen=True)
+class Watch:
+    """Where one pass looks and reports. No directory is the playbook in force,
+    no audit path the door's own log and no DSN default_dsn(), each resolved
+    on every pass."""
+    directory: str | None = None
+    audit_path: str | None = None
+    dsn: str | None = None
+    report_path: str = REPORT_PATH
+    scan_database: bool = True
+    log: Log = print
+
+
+class Report(TypedDict):
+    """One pass, as db/raw/sentry.json holds it and `orchestrator.py status` reads it."""
+    checked_at: str
+    ok: bool
+    playbook: int | None
+    quarantined: list[str]
+    flags: list[str]
+    calls_last_minute: int
+    refused_last_minute: int
+    audit_offset: int
+
+
 # What a strategy, a note or a description never legitimately says.
 TOOLS = r"(db_rebuild|db_init|db_migrate|sync_all|pull_\w+|load_authored|tune|infer_strategy|" \
         r"add_strategy|derive_strategies|query|export_csv)"
@@ -230,63 +256,65 @@ def check_door(audit_path: str | None = None, offset: int = 0) -> DoorTally:
                      malformed=malformed)
 
 
-class Report(TypedDict):
-    """One pass, as db/raw/sentry.json holds it and `orchestrator.py status` reads it."""
-    checked_at: str
-    ok: bool
-    playbook: int | None
-    quarantined: list[str]
-    flags: list[str]
-    calls_last_minute: int
-    refused_last_minute: int
-    audit_offset: int
+def _report(
+        quarantined: list[str], cat: list[catalog_module.Strategy] | None, flags: list[str],
+        door: DoorTally) -> Report:
+    """The report of one pass: ok when the playbook loads whole, nothing was
+    quarantined and nothing is flagged."""
+    return Report(checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
+                  ok=not quarantined and not flags and cat is not None,
+                  playbook=None if cat is None else len(cat),
+                  quarantined=quarantined, flags=flags,
+                  calls_last_minute=door.recent, refused_last_minute=door.refused,
+                  audit_offset=door.offset)
 
 
-def run_once(
-        directory: str | None = None, audit_path: str | None = None, dsn: str | None = None,
-        log: Log = print, report_path: str | None = None, scan_database: bool = True,
-        offset: int = 0) -> Report:
-    """One pass -> the report, also written to db/raw/sentry.json."""
-    quarantined, cat = check_playbook(directory, log)
-    flags = check_database(dsn) if scan_database else []
-    door = check_door(audit_path, offset)
+def _write_report(report: Report, watch: Watch) -> None:
+    """Leave the report where the watch keeps it; a failed write is logged."""
+    try:
+        os.makedirs(os.path.dirname(watch.report_path), exist_ok=True)
+        with open(watch.report_path, "w", encoding="utf-8") as handle:
+            json.dump(report, handle, indent=1)
+    except OSError as error:
+        watch.log("sentry: could not write the report: %s" % error)
+
+
+def run_once(watch: Watch | None = None, offset: int = 0) -> Report:
+    """One pass, reading the audit log from `offset` -> the report, also
+    written to the watch's report path."""
+    watch = watch or Watch()
+    quarantined, cat = check_playbook(watch.directory, watch.log)
+    flags = check_database(watch.dsn) if watch.scan_database else []
+    door = check_door(watch.audit_path, offset)
     if door.crashed:
         flags.append("%d tool call(s) crashed in the last minute" % door.crashed)
     if door.hot:
         flags.append("client(s) past the rate limit: %s" % ", ".join(str(c) for c in door.hot))
     if door.malformed:
         flags.append("%d malformed line(s) in the audit log" % door.malformed)
-    report = Report(checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
-                    ok=not quarantined and not flags and cat is not None,
-                    playbook=None if cat is None else len(cat),
-                    quarantined=quarantined, flags=flags,
-                    calls_last_minute=door.recent, refused_last_minute=door.refused,
-                    audit_offset=door.offset)
-    report_path = report_path or REPORT_PATH
-    try:
-        os.makedirs(os.path.dirname(report_path), exist_ok=True)
-        with open(report_path, "w", encoding="utf-8") as handle:
-            json.dump(report, handle, indent=1)
-    except OSError as error:
-        log("sentry: could not write the report: %s" % error)
-    log("sentry: %s - playbook %s, %d call(s)/min, %d flag(s)%s" % (
+    report = _report(quarantined, cat, flags, door)
+    _write_report(report, watch)
+    watch.log("sentry: %s - playbook %s, %d call(s)/min, %d flag(s)%s" % (
         "ok" if report["ok"] else "NOT OK", report["playbook"], door.recent, len(flags),
         ", quarantined " + ", ".join(quarantined) if quarantined else ""))
     for flag in flags:
-        log("sentry: flag - " + flag)
+        watch.log("sentry: flag - " + flag)
     return report
 
 
 def run_forever(
-        every: float = EVERY, log: Log = print,
-        sleep: Callable[[float], None] = time.sleep) -> NoReturn:
-    log("sentry: watching the playbook, the database and the door every %gs" % every)
+        every: float = EVERY, watch: Watch | None = None,
+        sleep: Callable[[float], object] = time.sleep) -> NoReturn:
+    """A pass every `every` seconds, each reading the audit log on from where
+    the last one stopped."""
+    watch = watch or Watch()
+    watch.log("sentry: watching the playbook, the database and the door every %gs" % every)
     offset = 0
     while True:
         try:
-            offset = run_once(log=log, offset=offset).get("audit_offset", 0)
+            offset = run_once(watch, offset)["audit_offset"]
         except Exception as error:      # a failed pass is logged, the loop goes on
-            log("sentry: pass failed: %s: %s" % (type(error).__name__, error))
+            watch.log("sentry: pass failed: %s: %s" % (type(error).__name__, error))
         sleep(every)
 
 
