@@ -133,13 +133,13 @@ def refresh_once(
         log("refresh: starting a %s refresh at %s" % (
             "FULL" if full else "daily", datetime.now().strftime("%Y-%m-%d %H:%M")))
         if full:
-            text, _ = tools.run_tool(ctx, "sync_all", refresh=True)
+            text, _ = ctx.call("sync_all", refresh=True)
         else:
             parts: list[str] = []
             for name in DAILY:
-                parts.append(tools.run_tool(ctx, name, refresh=True)[0].splitlines()[0])
-            parts.append(tools.run_tool(ctx, "load_authored")[0].split(";")[0])
-            parts.append(tools.run_tool(ctx, "export_csv")[0])
+                parts.append(ctx.call(name, refresh=True)[0].splitlines()[0])
+            parts.append(ctx.call("load_authored")[0].split(";")[0])
+            parts.append(ctx.call("export_csv")[0])
             text = "; ".join(parts)
     except Exception as error:  # noqa: BLE001  # a failed refresh leaves yesterday's data in place
         log(traceback.format_exc().rstrip())

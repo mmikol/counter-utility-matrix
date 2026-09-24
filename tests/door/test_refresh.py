@@ -29,13 +29,13 @@ def test_cache_age_reads_the_newest_page(tmp_path):
 def test_refresh_once_survives_a_bad_day(monkeypatch):
     from door.mcp import tools
     logs = []
-    monkeypatch.setattr(tools, "run_tool", lambda ctx, name, **kw: (_ for _ in ()).throw(
+    monkeypatch.setattr(tools.Context, "call", lambda ctx, name, **kw: (_ for _ in ()).throw(
         RuntimeError("blizzard 504")))
     ok, text = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"), logs.append)
     assert ok is False and "504" in text and any("FAILED" in line for line in logs)
     traceback = next(line for line in logs if line.startswith("Traceback"))
     assert traceback.endswith("RuntimeError: blizzard 504")
-    monkeypatch.setattr(tools, "run_tool", lambda ctx, name, **kw: ("sync_all: done", {}))
+    monkeypatch.setattr(tools.Context, "call", lambda ctx, name, **kw: ("sync_all: done", {}))
     ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"), logs.append)
     assert ok is True
 
@@ -104,7 +104,7 @@ def test_full_refresh_is_due_when_the_slow_caches_are_stale(tmp_path):
 def test_daily_refresh_touches_only_what_moves(monkeypatch):
     from door.mcp import tools
     calls = []
-    monkeypatch.setattr(tools, "run_tool", lambda ctx, name, **kw: calls.append(
+    monkeypatch.setattr(tools.Context, "call", lambda ctx, name, **kw: calls.append(
         (name, kw.get("refresh"))) or ("%s: ok" % name, {}))
     ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere"),
                                  lambda m: None, full=False)

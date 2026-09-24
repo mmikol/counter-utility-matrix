@@ -104,9 +104,9 @@ def test_only_the_door_calls_the_playbook_writers():
     writes the playbook and its table lives in inference/ (catalog.mirror,
     tune.tune, tune.add, tune.complete, and derive.derive over them), and only
     a door tool calls it - or inference/derive.py, inside a run the door
-    started. The board stores a weight through tools.run_tool, not tune."""
+    started. The board stores a weight through ctx.call, not tune."""
     assert WRITER_RE.search("        catalog.mirror(cx, cat)")
-    assert not WRITER_RE.search('tools.run_tool(ctx, "tune", **arguments)')
+    assert not WRITER_RE.search('tool_context().call("tune", **arguments)')
     outside = []
     for path in _python_files("db", "facts", "inference", "door", "ui", "scripts"):
         relative = os.path.relpath(path, ROOT)
@@ -386,7 +386,7 @@ def test_the_tool_reference_is_current(copy_of):
     listed = set(re.findall(r"^\| `([a-z_]+)` \|", _section(committed, "tools"), re.M))
     assert listed == set(tools.REGISTRY.names())
     fresh = copy_of("docs/mcp.md")
-    tools.write_tool_docs(fresh)
+    tools.REGISTRY.write_docs(fresh)
     with open(fresh, encoding="utf-8") as handle:
         assert _section(handle.read(), "tools") == _section(committed, "tools"), \
             "docs/mcp.md is behind the tools: run `.venv/bin/python -m door.mcp call db_docs`"

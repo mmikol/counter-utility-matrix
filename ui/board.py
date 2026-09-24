@@ -200,7 +200,7 @@ def api_weight(payload: Mapping[str, object] | None) -> web.Reply:
         if reply.is_error:
             return web.Reply({"error": reply.text}, 400)
         return web.Reply({"line": reply.text.split("\n")[0], "change": reply.structured}, 200)
-    text, stored = tools.run_tool(tool_context(), "tune", **arguments)
+    text, stored = tool_context().call("tune", **arguments)
     return web.Reply({"line": text.split("\n")[0], "change": stored}, 200)
 
 

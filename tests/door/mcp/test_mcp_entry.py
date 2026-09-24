@@ -1,5 +1,5 @@
 """The door's entry point and in-process call: `python -m door.mcp list` and
-`call`, the data container's /health, and run_tool - the refresher's, the
+`call`, the data container's /health, and ctx.call - the refresher's, the
 shell's and the board's path - validated and audited like a call through
 either door."""
 
@@ -47,7 +47,7 @@ def test_health_is_degraded_when_the_database_is_out_of_reach_and_crashes_otherw
 
     def broken(ctx, name, /, **arguments):
         raise RuntimeError("a bug in db_status")
-    monkeypatch.setattr(tools, "run_tool", broken)
+    monkeypatch.setattr(tools.Context, "call", broken)
     with pytest.raises(RuntimeError, match="a bug"):
         status()
 
@@ -60,9 +60,9 @@ def test_an_in_process_call_is_validated_against_the_tools_schema(tmp_path, monk
     monkeypatch.setenv("COUNTRIX_AUDIT", str(path))
     ctx = tools.Context(dsn="postgresql://nowhere")
     with pytest.raises(Refusal, match="strategies: unknown argument"):
-        tools.run_tool(ctx, "strategies", bogus=1)
+        ctx.call("strategies", bogus=1)
     with pytest.raises(Refusal, match="reach: 'hero' must be string"):
-        tools.run_tool(ctx, "reach", hero=5)
+        ctx.call("reach", hero=5)
     lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     assert [(e["tool"], e["ok"], "refused" in e) for e in lines] == [
         ("strategies", False, True), ("reach", False, True)]
@@ -74,9 +74,9 @@ def test_an_in_process_tool_call_leaves_one_audit_line(tmp_path, monkeypatch):
     path = tmp_path / "audit.jsonl"
     monkeypatch.setenv("COUNTRIX_AUDIT", str(path))
     ctx = tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x")
-    tools.run_tool(ctx, "list_sources")
+    ctx.call("list_sources")
     with pytest.raises(tools.NoSuchToolError):
-        tools.run_tool(ctx, "no_such_tool")          # never reached a tool: no line
+        ctx.call("no_such_tool")          # never reached a tool: no line
     lines = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
     assert [e["tool"] for e in lines] == ["list_sources"]
     assert lines[0]["transport"] == "in-process" and lines[0]["ok"] is True
@@ -84,8 +84,8 @@ def test_an_in_process_tool_call_leaves_one_audit_line(tmp_path, monkeypatch):
 
 
 def test_a_tool_argument_named_name_reaches_the_tool():
-    """run_tool takes the tool's name positionally, so add_strategy's own `name`
+    """ctx.call takes the tool's name positionally, so add_strategy's own `name`
     argument is not swallowed by the call - it raised TypeError once."""
     with pytest.raises(tools.NoSuchToolError, match="no tool named 'no_such_tool'"):
-        tools.run_tool(tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x"), "no_such_tool",
-                       name="Players play optimally")
+        tools.Context(dsn="postgresql://nobody@127.0.0.1:9/x").call(
+            "no_such_tool", name="Players play optimally")

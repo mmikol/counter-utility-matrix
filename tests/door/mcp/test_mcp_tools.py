@@ -31,44 +31,44 @@ def ctx(db, dsn):
 
 @pytest.mark.invariant
 def test_query_is_read_only(ctx):
-    _text, data = tools.run_tool(ctx, "query", sql="select count(*) from heroes")
+    _text, data = ctx.call("query", sql="select count(*) from heroes")
     assert data["rows"][0][0] > 40
-    text, data = tools.run_tool(ctx, "query", sql="select generate_series(1, 300)")
+    text, data = ctx.call("query", sql="select generate_series(1, 300)")
     assert len(data["rows"]) == 200 and data["truncated"] is True
     assert text.endswith("\n(truncated: 200 rows shown)")
-    _text, data = tools.run_tool(ctx, "query", sql="select generate_series(1, 200)")
+    _text, data = ctx.call("query", sql="select generate_series(1, 200)")
     assert len(data["rows"]) == 200 and data["truncated"] is False
     with pytest.raises(Refusal, match="read-only"):
-        tools.run_tool(ctx, "query", sql="delete from heroes")
+        ctx.call("query", sql="delete from heroes")
     with pytest.raises(Refusal, match="read-only"):
-        tools.run_tool(ctx, "query", sql="select 1; drop table heroes")
+        ctx.call("query", sql="select 1; drop table heroes")
     # what Postgres rejects is the caller's to fix too, answered in its words
     with pytest.raises(Refusal, match='query: column "nosuch" does not exist'):
-        tools.run_tool(ctx, "query", sql="select nosuch from heroes")
+        ctx.call("query", sql="select nosuch from heroes")
 
 
 @pytest.mark.invariant
 def test_db_status_and_roster(ctx):
-    text, status = tools.run_tool(ctx, "db_status")
+    text, status = ctx.call("db_status")
     # 33: map_strategy went with counterpick.gg (migration 019)
     assert status["table_count"] >= 33 and status["counts"]["heroes"] > 40
     assert status["state"] == "current" and "state: current" in text
     assert status["counts"]["counters"] >= 100
     assert {s["source"] for s in status["snapshots"]} == {"blizzard"}
-    _, roster = tools.run_tool(ctx, "roster")
+    _, roster = ctx.call("roster")
     assert any(h["name"] == "Ana" and h["portrait"] for h in roster["heroes"])
     assert any(m["name"] == "King's Row" and m["mode"] == "Hybrid" for m in roster["maps"])
 
 
 @pytest.mark.invariant
 def test_facts_and_infer_through_the_tools(ctx):
-    text, data = tools.run_tool(ctx, "facts", map="King's Row", red=["Zarya"], blue=["Ana"])
+    text, data = ctx.call("facts", map="King's Row", red=["Zarya"], blue=["Ana"])
     assert data["count"] > 300 and text.startswith("[F1]")
     with pytest.raises(Refusal, match="unknown heroes"):
-        tools.run_tool(ctx, "facts", red=["Goku"])
+        ctx.call("facts", red=["Goku"])
     with pytest.raises(Refusal, match="unknown heroes"):
-        tools.run_tool(ctx, "reach", hero="Nosuchhero")
-    text, data = tools.run_tool(ctx, "infer", map="King's Row", red=["Zarya"], blue=["Ana"])
+        ctx.call("reach", hero="Nosuchhero")
+    text, data = ctx.call("infer", map="King's Row", red=["Zarya"], blue=["Ana"])
     assert len(data["blue"]) == 6 and "Ana" in data["blue"]
     assert "optimal comp" in text
 
@@ -76,8 +76,8 @@ def test_facts_and_infer_through_the_tools(ctx):
 @pytest.mark.invariant
 def test_a_compact_infer_names_the_silent_heuristics_and_fits_a_reply(ctx):
     board = {"map": "King's Row", "red": ["Zarya"], "blue": ["Ana"]}
-    _, full = tools.run_tool(ctx, "infer", **board)
-    text, data = tools.run_tool(ctx, "infer", compact=True, **board)
+    _, full = ctx.call("infer", **board)
+    text, data = ctx.call("infer", compact=True, **board)
     assert data["blue"] == full["blue"] and data["score"] == full["score"]
     silent = sorted(c["id"] for c in full["contributions"] if c.get("spread") is False)
     assert data["silent"] == silent
@@ -89,13 +89,13 @@ def test_a_compact_infer_names_the_silent_heuristics_and_fits_a_reply(ctx):
 
 @pytest.mark.invariant
 def test_db_migrate_is_idle_when_the_ledger_is_current(ctx):
-    text, data = tools.run_tool(ctx, "db_migrate")
+    text, data = ctx.call("db_migrate")
     assert data["applied"] == [] and text.startswith("db_migrate: applied 0")
 
 
 @pytest.mark.invariant
 def test_query_runs_as_the_reader_role(ctx):
-    _text, data = tools.run_tool(ctx, "query", sql="select current_user, count(*) from heroes")
+    _text, data = ctx.call("query", sql="select current_user, count(*) from heroes")
     assert data["rows"][0][0] == "matrix_reader" and data["rows"][0][1] > 0
 
 
@@ -106,22 +106,22 @@ def test_query_refuses_file_and_server_reaching_sql_before_connecting():
     for sql in ("select pg_read_file('/etc/passwd')", "select * from pg_ls_dir('.')",
                 "COPY heroes TO PROGRAM 'id'", "select pg_sleep(10)"):
         with pytest.raises(Refusal, match=r"refuses|read-only"):
-            tools.run_tool(nowhere, "query", sql=sql)
+            nowhere.call("query", sql=sql)
     long = "select '%s'" % ("x" * (lifecycle.MAX_SQL_CHARS - 8))       # one character over
     assert len(long) == lifecycle.MAX_SQL_CHARS + 1
     with pytest.raises(Refusal, match="too long"):
-        tools.run_tool(nowhere, "query", sql=long)
+        nowhere.call("query", sql=long)
 
 
 def test_metrics_tool_serves_the_vocabulary():
-    text, data = tools.run_tool(tools.Context(dsn="postgresql://nowhere"), "metrics")
+    text, data = tools.Context(dsn="postgresql://nowhere").call("metrics")
     assert "team.coverage_share" in data["metrics"] and "team.coverage_share" in data["numeric"]
     assert "map.side" in data["text"] and "map.side" not in data["numeric"]
     assert text.splitlines()[0].startswith("team.")
 
 
 def test_derive_strategies_is_idle_with_nothing_pending():
-    text, data = tools.run_tool(tools.Context(dsn="postgresql://nowhere"), "derive_strategies")
+    text, data = tools.Context(dsn="postgresql://nowhere").call("derive_strategies")
     assert data["skipped"] == "nothing pending" and "nothing pending" in text
     assert data["deferred"] == 0
 
@@ -144,16 +144,18 @@ def test_every_playbook_write_mirrors_the_catalog_once(tmp_path, monkeypatch):
     ctx = Offline(dsn="postgresql://nowhere")
     heuristic = next(h for h in catalog.load() if h.kind == "heuristic")
     files = len(catalog.strategy_files(str(tmp_path)))
-    tools.run_tool(ctx, "tune", id=heuristic.id, field="weight", value=3, reason="a test")
+    ctx.call("tune", id=heuristic.id, field="weight", value=3, reason="a test")
     assert mirrored == [("cx", files)]
-    tools.run_tool(ctx, "add_strategy", id="a-draft", name="A draft", kind="heuristic",
-                   body="Prose to infer from.", reason="a test")
+    ctx.call(
+        "add_strategy", id="a-draft", name="A draft", kind="heuristic",
+        body="Prose to infer from.", reason="a test")
     assert mirrored[1:] == [("cx", files + 1)]            # the new file is in the mirror
-    tools.run_tool(ctx, "infer_strategy", id="a-draft", reason="a test",
-                   metric=heuristic.metric, direction="maximize", weight=1)
+    ctx.call(
+        "infer_strategy", id="a-draft", reason="a test", metric=heuristic.metric,
+        direction="maximize", weight=1)
     assert len(mirrored) == 3
     assert not [h.id for h in catalog.load() if h.pending]
-    _, data = tools.run_tool(ctx, "derive_strategies")
+    _, data = ctx.call("derive_strategies")
     assert data["derived"] == [] and len(mirrored) == 3
 
 
@@ -176,8 +178,7 @@ def test_a_board_tool_hands_its_function_one_draft(tmp_path, monkeypatch):
             return contextlib.nullcontext("cx")
     monkeypatch.setattr(tables, "load", lambda cx: None)
     monkeypatch.setattr(board_facts, "generate", lambda world, draft: seen.append(draft) or Stub())
-    tools.run_tool(Offline(dsn="postgresql://nowhere"), "facts", map="Ilios", red=["Ana"],
-                   bans=["Mei"])
+    Offline(dsn="postgresql://nowhere").call("facts", map="Ilios", red=["Ana"], bans=["Mei"])
     assert seen == [Draft("Ilios", ("Ana",), (), ("Mei",), "")]
     for name in ("facts", "infer", "evaluate", "board"):
         assert list(tools.REGISTRY.get(name).schema["properties"])[:5] == list(boards.BOARD)

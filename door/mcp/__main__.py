@@ -22,7 +22,7 @@ def _status(ctx: tools.Context) -> Callable[[], dict[str, object]]:
     def status() -> dict[str, object]:
         try:
             # the tool is named, so its payload is the one db_status builds
-            found = cast(DbStatus, tools.run_tool(ctx, "db_status").data)
+            found = cast(DbStatus, ctx.call("db_status").data)
             return {"status": "ok", "state": found["state"],
                     "table_count": found["table_count"],
                     "pending_migrations": found["pending_migrations"],
@@ -47,7 +47,7 @@ def _call(ctx: tools.Context, name: str, text: str) -> int:
         print(__doc__, file=sys.stderr)
         return 2
     try:
-        shown, _ = tools.run_tool(ctx, name, **arguments)
+        shown, _ = ctx.call(name, **arguments)
     except (tools.NoSuchToolError, Refusal) as error:
         print("error: %s" % error, file=sys.stderr)
         return 1
@@ -58,7 +58,7 @@ def _call(ctx: tools.Context, name: str, text: str) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     ctx = tools.Context()
-    server = Server(tools.build(ctx), tools.StrategyResources())
+    server = Server(tools.REGISTRY.bind(ctx), tools.StrategyResources())
     if not argv:
         stdio.serve(server)
         return 0
@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> int:
                    allowed_hosts=argv[2:])
         return 0
     if argv[0] == "list":
-        for t in tools.build(ctx):
+        for t in tools.REGISTRY.bind(ctx):
             print("%-16s %s" % (t.name, t.description.split(". ")[0]))
         return 0
     if argv[0] == "call" and len(argv) >= 2:

@@ -145,13 +145,8 @@ class Registry:
         NoSuchToolError, which reaches no tool and leaves no audit line. The
         name is positional only, so a tool argument called `name` (add_strategy
         has one) reaches the tool instead of colliding here."""
-        spec = self.get(name)
-        tool = _bind(ctx, spec)
-
-        def call() -> ToolReply:
-            tool.check(arguments)
-            return spec.fn(ctx, **arguments)
-        return audited(name, arguments, call, "in-process")
+        tool = _bind(ctx, self.get(name))
+        return audited(name, arguments, lambda: tool(arguments), "in-process")
 
     def write_docs(self, path: str | None = None) -> str:
         """The tool reference - every tool, its description and its arguments -
@@ -225,5 +220,6 @@ class Context:
         return fetch.prepare_cache(self.caches[source])
 
     def call(self, name: str, /, **arguments: object) -> ToolReply:
-        """Another tool by name, validated and audited as an in-process call."""
+        """A tool by name, in-process - the refresher's, the shell's, the
+        board's and one tool's call of another (Registry.run)."""
         return self.tools.run(self, name, **arguments)

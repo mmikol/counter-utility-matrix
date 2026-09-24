@@ -60,7 +60,7 @@ when the pool starts. The pool is spawn-context: killing the parent leaves
 `spawn_main` workers orphaned under launchd, so stop them too.
 
 Without the database, two generated sections regenerate on their own:
-`.venv/bin/python -c "from door.mcp import tools; tools.write_tool_docs()"`
+`.venv/bin/python -c "from door.mcp import tools; tools.REGISTRY.write_docs()"`
 (docs/mcp.md) and
 `.venv/bin/python -c "from inference import catalog; catalog.write_docs(catalog.load())"`
 (the catalog in docs/inference.md). The second writes nothing while
@@ -79,7 +79,7 @@ db <- facts <- inference <- door <- ui.
   `playbook` in `door/mcp/`) declares its tools with `@tool(...)` into the
   one `REGISTRY` (`door/mcp/registry.py`), which lists them in `FAMILIES`'
   order, and `door/mcp/tools.py` imports every family. A call arrives over
-  stdio, HTTP or in-process (`tools.run_tool`), is checked against the
+  stdio, HTTP or in-process (`ctx.call`), is checked against the
   tool's schema by the same `Tool` wrapper on every path, and is audited to
   `db/raw/audit.jsonl` - except the sentry, which renames a bad strategy
   file to `.md.quarantined` outside the door. The code that writes lives

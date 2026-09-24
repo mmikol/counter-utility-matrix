@@ -206,7 +206,7 @@ def test_a_broken_playbook_is_a_server_fault_at_the_door(tmp_path, monkeypatch):
     monkeypatch.setenv("COUNTRIX_STRATEGIES", str(empty))
     logged = []
     audit = tmp_path / "audit.jsonl"
-    server = Server(tools.build(tools.Context(dsn="postgresql://nowhere")),
+    server = Server(tools.REGISTRY.bind(tools.Context(dsn="postgresql://nowhere")),
                     tools.StrategyResources(), log=logged.append, audit_path=str(audit))
     for method, params in (("tools/call", {"name": "strategies", "arguments": {}}),
                            ("resources/list", {})):

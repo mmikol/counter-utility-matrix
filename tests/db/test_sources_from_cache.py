@@ -58,7 +58,7 @@ def _offline(self, url, params=None, **kwargs):
 
 @needs_caches
 def test_blizzard_roster_pulls_from_the_cache(ctx):
-    text, data = tools.run_tool(ctx, "pull_heroes")
+    text, data = ctx.call("pull_heroes")
     assert text.startswith("pull_heroes: roster stored") and data["heroes"] >= 50
     assert "heroes" in data["tables"]
     assert data["missing"] == []                 # every hero page read from the cache
@@ -70,7 +70,7 @@ def test_blizzard_rates_pull_from_the_cache_and_leave_no_snapshot(ctx, snapshots
     # only a requests failure, so the pull neither waits out six attempts nor
     # reads the live site at 5 s a page
     monkeypatch.setattr(requests.Session, "get", _offline)
-    text, data = tools.run_tool(ctx, "pull_rates")
+    text, data = ctx.call("pull_rates")
     assert text.startswith("pull_rates: snapshot stored")
     assert data["tables"] == ["regions", "competitive_tiers", "meta_snapshots",
                               "hero_meta", "map_meta"]
@@ -85,7 +85,7 @@ def test_blizzard_rates_pull_from_the_cache_and_leave_no_snapshot(ctx, snapshots
 
 @needs_caches
 def test_wiki_kits_pull_from_the_cache_and_keep_the_announced(ctx):
-    _text, data = tools.run_tool(ctx, "pull_kits")
+    _text, data = ctx.call("pull_kits")
     assert data["cargo_rows"] > 500 and "abilities" in data["tables"]
     assert "All heroes" in data["unknown_heroes"]          # wiki pages that are not heroes
     assert isinstance(data["announced"], list)
@@ -123,7 +123,7 @@ def test_wiki_kits_store_the_numbers_the_pages_publish(db, dsn):
         def connect(self):
             return _ReadThenRolledBack(psycopg.connect(self.dsn), seen)
 
-    tools.run_tool(Reading(dsn=dsn), "pull_kits")
+    Reading(dsn=dsn).call("pull_kits")
     assert seen == [
         # Cargo's heal is empty for Kasa; the article supplies it
         ("Mizuki", "Healing Kasa", "heal", 90.0, "hp", None, "1st bounce"),
@@ -176,7 +176,7 @@ STAGES_BY_MAP = """
 @needs_caches
 def test_wiki_maps_store_each_modes_stages(shared):
     ctx, connection = shared
-    text, data = tools.run_tool(ctx, "pull_maps")
+    text, data = ctx.call("pull_maps")
     assert "maps_with_stages" in text and data["missing"] == []
     stages = {}
     for code, name, names in connection.execute(STAGES_BY_MAP):
@@ -211,8 +211,8 @@ def test_wiki_terrain_pulls_the_stages_terrain_after_the_maps(shared):
     ctx, connection = shared
     order = [spec.name for spec in tools.REGISTRY.pulls()]
     assert order.index("pull_maps") < order.index("pull_terrain")
-    tools.run_tool(ctx, "pull_maps")
-    text, data = tools.run_tool(ctx, "pull_terrain")
+    ctx.call("pull_maps")
+    text, data = ctx.call("pull_terrain")
     assert text.startswith("pull_terrain: terrain stored")
     assert data["tables"] == ["map_terrain", "stage_terrain"]
     assert data["stage_rows"] == data["stages"] * 8 > 0
@@ -227,18 +227,18 @@ def test_wiki_terrain_pulls_the_stages_terrain_after_the_maps(shared):
 
 @needs_caches
 def test_wiki_maps_patches_and_playstyles_pull_from_the_cache(ctx):
-    text, data = tools.run_tool(ctx, "pull_maps")
+    text, data = ctx.call("pull_maps")
     assert text.startswith("pull_maps:") and data["modes"] == 5 and data["stages"] >= 2
-    text, data = tools.run_tool(ctx, "pull_patches")
+    text, data = ctx.call("pull_patches")
     assert text.startswith("pull_patches: patches stored") and data["patches"] > 0
-    text, data = tools.run_tool(ctx, "pull_playstyles")
+    text, data = ctx.call("pull_playstyles")
     assert text.startswith("pull_playstyles:") and data["links"] > 0
     assert {name.lower() for name in data["playstyles"]} >= {"dive", "brawl", "poke"}
 
 
 @needs_caches
 def test_wiki_counters_pull_from_the_cache_and_stamp_no_snapshot(ctx, snapshots, db):
-    text, data = tools.run_tool(ctx, "pull_counters")
+    text, data = ctx.call("pull_counters")
     assert text.startswith("pull_counters: counters stored") and data["counters"] > 100
     assert data["tables"] == ["counters"] and data["unmatched"] == [] and data["missing"] == []
     assert data["articles"] >= 40 and data["cells"] > data["no_verdict"] > 0
@@ -253,10 +253,10 @@ def test_wiki_counters_pull_from_the_cache_and_stamp_no_snapshot(ctx, snapshots,
 
 @needs_caches
 def test_wiki_seasons_and_synergies_pull_from_the_cache(ctx, snapshots):
-    text, data = tools.run_tool(ctx, "pull_seasons")
+    text, data = ctx.call("pull_seasons")
     assert text.startswith("pull_seasons: seasons stored") and data["seasons"] > 20
     assert data["stamped"] == snapshots and data["tables"] == ["seasons", "meta_snapshots"]
-    text, data = tools.run_tool(ctx, "pull_synergies")
+    text, data = ctx.call("pull_synergies")
     assert text.startswith("pull_synergies: pairs stored") and data["synergies"] > 100
     assert 0 < data["mutual"] < data["synergies"] and data["unmatched"] == []
     assert data["missing"] == []
@@ -265,7 +265,7 @@ def test_wiki_seasons_and_synergies_pull_from_the_cache(ctx, snapshots):
 @needs_caches
 def test_load_authored_mirrors_the_strategies_and_nothing_else(ctx):
     from inference import catalog
-    text, data = tools.run_tool(ctx, "load_authored")
+    text, data = ctx.call("load_authored")
     assert text.startswith("load_authored: strategies ") and set(data) == {"strategies"}
     assert data["strategies"]["total"] == len(catalog.load())
     assert data["strategies"]["tables"] == ["strategies"]
