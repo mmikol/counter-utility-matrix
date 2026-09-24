@@ -69,7 +69,7 @@ def test_the_agents_run_is_headless_claude_on_the_refresh_skill(monkeypatch):
         assert not any(t.endswith("__" + never) for t in allowed), never
     from inference import derive
     monkeypatch.setattr(derive, "cli", lambda: None)
-    with pytest.raises(RuntimeError, match="no claude CLI"):
+    with pytest.raises(RuntimeError, match="set COUNTRIX_CLAUDE"):
         orchestrator.agents_command()
 
 

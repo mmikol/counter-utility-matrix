@@ -59,14 +59,16 @@ def test_every_relative_link_in_the_docs_resolves():
     assert not broken, broken
 
 
-ENV_RE = re.compile(r"""os\.environ\.get\(\s*["']"""
-                    r"""(COUNTRIX_[A-Z_]+|DATABASE_URL)["']""")
+# Any quoted COUNTRIX_ name, not only an os.environ.get argument: a setting read
+# through a constant or a helper still spells its name as a literal somewhere
+ENV_RE = re.compile(r"""["'](COUNTRIX_[A-Z_]+|DATABASE_URL)["']""")
 # read where the code reads them, documented where a reader looks: the settings
 # table in architecture.md, or db.md for the refresh clock it delegates
 ENV_DOCS = ("architecture.md", "db.md")
 
 
 def test_every_setting_the_code_reads_is_documented():
+    assert ENV_RE.findall('CLI = "COUNTRIX_X"') == ["COUNTRIX_X"]   # a name kept in a constant
     names = set()
     for folder in ("db", "ui", "inference"):
         for base, _, files in os.walk(os.path.join(ROOT, folder)):

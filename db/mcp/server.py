@@ -334,7 +334,6 @@ LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 MAX_BODY = 1 << 20            # one request is a tool call, not an upload
 MAX_BATCH = 20                # messages in one JSON-RPC batch
 RATE_LIMIT = 120              # tool calls per client address per minute
-TOKEN_ENV = "COUNTRIX_MCP_TOKEN"
 
 
 class HttpHandler(BaseHTTPRequestHandler):
@@ -460,7 +459,7 @@ class HttpServer(ThreadingHTTPServer):
         self.mcp = mcp
         self.status = status
         self.allowed_hosts = set(allowed_hosts)
-        self.token = token if token is not None else os.environ.get(TOKEN_ENV) or None
+        self.token = token if token is not None else os.environ.get("COUNTRIX_MCP_TOKEN") or None
         self.rate_limit = rate_limit
         self._calls: dict[str, list[float]] = {}
         self._lock = threading.Lock()

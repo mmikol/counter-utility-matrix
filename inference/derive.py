@@ -33,7 +33,6 @@ from inference import tune
 from inference.catalog import Strategy
 from ui.facts import compute
 
-CLI_ENV = "COUNTRIX_CLAUDE"
 CLI_CANDIDATES = ("claude",                                   # on PATH, any OS
                   os.path.expanduser("~/.local/bin/claude"))    # the native installer's default
 TIMEOUT = 300
@@ -78,7 +77,7 @@ class CliUnavailableError(RuntimeError):
 
 def cli() -> str | None:
     """The claude CLI to run, or None."""
-    explicit = os.environ.get(CLI_ENV)
+    explicit = os.environ.get("COUNTRIX_CLAUDE")
     if explicit:
         return explicit if os.path.exists(explicit) else shutil.which(explicit)
     for candidate in CLI_CANDIDATES:
@@ -194,7 +193,7 @@ def run_cli(text: str, timeout: float = TIMEOUT) -> str:
     servers) with no session inherited -> the answer text."""
     binary = cli()
     if not binary:
-        raise RuntimeError("no claude CLI on this machine (set %s)" % CLI_ENV)
+        raise RuntimeError("no claude CLI on this machine (set COUNTRIX_CLAUDE)")
     env = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
     argv = [binary, "-p", "--output-format", "text", "--no-session-persistence",
             "--strict-mcp-config", "--tools", "", "--max-turns", "2"]

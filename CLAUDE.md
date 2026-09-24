@@ -117,7 +117,7 @@ Three layers over one database, each a folder: `db/` (DATA), `ui/` (FACTS),
 - A new tracked file or folder at the root must be named in
   `docs/architecture.md` - a file in The files, a folder in The folders. The
   test greps the whole doc for the name.
-- Every `os.environ.get("COUNTRIX_...")` in `db/`, `ui/`, `inference/` or
+- Every quoted `"COUNTRIX_..."` name in `db/`, `ui/`, `inference/` or
   `orchestrator.py` must appear in docs/architecture.md or docs/db.md.
 - Text between `<!-- generated:NAME -->` markers is rendered from code and
   compared with a fresh render. Never edit it by hand; change the source

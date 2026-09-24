@@ -267,7 +267,7 @@ def agents_command(claude: str | None = None) -> list[str]:
     from inference import derive
     binary = claude or derive.cli()
     if not binary:
-        raise RuntimeError("no claude CLI on this machine (set %s)" % derive.CLI_ENV)
+        raise RuntimeError("no claude CLI on this machine (set COUNTRIX_CLAUDE)")
     return [binary, "-p", "/refresh", "--output-format", "text",
             "--mcp-config", os.path.join(ROOT, ".mcp.json"), "--strict-mcp-config",
             "--allowedTools", AGENT_TOOLS, "--tools", "", "--max-turns", "80",
