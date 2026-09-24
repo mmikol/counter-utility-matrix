@@ -16,7 +16,7 @@ import pytest
 
 from db import ROOT, Refusal
 from door.mcp import tools
-from door.mcp.audit import audit
+from door.mcp.audit import audit, audited
 from door.mcp.schema import Tool, tool_schema
 from door.mcp.server import Server
 from inference import catalog, tune
@@ -248,3 +248,17 @@ def test_an_audit_line_that_cannot_be_written_is_noted_on_stderr_and_not_raised(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err.startswith("countrix mcp: the audit log %s was not written: " % tmp_path)
+
+
+def test_an_audit_line_records_sizes_and_type_names_never_values(tmp_path):
+    """A string, a list or an object is recorded by its length; a number, a
+    bool or None by its type name, so a tune's weight never reaches the log."""
+    path = tmp_path / "audit.jsonl"
+    arguments = {"weight": 7.25, "top": 3, "flag": True, "none": None, "names": ["Ana"],
+                 "sql": "select 1"}
+    assert audited("t", arguments, lambda: "ok", "in-process", "shell",
+                   audit_path=str(path)) == "ok"
+    [line] = [json.loads(text) for text in path.read_text(encoding="utf-8").splitlines()]
+    assert line["args"] == {"weight": "float", "top": "int", "flag": "bool", "none": "NoneType",
+                            "names": 1, "sql": 8}
+    assert line["ok"] is True and line["client"] == "shell"

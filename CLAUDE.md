@@ -76,7 +76,8 @@ db <- facts <- inference <- door <- ui.
   order, and `door/mcp/tools.py` imports every family. A call arrives over
   stdio, HTTP or in-process (`ctx.call`), is checked against the
   tool's schema by the same `Tool` wrapper on every path, and is audited to
-  `db/raw/audit.jsonl` - except the sentry, which renames a bad strategy
+  `db/raw/audit.jsonl` (argument sizes and type names, never values) -
+  except the sentry, which renames a bad strategy
   file to `.md.quarantined` outside the door. The code that writes lives
   with what it writes - the pulls in `db/data`, the strategies table in
   `inference.catalog.mirror`, the playbook's files in `inference.tune` - and

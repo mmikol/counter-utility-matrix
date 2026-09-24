@@ -16,7 +16,7 @@ from collections.abc import Callable, Iterable, Mapping
 from typing import NotRequired, Protocol, TypedDict
 
 from db import Refusal
-from door.mcp.audit import audited
+from door.mcp.audit import Transport, audited
 from door.mcp.schema import Tool
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
@@ -128,7 +128,7 @@ class Server:
         self.tools = {t.name: t for t in tools}
         self.resources = resources
         self.log = log or (lambda msg: sys.stderr.write(msg + "\n"))
-        self.transport = "stdio"
+        self.transport: Transport = "stdio"
         self.audit_path = audit_path
 
     def handle(self, message: object, client: str | None = None) -> Response | None:
