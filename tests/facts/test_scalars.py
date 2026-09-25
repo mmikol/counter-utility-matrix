@@ -89,6 +89,11 @@ def test_a_supports_healing_lands_on_teammates_and_a_self_heal_is_its_own():
     assert (hero.hps, hero.peak_heal, hero.self_hps, hero.self_heal) == (60.0, 70.0, 0.0, 30.0)
     # a healing beam deals no damage: it is not a beam weapon
     assert not hero.beam and hero.weapon_kinds == set()
+    # a self row under a longer condition is the hero's own too
+    purr = _kit("Purr", KIND_ABILITY, _stat("heal", 30, "hp", condition="per pulse, allies"),
+                _stat("heal", 40, "hp", condition="per pulse, self"))
+    cat = _hero("support", abilities=[purr])
+    assert (cat.peak_heal, cat.self_heal) == (30.0, 40.0)
 
 
 def test_a_non_supports_healing_is_its_own_unless_it_lands_on_an_ally():

@@ -5,7 +5,7 @@ row is built by hand in the shape the wiki publishes it."""
 import pytest
 
 from db import KIND_ABILITY, KIND_ULTIMATE, KIND_WEAPON
-from facts.kit import Kit, Stat, dual_rate
+from facts.kit import Kit, Stat, dual_rate, on_self
 
 # a stat row as the loader reads it, column by column
 STAT_COLUMNS = ("code", "value", "unit_num", "unit_den", "den_value", "condition", "text")
@@ -221,6 +221,20 @@ def test_a_cast_whose_only_damage_is_on_the_hero_itself_hits_nothing():
         ("damage", 10, "hp", None, None, "explosion, self", "10"),
         ("pellets", 6, None, None, None, None, "6"))
     assert recoil.cast_hit() is None
+
+
+def test_a_row_is_on_the_hero_itself_when_one_part_of_its_condition_says_self():
+    for condition in ("self", "splash, self, min", "per pulse, self", "bonus self-knockback"):
+        assert on_self(condition), condition
+    # an enemy and the hero together is not the hero alone
+    for condition in (None, "", "enemy", "splash, enemy & self"):
+        assert not on_self(condition), condition
+    # a knockback on the hero itself shoves no one; one on an enemy and the hero does
+    recoil = _kit(KIND_ABILITY, (
+        "kbspeed", 12.3, "meters", "seconds", 1, "bonus self-knockback", "12.3"))
+    accretion = _kit(KIND_ABILITY, (
+        "kbspeed", 15, "meters", "seconds", 1, "splash, enemy & self", "15"))
+    assert not recoil.shoves and accretion.shoves
 
 
 def test_a_heal_rate_is_the_weapons_else_the_per_second_heal_for_its_uptime():

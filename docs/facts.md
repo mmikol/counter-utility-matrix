@@ -52,8 +52,9 @@ cast's damage, `reach` how far a weapon fights, `dual_rate` two guns fired
 from one magazine. This is the one place the wiki's prose is read:
 `db/data/wiki/kits/measurements.py` splits a stat into measurements at ingest
 and keeps its text, and the wording rules - a reload in a row's text, a
-figure that is a sum, an overhealth percent worth its cap - live here, so a
-misread stat is fixed in this file and needs no re-pull.
+figure that is a sum, an overhealth percent worth its cap, a row on the hero
+itself (`on_self`) - live here, so a misread stat is fixed in this file and
+needs no re-pull.
 
 ### `model.py` - the World
 

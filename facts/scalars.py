@@ -11,7 +11,7 @@ the authored name lists below decide what a kit piece counts toward.
 import statistics
 
 from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON
-from facts.kit import Kit, dual_rate
+from facts.kit import Kit, dual_rate, on_self
 from facts.model import Hero
 
 # Keyword families the wiki tags abilities with, read verbatim from the
@@ -118,12 +118,12 @@ def _healing(hero: Hero, fought: list[Kit], dps: float) -> None:
     for kit in fought:
         mine = not (hero.role == "support" or kit.for_allies or "deployable" in kit.keywords)
         rate = kit.heal_rate()
-        casts = [s.value for s in kit.flat("heal") if s.condition != "self"]
+        casts = [s.value for s in kit.flat("heal") if not on_self(s.condition)]
         if rate:
             (own_rate if mine else team_rate).append(rate)
         if casts:
             (own_cast if mine else team_cast).append(max(casts))
-        own_cast.extend(s.value for s in kit.flat("heal") if s.condition == "self")
+        own_cast.extend(s.value for s in kit.flat("heal") if on_self(s.condition))
         if mine and kit.kind != KIND_WEAPON:
             own_cast.extend(kit.run_casts())
         share = _share_cast(kit, mine, dps)
@@ -143,7 +143,7 @@ def _share_cast(kit: Kit, mine: bool, dps: float) -> float | None:
     shares = [
         s.value / 100.0 for s in kit.stats.get("heal", ())
         if s.value is not None and s.unit_num == "percent"
-        and (s.condition == "self" or (mine and not s.condition))]
+        and (on_self(s.condition) or (mine and not s.condition))]
     if shares and runs and kit.max_stat("cooldown") and not kit.damages:
         return max(shares) * dps * runs
     return None

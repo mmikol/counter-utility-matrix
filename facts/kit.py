@@ -5,9 +5,10 @@ db/data/wiki/kits/measurements.py stores each wiki stat as measurements
 (value, unit, condition) beside the stat's original value_text. This module
 derives a kit piece's combat numbers from both at read time - a reload
 worded beside a firing rate, a figure that is a sum and not one hit, a
-percent worth its published cap - so a fix to how a wording is read is a
-code change here and needs no re-pull. The rest of the facts package reads
-the measurements and the keywords, never the prose.
+percent worth its published cap, a row on the hero itself - so a fix to how
+a wording is read is a code change here and needs no re-pull. The rest of
+the facts package reads the measurements and the keywords, never the
+prose.
 """
 
 import math
@@ -24,6 +25,8 @@ from db import KIND_ABILITY, KIND_WEAPON
 ALLY_QUALIFIERS = ("target ally", "targets")
 # an area row: it lands on the body, never the head
 SPLASH_RE = re.compile(r"explosion|splash", re.I)
+# one part of a condition that names the hero itself: "self", "bonus self-knockback"
+SELF_RE = re.compile(r"[\w ]*\bself(?:-\w+)?", re.I)
 # a flat damage figure that is a sum, not one hit
 SUMMED_RE = re.compile(r"\b(dot|over time|total|if all|both|maximum)\b", re.I)
 # a rate with its reload folded in, as the wiki words it beside the firing rate
@@ -112,6 +115,14 @@ def _first_figure(text: str | None) -> float | None:
     return float(found.group(2) or found.group(1)) if found else None
 
 
+def on_self(condition: str | None) -> bool:
+    """A row on the hero itself: one comma-separated part of its condition is
+    "self" ("splash, self, min", "per pulse, self", "self, 0% Energy, max") or
+    a self- word ("bonus self-knockback", "self-healing"). "splash, enemy &
+    self" reaches the enemy too, so it is not."""
+    return any(SELF_RE.fullmatch(part.strip()) for part in (condition or "").split(","))
+
+
 def _reload_figure(stat: Stat, value: float) -> float | None:
     """A rate row's figure with the reload in, where its wording has one: the
     figure in its condition ("68.18 overall w/reload"), else the one its text
@@ -187,7 +198,7 @@ class Kit:
         """Knocks an enemy back at MIN_KNOCKBACK or more."""
         pushes = (
             s.value for s in self.stats.get("kbspeed", ())
-            if s.value is not None and "self" not in (s.condition or ""))
+            if s.value is not None and not on_self(s.condition))
         return max(pushes, default=0.0) >= MIN_KNOCKBACK
 
     @property
@@ -300,7 +311,7 @@ class Kit:
             return rate
         rate = max(
             (s.per_second for c in ("hps", "heal") for s in self.stats.get(c, ())
-                if s.per_second and s.condition != "self"),
+                if s.per_second and not on_self(s.condition)),
             default=None)
         wait, lasts = self.max_stat("cooldown"), self.max_stat("duration")
         if rate and wait and lasts:     # up for `lasts` of every lasts + wait
@@ -342,7 +353,7 @@ class Kit:
         apiece = all(
             s.condition and not SUMMED_RE.search("%s %s" % (s.condition, s.text or ""))
             for s in rows)
-        hits = [s.value for s in rows if "self" not in (s.condition or "")]
+        hits = [s.value for s in rows if not on_self(s.condition)]
         if self.kind != KIND_ABILITY or pieces < 2 or not hits or not apiece:
             return None
         return pieces * max(hits)
@@ -370,7 +381,7 @@ class Kit:
     def _fired_at_rate(self, shots: list[float], lasts: float) -> float:
         """The largest hit fired at the fastest rate for `lasts` seconds, no more
         shots than the ammo. A hit on the hero itself is not the ultimate's."""
-        hits = [s.value for s in self.flat("damage") if "self" not in (s.condition or "")]
+        hits = [s.value for s in self.flat("damage") if not on_self(s.condition)]
         if not hits:
             return 0.0
         return max(hits) * min(max(shots) * lasts, self.max_stat("ammo") or math.inf)
@@ -382,7 +393,7 @@ class Kit:
         timed = [
             (s.value, w.value) for w in self.stats.get("cooldown", ()) if w.value and w.condition
             for s in self.flat("damage")
-            if w.condition in (s.condition or "") and "self" not in (s.condition or "")]
+            if w.condition in (s.condition or "") and not on_self(s.condition)]
         return max((hit * (1 + math.floor(lasts / wait)) for hit, wait in timed), default=0.0)
 
 
