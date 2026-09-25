@@ -165,6 +165,14 @@ def test_a_note_is_the_first_sentence_cut_to_a_clause_under_the_limit():
     assert len(clause(unbroken)) < synergies.NOTE_LIMIT and clause(unbroken).endswith("word")
 
 
+def test_the_first_sentence_is_read_uncut_whatever_its_length():
+    first = synergies.first_sentence
+    assert first("Nano D.Va. She dives. Then more.") == "Nano D.Va"
+    long = "With a friendly Sigma on your team, " + "you hold the line, " * 10 + "and win. More."
+    assert first(long) == long[: -len(". More.")]
+    assert first("  No sentence end;  ") == "No sentence end"
+
+
 def test_pairs_are_stored_once_and_scored_by_how_many_articles_claim_them():
     ids = {"ana": 1, "genji": 2, "dva": 3, "cassidy": 4}
     pairs, unmatched = synergies.pair_up({

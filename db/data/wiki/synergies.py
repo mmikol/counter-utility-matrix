@@ -174,23 +174,28 @@ def plain(cell: str) -> str:
     return next(iter(paragraphs(cell)), "")
 
 
-def clause(text: str, limit: int = NOTE_LIMIT) -> str:
-    """The first sentence, cut to a clause under `limit` characters: a long
-    sentence loses its opener, then everything past its last clause that fits."""
+def first_sentence(text: str) -> str:
+    """The first sentence, uncut, its closing punctuation dropped."""
     end = SENTENCE_END_RE.search(text)
     sentence = text[: end.start()] if end else text
-    sentence = sentence.strip().rstrip(".!?;:, ")
-    if len(sentence) < limit:
+    return sentence.strip().rstrip(".!?;:, ")
+
+
+def clause(text: str) -> str:
+    """The first sentence, cut to a clause under NOTE_LIMIT characters: a long
+    sentence loses its opener, then everything past its last clause that fits."""
+    sentence = first_sentence(text)
+    if len(sentence) < NOTE_LIMIT:
         return sentence
     opener = OPENER_RE.match(sentence)
     if opener:
         sentence = sentence[opener.end()].upper() + sentence[opener.end() + 1:]
-        if len(sentence) < limit:
+        if len(sentence) < NOTE_LIMIT:
             return sentence
-    cuts = [m.start() for m in CLAUSE_END_RE.finditer(sentence) if 30 <= m.start() < limit]
+    cuts = [m.start() for m in CLAUSE_END_RE.finditer(sentence) if 30 <= m.start() < NOTE_LIMIT]
     if cuts:
         return sentence[: cuts[-1]].rstrip(".;:, ")
-    return sentence[:limit].rsplit(" ", 1)[0].rstrip(".;:, ")
+    return sentence[:NOTE_LIMIT].rsplit(" ", 1)[0].rstrip(".;:, ")
 
 
 def parse_synergies(text: str) -> list[Row]:
@@ -201,7 +206,7 @@ def parse_synergies(text: str) -> list[Row]:
         advice = plain(advice)
         if name_key(advice) in PLACEHOLDERS or rating in NOT_A_SYNERGY:
             continue
-        if rating is None and NO_SYNERGY_RE.search(clause(advice, 10 ** 6)):
+        if rating is None and NO_SYNERGY_RE.search(first_sentence(advice)):
             continue
         claims.append(Row(hero=row.hero, cell=advice))
     return claims
@@ -234,7 +239,7 @@ def pair_up(claims_by_hero: Mapping[str, Sequence[Row]],
     pairs: Pairs = {}
     for pair, advice_by_hero in stated.items():
         notes = list(advice_by_hero.values())
-        uncut = [n for n in notes if clause(n) == clause(n, 10 ** 6)]
+        uncut = [n for n in notes if clause(n) == first_sentence(n)]
         pairs[pair] = (len(advice_by_hero), clause((uncut or notes)[0]))
     return pairs, unmatched
 
