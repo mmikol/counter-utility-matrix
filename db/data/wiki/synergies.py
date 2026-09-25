@@ -1,9 +1,8 @@
 """Pull + clean + store: overwatch.fandom.com - hero synergies.
 
-Every hero article has a "Match-Ups and Team Synergy" section: one table
-per role, a row per other hero, a Team Synergy cell of advice. The wiki
-writes the tables two ways - a wikitable, or a {{MatchupTable/<Role>}}
-template with <Hero>_synergy and <Hero>_synergy_rating parameters.
+Every hero article's "Match-Ups and Team Synergy" section has, per other
+hero, a Team Synergy cell of advice, in either markup matchup_tables.py
+reads; a template rates the cell in <Hero>_synergy_rating.
 
 A cell is a claim when it holds advice for the pair: not a placeholder
 ("To be added"), not rated below GOOD (SITUATIONAL, OK, WEAK, POOR, BAD) or
@@ -14,40 +13,34 @@ under 120 characters. The table is reloaded wholesale.
 """
 
 import re
-from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass
-from typing import NamedTuple
+from collections.abc import Mapping, Sequence
 
 import psycopg
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
 from db.data.names import hero_key, index, name_key
-from db.data.wiki import WIKI, WikiError, fetch_articles, markup
+from db.data.wiki import WIKI, WikiError, fetch_articles
+from db.data.wiki.matchup_tables import (
+    PLACEHOLDERS,
+    SENTENCE_END_RE,
+    Row,
+    paragraphs,
+    section_rows,
+)
 
 # --- extract: markup -> Python ---------------------------------------------
 
 NOTE_LIMIT = 120
 
-SECTION_RE = re.compile(r"^==(?!=)[^=\n]*synergy[^=\n]*==[ \t]*$", re.M | re.I)
-ROW_SPLIT_RE = re.compile(r"^\|-.*$", re.M)
-CELL_ATTRIBUTES_RE = re.compile(r"^[^\[\]{}<>|]*\|(?!\|)")
-PARAGRAPH_RE = re.compile(r"<br\s*/?>|\n\s*\n", re.I)
 # "STRONG SYNERGY advice", or "(6v6 Exclusive Pairing - Weak Synergy) advice".
 RATING_RE = re.compile(r"^(?:\s|<[^>]+>|'{2,5})*(?:([A-Z ]*?)\s*SYNERGY\b"
                        r"|\((?:[^()]*? - )?(?i:([a-z ]*?)\s*synergy)\))(?:\s|'{2,5})*")
-TABLE_END_RE = re.compile(r"\s\|\}\s*$", re.M)
-LINK_PARAM_RE = re.compile(r"\|\s*link\s*=\s*([^|\]]+)")
-FILE_TARGET_RE = re.compile(r"\s*(?:file|image)\s*:", re.I)
-# A sentence ends at . ! or ? before a capital; the period of an initial
-# ("D.Va", "B.O.B.") does not end one.
-SENTENCE_END_RE = re.compile(r"(?<![ .][A-Z])[.!?](?=\s+[A-Z\"'])")
 CLAUSE_END_RE = re.compile(r"[,;:]\s| - | \(")
 # "With a friendly Sigma on your team, ..." - an opener, not the advice.
 OPENER_RE = re.compile(r"(?:if|when|while|with|because|since|as|though|although|should|like"
                        r"|just like|unlike|in|for|due to|thanks to)\b[^,]*,\s+", re.I)
 
-PLACEHOLDERS = {"", "tobeadded", "tba", "tbd", "na", "none", "todo"}
 # A rated cell is a claim unless rated one of these; "tba" is no rating.
 NOT_A_SYNERGY = {"situational", "ok", "weak", "very weak", "poor", "very poor",
                  "bad", "no", "mirror"}
@@ -60,98 +53,6 @@ NO_SYNERGY_RE = re.compile(
     r"|\bdo not share\b|\brarely interact|\b(?:low|weak\w*) (?:synerg|pairing)", re.I)
 
 
-def synergy_section(text: str) -> str:
-    """The article's synergy section, its subsections included, or '' when
-    it has none."""
-    match = SECTION_RE.search(text)
-    return markup.section_body(text, match.end(), top_level=True) if match else ""
-
-
-def _cells(row: str) -> list[str]:
-    """The cells of one wikitable row; a cell runs until the next | or ! line."""
-    cells = []
-    for line in row.split("\n"):
-        if line[:1] in ("|", "!") and line[:2] not in ("|}", "|-", "|+"):
-            cells.append(line[1:])
-        elif cells:
-            cells[-1] += "\n" + line
-    cells = [TABLE_END_RE.split(cell)[0] for cell in cells]
-    return [CELL_ATTRIBUTES_RE.sub("", cell, count=1).strip() for cell in cells]
-
-
-def _row_hero(cell: str) -> str | None:
-    """The hero a row is about: its article link, else its icon's link=."""
-    for link in markup.LINK_RE.finditer(cell):
-        if not FILE_TARGET_RE.match(link.group(1)):
-            return link.group(1).strip()
-    match = LINK_PARAM_RE.search(cell)
-    return match.group(1).strip() if match else None
-
-
-@dataclass(frozen=True)
-class Column:
-    """A column of the section's tables: the word its wikitable heading holds
-    and its position when a table has no heading row; its template parameter
-    and that parameter's rating parameters."""
-    heading: str
-    position: int
-    parameter: str
-    ratings: tuple[str, ...]
-
-
-SYNERGY = Column(heading="synergy", position=2, parameter="synergy",
-                 ratings=("synergy_rating",))
-MATCHUP = Column(heading="match", position=1, parameter="matchup", ratings=("rating", "risk"))
-
-
-class Row(NamedTuple):
-    """One row of the section's tables: the hero it is about and the text of
-    one cell - the markup in section_rows, the plain advice in
-    parse_synergies."""
-    hero: str
-    cell: str
-
-
-def _table_rows(table: str, heading: str, position: int) -> Iterator[Row]:
-    """Row(hero, cell of one column) per data row of one wikitable."""
-    for row in ROW_SPLIT_RE.split(table):
-        cells = _cells(row)
-        if not cells:
-            continue
-        headers = [i for i, cell in enumerate(cells) if heading in cell.lower()
-                   and len(cell) < 60]
-        if headers and _row_hero(cells[0]) is None:
-            position = headers[0]
-            continue
-        hero = _row_hero(cells[0])
-        if hero and len(cells) > position:
-            yield Row(hero=hero, cell=cells[position])
-
-
-def _template_rows(section: str, parameter: str,
-                   ratings: Sequence[str]) -> Iterator[Row]:
-    """Row(hero key, rated cell of one column) per hero of each {{MatchupTable/...}}."""
-    suffix = "_" + parameter
-    for block in markup.find_templates(section, r"MatchupTable"):
-        params = markup.parse_params(block)
-        for key, value in params.items():
-            if key.endswith(suffix):
-                hero = key[: -len(suffix)]
-                rated = [params.get("%s_%s" % (hero, rating), "").strip() for rating in ratings]
-                rating = " | ".join(r for r in rated if r)
-                yield Row(hero=hero, cell="'''%s''' %s" % (rating, value) if rating else value)
-
-
-def section_rows(text: str, column: Column = SYNERGY) -> list[Row]:
-    """[Row(hero, cell)] - one column of the section's tables, in either markup.
-    A template's ratings lead its cell in bold, as a wikitable writes them."""
-    section = synergy_section(text)
-    rows = list(_template_rows(section, column.parameter, column.ratings))
-    for table in markup.TABLE_RE.findall(section):
-        rows.extend(_table_rows(table, column.heading, column.position))
-    return rows
-
-
 def split_rating(cell: str) -> tuple[str | None, str]:
     """'''STRONG SYNERGY''' advice -> ('strong', advice). No rating -> (None, cell)."""
     match = RATING_RE.match(cell)
@@ -159,14 +60,6 @@ def split_rating(cell: str) -> tuple[str | None, str]:
         return None, cell
     rating = (match.group(1) or match.group(2) or "").strip().lower()
     return (None if rating in UNRATED else rating), cell[match.end():]
-
-
-def paragraphs(cell: str) -> list[str]:
-    """A cell's paragraphs as plain text, the empty ones dropped."""
-    text = markup.REF_RE.sub("", markup.COMMENT_RE.sub("", cell))
-    text = markup.FILE_LINK_RE.sub("", text)
-    texts = (markup.wikitext_to_text(p.replace("\n", " ")) for p in PARAGRAPH_RE.split(text))
-    return [text for text in texts if text]
 
 
 def plain(cell: str) -> str:

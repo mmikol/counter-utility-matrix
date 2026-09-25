@@ -4,7 +4,7 @@ combined. The pull is test_wiki_matchups_pull.py's."""
 
 import pytest
 
-from db.data.wiki import matchups, synergies
+from db.data.wiki import matchup_tables, matchups
 from db.data.wiki.matchups import Known, read_cell
 
 # --- markup -> rows ----------------------------------------------------------
@@ -91,24 +91,25 @@ TEMPLATE = """
 
 
 def test_the_shared_row_parser_reads_the_match_up_column_of_a_wikitable():
-    rows = dict(synergies.section_rows(WIKITABLE, synergies.MATCHUP))
+    rows = dict(matchup_tables.section_rows(WIKITABLE, matchup_tables.MATCHUP))
     assert list(rows) == ["D.Va", "Orisa", "Hazard", "Widowmaker", "Pharah", "McCree", "Mei"]
     assert rows["Hazard"] == "<small>Hazard can be an interesting matchup.</small>"
-    hazard = synergies.section_rows(WIKITABLE, synergies.MATCHUP)[2]
+    hazard = matchup_tables.section_rows(WIKITABLE, matchup_tables.MATCHUP)[2]
     assert (hazard.hero, hazard.cell) == ("Hazard", rows["Hazard"])
     assert rows["Pharah"].startswith("'''LOW RISK'''\n<small>Pharah's slow flight")
     # The synergy column of the same rows is untouched by the match-up one.
-    assert dict(synergies.section_rows(WIKITABLE))["Orisa"] == (
+    assert dict(matchup_tables.section_rows(WIKITABLE))["Orisa"] == (
         "<small>Her Fortify holds the line for you.</small>")
 
 
 def test_the_shared_row_parser_reads_a_template_with_its_ratings_leading_the_cell():
-    rows = dict(synergies.section_rows(TEMPLATE, synergies.MATCHUP))
+    rows = dict(matchup_tables.section_rows(TEMPLATE, matchup_tables.MATCHUP))
     assert list(rows) == ["dva", "reinhardt", "soldier76", "roadhog", "sigma"]
     assert rows["dva"] == "'''VERY WEAK MATCHUP | EXTREME RISK''' "
     assert rows["soldier76"].startswith("'''EXTREMELY HIGH PRIORITY TARGET | EXTREME RISK''' ")
     assert rows["sigma"] == ""
-    assert dict(synergies.section_rows(TEMPLATE))["dva"] == "'''GOOD SYNERGY''' She peels for you."
+    assert dict(matchup_tables.section_rows(TEMPLATE))["dva"] == (
+        "'''GOOD SYNERGY''' She peels for you.")
 
 
 def test_a_wikitable_article_gives_a_reading_per_written_cell():

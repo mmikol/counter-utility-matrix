@@ -2,7 +2,7 @@
 
 Every hero article's "Match-Ups and Team Synergy" section has, per other
 hero, a Match-Up cell: advice to the article's hero about that enemy, in
-either markup synergies.py reads. A cell becomes a verdict from the
+either markup matchup_tables.py reads. A cell becomes a verdict from the
 article hero's seat: +1 the hero answers the enemy, -1 the enemy answers
 the hero, 0 neither.
 
@@ -31,7 +31,7 @@ import psycopg
 from db import psql
 from db.data import ArticlePullSummary, fetch
 from db.data.names import RENAMED, hero_key, index, name_key, unaccented
-from db.data.wiki import WIKI, WikiError, fetch_articles, synergies
+from db.data.wiki import WIKI, WikiError, fetch_articles, matchup_tables
 
 # --- extract: markup -> Python ---------------------------------------------
 
@@ -281,7 +281,7 @@ def read_label(parts: list[str]) -> tuple[float | None, float]:
 
 def prose(cell: str) -> str:
     """Every paragraph of a cell's advice as one line of plain text."""
-    return " ".join(" ".join(synergies.paragraphs(cell)).split())
+    return " ".join(" ".join(matchup_tables.paragraphs(cell)).split())
 
 
 def _aliases(hero: str) -> list[str]:
@@ -297,7 +297,7 @@ def _aliases(hero: str) -> list[str]:
 def pronoun(text: str) -> str | None:
     """'he' or 'she': the pronoun an article uses of its hero, counted outside
     the match-up section, where the enemies are. None when neither leads."""
-    rest = text.replace(synergies.synergy_section(text), "")
+    rest = text.replace(matchup_tables.synergy_section(text), "")
     he, she = len(HE_RE.findall(rest)), len(SHE_RE.findall(rest))
     return "he" if he > 2 * she else "she" if she > 2 * he else None
 
@@ -335,7 +335,7 @@ def normalise(text: str, hero: str, other: str, pronouns: Pronouns = (None, None
 def sentences(text: str) -> list[str]:
     parts: list[str] = []
     start = 0
-    for end in synergies.SENTENCE_END_RE.finditer(text):
+    for end in matchup_tables.SENTENCE_END_RE.finditer(text):
         parts.append(text[start: end.end()])
         start = end.end()
     parts.append(text[start:])
@@ -372,7 +372,7 @@ def read_cell(cell: str, hero: str, other: str, pronouns: Pronouns = (None, None
     label, advice = split_label(cell)
     steps, risk = read_label(label)
     text = prose(advice)
-    if name_key(text) in synergies.PLACEHOLDERS and steps is None and not risk:
+    if name_key(text) in matchup_tables.PLACEHOLDERS and steps is None and not risk:
         return UNWRITTEN
     if steps is not None and (abs(steps) >= 1 or steps == 0):
         return Reading((steps > 0) - (steps < 0), "rating")
@@ -396,7 +396,7 @@ def parse_matchups(text: str, hero: str,
     by the roster's name and the pronoun."""
     unknown = Known(name=None, pronoun=None)
     readings = []
-    for row in synergies.section_rows(text, synergies.MATCHUP):
+    for row in matchup_tables.section_rows(text, matchup_tables.MATCHUP):
         key = hero_key(row.hero)
         if key == name_key(hero):
             continue

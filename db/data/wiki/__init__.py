@@ -23,10 +23,13 @@ The heroes pull's kit pipeline, no run():
     kits/           each hero's kit: read from its Cargo rows and its
                     article, its stats, weapons and modifiers parsed, stored
 
-The reader the loaders share, no run():
+The readers the loaders share, no run():
 
     markup          reading the wiki's two markups - Cargo's rendered HTML
                     and article wikitext - and the tidying both need
+    matchup_tables  a hero article's Match-Ups and Team Synergy section:
+                    one column of its tables as rows, in either markup,
+                    and a cell as plain text; synergies and matchups read it
 
 The article HTML sits behind a bot challenge; the only open path is the
 MediaWiki endpoint below, which returns JSON (Cargo) and raw wikitext and
