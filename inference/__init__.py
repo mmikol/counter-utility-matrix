@@ -34,12 +34,18 @@
     tune          one validated, logged edit to a strategy file; add and complete
     derive        the engine asking the model for a draft's frontmatter
     reach         the board each released hero is optimal on, within a match's bans
-    validate      the playbook against the recorded matches: each map rescored
-                  from both seats, five models scored out of sample on a time
-                  and a sessions split, each strategy family ablated, the data
-                  guard and the pin
+    validate      the playbook against the recorded matches: the verdict from
+                  rescore's maps and predict's models, and the data guard
+                  that withholds it
+    report        what validate answers: its records, JSON the door serves and
+                  the page draws, and the same report as text
+    rescore       the recorded maps a playbook is judged on - from its digest's
+                  first map - each through evaluate from both seats, and the
+                  playbook's scoring strategies in the families an ablation
+                  drops
     predict       the models validate scores, M0 a coin flip to M4 the heroes
-                  plus the playbook score, and the splits it scores them on
+                  plus the playbook score, the splits it scores them on, and
+                  each model's log loss and Brier with their intervals
     fit           the statistics validate reads, in pure Python: a ridge
                   logistic fit, log loss and Brier, the bootstrap over
                   sessions, the maps an effect needs

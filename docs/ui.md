@@ -186,7 +186,7 @@ assumptions. The core palette is tokens in `:root`; the rest, the sand
 served from `static/`, Impact standing in until the font arrives; the
 portraits and role icons load as `<img>` from Blizzard's CDNs.
 
-## `validation.py` - the validation report
+## `validation.py` and `charts.py` - the validation report
 
 ```bash
 .venv/bin/python -m ui.validation                                  # the playbook in force

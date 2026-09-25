@@ -15,7 +15,7 @@ import random
 from facts.compute import matchup_metrics
 from facts.matches import Match
 from facts.team import numbers, team_metrics
-from inference import fit, validate
+from inference import fit, rescore, validate
 
 DIGEST = "d" * 64
 OTHER_DIGEST = "e" * 64
@@ -41,7 +41,7 @@ def rescored(world, match, blue_score=0.0, red_score=0.0, blue_terms=None, red_t
     m, red_h, blue_h, _ = world.resolve(match.map_name, match.red, match.blue, match.bans)
     blue_team = team_metrics(world, blue_h, m, red_h, lean=True)
     red_team = team_metrics(world, red_h, m, blue_h, lean=True)
-    return validate.Rescored(
+    return rescore.Rescored(
         match=match, blue_score=blue_score, red_score=red_score,
         blue_terms=blue_terms or {}, red_terms=red_terms or {},
         blue_team=numbers(blue_team), red_team=numbers(red_team),
@@ -74,8 +74,8 @@ def judged(rows, catalog=(), digest=DIGEST, *, pinned=True, set_aside=0):
     """What assess() is told about the rows: every one recorded under `digest`."""
     matches = [r.match for r in rows]
     return validate.Judged(
-        catalog=list(catalog), name="tests/fixtures/playbook", digest=digest,
-        pins=validate.pins(matches, digest), recorded=len(matches) + set_aside,
+        subject=validate.Subject(list(catalog), "tests/fixtures/playbook", digest),
+        pins=rescore.pins(matches, digest), recorded=len(matches) + set_aside,
         set_aside=set_aside, pinned=pinned)
 
 

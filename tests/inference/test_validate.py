@@ -15,7 +15,8 @@ from db import Refusal
 from facts.compute import matchup_metrics
 from facts.matches import Match
 from facts.team import numbers, team_metrics
-from inference import catalog, engine, predict, validate
+from inference import catalog, engine, predict, rescore, validate
+from inference.report import rendered
 from tests import matches
 from tests.inference import ASSUMPTIONS_ONLY, FIXTURE_PLAYBOOK
 
@@ -23,8 +24,8 @@ COIN = math.log(2.0)
 
 
 def _assess(rows, catalog=(), effect=validate.EFFECT):
-    return validate.assess(validate.Rescoring(rows, []), matches.judged(rows, catalog),
-                           effect=effect)
+    return validate.assess(rescore.Rescoring(rows, []), matches.judged(rows, catalog),
+                           validate.Options(effect=effect))
 
 
 def _models(split):
@@ -137,27 +138,26 @@ def test_a_playbook_is_judged_only_from_its_digests_first_map():
     recorded = [_match(1, 1, matches.OTHER_DIGEST), _match(2, 1, matches.OTHER_DIGEST),
                 _match(3, 2, matches.DIGEST), _match(4, 3, matches.OTHER_DIGEST),
                 _match(5, 4, matches.DIGEST)]
-    assert [m.match_id for m in validate.pinned(recorded, matches.DIGEST)] == [3, 4, 5]
-    assert validate.pinned(recorded, "f" * 64) == []
-    pins = validate.pins(recorded, matches.DIGEST)
+    assert [m.match_id for m in rescore.pinned(recorded, matches.DIGEST)] == [3, 4, 5]
+    assert rescore.pinned(recorded, "f" * 64) == []
+    pins = rescore.pins(recorded, matches.DIGEST)
     assert [(p["digest"][0], p["maps"], p["first"], p["last"], p["judged"]) for p in pins] == [
         ("e", 3, "2026-03-01", "2026-03-03", False), ("d", 2, "2026-03-02", "2026-03-04", True)]
 
 
 def test_a_playbook_no_map_was_played_under_is_not_judged(world):
     recorded = [_match(1, 1, matches.OTHER_DIGEST)]
-    report = validate.validate(world, recorded, ASSUMPTIONS_ONLY, digest=matches.DIGEST,
-                               name="p")
+    subject = validate.Subject(ASSUMPTIONS_ONLY, "p", matches.DIGEST)
+    report = validate.validate(world, recorded, subject)
     assert report["counts"]["set_aside"] == 1 and report["counts"]["judged"] == 0
     assert report["verdict"].startswith("No recorded map was played under this playbook")
-    unpinned = validate.validate(world, recorded, ASSUMPTIONS_ONLY, digest=matches.DIGEST,
-                                 name="p", pin=False)
+    unpinned = validate.validate(world, recorded, subject, validate.Options(pin=False))
     assert unpinned["counts"]["judged"] == 1 and not unpinned["pinned"]
 
 
 def test_the_families_file_every_scoring_strategy_once():
     playbook = catalog.load(FIXTURE_PLAYBOOK)
-    kin = {f.name: f.ids for f in validate.families(playbook)}
+    kin = {f.name: f.ids for f in rescore.families(playbook)}
     assert kin == {
         "side": ("attack-breaks-the-hold", "defense-holds-the-ground"),
         "counters": ("coverage", "exposure"),
@@ -166,9 +166,9 @@ def test_the_families_file_every_scoring_strategy_once():
         "scored": ("anti-heal-answer", "squish-limit", "under-healed"),
         "other": ("anti-air", "effective-hp", "healing-floor", "range-war")}
     filed = [i for ids in kin.values() for i in ids]
-    assert sorted(filed) == sorted(s.id for s in playbook if validate.scores(s))
+    assert sorted(filed) == sorted(s.id for s in playbook if rescore.scores(s))
     assert "open-queue-tanks" not in filed                        # a hard limit scores nothing
-    assert validate.families(ASSUMPTIONS_ONLY) == []
+    assert rescore.families(ASSUMPTIONS_ONLY) == []
 
 
 def test_an_ablation_drops_exactly_its_familys_terms(world):
@@ -176,10 +176,10 @@ def test_an_ablation_drops_exactly_its_familys_terms(world):
     row = row._replace(blue_score=5.0, red_score=3.0,
                        blue_terms={"coverage": 1.5, "cohesion": 0.5, "map-fit": 3.0},
                        red_terms={"coverage": 0.25, "cohesion": 2.0, "map-fit": 0.75})
-    assert validate.without(row, []) == 2.0
-    assert validate.without(row, ["coverage"]) == (5.0 - 1.5) - (3.0 - 0.25)
-    assert validate.without(row, ["coverage", "cohesion", "map-fit"]) == 0.0
-    kin = [validate.Family("counters", "", ("coverage",)), validate.Family("synergy", "",
+    assert rescore.without(row, []) == 2.0
+    assert rescore.without(row, ["coverage"]) == (5.0 - 1.5) - (3.0 - 0.25)
+    assert rescore.without(row, ["coverage", "cohesion", "map-fit"]) == 0.0
+    kin = [rescore.Family("counters", "", ("coverage",)), rescore.Family("synergy", "",
                                                                             ("cohesion",))]
     [example] = validate.examples([row._replace(match=row.match._replace(result="win"))], kin)
     assert example.score == {"": 2.0, "counters": 0.75, "synergy": 3.5}
@@ -188,10 +188,10 @@ def test_an_ablation_drops_exactly_its_familys_terms(world):
 def test_each_family_is_ablated_and_named_by_its_ids(world):
     rows = [r._replace(blue_terms={"coverage": r.blue_score}, red_terms={"coverage": r.red_score})
             for r in matches.rows(world, 200, matches.score, seed="families")]
-    report = validate.assess(validate.Rescoring(rows, []), matches.judged(rows))
+    report = validate.assess(rescore.Rescoring(rows, []), matches.judged(rows))
     assert report["splits"][0]["ablations"] == []                 # the catalog names no family
     playbook = [s for s in catalog.load(FIXTURE_PLAYBOOK) if s.id in ("coverage", "exposure")]
-    report = validate.assess(validate.Rescoring(rows, []), matches.judged(rows, playbook))
+    report = validate.assess(rescore.Rescoring(rows, []), matches.judged(rows, playbook))
     for split in report["splits"]:
         cuts = {a["family"]: a for a in split["ablations"]}
         assert set(cuts) == {"counters", "playbook"}
@@ -215,10 +215,10 @@ def test_the_rescore_is_the_engines_evaluate_from_both_seats(world):
     playbook = catalog.load(FIXTURE_PLAYBOOK)
     good = _match(1, 1, matches.DIGEST)._replace(map_name="Harbor Gate", side="attack")
     unknown = _match(2, 1, matches.DIGEST)._replace(blue=("Nobody",) * 6)
-    done = validate.rescore(world, [good, unknown], playbook)
+    done = rescore.rescore(world, [good, unknown], playbook)
     [row] = done.scored
-    assert done.refused == [validate.Refused(2, "unknown heroes: " + ", ".join(("Nobody",) * 6))]
-    blue_seat, red_seat = validate.seats(good)
+    assert done.refused == [rescore.Refused(2, "unknown heroes: " + ", ".join(("Nobody",) * 6))]
+    blue_seat, red_seat = rescore.seats(good)
     assert red_seat.side == "defense" and red_seat.blue == good.red
     blue = engine.evaluate(world, blue_seat, catalog=playbook)
     red = engine.evaluate(world, red_seat, catalog=playbook)
@@ -239,8 +239,8 @@ def test_the_validation_runs_end_to_end_on_the_synthetic_world(world):
     recorded = [m._replace(playbook_digest=matches.OTHER_DIGEST) if m.match_id <= 2 else m
                 for m in recorded]
     lines = []
-    report = validate.validate(world, recorded, playbook, digest=matches.DIGEST,
-                               name="tests/fixtures/playbook", log=lines.append)
+    subject = validate.Subject(playbook, "tests/fixtures/playbook", matches.DIGEST)
+    report = validate.validate(world, recorded, subject, validate.Options(log=lines.append))
     counts = report["counts"]
     assert (counts["recorded"], counts["set_aside"], counts["judged"]) == (18, 2, 16)
     assert lines[-1] == "validate: 16 of 16 maps rescored"
@@ -250,7 +250,7 @@ def test_the_validation_runs_end_to_end_on_the_synthetic_world(world):
     row = report["matches"][0]
     assert row["match_id"] == 3 and set(row["predictions"]) <= {"time", "sessions"}
     assert "blue_team" not in row
-    text = validate.rendered(report)
+    text = rendered(report)
     assert text.splitlines()[0].startswith("validation of tests/fixtures/playbook (digest ddd")
     assert "rate-derived: personal use" in text
     assert "pinned: 2 earlier maps set aside" in text

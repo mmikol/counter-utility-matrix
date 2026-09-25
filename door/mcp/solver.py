@@ -8,7 +8,6 @@ points at, and none of these tools writes.
 from collections.abc import Mapping
 from typing import TypedDict
 
-from db import Refusal
 from door.mcp.boards import board_tool
 from door.mcp.registry import Context, tool
 from door.mcp.schema import Property, ToolReply
@@ -16,8 +15,8 @@ from facts import tables
 from facts.draft import Draft
 from facts.matches import load_matches
 from inference import catalog, engine, reach, validate
+from inference.report import rendered
 from inference.result import Result
-from inference.strategy import CatalogError
 
 COMPACT_TERMS = 15        # the heaviest terms a compact reply carries
 
@@ -199,18 +198,11 @@ def board(
 def validate_playbook(
         ctx: Context, playbook: str | None = None, pin: bool = True,
         effect: float = validate.EFFECT, detail: bool = False) -> ToolReply:
-    directory = catalog.named_dir(playbook)
-    try:
-        strategies = catalog.load(directory)
-    except CatalogError as error:
-        raise Refusal("the playbook at %s does not load: %s"
-                      % (catalog.playbook_name(directory), error)) from error
+    subject = validate.Subject.of(catalog.named_dir(playbook))
     validate.check_effect(effect)
     with ctx.connect() as cx:
         world = tables.load(cx)
         recorded = load_matches(cx)
-    report = validate.validate(
-        world, recorded, strategies, digest=catalog.playbook_digest(directory),
-        name=catalog.playbook_name(directory), pin=pin, effect=effect, detail=detail,
-        log=ctx.log)
-    return ToolReply(validate.rendered(report), report)
+    report = validate.validate(world, recorded, subject, validate.Options(
+        pin=pin, effect=effect, detail=detail, log=ctx.log))
+    return ToolReply(rendered(report), report)

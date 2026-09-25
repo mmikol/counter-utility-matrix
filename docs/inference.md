@@ -123,7 +123,10 @@ bans, the map, blue's side and blue's result. Blue is always the owner's
 team. Each map carries the digest of the playbook in force when it was
 played (`catalog.playbook_digest`). `validate.py` asks one question of
 them: does the playbook's score say anything about who won that the
-heroes alone do not? It runs as the `validate_playbook` tool, or as
+heroes alone do not? `rescore.py` picks the maps and runs them through the
+engine, `predict.py` holds the models, the splits and their scores,
+`fit.py` the statistics under them, and `report.py` the answer as JSON and
+as text. It runs as the `validate_playbook` tool, or as
 `.venv/bin/python -m ui.validation`, which prints the same text and
 writes a page of charts and its JSON to `db/raw/validation.html`. Nothing
 it runs writes to the database or the playbook.

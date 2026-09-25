@@ -10,10 +10,10 @@ import re
 
 import pytest
 
-from inference import catalog, validate
+from inference import catalog, rescore, validate
 from tests import matches
 from tests.inference import FIXTURE_PLAYBOOK
-from ui import validation
+from ui import charts, validation
 
 
 @pytest.fixture(scope="module")
@@ -27,7 +27,7 @@ def report():
     rows = [r._replace(blue_terms={"coverage": r.blue_score}, red_terms={"coverage": r.red_score})
             for r in rows]
     playbook = [s for s in catalog.load(FIXTURE_PLAYBOOK) if s.id in kin_ids]
-    return validate.assess(validate.Rescoring(rows, [validate.Refused(999, "unknown heroes")]),
+    return validate.assess(rescore.Rescoring(rows, [rescore.Refused(999, "unknown heroes")]),
                            matches.judged(rows, playbook))
 
 
@@ -57,19 +57,19 @@ def test_the_page_escapes_what_the_owner_typed(report):
 
 
 def test_a_page_with_nothing_judged_draws_no_chart():
-    empty = validate.assess(validate.Rescoring([], []), matches.judged([]))
+    empty = validate.assess(rescore.Rescoring([], []), matches.judged([]))
     page = validation.page(empty)
     assert "<svg" not in page and "No recorded map was played under this playbook" in page
-    unpinned = validate.assess(validate.Rescoring([], []), matches.judged([], pinned=False))
+    unpinned = validate.assess(rescore.Rescoring([], []), matches.judged([], pinned=False))
     assert "No decided map to judge." in validation.page(unpinned)
 
 
 def test_the_scale_ticks_on_round_values_and_keeps_zero_in_view():
-    x = validation.scale([0.013, 0.021], 0, 100)
+    x = charts.scale([0.013, 0.021], 0, 100)
     assert x.low == 0.0 and x.ticks[-1] >= 0.021
     assert all(abs(t * 1000 - round(t * 1000)) < 1e-9 for t in x.ticks)
     assert x.at(x.low) == 0 and x.at(x.high) == 100
-    assert validation.scale([], 0, 10).ticks[0] == -1.0          # no values: a unit either way
+    assert charts.scale([], 0, 10).ticks[0] == -1.0          # no values: a unit either way
 
 
 def test_the_command_line_prints_the_text_and_writes_the_page_and_its_json(
