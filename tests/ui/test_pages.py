@@ -13,7 +13,7 @@ import re
 import pytest
 
 from facts import board_facts, compute
-from facts.draft import Draft, board_query
+from facts.draft import Draft
 from inference import catalog, engine, scale, scoring, solver
 from inference.result import Badge, Momentum, Pick
 from inference.scoring import Contribution
@@ -164,13 +164,13 @@ def test_the_display_font_ships_with_the_board_and_its_licence():
 def test_the_scripts_send_the_routes_and_query_keys_the_board_reads():
     """Each route the scripts ask for is the board's own - /api/infer is the
     inference service's, not the page's - and each key of a board's query
-    is sent in the spelling parse_board reads back, with the sliders'
-    weights and the page's client, which api_board reads beside them."""
+    is sent in the spelling parse_board reads, with the sliders' weights and
+    the page's client, which serve.handle_board reads beside them."""
     script = scripts()
     for route in ("/api/roster", "/api/facts?", "/api/board?", "/api/strategies", "/api/weight"):
         assert route in script, route
     assert "/api/infer" not in script
-    for key in [*board_query(Draft()), "weights", "client"]:
+    for key in ("map", "side", "red", "blue", "bans", "weights", "client"):
         assert "'%s='" % key in script, key
 
 

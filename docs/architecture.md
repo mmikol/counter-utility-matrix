@@ -188,7 +188,7 @@ clock and the sentry interval, which are read once at start:
 | `COUNTRIX_UI_HOST`, `COUNTRIX_UI_PORT` | `127.0.0.1`, `8017` | where the board listens |
 | `COUNTRIX_READ_ONLY` | `1` | the board writes nothing: a slider's weight is the session's own; `0` brings back *store* |
 | `COUNTRIX_INFERENCE_HOST`, `COUNTRIX_INFERENCE_PORT` | `127.0.0.1`, `8019` | where the inference service listens |
-| `COUNTRIX_INFERENCE_URL` | unset | the inference service the board delegates to; the engine runs in-process when unset. http or https: any other scheme stops the board at launch |
+| `COUNTRIX_INFERENCE_URL` | unset | the inference service the board delegates to; its handlers run in the board's process when unset. http or https: any other scheme stops the board at launch |
 | `COUNTRIX_MCP_TOKEN` | unset | bearer token the MCP server requires over HTTP |
 | `COUNTRIX_AUDIT` | `db/raw/audit.jsonl` | the MCP server's audit log |
 | `COUNTRIX_SENTRY_EVERY` | `30` | seconds between sentry sweeps |

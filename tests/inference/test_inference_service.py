@@ -1,5 +1,6 @@
 """The inference engine as a service: its handlers speak the same results
-the engine returns in-process, and the board forwards to it when told to."""
+the engine returns in-process, the board calls them in its own process or
+forwards to the service when told to, and both paths answer alike."""
 
 from urllib.parse import quote
 
@@ -8,18 +9,6 @@ import pytest
 from db import Refusal
 from inference import catalog, serve
 from ui import board
-
-
-def test_the_board_survives_the_round_trip_through_a_query_string():
-    """One owner for the wire: what board_query writes, parse_board reads back,
-    so the two doors cannot drift apart on a spelling."""
-    from urllib.parse import parse_qs, urlencode
-
-    from facts.draft import Draft, board_query, parse_board
-    for draft in (Draft("King's Row", ("Zarya", "Pharah"), ("Ana",), ("Widowmaker",), "attack"),
-                  Draft()):
-        written = urlencode(board_query(draft), doseq=True)
-        assert parse_board(parse_qs(written)) == draft
 
 
 def test_both_doors_bound_the_search_with_one_clamp():
@@ -66,10 +55,45 @@ def test_service_infers_evaluates_and_lists(db):
         serve.handle_evaluate(db, {"blue": ["Ana"]})
     data, code = serve.handle_strategies()
     assert code == 200 and len(data["strategies"]) == len(catalog.load())
-    data, code = serve.handle_board(db, {"map": ["King's Row"], "red": ["Zarya"],
-                                         "blue": ["Ana"], "side": ["defense"]})
-    assert code == 200 and data["red"]["side"] == "attack" and data["current"]["partial"]
     db.rollback()
+
+
+@pytest.mark.invariant
+def test_the_board_handler_serves_both_seats_and_the_current_comp(db):
+    """What the page's board shows, on either path: both seats' optimal on
+    opposite sides, the current comp partial until blue holds six and
+    evaluated once it does, and no countered case."""
+    for side, other in (("attack", "defense"), ("defense", "attack")):
+        data, code = serve.handle_board(db, {
+            "map": ["King's Row"], "red": ["Zarya"], "blue": ["Ana"], "side": [side]})
+        assert code == 200 and data["side"] == side
+        assert data["blue"]["kind"] == "infer" and len(data["blue"]["blue"]) == 6
+        assert data["red"]["seat"] == "red" and data["red"]["side"] == other
+        assert data["current"]["partial"] and data["current"]["blue"] == ["Ana"]
+        assert data["blue"]["cited"] and all(p["evidence"] for p in data["blue"]["picks"])
+        assert data["countered"] is None                   # the page never reads it
+    data, code = serve.handle_board(db, {
+        "blue": ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]})
+    current = data["current"]
+    assert code == 200 and current["kind"] == "evaluate"
+    assert current["rank"] is None if current["unscored"] else current["rank"] >= 1
+    with pytest.raises(Refusal, match="banned"):          # the boundary answers it 400
+        serve.handle_board(db, {"red": ["Zarya"], "blue": ["Ana"], "bans": ["Ana"]})
+    db.rollback()
+
+
+def test_a_refused_board_supersedes_nothing():
+    """The service reads the whole query before it takes the client's lane,
+    so a board its parse refuses - a junk weight, a junk pool, a seventh
+    pick - leaves the board still solving in that lane alone. No database
+    is reached: each is refused before the World loads."""
+    from inference import supersede
+    ticket = supersede.LATEST.take("tab1")
+    seven = ["Ana", "Ashe", "Baptiste", "Cassidy", "Genji", "Kiriko", "Mercy"]
+    for refused in ({"weights": ["junk"]}, {"pool": ["x"]}, {"red": seven}):
+        with pytest.raises(Refusal):
+            serve.handle_board(None, {**refused, "client": ["tab1"]})
+    assert ticket() is False
 
 
 @pytest.mark.invariant
@@ -172,7 +196,11 @@ def test_the_inference_service_listens_where_the_environment_says(monkeypatch):
     assert serve.command_line(["--allow-host", "x", "--allow-host", "y"]).allow_host == ["x", "y"]
 
 
-def test_board_forwards_to_a_named_inference_service(monkeypatch):
+def test_the_board_forwards_a_query_as_received(monkeypatch):
+    """With a service named, the page's query reaches it unchanged - the
+    client, the weights, a weight the service will refuse and one it will
+    clamp - and the service's reply is the board's; nothing is parsed here
+    and no connection opens."""
     calls, connected = [], []
 
     def fake_remote(path, query=None, payload=None):
@@ -182,22 +210,14 @@ def test_board_forwards_to_a_named_inference_service(monkeypatch):
     monkeypatch.setenv("COUNTRIX_INFERENCE_URL", "http://inference:8019")
     monkeypatch.setattr(board, "remote", fake_remote)
     monkeypatch.setattr(board.psycopg, "connect", lambda *a, **k: connected.append(a))
-    assert board.api_board({"map": ["Ilios"], "red": ["Zarya"], "blue": []}) == (
-        {"forwarded": True}, 200)
-    assert calls[-1] == ("/board", {"map": "Ilios", "side": "", "red": ["Zarya"],
-                                    "blue": [], "bans": []}, None)
-    board.api_board({"map": ["Ilios"], "weights": ["healing-floor:9.99", "x:12"]})
-    assert calls[-1][1]["weights"] == ["healing-floor:9.99", "x:10"]  # clamped
-    board.api_board({"map": ["Ilios"], "client": ["tab1"]})      # the page's lane rides along
-    assert calls[-1][1]["client"] == "tab1"
-    # a malformed weight is the caller's error, refused here and never forwarded
-    forwarded = len(calls)
-    with pytest.raises(Refusal, match="id:value"):
-        board.api_board({"map": ["Ilios"], "weights": ["junk"]})
-    assert len(calls) == forwarded
+    query = {"map": ["Ilios"], "red": ["Zarya"], "client": ["tab1"], "weights": ["x:12", "junk"]}
+    assert board.api_board(query) == ({"forwarded": True}, 200)
+    assert calls == [("/board", {"map": ["Ilios"], "red": ["Zarya"], "client": ["tab1"],
+                                 "weights": ["x:12", "junk"]}, None)]
     assert connected == []                  # a forwarded board opens no connection
-    # the status rides along now: a 502 from the service is not served as a 200
+    # the status rides along: a 502 from the service is not served as a 200
     assert board.api_strategies() == ({"forwarded": True}, 200)
+    assert calls[-1] == ("/strategies", None, None)
 
 
 def test_board_reports_an_unreachable_inference_service(monkeypatch, capsys):
@@ -296,3 +316,42 @@ def test_board_infer_and_evaluate_are_served(served, monkeypatch, dsn):
     assert code == 400 and "error" in data
     code, data = _get(served + "/board?map=Ilios&weights=junk")    # a weight is id:value
     assert code == 400 and "id:value" in data["error"]
+
+
+@pytest.mark.invariant
+def test_the_board_answers_the_same_in_process_and_through_the_service(served, monkeypatch, dsn):
+    """The page's board is serve.handle_board on either path: the same query
+    under a weight solved in the board's process and on the served service
+    answers the same status and body, the seconds aside, and a malformed
+    weight the same 400 in the service's words. Both solve in this process,
+    under the reference playbook, so the weight rides on a heuristic; the
+    pooled board's agreement with this one is test_parallel's."""
+    import json
+
+    from db import web
+    from tests.inference import FIXTURE_PLAYBOOK, timeless
+    monkeypatch.setattr(serve.psql, "default_dsn", lambda: dsn)   # board.psql is the same module
+    monkeypatch.setenv("COUNTRIX_PARALLEL", "0")
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", FIXTURE_PLAYBOOK)
+    heuristic = next(s for s in catalog.load(FIXTURE_PLAYBOOK) if s.kind == "heuristic")
+
+    def in_process(query):
+        monkeypatch.delenv("COUNTRIX_INFERENCE_URL", raising=False)
+        return board.api_board(query)
+
+    def on_the_service(query):
+        monkeypatch.setenv("COUNTRIX_INFERENCE_URL", served)
+        return board.api_board(query)
+    query = {
+        "map": ["King's Row"], "red": ["Zarya"], "blue": ["Ana"], "side": ["attack"],
+        "weights": ["%s:3" % heuristic.id]}
+    here, there = in_process(query), on_the_service(query)
+    assert here.status == there.status == 200
+    sent = json.loads(json.dumps(here.body))             # as the board's handler sends it
+    assert heuristic.weight != 3 and sent["blue"]["weights"][heuristic.id] == 3   # it rode
+    assert timeless(sent) == timeless(there.body)
+    junk = {"map": ["Ilios"], "weights": ["junk"]}
+    with pytest.raises(Refusal) as refused:
+        in_process(junk)
+    reply = on_the_service(junk)
+    assert reply.status == 400 and web.failure(refused.value) == reply

@@ -124,8 +124,9 @@ db <- facts <- inference <- door <- ui.
   and the pooled and sequential answers must agree bit for bit: string-seeded
   RNGs, integer tallies, ties broken by `map_win_mean` and then sorted names.
 - **The board** (`ui/board.py`, its pages in `ui/pages.py`) serves
-  `/api/facts` in-process and delegates `/api/board` and `/api/strategies` to
-  `COUNTRIX_INFERENCE_URL` when set. It is read-only unless
+  `/api/facts` in-process and answers `/api/board` and `/api/strategies`
+  with `inference/serve.py`'s handlers, in-process or on the service
+  `COUNTRIX_INFERENCE_URL` names. It is read-only unless
   `COUNTRIX_READ_ONLY=0`; its one write is a `tune` call through the door.
   All three HTTP servers stand on `db/web.py`: a request whose Host or Origin
   is not a local name or one given with `--allow-host` is refused with 403.

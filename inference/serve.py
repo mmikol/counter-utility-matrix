@@ -5,7 +5,7 @@
     GET  /health                       the catalog size and the database state; 200
                                        and degraded, naming why, when either is out
                                        of reach
-    GET  /board?map=&side=&red=&blue=&bans=[&weights=&client=]   both seats' optimal
+    GET  /board?map=&side=&red=&blue=&bans=[&weights=&client=&pool=]   both seats' optimal
                                        six + the current comp, under the playbook
                                        tab's weights; a newer board from the same
                                        client supersedes one still solving
@@ -13,14 +13,14 @@
     GET  /evaluate?map=&side=&red=&blue=&bans=   a full six scored against the field
     GET  /strategies                   the catalog
 
-The engine functions ui/board.py calls in-process when COUNTRIX_INFERENCE_URL
-is unset. http.server on db.web's server and handler, no web framework: a
-request whose Host or Origin names another server is refused with 403 -
---allow-host adds the names it is called by, as `inference` in the compose
-stack - and every solve leaves a line on stderr with how long it took. A
-request that raises is answered by db.web.failure: a Refusal 400 with its
-message, anything else 500 with its type and message, the traceback on
-stderr.
+ui/board.py calls handle_board and handle_strategies in-process when
+COUNTRIX_INFERENCE_URL is unset. http.server on db.web's server and
+handler, no web framework: a request whose Host or Origin names another
+server is refused with 403 - --allow-host adds the names it is called by,
+as `inference` in the compose stack - and every solve leaves a line on
+stderr with how long it took. A request that raises is answered by
+db.web.failure: a Refusal 400 with its message, anything else 500 with its
+type and message, the traceback on stderr.
 """
 
 import argparse
@@ -79,12 +79,14 @@ def handle_board(cx: psycopg.Connection, query: Query) -> web.Reply:
     """Both seats and the current comp - what the board's two displays show -
     under the playbook tab's weights. The page never reads the countered case,
     so it is not solved here; a newer board from the same `client` (one lane
-    when none is named) supersedes this one, which then answers 400."""
+    when none is named) supersedes this one, which then answers 400. The whole
+    query is read before the lane is taken, so a malformed one supersedes
+    nothing."""
     draft = parse_board(query)
-    superseded = supersede.LATEST.take(_first(query, "client") or "")
-    world = tables.load(cx)
     weights = catalog_module.parse_weights(query.get("weights", []))
     pool, _ = engine.clamp_search(_first(query, "pool"))
+    superseded = supersede.LATEST.take(_first(query, "client") or "")
+    world = tables.load(cx)
     brief = engine.Brief(pool_size=pool, weights=weights, countered=False, superseded=superseded)
     return web.Reply(engine.board(world, draft, brief=brief).to_dict(), 200)
 

@@ -1,12 +1,12 @@
-"""The board's server: every JSON endpoint speaks the same facts and inference
-the MCP tools serve, its settings are read when used, and its one write is a
-tune call through the door. No HTTP server is spun up - the handler is thin
-routing; tests/ui/test_board_server.py serves it."""
+"""The board's server: its roster and facts speak what the MCP tools serve,
+its settings are read when used, and its one write is a tune call through
+the door. Its board and catalog are the inference service's handlers,
+tested in tests/inference/test_inference_service.py. No HTTP server is spun
+up - the handler is thin routing; tests/ui/test_board_server.py serves it."""
 
 import pytest
 
 from db import Refusal
-from facts.draft import parse_board
 from ui import board
 
 
@@ -44,31 +44,11 @@ def test_facts_endpoint_returns_the_board(db):
 
 
 @pytest.mark.invariant
-def test_board_endpoint_serves_both_seats_and_the_current_comp(db):
-    data, code = board.solve_board(db, parse_board({
-        "map": ["King's Row"], "red": ["Zarya"], "blue": ["Ana"], "side": ["attack"]}))
-    assert code == 200 and data["side"] == "attack"
-    assert data["blue"]["kind"] == "infer" and len(data["blue"]["blue"]) == 6
-    assert data["red"]["seat"] == "red" and data["red"]["side"] == "defense"
-    assert data["current"]["partial"] and data["current"]["blue"] == ["Ana"]
-    assert data["blue"]["cited"] and all(p["evidence"] for p in data["blue"]["picks"])
-    assert data["countered"] is None                   # the page never reads it
-    data, code = board.solve_board(db, parse_board({
-        "blue": ["Reinhardt", "Zarya", "Widowmaker", "Bastion", "Ana", "Lúcio"]}))
-    current = data["current"]
-    assert code == 200 and current["kind"] == "evaluate"
-    assert current["rank"] is None if current["unscored"] else current["rank"] >= 1
-    db.rollback()
-
-
-@pytest.mark.invariant
 def test_bans_ride_the_query_string(db):
     data, code = board.api_facts(db, {"map": ["King's Row"], "red": ["Zarya"],
                                       "bans": ["Widowmaker", "Sombra"]})
     assert code == 200 and data["bans"] == ["Widowmaker", "Sombra"]
     assert any(f["scope"] == "bans" for f in data["facts"])
-    with pytest.raises(Refusal, match="banned"):
-        board.solve_board(db, parse_board({"red": ["Zarya"], "blue": ["Ana"], "bans": ["Ana"]}))
     data, _ = board.api_roster(db)
     assert any(m["name"] == "King's Row" and m["sided"] for m in data["maps"])
     assert any(m["name"] == "Ilios" and not m["sided"] for m in data["maps"])

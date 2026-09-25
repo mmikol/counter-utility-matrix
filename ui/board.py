@@ -28,7 +28,7 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import psycopg
@@ -37,9 +37,9 @@ from psycopg.rows import TupleRow
 from db import psql, web
 from door.mcp import tools
 from facts import board_facts, tables
-from facts.draft import Draft, Query, board_query, is_sided, parse_board
+from facts.draft import Query, is_sided, parse_board
 from inference import catalog as catalog_module
-from inference import engine, parallel, supersede
+from inference import parallel, serve
 from inference.strategy import finite_number
 from ui import pages
 
@@ -63,8 +63,8 @@ def _http_url(setting: str) -> str:
     return value
 
 
-# The inference layer runs in-process unless a service is named: in the
-# compose stack the `inference` container serves it (inference/serve.py).
+# The inference service's handlers (inference/serve.py) run in-process unless
+# a service is named: in the compose stack the `inference` container serves them.
 def inference_url() -> str:
     return _http_url("COUNTRIX_INFERENCE_URL")
 
@@ -136,38 +136,15 @@ def api_facts(cx: psycopg.Connection[TupleRow], query: Query) -> web.Reply:
 
 
 def api_board(query: Query) -> web.Reply:
-    """The board solved at this stage of the draft - the inference layer's
-    `board()`: on the service when one is named, else in this process, the
-    one branch that opens a connection. The playbook tab's sliders ride along
-    as `weights=<id>:<0..10>`, one per heuristic set away from its file, and
-    the page names itself as `client`, so its newer board supersedes one
-    still solving. A malformed weight is refused here, never forwarded."""
-    draft = parse_board(query)
-    weights = catalog_module.parse_weights(query.get("weights", []))
-    client = (query.get("client") or [""])[0]
+    """The board solved at this stage of the draft: on the service when one
+    is named, else serve.handle_board in this process, the one branch that
+    opens a connection. The query goes as received - the playbook tab's
+    weights and the page's client with it - and the service's parse refuses
+    anything malformed."""
     if inference_url():
-        forward: dict[str, str | list[str]] = dict(board_query(draft))
-        if weights:
-            forward["weights"] = ["%s:%g" % kv for kv in sorted(weights.items())]
-        if client:
-            forward["client"] = client
-        return remote("/board", forward)
-    superseded = supersede.LATEST.take(client)
+        return remote("/board", query)
     with psycopg.connect(psql.default_dsn()) as cx:
-        return solve_board(cx, draft, weights, superseded)
-
-
-def solve_board(
-        cx: psycopg.Connection[TupleRow], draft: Draft,
-        weights: Mapping[str, float] | None = None,
-        superseded: Callable[[], bool] | None = None) -> web.Reply:
-    """The board solved in this process as the page asks for it: under the
-    sliders' weights, without the countered case the page never reads, and
-    stopped once `superseded` reports a newer board from the same page. A
-    Refusal reaches the request's boundary, which answers it 400."""
-    world = tables.load(cx)
-    brief = engine.Brief(weights=weights, countered=False, superseded=superseded)
-    return web.Reply(engine.board(world, draft, brief=brief).to_dict(), 200)
+        return serve.handle_board(cx, query)
 
 
 def tool_context() -> tools.Context:
@@ -204,12 +181,9 @@ def api_weight(payload: Mapping[str, object] | None) -> web.Reply:
 
 
 def api_strategies() -> web.Reply:
-    if inference_url():
-        return remote("/strategies")
-    # a playbook that does not load is the server's fault: a 500, as on the service
-    catalog = catalog_module.load()
-    return web.Reply({"strategies": [h.to_dict() for h in catalog],
-                      "playbook": catalog_module.playbook_name()}, 200)
+    """The catalog: the service's when one is named, else
+    serve.handle_strategies in this process."""
+    return remote("/strategies") if inference_url() else serve.handle_strategies()
 
 
 # --- server -----------------------------------------------------------------

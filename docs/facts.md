@@ -27,7 +27,7 @@ facts/
   scalars.py       a hero's numbers derived from its kit, one step per section
   kit.py           a kit piece's stat rows and the combat numbers read off them
   records.py       the typed records a Hero, a Map and the World hand on
-  draft.py         the board's vocabulary and the Draft record the doors read and write
+  draft.py         the board's vocabulary and the Draft record the doors read
   team.py          the team metrics and the typed bag every metric section comes in
   compute.py       the matchup, map and world metrics, and the registry of them all
   factset.py       the FactSet: a board's facts, numbered and filed by metric
@@ -125,10 +125,11 @@ refuses a team of seven, a sixth ban and a side that is not one, so the
 page, the inference service and the MCP board tools refuse the same
 boards. A playbook draft is another thing: a strategy that awaits its
 frontmatter. `parse_board(query)` reads a Draft off a `Query`, a parsed
-query string, dropping empty values, and `board_query(draft)` writes one
-back, so this board and the inference service spell a board the same way
-and take `Query` from here. The module imports only the model and
-`db.Refusal`, so the metrics can take its names without a cycle.
+query string, dropping empty values: the one reader of a board off the
+wire, shared by the page and the inference service because the page's
+board runs through `serve.handle_board`. Both take `Query` from here. The
+module imports only the model and `db.Refusal`, so the metrics can take
+its names without a cycle.
 
 ### `team.py` - the team metrics
 

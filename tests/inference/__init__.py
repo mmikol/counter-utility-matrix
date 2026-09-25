@@ -1,6 +1,7 @@
 """The inference layer's tests, the reference playbook they prove the solver against, its
 assumptions alone (ASSUMPTIONS_ONLY) for a test that needs a playbook that scores nothing,
-and the proven fixtures, each read with the playbook it was recorded under."""
+the proven fixtures, each read with the playbook it was recorded under, and timeless(),
+a board's payload less the seconds each result took, for comparing two solves."""
 
 import json
 import os
@@ -41,3 +42,13 @@ def recorded(name: str) -> Recorded:
     if not fixture.get("boards"):
         pytest.fail("tests/fixtures/%s.json records no boards" % name)
     return Recorded(playbook=fixture["playbook"], boards=fixture["boards"])
+
+
+def timeless(payload: dict[str, Any]) -> dict[str, Any]:
+    """A board's payload (its to_dict(), or the JSON a server sent) less the
+    seconds each result took: 'seconds' popped from every dict value holding
+    one. The payload is changed in place and returned."""
+    for value in payload.values():
+        if isinstance(value, dict) and "seconds" in value:
+            value.pop("seconds")
+    return payload

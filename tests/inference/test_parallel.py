@@ -17,17 +17,8 @@ import db
 from facts.draft import Draft
 from inference import catalog
 from inference.strategy import CatalogError
-from tests.inference import FIXTURE_PLAYBOOK
+from tests.inference import FIXTURE_PLAYBOOK, timeless
 from tests.inference.tracing import TRACED, Call, traced_board
-
-
-def _timeless(board):
-    """The board as data, less the seconds each result took."""
-    d = board.to_dict()
-    for value in d.values():
-        if isinstance(value, dict) and "seconds" in value:
-            value.pop("seconds")
-    return d
 
 
 def test_the_pooled_and_the_in_process_board_run_one_orchestration(
@@ -59,7 +50,7 @@ def test_the_pooled_and_the_in_process_board_run_one_orchestration(
         Call("merge", **against), Call("merge", **answer),
         Call("solved", **fill), Call("solved", **red_fill),
         Call("solved", **against), Call("solved", **answer)]
-    assert _timeless(pooled) == _timeless(alone)
+    assert timeless(pooled.to_dict()) == timeless(alone.to_dict())
 
 
 def test_a_dying_worker_reruns_the_same_board_in_this_process(
@@ -75,7 +66,7 @@ def test_a_dying_worker_reruns_the_same_board_in_this_process(
         board, trace = traced_board(monkeypatch, synthetic_world, scratch_playbook,
                                     pooled=True, breaks_after=breaks_after)
         assert trace[breaks_after:] == [Call("drop")], breaks_after
-        assert _timeless(board) == _timeless(alone), breaks_after
+        assert timeless(board.to_dict()) == timeless(alone.to_dict()), breaks_after
         assert "worker died (BrokenProcessPool: a worker died)" in capsys.readouterr().err
 
 
@@ -92,8 +83,9 @@ def test_a_board_without_the_countered_case_sends_none_of_its_rounds(
     assert "your picks hold" in full.momentum["verdict"]
     assert lean.countered is None and lean.momentum["countered"] is None
     assert "your picks hold" not in lean.momentum["verdict"]
-    assert ({k: v for k, v in _timeless(lean).items() if k not in ("countered", "momentum")}
-            == {k: v for k, v in _timeless(full).items() if k not in ("countered", "momentum")})
+    hedged = ("countered", "momentum")
+    assert ({k: v for k, v in timeless(lean.to_dict()).items() if k not in hedged}
+            == {k: v for k, v in timeless(full.to_dict()).items() if k not in hedged})
 
 
 @pytest.mark.invariant
@@ -123,14 +115,7 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
         straight = engine.board(world, draft, brief=engine.Brief(weights=weights))
     finally:
         parallel.POOL.drop()                # the pool this test started, torn down
-
-    def timeless(b):
-        d = b.to_dict()
-        for key in ("blue", "red", "current", "red_current", "fill", "countered"):
-            if d.get(key):
-                d[key].pop("seconds", None)
-        return d
-    assert timeless(split) == timeless(straight)
+    assert timeless(split.to_dict()) == timeless(straight.to_dict())
     first_line = lambda b: b.rendered().split("\n")[0]   # noqa: E731
     assert first_line(split) == first_line(straight)
     assert parallel.available(catalog=[]) is False   # a caller's catalog stays in-process

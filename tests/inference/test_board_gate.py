@@ -1,9 +1,11 @@
 """One gate for every door: the same over-limit board sent through the page's
-two endpoints, the service's three handlers, the four MCP board tools and
+facts endpoint, the service's three handlers, the four MCP board tools and
 the engine's three entry points is refused with the same message on each.
-The synthetic World stands in for the database and the reference playbook
-for the live one, every tool call is audited to a scratch file, and every
-board solves in this process."""
+The page's board is not listed: in-process it opens a connection and hands
+the query to serve.handle_board, which is a door here, and on the service
+it is that handler again. The synthetic World stands in for the database
+and the reference playbook for the live one, every tool call is audited to
+a scratch file, and every board solves in this process."""
 
 import contextlib
 
@@ -25,7 +27,7 @@ SOLVING_DOORS = (
     "service handle_infer", "service handle_evaluate", "service handle_board",
     "mcp infer", "mcp evaluate", "mcp board",
     "engine infer", "engine evaluate", "engine board")
-DOORS = (*FACTS_DOORS, "page api_board", *SOLVING_DOORS)
+DOORS = (*FACTS_DOORS, *SOLVING_DOORS)
 
 OVER_LIMIT = [
     pytest.param({"red": SEVEN, "blue": ("Anvil",)}, "more than 6 red picks", id="seven-red"),
@@ -51,7 +53,6 @@ def doors(synthetic_world, monkeypatch, tmp_path):
     # board() asks the pool for its workers before _board_once refuses
     monkeypatch.setenv("COUNTRIX_PARALLEL", "0")
     monkeypatch.setenv("COUNTRIX_AUDIT", str(tmp_path / "audit.jsonl"))
-    monkeypatch.delenv("COUNTRIX_INFERENCE_URL", raising=False)
     monkeypatch.setenv("COUNTRIX_STRATEGIES", FIXTURE_PLAYBOOK)
     ctx = Offline(dsn="postgresql://nowhere", client="test")
 
@@ -66,7 +67,6 @@ def doors(synthetic_world, monkeypatch, tmp_path):
 
     return {
         "page api_facts": lambda board: page.api_facts(None, query(board)),
-        "page api_board": lambda board: page.api_board(query(board)),
         "service handle_infer": lambda board: serve.handle_infer(None, query(board)),
         "service handle_evaluate": lambda board: serve.handle_evaluate(None, query(board)),
         "service handle_board": lambda board: serve.handle_board(None, query(board)),
@@ -94,8 +94,6 @@ def test_every_door_that_solves_refuses_a_third_red_tank(doors, door):
     """Three red tanks against one blue pick is refused as the queue's by
     infer, evaluate and board alike, evaluate before it asks for a full six;
     test_engine holds a third blue tank. The facts doors are left out: a
-    board's facts state what it holds and apply no tank rule. api_board is
-    left out too: past the parse it opens a database connection, and the
-    engine board it then solves with is a door here."""
+    board's facts state what it holds and apply no tank rule."""
     with pytest.raises(Refusal, match="the queue allows at most 2 tanks, and red picks 3"):
         doors[door]({"red": ("Anvil", "Kite", "Mortar"), "blue": ("Balm",)})

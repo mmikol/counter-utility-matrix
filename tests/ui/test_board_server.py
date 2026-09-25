@@ -177,7 +177,7 @@ def test_a_board_on_the_service_answers_while_the_database_is_down(served, monke
     monkeypatch.setattr(board, "remote", lambda path, query=None, payload=None: (
         {"forwarded": path, "client": query.get("client")}, 200))
     code, _, body = get(served + "/api/board?map=Ilios&blue=Ana&client=tab1")
-    assert code == 200 and json.loads(body) == {"forwarded": "/board", "client": "tab1"}
+    assert code == 200 and json.loads(body) == {"forwarded": "/board", "client": ["tab1"]}
 
 
 def test_a_board_leaves_a_line_on_stderr_and_a_static_file_none(served, monkeypatch, capsys):
