@@ -1,13 +1,15 @@
 """The INFERENCE LAYER: facts in, the optimal composition out.
 
     strategies/   the playbook - STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS:
-                  one markdown file per strategy. A constraint is a limit
+                  one markdown file per strategy, and tuning-log.md, a line
+                  per change. A constraint is a limit
                   (require: must hold) or a scored adjustment (bonus/penalty
                   while a condition holds); a heuristic maximises or
                   minimises a metric; an assumption is prose the agent holds
                   a comp to
     README.md     the citation record the playbook is rebuilt from: a line
-                  per strategy id, shipped or removed
+                  per strategy id, shipped or removed, with the threads a
+                  rule was drawn from or the user's word for an assumption
     frontmatter   the dialect a strategy file's frontmatter is written in
     strategy      one strategy: its fields, its kind and form, and the rules
                   every file keeps

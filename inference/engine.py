@@ -8,7 +8,8 @@ that justify it (the facts the board would show for map + red + the
 six), the score broken down per strategy, and the alternatives.
 board() does it for both seats - blue's absolute optimal, red around
 its revealed ones, on opposite sides of a sided map - and scores the
-current blue picks as they stand. The records are result.py's, the prose
+current blue picks as they stand. All three refuse a team past the
+queue's tanks, on either seat. The records are result.py's, the prose
 plan.py's and the process pool parallel.py's.
 """
 

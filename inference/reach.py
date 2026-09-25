@@ -11,7 +11,10 @@ opposite - the search tries a few maps and a few reds, and a board it never visi
 seat the hero. A hero it finds nothing for is one worth looking at: a wrong number, a
 tool no metric reads, a rule that charges it for what it is not, or a board this search
 does not reach. Fifty-one of the fifty-three released heroes have a board; Freja and
-Shion do not, as of the scale that stopped moving with the bans.
+Shion do not, as of the scale that stopped moving with the bans. The `reach` tool
+runs the search; `.venv/bin/python -m scripts.reach` records a board per released hero
+in tests/fixtures/reach.json beside the playbook's digest, and the suite checks none
+is lost.
 
     maps    the four its map rates lift it most on (its three best maps are among them)
     reds    none (blue counters the likely six); the heroes it answers, two a role, the

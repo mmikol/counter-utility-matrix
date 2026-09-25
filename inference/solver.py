@@ -3,18 +3,20 @@ A Solver is the board's Objective (inference.scoring) on the board's scale
 (inference.scale), searched around the locked picks.
 
     legal_sixes     every shape the queue and the hard limits allow, filled around
-                    the locked picks from a per-role pool ranked by standing (six
-                    per role by default)
+                    the locked picks from a per-role pool of released heroes (an
+                    announced hero waits) ranked by standing, PARTNER_POINTS for
+                    each locked partner (six per role by default)
     sweep           a slice of the enumeration prepared, scored and slimmed. The
                     slices partition the field, so the search splits across
                     processes.
     rank            sorted by score, then tie-break, then names - a total order, so
                     the answer does not depend on how the sweep was split
     refine          local search from the best six sixes and the best of every
-                    shape: swap any slot for any same-role hero on the roster, keep
-                    improvements; bring each of the wiki's synergy pairs into the
-                    best sixes two slots at once; then climb from random sixes of
-                    the leader's shape and change two seats at once
+                    shape within SHAPE_REACH of the best: swap any slot for any
+                    same-role hero on the roster, keep improvements; bring each
+                    of the wiki's synergy pairs into the best sixes two slots at
+                    once; then climb from random sixes of the leader's shape and
+                    change two seats at once
 """
 
 import heapq
@@ -129,8 +131,8 @@ class Solver(Objective):
         return pools
 
     def _pool_key(self, h: Hero) -> tuple[float, float, str]:
-        """Standing first, a point for each locked partner; then the old prior,
-        then the name."""
+        """Standing first, PARTNER_POINTS for each locked partner; then the old
+        prior, then the name."""
         standing = self._standing.get(h.id)
         if standing is not None:
             standing += PARTNER_POINTS * 1e6 * sum(

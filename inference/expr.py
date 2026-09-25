@@ -11,7 +11,8 @@ and then compiled to a code object, so evaluating a strategy on a
 candidate is a native expression, not a tree walk. Names are dotted keys
 into a namespace of dicts ({"team": {...}, "enemy": {...}, "matchup": ...,
 "map": ..., "world": ..., "params": ...}); a key a namespace lacks reads 0,
-and a division by zero reads 0 - that division alone.
+so a metric that does not apply to a board never crashes a score, and a
+/, // or % by zero reads 0 - that operation alone.
 """
 
 import ast

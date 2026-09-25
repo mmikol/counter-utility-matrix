@@ -100,7 +100,7 @@ def load(directory: str | None = None) -> list[Strategy]:
 
 
 def parse_weights(items: Mapping[str, object] | Iterable[object] | None) -> dict[str, float]:
-    """`id:value` strings (a query's repeated `weight` parameter) or a mapping
+    """`id:value` strings (a query's repeated `weights` parameter) or a mapping
     -> {id: weight}, each clamped to the file's WEIGHT_RANGE. What a board's
     sliders send. An entry that is not id:value, or a value that is not a
     finite number (strategy.finite_number: nan and inf are not), is a

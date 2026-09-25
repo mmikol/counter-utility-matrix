@@ -1,6 +1,7 @@
 """Tuning a strategy: an edit to its frontmatter, validated, written back
 and logged with its reason. The `tune`, `add_strategy` and `infer_strategy`
-tools mirror it into the database.
+tools mirror it into the database, and `derive_strategies` does when it
+derived something.
 
     tune("coverage", "weight", 3.5, "the solver kept leaving Pharah unanswered")
     tune("under-healed", "params.HEAL_MARGIN", 0.8, "two-support lines felt thin")
