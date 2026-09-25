@@ -30,7 +30,9 @@ hide the rate figures: Blizzard licenses those for personal use only.*
 - **Solves the comp.** A deterministic search enumerates the sixes each role's
   strongest heroes allow, then climbs by local search over the whole roster.
   A default engine scores every candidate on its win rates on the map, the
-  wiki's synergies and its counters to the other side; the playbook's
+  wiki's synergies and its counters to the other side - the wiki's, and
+  where the wiki says nothing, answers derived from the two kits and named
+  on the board with the mechanism that fired; the playbook's
   constraints and heuristics adjust that score. The best six comes back with
   the alternatives and why.
 - **Records what was played.** Each map played is entered by hand - both
@@ -76,7 +78,7 @@ frontmatter, and the solver reads nothing else.
 
 ## Engineering
 
-- **815 tests, 95% line coverage** with the database built, against a 75%
+- **940 tests, 97% line coverage** with the database built, against a 75%
   floor. CI runs ruff, mypy and the database-free suite, held to 78%, on every
   push to main and every pull request.
 - **The search is held to brute force.** A CI gate enumerates every legal six

@@ -61,12 +61,22 @@ three terms favour, scored and explained:
   share of the optimal's edge over a coin flip.
 - **synergy**: `team.synergy_score`, the wiki's synergy scores among the
   six.
-- **counters**: the wiki's counter edges between the six and the other
-  side, answers less exposures. The other side is its locked picks, or,
-  with none, its likely six on this map past the bans
-  (`compute.expected_picks`, the six the board's red panel shows); either
-  seat reads the other the same way. Only this term reads the likely six:
-  `enemy.*` and every other metric still see the picks alone.
+- **counters**: the counter graph between the six and the other side,
+  the weight of its answers less the weight of its exposures. A wiki
+  edge, from the Match-Up tables or the Strategy sections, weighs 2.
+  Where the wiki has no edge either way, `facts/counters.py` derives
+  answers from the kits at load: thirteen mechanisms (anti-air, a flier,
+  barrier piercing, anti-heal, burst, control, a projectile eater and a
+  weapon it cannot take, armor, dive, saves, reach, tank-busting) score
+  every ordered pair of released heroes, and each loser's six best
+  answers, scoring 0.5 or more and more than the reverse, weigh 1 each.
+  The other side is its locked picks, or, with none, its likely six on
+  this map past the bans (`compute.expected_picks`, the six the board's
+  red panel shows); either seat reads the other the same way. Only this
+  term reads the likely six or a derived edge: the `team.*` and `enemy.*`
+  counter metrics read the wiki's graph against the picks. The board
+  names every derived edge it counts with the mechanism and the numbers
+  that fired.
 
 `W_RATE` is 1, so the rate term is in win-rate points. `W_SYNERGY` and
 `W_COUNTER` are set so that each term's median spread across a board's

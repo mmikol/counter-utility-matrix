@@ -21,6 +21,7 @@ from psycopg.rows import TupleRow
 
 from db import KIND_WEAPON
 from db.data.names import name_key
+from facts import counters
 from facts import kit_format as kit_format_module
 from facts.draft import KIT_FORMAT
 from facts.kit import KitPiece, Stat
@@ -411,8 +412,9 @@ def load(cx: Connection, kit_format: str = KIT_FORMAT) -> World:
     open psycopg connection; this module never opens one of its own. The
     steps run in the order each relies on: the kit, and the format laid over
     it, before derive_scalars, the rates before derive_rates, best_maps and
-    map_styles, the terrain before map_styles, and the benches over the
-    derived roster."""
+    map_styles, the terrain before map_styles, the benches over the derived
+    roster, and the counter matrix over the derived kit and the wiki's
+    counters, last."""
     w = World()
     _read_heroes(cx, w)
     _read_abilities(cx, w)
@@ -430,4 +432,5 @@ def load(cx: Connection, kit_format: str = KIT_FORMAT) -> World:
     for hero in w.heroes.values():
         derive_scalars(hero)
     _benches(w)
+    counters.derive(w)
     return w

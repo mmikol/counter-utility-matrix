@@ -1,11 +1,12 @@
 """A named hero's facts: first what the hero is wherever it plays - who it is,
 what the kit's format changes, the traits its kit's numbers and keywords
-carry, its abilities, weapons and perks, its rates, and the wiki's counters
-and partners - then what only this board has: on this map, against these
-opponents, beside these teammates. facts.board_facts calls write() once per
-pick, red first.
+carry, its abilities, weapons and perks, its rates, the wiki's counters and
+partners and the kit's derived answers where the wiki is silent - then what
+only this board has: on this map, against these opponents, beside these
+teammates. facts.board_facts calls write() once per pick, red first.
 """
 
+from facts import counters
 from facts.compute import TREND_POINTS
 from facts.factset import FactSet
 from facts.model import Hero, Map, Resolved, World
@@ -311,6 +312,23 @@ def _by_basis(world: World, edges: list[tuple[int, int]], other: int) -> str:
     return said
 
 
+def _hero_derived(fs: FactSet, world: World, h: Hero, team: str) -> None:
+    """The answers the kit derives where the wiki has no edge either way,
+    each with the mechanism that fired strongest, labelled derived."""
+    name = h.name
+    for key, side, other, said in (
+            ("hero.derived_answered_by", 0, 1, "is answered by"),
+            ("hero.derived_answers", 1, 0, "answers")):
+        edges = sorted((e for pair, e in world.derived.items() if pair[side] == h.id),
+                       key=lambda e: (-e.score, world.heroes[(e.loser, e.winner)[other]].name))
+        if edges:
+            names = [world.heroes[(e.loser, e.winner)[other]].name for e in edges]
+            fs.add("hero", name, key, "%s %s, derived from the kits where the wiki is silent:"
+                " %s" % (name, said, ", ".join(
+                    "%s (%s)" % (n, e.fired[0].phrase) for n, e in zip(names, edges, strict=True))),
+                value=names, source="derived:counters", team=team)
+
+
 def _hero_relations(fs: FactSet, world: World, h: Hero, team: str) -> None:
     """The wiki's counters - its match-up advice and its Strategy sections -
     and synergies, whoever else is picked."""
@@ -325,6 +343,7 @@ def _hero_relations(fs: FactSet, world: World, h: Hero, team: str) -> None:
         fs.add("hero", name, "hero.answers", "%s answers, %s" % (
             name, _by_basis(world, [(x, h.id) for x in world.answers[h.id]], 0)),
             value=answers, source="counters", team=team)
+    _hero_derived(fs, world, h, team)
     for other, (score, note) in sorted(world.partners.get(h.id, {}).items(),
             key=lambda kv: -(kv[1][0] or 0)):
         fs.add("hero", name, "hero.partner", "%s + %s (%s/2): %s"
@@ -382,6 +401,15 @@ def _hero_versus(
         fs.add("hero", name, "hero.vs_answers", "%s %s answers %s %s"
             % (team, name, other_side, ", ".join(wins)), value=wins,
             source="counters", team=team)
+    # the kit's answers where the wiki is silent, each worded with what fired,
+    # filed under the hero answered
+    for o in opponents:
+        derived = world.derived.get((h.id, o.id))
+        if derived is not None:
+            fs.add("hero", name, "hero.vs_derived", counters.said(world, derived),
+                value={"winner": o.name, "loser": name,
+                       "mechanisms": [f.mechanism for f in derived.fired]},
+                source="derived:counters", team=team)
     for mate in teammates:
         edge = world.synergy(h.id, mate.id)
         if edge:

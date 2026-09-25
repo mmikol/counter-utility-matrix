@@ -8,16 +8,29 @@
                 RATE_PICK_HALF), the map's pick rate on a map - and averaged
                 over the six
     synergy     team.synergy_score: the wiki's synergy scores among the six
-    counters    the wiki's counter edges between the six and the other side:
-                the picks that answer it less the picks it answers back. The
-                other side is its locked picks; with none, its likely six on
-                this map (compute.expected_picks, past the bans), which only
-                this term reads
+    counters    the counter graph between the six and the other side
+                (facts.counters): the weight of the edges by which its picks
+                answer that side less the weight of those by which that side
+                answers them, a wiki edge WIKI_WEIGHT (2) and, on a pair the
+                wiki has no edge on either way, a derived one DERIVED_WEIGHT
+                (1). The other side is its locked picks; with none, its likely
+                six on this map (compute.expected_picks, past the bans),
+                which only this term reads
 
 It is always on and needs no playbook: under a playbook of assumptions the
 board's sixes are the ones these three favour, and the strategies' terms
 sit on top of it (inference.scoring). A heuristic moves a six by its weight
 at most, since its norm is in [0, 1].
+
+Only this term reads the kit's derived edges. The team.* counter metrics -
+coverage, exposed_count, net_edges and their family - read the wiki's
+graph alone: the playbook's counter rules are written and weighed against
+the wiki's judgement, and a derived edge is the kit's reading, at half a
+wiki edge's weight here. team.net_edges stays the wiki's edges counted once
+each against red's picks; this term is the weighted graph against the side
+it reads, another number under another name. The board says which edges
+are derived: this term's fact lists each one with the mechanism that fired,
+as do the heroes' facts (hero.vs_derived).
 
 The rate term is centred on 50, a coin flip, and not on the reference
 sample's mean: the zero is the same on every board, so a six's term needs no
@@ -30,15 +43,18 @@ are set so that each term's median range within one board is about half the
 rate term's, measured over the reference sample (inference.scale.sample,
 1,200 legal sixes a board) on each of the 30 maps of the database's capture
 of September 2026, each board's other side its likely six, the side the
-term reads until one is revealed. The rate term's median range was 4.8
-points (map_win_mean's, unpulled, 6.6), the synergy score's 21 and the net
-counter edges' 17.5; with two red picks revealed the counter edges' was 12.
-Half the rate term's range is 0.114 of the synergy score's and 0.137 of the
-counter edges', rounded to 0.1 and 0.15: at the median a board's sixes
-spread about 4.8 points on rates, 2.1 on synergy and 2.6 on counters. These
-are defaults, which recorded match outcomes will refit. OFF zeroes all
-three, and a board scored under it is the playbook's alone, exactly as
-before the engine had a base.
+term reads until one is revealed. The rate term's median range was 4.56
+points (map_win_mean's, unpulled, 6.29), the synergy score's 21 and the
+counter graph's 42.5 - the wiki's edges, its Match-Up column's and its
+Strategy sections', at 2 and the kit's fill at 1; with two red picks
+revealed the graph's was 24. Half the rate term's range is 0.109 of the
+synergy score's and 0.054 of the counter graph's, rounded to 0.1 and 0.05:
+at the median a board's sixes spread about 4.6 points on rates, 2.1 on
+synergy and 2.1 on counters. (Before the graph weighed a wiki edge 2 and
+took the kit's fill, the same measure gave the wiki's Match-Up edges alone
+a range of 17.5 and W_COUNTER 0.15.) These are defaults, which recorded
+match outcomes will refit. OFF zeroes all three, and a board scored under
+it is the playbook's alone, exactly as before the engine had a base.
 """
 
 import math
@@ -46,13 +62,14 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import NamedTuple, TypedDict
 
-from facts import compute
+from facts import compute, counters
 from facts.factset import Fact, FactSet
 from facts.model import Hero, Map, World
+from facts.records import DerivedEdge
 
 W_RATE = 1.0            # points of score per point of trusted win-rate edge
 W_SYNERGY = 0.1         # per point of the wiki's synergy scores among the six
-W_COUNTER = 0.15        # per net counter edge against the other side
+W_COUNTER = 0.05        # per net point of the counter graph: a wiki edge 2, a derived one 1
 COIN_FLIP = 50.0        # the win rate the rate term is centred on
 # The pick rate at which a hero's edge is trusted by half: trust = p / (p +
 # RATE_PICK_HALF). A rarely picked hero's rate is read off few matches and
@@ -70,7 +87,8 @@ RATES, SYNERGY, COUNTERS = "base.rates", "base.synergy", "base.counters"
 READS = {
     RATES: "the six's win rates on the map, each trusted by its pick rate",
     SYNERGY: "team.synergy_score, the wiki's synergy scores among the six",
-    COUNTERS: "the wiki's counter edges between the six and the other side"}
+    COUNTERS: "the counter graph between the six and the other side: a wiki edge 2, a derived"
+                " one 1"}
 TITLES = {
     RATES: "Win rates here", SYNERGY: "The wiki's synergy pairs",
     COUNTERS: "Answers to the other side"}
@@ -96,13 +114,14 @@ OFF = BaseWeights(rate=0.0, synergy=0.0, counter=0.0)
 
 
 class BaseStamp(TypedDict):
-    """The default engine as a recorded fixture holds it: the weights and the
-    pick rate that halves an edge, which with the playbook fix what a six
-    scores."""
+    """The default engine as a recorded fixture holds it: the weights, the
+    pick rate that halves an edge, and a derived counter edge's weight
+    against a wiki edge's, which with the playbook fix what a six scores."""
     rate: float
     synergy: float
     counter: float
     pick_half: float
+    derived: float
 
 
 def stamp(weights: BaseWeights) -> BaseStamp | None:
@@ -111,7 +130,8 @@ def stamp(weights: BaseWeights) -> BaseStamp | None:
     if not weights.on:
         return None
     return BaseStamp(rate=weights.rate, synergy=weights.synergy, counter=weights.counter,
-                     pick_half=RATE_PICK_HALF)
+                     pick_half=RATE_PICK_HALF,
+                     derived=counters.DERIVED_WEIGHT / counters.WIKI_WEIGHT)
 
 
 class Opponent(NamedTuple):
@@ -122,15 +142,16 @@ class Opponent(NamedTuple):
 
 
 class Edges(NamedTuple):
-    """One hero's counter edges against the other side: the heroes of that
-    side it answers, and those that answer it."""
+    """One hero's counter tally against the other side: the weight of the
+    edges by which it answers that side's heroes, and of those by which they
+    answer it (counters.weight)."""
     answers: int
     exposures: int
 
 
 class Terms(NamedTuple):
     """A six's three base terms, unweighted: the trusted rate edge in points,
-    the synergy score, and the counter edges each way."""
+    the synergy score, and the counter graph's weight each way."""
     rates: float
     synergy: float
     answers: int
@@ -138,8 +159,9 @@ class Terms(NamedTuple):
 
     @property
     def counters(self) -> int:
-        """Answer edges less exposure edges: team.net_edges against the
-        other side the term reads."""
+        """Answer weight less exposure weight against the other side the
+        term reads. team.net_edges counts the wiki's edges alone, once each,
+        against red's picks alone."""
         return self.answers - self.exposures
 
 
@@ -179,19 +201,30 @@ def rate_edge(h: Hero, m: Map | None) -> float:
 class Base:
     """The default engine on one board: its weights, the other side the
     counter term reads, and each hero's trusted rate edge on the map and
-    counter edges against that side, read once. A six's terms are then a
+    counter tally against that side, read once. A six's terms are then a
     sum of lookups and the synergy score its metrics already hold."""
 
     def __init__(self, world: World, m: Map | None, *, red: Sequence[Hero],
                  banned: Sequence[Hero], weights: BaseWeights) -> None:
         self.weights = weights
+        self.world = world
         self.opponent = opponent(world, m, red, banned)
         against = self.opponent.heroes
         self._edge = {h.id: rate_edge(h, m) for h in world.heroes.values()}
         self._edges = {h.id: Edges(
-            answers=sum(1 for e in against if world.is_countered_by(e.id, h.id)),
-            exposures=sum(1 for e in against if world.is_countered_by(h.id, e.id)))
+            answers=sum(counters.weight(world, e.id, h.id) for e in against),
+            exposures=sum(counters.weight(world, h.id, e.id) for e in against))
             for h in world.heroes.values()}
+
+    def derived(self, heroes: Sequence[Hero]) -> list[DerivedEdge]:
+        """The derived edges the six's tally counts, each way, in seat order:
+        what the counter fact names as derived."""
+        against = self.opponent.heroes
+        return [edge for h in heroes for e in against
+                for edge in (self.world.derived.get((e.id, h.id)),
+                             self.world.derived.get((h.id, e.id)))
+                if edge is not None and counters.weight(
+                    self.world, edge.loser, edge.winner) == counters.DERIVED_WEIGHT]
 
     def terms(self, heroes: Sequence[Hero], synergy: float) -> Terms:
         """A six's terms. The edges are summed exactly (math.fsum), so a six
@@ -224,9 +257,10 @@ def write_rates_fact(fs: FactSet, *, seat: str, map_name: str | None, rates: flo
 
 def write_counters_fact(
         fs: FactSet, *, seat: str, map_name: str | None, against: Sequence[str],
-        likely: bool, answers: int, exposures: int) -> Fact:
+        likely: bool, answers: int, exposures: int, derived: Sequence[str] = ()) -> Fact:
     """The fact the counter term cites: which of the other side's sixes it
-    read - its picks, or its likely six - and the edges each way."""
+    read - its picks, or its likely six - the graph's weight each way, and
+    each derived edge in it, worded with its mechanism (counters.said)."""
     other = "blue" if seat == "red" else "red"
     if likely:
         whom = "%s's likely six %s" % (other, "on %s" % map_name if map_name else "with no map")
@@ -234,7 +268,9 @@ def write_counters_fact(
         whom = "%s as it stands" % other
     fs.add(
         "team", "blue", COUNTERS,
-        "counters read %s: %s - %d answer-edges into it, %d back (%+d)"
-        % (whom, ", ".join(against), answers, exposures, answers - exposures),
+        "counters read %s: %s - %d into it, %d back (%+d), a wiki edge %d and a derived one %d%s"
+        % (whom, ", ".join(against), answers, exposures, answers - exposures,
+            counters.WIKI_WEIGHT, counters.DERIVED_WEIGHT,
+            "".join("; %s" % said for said in derived)),
         value=answers - exposures, source="derived:" + COUNTERS, team="blue")
     return fs.find(COUNTERS)[-1]

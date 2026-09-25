@@ -16,10 +16,12 @@ from db import KIND_ULTIMATE, ROLES, Refusal
 from db.data.names import name_key
 from facts.kit import KitPiece
 from facts.records import (
+    DerivedEdge,
     KitChange,
     KitLine,
     MapRate,
     Modifier,
+    Pairing,
     Patch,
     PerkEffect,
     Rates,
@@ -214,6 +216,11 @@ class World:
         # (loser, winner) -> where in the wiki's articles the edge was read:
         # match-up, strategy or both (the counters table's basis)
         self.counter_basis: defaultdict[tuple[int, int], set[str]] = defaultdict(set)
+        # the kit's counter matrix, (winner, loser) -> its pairing, and the
+        # edges it fills the wiki's gaps with, (loser, winner) -> the edge
+        # (facts.counters, after derive_scalars)
+        self.matrix: dict[tuple[int, int], Pairing] = {}
+        self.derived: dict[tuple[int, int], DerivedEdge] = {}
         self.answered_by: defaultdict[int, set[int]] = defaultdict(set)     # loser -> {winners}
         self.answers: defaultdict[int, set[int]] = defaultdict(set)         # winner -> {losers}
         self.synergies: dict[frozenset[int], Synergy] = {}      # frozenset({a, b}) -> the pair's

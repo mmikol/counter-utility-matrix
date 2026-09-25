@@ -23,7 +23,10 @@ RANK_SENSITIVE = 6.0
 FLIER_REACH = 30.0        # metres a hitscan weapon must publish to answer a flier
 
 # versus the other team (all 0 when the other team is empty): the last section
-# of TEAM_METRICS, and the keys compute keeps off the enemy.* vocabulary
+# of TEAM_METRICS, and the keys compute keeps off the enemy.* vocabulary. They
+# read the wiki's counter edges alone (World.counters, its Match-Up tables' and
+# its Strategy sections'), each once; the kit's derived edges are the default
+# engine's counter term's alone (facts.counters, inference.base)
 VERSUS_METRICS = OrderedDict([
     ("coverage", "enemies answered by at least one pick"),
     ("coverage_share", "coverage / enemies revealed"),

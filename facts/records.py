@@ -59,6 +59,35 @@ class KitChange(NamedTuple):
     text: str
 
 
+class Fired(NamedTuple):
+    """One mechanism of the counter matrix firing for a pair: its name, its
+    strength in [0, 1], the words the board says it with ("hitscan against
+    a flier") and the numbers that fired it."""
+    mechanism: str
+    strength: float
+    phrase: str
+    numbers: str
+
+
+class Pairing(NamedTuple):
+    """A winner against a loser in the counter matrix: its score, the fired
+    strengths' sum capped at 1, and each mechanism that fired, strongest
+    first."""
+    score: float
+    fired: tuple[Fired, ...]
+
+
+class DerivedEdge(NamedTuple):
+    """A counter edge the matrix derives on a pair the wiki leaves out: the
+    winner answers the loser, by the winner's score against it and its net
+    over the reverse, through the mechanisms that fired."""
+    winner: int
+    loser: int
+    score: float
+    net: float
+    fired: tuple[Fired, ...]
+
+
 # --- a map's -------------------------------------------------------------
 
 class StageTerrain(NamedTuple):

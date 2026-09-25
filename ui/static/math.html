@@ -57,11 +57,17 @@ same board gives the same six.</p>
 tab's own numbers.</p>
 <p id='default-engine'><b>The default engine</b> scores every six before the playbook reads
 it, whatever the playbook holds: the six's win rates on this map, the wiki's synergy pairs
-among its picks, and the wiki's counter edges between it and the other side. A pick's win
-rate is read as its edge over a coin flip, trusted by its pick rate, so a hero picked in few
-matches counts for less. The other side is its locked picks, or its likely six on this map
-until it locks one; only this term reads the likely six. A playbook of assumptions alone gets
-the six these three favour, scored and explained, and every other term sits on top of them.</p>
+among its picks, and the counter graph between it and the other side. A pick's win rate is
+read as its edge over a coin flip, trusted by its pick rate, so a hero picked in few matches
+counts for less. The counter graph is the wiki's edges, its Match-Up tables' and its
+Strategy sections', and where the wiki has no edge either way, the answers the kit derives:
+thirteen mechanisms read off the two heroes' kits, from hitscan against a flier to anti-heal
+against self-healing, each loser's %(TOP_ANSWERS)d best at a score of %(THRESHOLD)g or more.
+A wiki edge counts %(WIKI_WEIGHT)d, a derived one %(DERIVED_WEIGHT)d, and the board names
+every derived edge it counts with the mechanism that fired. The other side is its locked
+picks, or its likely six on this map until it locks one; only this term reads the likely six
+or a derived edge - the playbook's counter metrics read the wiki's graph alone. A playbook of assumptions alone gets the six these three favour, scored and explained,
+and every other term sits on top of them.</p>
 <p>A hard limit that fails removes the six; a soft one subtracts its penalty. A heuristic
 normalises its metric to 0..1 against %(REFERENCE_SIZE)s random legal sixes for the board
 (seeded from map, side, enemies and bans), flips it when minimising, then multiplies by its
@@ -82,7 +88,9 @@ rates(x)    = mean over the picks p of  t_p &middot; ( win_p &minus; 50 )
               t_p = pick_p / ( pick_p + %(RATE_PICK_HALF)g )
               win_p, pick_p: p's rates on the map, all ranks; overall with no map or no row
 synergy(x)  = the wiki's synergy scores, summed over the pairs in x
-counters(x) = counter edges into the other side &minus; edges from it into x
+counters(x) = &Sigma; over x's picks p and the other side's heroes e of  w(e, p) &minus; w(p, e)
+              w(l, a) = %(WIKI_WEIGHT)d where the wiki reads a answering l, 0 where it reads the
+              reverse, else %(DERIVED_WEIGHT)d for a derived answer, else 0
               the other side: its locked picks, else its likely six here
 
 norm_h(v) = clamp( (v &minus; min_ref) / (max_ref &minus; min_ref), 0, 1 )

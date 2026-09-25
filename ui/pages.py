@@ -16,7 +16,7 @@ import os
 from typing import NamedTuple
 
 from door.mcp.matches import NOTE_LIMIT, RESULTS
-from facts import compute
+from facts import compute, counters
 from facts.draft import MAX_BANS, TEAM_SIZE
 from inference import base, scale, scoring, solver
 
@@ -194,6 +194,10 @@ def view_math() -> str:
         "W_RATE": base.W_RATE,
         "W_SYNERGY": base.W_SYNERGY,
         "W_COUNTER": base.W_COUNTER,
+        "WIKI_WEIGHT": counters.WIKI_WEIGHT,
+        "DERIVED_WEIGHT": counters.DERIVED_WEIGHT,
+        "TOP_ANSWERS": counters.TOP_ANSWERS,
+        "THRESHOLD": counters.THRESHOLD,
         "RATE_PICK_HALF": base.RATE_PICK_HALF,
         "SYNERGY_PULL": compute.SYNERGY_PULL,
         "REFERENCE_SIZE": format(scale.REFERENCE_SIZE, ","),

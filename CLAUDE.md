@@ -126,8 +126,10 @@ db <- facts <- inference <- door <- ui.
   `inference/strategies/`.
 - **The default engine scores first.** `inference/base.py` scores every six
   on its win rates on the map (each pick's edge over 50, trusted by its pick
-  rate), the wiki's synergy scores and its counter edges against the other
-  side - its locked picks, else its likely six - and the playbook's terms
+  rate), the wiki's synergy scores and the counter graph against the other
+  side - its locked picks, else its likely six: a wiki edge 2, and on a
+  pair the wiki leaves out a kit-derived one 1 (`facts/counters.py`, which
+  the team.* counter metrics never read) - and the playbook's terms
   sit on top, so the shipped playbook's boards are scored, never
   *unscored*. A `BaseWeights` rides the `Brief` (`base=` on `infer`,
   `evaluate`, `Objective`, `Solver` and the pool's `Spec`); the board, the

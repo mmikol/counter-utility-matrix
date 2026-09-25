@@ -260,7 +260,7 @@ class Result:
         return base_module.write_counters_fact(
             fs, seat=self.seat, map_name=self.map_name, against=c.get("against", []),
             likely=c.get("likely", False), answers=c.get("answers", 0),
-            exposures=c.get("exposures", 0))
+            exposures=c.get("exposures", 0), derived=c.get("derived", []))
 
     def to_dict(self) -> Payload:
         """The result as JSON-ready data. The facts it cites ride along as

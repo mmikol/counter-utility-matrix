@@ -15,7 +15,7 @@ shapes live in inference.shapes.
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal, NamedTuple, NotRequired, TypedDict
 
-from facts import compute
+from facts import compute, counters
 from facts.model import Hero, Map, World
 from facts.team import NUMBER_TYPES, MetricBag, MetricValue, number, team_metrics
 from inference.base import COUNTERS, RATES, READS, SYNERGY, Base, BaseWeights, Terms
@@ -142,8 +142,9 @@ class Contribution(TypedDict):
     weight: NotRequired[float]         # a base term
     against: NotRequired[list[str]]    # the counter term: the other side it read,
     likely: NotRequired[bool]          # whether that is the side's likely six,
-    answers: NotRequired[int]          # and the edges each way
+    answers: NotRequired[int]          # and the graph's weight each way,
     exposures: NotRequired[int]
+    derived: NotRequired[list[str]]    # each derived edge in it, worded
     norm: NotRequired[float]
     when: NotRequired[str | None]      # a heuristic, and a scored constraint
     spread: NotRequired[bool]          # an applying heuristic
@@ -215,7 +216,9 @@ def _score_base(base: Base, cand: Candidate, out: list[Contribution] | None) -> 
                         "metric": READS[key]})
         out[-1].update({"against": [h.name for h in base.opponent.heroes],
                         "likely": base.opponent.likely, "answers": terms.answers,
-                        "exposures": terms.exposures})
+                        "exposures": terms.exposures,
+                        "derived": [counters.said(base.world, edge)
+                                    for edge in base.derived(cand.heroes)]})
     return base.value(terms)
 
 
