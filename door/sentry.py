@@ -25,13 +25,13 @@ Every COUNTRIX_SENTRY_EVERY seconds (30):
     python -m door.sentry            the loop (the sentry container)
     python -m door.sentry --once     one pass, exit 0 when nothing is wrong and
                                      1 when something is; any other argument
-                                     prints this text and exits 2
+                                     is a usage error and exits 2
 """
 
+import argparse
 import json
 import os
 import re
-import sys
 import time
 import traceback
 import unicodedata
@@ -346,13 +346,14 @@ def run_forever(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """The command line -> its exit code; the loop never returns."""
-    argv = sys.argv[1:] if argv is None else argv
-    if argv == ["--once"]:
+    """The command line -> its exit code: --once is 0 when the pass is clean
+    and 1 when it is not; the loop never returns."""
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--once", action="store_true", help="one pass, then exit")
+    args = parser.parse_args(argv)
+    if args.once:
         return 0 if run_once()["ok"] else 1
-    if argv:
-        print(__doc__, file=sys.stderr)
-        return 2
     run_forever(float(os.environ.get("COUNTRIX_SENTRY_EVERY", EVERY)))
 
 

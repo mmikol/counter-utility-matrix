@@ -64,14 +64,19 @@ def test_a_schedule_refuses_a_time_that_is_not_hh_mm():
         refresh.Schedule("5pm", 20, 7)
 
 
-def test_the_command_line_exits_with_the_refresh_verdict(monkeypatch):
+def test_the_command_line_exits_with_the_refresh_verdict(monkeypatch, capsys):
     verdicts = iter([(False, "down"), (True, "")])
     contexts = []
     monkeypatch.setattr(refresh, "refresh_once",
                         lambda ctx, **kw: contexts.append(ctx) or next(verdicts))
-    assert refresh.main(["--now"]) == 1
-    assert refresh.main(["--now"]) == 0
+    assert refresh.main(["--once"]) == 1
+    assert refresh.main(["--once"]) == 0
     assert [ctx.client for ctx in contexts] == ["refresher", "refresher"]   # its audit lines
+    # --help prints the docstring's usage map as written, not reflowed
+    with pytest.raises(SystemExit) as helped:
+        refresh.main(["--help"])
+    assert helped.value.code == 0
+    assert "\n    python -m door.refresh --once       one refresh" in capsys.readouterr().out
 
 
 def test_the_refresh_clock_is_read_from_the_environment_at_start(monkeypatch):
@@ -85,7 +90,7 @@ def test_the_refresh_clock_is_read_from_the_environment_at_start(monkeypatch):
     monkeypatch.setenv("COUNTRIX_REFRESH_MAX_AGE_HOURS", "5")
     monkeypatch.setenv("COUNTRIX_REFRESH_FULL_DAYS", "3")
     refresh.main([])
-    assert refresh.main(["--now"]) == 0 and once[-1]["full_days"] == 3.0
+    assert refresh.main(["--once"]) == 0 and once[-1]["full_days"] == 3.0
     for name in ("COUNTRIX_REFRESH_AT", "COUNTRIX_REFRESH_MAX_AGE_HOURS",
                  "COUNTRIX_REFRESH_FULL_DAYS"):
         monkeypatch.delenv(name)

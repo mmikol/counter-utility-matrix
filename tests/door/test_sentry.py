@@ -175,8 +175,15 @@ def test_a_failed_pass_leaves_a_report_that_is_not_ok(tmp_path, monkeypatch):
 
 
 def test_a_usage_error_exits_2_and_one_pass_exits_with_its_verdict(monkeypatch, capsys):
-    assert sentry.main(["--bogus"]) == 2
-    assert "python -m door.sentry" in capsys.readouterr().err
+    with pytest.raises(SystemExit) as usage:
+        sentry.main(["--bogus"])
+    assert usage.value.code == 2
+    assert "unrecognized arguments: --bogus" in capsys.readouterr().err
+    # --help prints the docstring's usage map as written, not reflowed
+    with pytest.raises(SystemExit) as helped:
+        sentry.main(["--help"])
+    assert helped.value.code == 0
+    assert "\n    python -m door.sentry --once     one pass" in capsys.readouterr().out
     verdicts = iter([{"ok": True}, {"ok": False}])
     monkeypatch.setattr(sentry, "run_once", lambda: next(verdicts))
     assert sentry.main(["--once"]) == 0

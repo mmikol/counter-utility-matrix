@@ -6,7 +6,7 @@ date on a schedule.
                                         refresh right away first if the
                                         cached pages are older than
                                         COUNTRIX_REFRESH_MAX_AGE_HOURS (20)
-    python -m door.refresh --now        one refresh, then exit 0, or 1 if it fails
+    python -m door.refresh --once       one refresh, then exit 0, or 1 if it fails
 
 A refresh comes in two sizes. The DAILY one refetches what moves day to
 day - the wiki's seasons (a snapshot is stamped with the season live that
@@ -168,10 +168,11 @@ def run_forever(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """The command line -> its exit code: --now is 0 when the refresh
+    """The command line -> its exit code: --once is 0 when the refresh
     succeeds and 1 when it fails; the loop never returns."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--now", action="store_true", help="refresh once and exit")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--once", action="store_true", help="refresh once and exit")
     parser.add_argument("--at", default=os.environ.get("COUNTRIX_REFRESH_AT", DEFAULT_AT),
                         help="daily time, HH:MM (default %(default)s)")
     parser.add_argument("--max-age-hours", type=float,
@@ -179,12 +180,12 @@ def main(argv: list[str] | None = None) -> int:
                                                      DEFAULT_MAX_AGE_HOURS)),
                         help="refresh on start when the cache is older than this")
     parser.add_argument("--full", action="store_true",
-                        help="with --now: every source, not just the daily set")
+                        help="with --once: every source, not just the daily set")
     args = parser.parse_args(argv)
     # the full-refresh age has no flag: nothing passes one, and compose sets it
     full_days = float(os.environ.get("COUNTRIX_REFRESH_FULL_DAYS", DEFAULT_FULL_DAYS))
     ctx = tools.Context(log=print, client="refresher")  # DATABASE_URL, or the embedded cluster
-    if args.now:
+    if args.once:
         ok, _ = refresh_once(ctx, full=args.full or None, full_days=full_days)
         return 0 if ok else 1
     run_forever(ctx, Schedule(at=args.at, max_age_hours=args.max_age_hours,

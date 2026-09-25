@@ -172,7 +172,7 @@ loop reads them once, when it starts. The same refresh from a shell,
 against whichever database `DATABASE_URL` names:
 
 ```bash
-.venv/bin/python -m door.refresh --now         # once, now (the daily set; --full for every source)
+.venv/bin/python -m door.refresh --once        # once, now (the daily set; --full for every source)
 .venv/bin/python -m door.refresh               # the daily loop
 .venv/bin/python -m door.mcp call sync_all '{"refresh": true}'
 ```
