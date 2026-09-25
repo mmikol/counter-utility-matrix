@@ -9,6 +9,7 @@ it.
                     health pool, an announcement
     kit_store       the kits into the tables
     measurements    a stat value -> value, unit, window, condition
-    weapons         firing modes grouped into weapons
+    weapons         firing modes put in firing order and grouped into
+                    weapons
     modifiers       buff direction and target, off the keywords
 """
