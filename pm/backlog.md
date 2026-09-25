@@ -75,9 +75,12 @@ keeps it current.
   sliders as the manual override. The weights were fitted once to a
   benchmark of community comps; nothing refits them. The owner's played
   maps are recorded now (`record_match`, migration 024), each stamped with
-  the playbook's digest, so a fit can read results under the playbook they
-  were played under once enough accrue. The signal the data holds: fit the weights so
-  that the solver's per-hero contribution ranks agree with each hero's
+  the playbook's digest, and `validate_playbook` judges the playbook
+  against them without moving a weight. A fit from them waits on the
+  guard's sample - 191 decided maps for an even map won 60% of the time -
+  and a refitted playbook is a new digest, judged only on the maps played
+  after it. Until then the signal the data holds: fit the weights so that
+  the solver's per-hero contribution ranks agree with each hero's
   published win rate on the map, capped per step, every change a
   tuning-log line with "fit" as its reason. Cost: a day.
 - **Memoize the per-hero parts of the metrics.** `team.team_metrics`
@@ -184,7 +187,14 @@ few match-ups the wiki rates (the counters table is a list).
 
 ## Done
 
-- **The owner's matches are the second user input** - `exec/match-record`
+- **The playbook is judged against the recorded matches** - `match-level`
+  branch. `validate_playbook` and `python -m ui.validation` rescore each
+  map with evaluate from both seats, score five models out of sample on a
+  time and a sessions split with bootstrap intervals over sessions, ablate
+  each strategy family, judge a playbook only from its digest's first map,
+  and withhold the verdict below (5.6 / b)^2 decided maps. Pure Python;
+  the page is personal use, in `db/raw`.
+- **The owner's matches are the second user input** - `match-level`
   branch. Migration 024 adds `matches` and `match_picks`, one row a map
   with both sixes, the bans, blue's side and blue's result, under the
   `user` source. The door's `record_match` checks a map as the board

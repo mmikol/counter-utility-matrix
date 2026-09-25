@@ -31,6 +31,7 @@ COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q -rs -p no:cacheprovider --c
 .venv/bin/python -m door.mcp list                 # the MCP tools; `call <tool> '<json>'` runs one in-process
 .venv/bin/python -m door.mcp call db_docs         # regenerate every generated doc section (needs the database)
 .venv/bin/python -m ui.board --port 8018          # the board, engine in-process (8017 is the compose board)
+.venv/bin/python -m ui.validation                 # the playbook against the recorded matches: text, and a page in db/raw
 .venv/bin/python orchestrator.py up|test|status|down   # the Docker stack; `up` rebuilds the image `test` runs in
 ```
 

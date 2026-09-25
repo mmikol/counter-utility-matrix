@@ -20,10 +20,12 @@ Two things infer:
   where arithmetic cannot. It runs when you ask it to, never on its own,
   on your subscription.
 
-The playbook is one of the two inputs written by hand, and the only one
-the solver reads; the other is the owner's recorded matches, which the
-door's `record_match` stores and `facts.matches` reads back as `Match`
-records. A pull tool fills every other table. The shipped playbook is five assumptions that score nothing,
+Two inputs are written by hand: the playbook, the only one the solver
+reads, and the owner's recorded matches, one map each, which the door's
+`record_match` stores and `facts.matches` reads back as `Match` records. A
+pull tool fills every other table. The matches judge the playbook
+([How the playbook is judged](#how-the-playbook-is-judged)) and never
+change it. The shipped playbook is five assumptions that score nothing,
 so a board reads unscored while the playbook is rebuilt from the
 citations in [inference/README.md](../inference/README.md). The solver
 tests run on the reference playbook in
@@ -102,8 +104,9 @@ API key anywhere.
 
 ## How the weights move
 
-Weights do not learn on their own: no match signal is recorded, and
-[pm/backlog.md](../pm/backlog.md) holds what learning would take. The
+Weights do not learn on their own. The recorded matches judge the
+playbook and move nothing; [pm/backlog.md](../pm/backlog.md) holds what
+learning from them would take. The
 board's sliders override a weight for one board - `weights=<id>:<0..10>`
 on `/board`, `weights` on the `board` tool - and every result names the
 weights it was scored under. Four tools write a strategy file - `tune`,
@@ -111,6 +114,116 @@ weights it was scored under. Four tools write a strategy file - `tune`,
 through the catalog before it writes and logged with its reason in
 `strategies/tuning-log.md`; a slider's *store* is a `tune` call, which
 the board offers only with `COUNTRIX_READ_ONLY=0`.
+
+## How the playbook is judged
+
+The owner plays on console, so a match is entered by hand after the
+game: one map, with both sixes as they stood longest on the field, the
+bans, the map, blue's side and blue's result. Blue is always the owner's
+team. Each map carries the digest of the playbook in force when it was
+played (`catalog.playbook_digest`). `validate.py` asks one question of
+them: does the playbook's score say anything about who won that the
+heroes alone do not? It runs as the `validate_playbook` tool, or as
+`.venv/bin/python -m ui.validation`, which prints the same text and
+writes a page of charts and its JSON to `db/raw/validation.html`. Nothing
+it runs writes to the database or the playbook.
+
+**The rescore.** Each map goes through `evaluate` from both seats: blue's
+six against red's on blue's side, red's against blue's on the other
+side. Each seat's score is the playbook's objective on its own seat's
+scale, so the two are the same kind of number, and their difference is
+the playbook score difference. The team metrics of both sixes and the
+matchup metrics ride along. A map the engine refuses - a hero the
+database no longer holds, a board no six satisfies - is listed, not
+judged. About three seconds a map on the real roster.
+
+**The pin.** A playbook is judged only on the maps from the first one
+played under its digest on. The maps before it are the ones it may have
+been tuned on, and judging a playbook on the maps it was fitted to is the
+leak that makes any rule look good. A tune makes a new digest, which
+starts with no maps of its own. `pin: false` (`--all`) judges every map
+and the report says so.
+
+**The models.** Five, each fitted on some maps and scored on others:
+
+| model | reads |
+| --- | --- |
+| M0 | nothing: a coin flip |
+| M1 | the map and side's win rate, shrunk toward the overall one by four maps' worth |
+| M2 | blue's `team.map_win_mean` minus red's: Blizzard's rates, for personal use |
+| M3 | one effect per hero, +1 on blue and -1 on red, in a ridge-penalised logistic model |
+| M4 | M3 plus the playbook score difference and the matchup metrics |
+
+The ridge pulls every coefficient but the intercept toward 0 with a prior
+sd of 0.25 log-odds, so a hero's effect or a feature's effect per sd is
+earned from the maps. The intercept is the owner's own win rate. A
+feature other than a hero's is standardised on the maps the fit trains
+on. The fit is Newton's method in pure Python (`fit.py`); nothing is
+installed for it.
+
+**The splits.** The time split cuts the sessions (a session is one
+`played_on` date) into five blocks of about equal maps and scores each
+block after the first with a fit on every block before it: no fit trains
+on a map played on or after a day it scores. The sessions split deals the
+sessions into ten folds (one per session where there are fewer) and
+scores each with a fit that left it out. A split needs two sessions.
+
+**The scores.** Log loss (a coin flip scores ln 2, 0.693) and Brier (a
+coin flip scores 0.25), each with a 95% interval from 2000 resamples of
+whole sessions, since maps played the same evening are not independent.
+Every interval on a split draws the same resamples, so the difference
+between two models is paired: M4 minus M3 is what the playbook score and
+the matchups add to the heroes.
+
+**The ablations.** M4 is fitted again with one family of strategies
+dropped from the playbook score, then with the score dropped whole. A
+family is read off the catalog, each scoring strategy filed in the first
+it fits, and named by the ids it drops:
+
+| family | holds |
+| --- | --- |
+| side | the side bonuses: a strategy that reads `map.side` |
+| counters | a strategy on the counters table's edges (`team.coverage`, `team.exposed_count`, ...) |
+| synergy | a strategy on the wiki's synergy pairs |
+| rates | a strategy that reads Blizzard's win, pick or ban rates |
+| scored | the other scored constraints |
+| other | the rest that scores: kit heuristics and soft limits |
+
+A family is dropped by taking its terms out of both seats' scores; each
+heuristic stays normalised on the full playbook's scale. An ablation
+whose log loss rises over M4's was carrying weight.
+
+**The guard.** An effect of b log-odds per sd needs about (5.6 / b)^2
+decided maps to be told from none (a two-sided 5% test at 80% power): 191
+for an even map won 60% of the time, 779 for 55%. Below that the report
+says how many decided maps there are and how many the effect needs, and
+gives no verdict; the scores still show, with their intervals. A draw is
+judged but never decided. `effect` sets the win chance the guard sizes
+the sample for.
+
+**What it cannot tell you.**
+
+- Why a comp wins. A score that predicts results may ride on something
+  the comps share - the owner plays some heroes better - and the models
+  cannot tell the playbook's reason from that one.
+- Anything about other players. Blue is always the owner's team: a hero's
+  effect is the hero and the owner's hands on it together, at one rank,
+  in one region, on console.
+- What happened inside a map. The sixes are the ones on the field
+  longest; a swap, a stage, an ult and a disconnect are not recorded.
+- A small effect from a few maps. Matchmaking pulls every lobby toward
+  even, which shrinks every effect, and most effects worth having need
+  hundreds of decided maps.
+- What a re-solved playbook would score. An ablation drops a family's
+  terms from the scores the full playbook gave; it does not solve the
+  board again without them.
+- Whether to tune. A tune read off a verdict is fitted to the maps that
+  gave it; the pin judges the tuned playbook only on the maps that come
+  after.
+
+The page and the JSON carry figures derived from Blizzard's rates (M2,
+each map's win difference). They are the owner's alone: `db/raw` is
+gitignored, and nothing public shows them.
 
 ## The catalog
 

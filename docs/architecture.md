@@ -39,8 +39,8 @@ Code on your subscription, and the board never calls a model.
 | `facts/` | **FACTS LAYER** - everything the database knows about a board: the World (the database in memory), the metrics registry, the FactSet. It imports only `db`; the solver, the deriver, the door and the board read the same numbers through it | [`facts/__init__.py`](../facts/__init__.py) |
 | `inference/` | **INFERENCE LAYER** - the playbook of constraints, heuristics and assumptions in markdown, the solver, the tuning loop, the deriver | [inference.md](inference.md) |
 | `door/` | **THE DOOR** over all three layers - `mcp/`, the MCP server and its tools, under which every write runs, the sentry's quarantine rename aside; `refresh.py`, the clock that runs the tools daily and weekly; `sentry.py`, the guard over the playbook, the database's free text and the door's audit log | [mcp.md](mcp.md) |
-| `ui/` | **THE BOARD** - the page (map, sides, bans, red and blue rosters) over the facts layer's facts and the inference layer's answer: `board.py`, `pages.py` and `static/`, the only presentation code | [ui.md](ui.md) |
-| `tests/` | one folder per layer beside the root files' tests, with `synthetic.py`, a World of twelve released heroes, one announced hero and three maps built by hand, so a test works out its expected values with no database, `scratch.py`, a scratch database on the test server holding that World's roster, where the recorded-match tests write instead of the built database, and `tests/fixtures/playbook/`, the reference playbook of every kind and form of strategy that the solver tests run on in place of `inference/strategies/` | |
+| `ui/` | **THE BOARD** - the page (map, sides, bans, red and blue rosters) over the facts layer's facts and the inference layer's answer: `board.py`, `pages.py` and `static/`, and `validation.py`, the playbook against the recorded matches as text and a page of charts in `db/raw` - the only presentation code | [ui.md](ui.md) |
+| `tests/` | one folder per layer beside the root files' tests, with `synthetic.py`, a World of twelve released heroes, one announced hero and three maps built by hand, so a test works out its expected values with no database, `matches.py`, recorded matches on that World with an effect planted on the heroes or the playbook score, `scratch.py`, a scratch database on the test server holding that World's roster, where the recorded-match tests write instead of the built database, and `tests/fixtures/playbook/`, the reference playbook of every kind and form of strategy that the solver tests run on in place of `inference/strategies/` | |
 | `.claude/skills/` | the skills a Claude Code session runs here, one `SKILL.md` each | [The skills](#the-skills) |
 | `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
 | `scripts/` | the recorders of the proven fixtures, run from the repo root as `.venv/bin/python -m scripts.<name>`: `optimal` writes `tests/fixtures/optimal.json`, the proven maxima the dormant real-World gate re-solves, and `reach` writes `tests/fixtures/reach.json`, a board per released hero | |
@@ -215,6 +215,8 @@ table is a table: every row carries its source, and that is the only
 distinction drawn between measured, judged and hand-written data. Two
 inputs are hand-written: the strategies and the recorded matches. The
 owner plays on console, so a match is entered by hand, never logged by
-the game. Players are assumed to play optimally
+the game; each is one map of the owner's own games, and the matches judge
+the playbook ([inference.md](inference.md#how-the-playbook-is-judged))
+and never change it. Players are assumed to play optimally
 ([players-play-optimally.md](../inference/strategies/players-play-optimally.md)),
 so a strategy encodes the game, never a lobby's habits.
