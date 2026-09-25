@@ -14,7 +14,7 @@ from typing import NamedTuple
 
 from db import KIND_ULTIMATE, Refusal
 from db.data.names import name_key
-from facts.kit import Kit
+from facts.kit import KitPiece
 from facts.records import (
     MapRate,
     Modifier,
@@ -48,9 +48,9 @@ class Hero:
     status: str = "released"            # announced: shown, never picked
     release_date: datetime.date | None = None
     styles: set[str] = field(default_factory=set)
-    abilities: list[Kit] = field(default_factory=list)
-    weapons: list[Kit] = field(default_factory=list)
-    perks: list[Kit] = field(default_factory=list)
+    abilities: list[KitPiece] = field(default_factory=list)
+    weapons: list[KitPiece] = field(default_factory=list)
+    perks: list[KitPiece] = field(default_factory=list)
     modifiers: list[Modifier] = field(default_factory=list)
     perk_effects: list[PerkEffect] = field(default_factory=list)    # a perk, the ability it alters
     win: float | None = None
@@ -100,7 +100,7 @@ class Hero:
     team_cleanse_tools: list[str] = field(default_factory=list)
     save_tools: list[str] = field(default_factory=list)
     deployables: list[str] = field(default_factory=list)
-    ult: Kit | None = None
+    ult: KitPiece | None = None
     ult_damage_raw: float = 0.0
     ult_damage: float = 0.0
     ult_cost: float | None = None
@@ -113,7 +113,7 @@ class Hero:
         return self.status == "released"
 
     @property
-    def ults(self) -> list[Kit]:
+    def ults(self) -> list[KitPiece]:
         """The ultimates the hero fights with: climbing back into the mech is not one."""
         return [a for a in self.abilities if a.kind == KIND_ULTIMATE and a.name not in REMECH]
 

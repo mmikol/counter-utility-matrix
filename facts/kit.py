@@ -1,4 +1,4 @@
-"""The kit: an ability, a weapon config or a perk, its stat rows, and the
+"""A kit piece: an ability, a weapon config or a perk, its stat rows, and the
 combat numbers read off them.
 
 db/data/wiki/kits/measurements.py stores each wiki stat as measurements
@@ -148,8 +148,9 @@ def _one_hit(stat: Figure, tick: float, lasts: float, singles: list[float]) -> b
     return not any(one and stat.value > one and stat.value % one == 0 for one in singles)
 
 
-class Kit:
-    """An ability, a weapon config or a perk: a named thing with stats."""
+class KitPiece:
+    """One piece of a hero's kit: an ability, a weapon config or a perk, a
+    named thing with stats."""
     __slots__ = ("atoms", "description", "extra", "keywords", "kind", "name", "stats")
 
     def __init__(
@@ -222,9 +223,9 @@ class Kit:
     def rate(self, code: str, per_shot: str) -> float | None:
         """This piece's sustained rate for `code` (dps or hps), hp/s: the
         published rate with its reload where the wiki gives one, else the firing
-        rate over its magazine and reload where the kit publishes both, else the
-        firing rate, else one `per_shot` times the fire rate. None when nothing
-        says."""
+        rate over its magazine and reload where the piece publishes both, else
+        the firing rate, else one `per_shot` times the fire rate. None when
+        nothing says."""
         loaded, plain, variants, worded = self._published_rates(code)
         if loaded:
             return min(loaded)
@@ -290,8 +291,8 @@ class Kit:
 
     def _with_reload(self, firing: float) -> float:
         """`firing` over the magazine's share of magazine plus reload, where the
-        kit publishes both. A reload worded "per shot" or "from empty" is ammo
-        that regenerates: a reload under a condition does not count."""
+        piece publishes both. A reload worded "per shot" or "from empty" is
+        ammo that regenerates: a reload under a condition does not count."""
         ammo = self.max_stat("ammo")
         rate = self.max_stat("fire_rate")
         reloads = [
@@ -397,7 +398,7 @@ class Kit:
         return max((hit * (1 + math.floor(lasts / wait)) for hit, wait in timed), default=0.0)
 
 
-def dual_rate(guns: Iterable[Kit]) -> float | None:
+def dual_rate(guns: Iterable[KitPiece]) -> float | None:
     """Two guns fired together from one magazine, hp/s with the reload in; None
     unless exactly two publish a 'simultaneous fire' row and the same magazine."""
     pair = [w for w in guns if any(

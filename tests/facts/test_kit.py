@@ -5,7 +5,7 @@ row is built by hand in the shape the wiki publishes it."""
 import pytest
 
 from db import KIND_ABILITY, KIND_ULTIMATE, KIND_WEAPON
-from facts.kit import Kit, Stat, dual_rate, on_self
+from facts.kit import KitPiece, Stat, dual_rate, on_self
 
 # a stat row as the loader reads it, column by column
 STAT_COLUMNS = ("code", "value", "unit_num", "unit_den", "den_value", "condition", "text")
@@ -13,7 +13,7 @@ STAT_COLUMNS = ("code", "value", "unit_num", "unit_den", "den_value", "condition
 
 def _kit(kind, *rows):
     """A kit piece from (code, value, unit_num, unit_den, den_value, condition, text) rows."""
-    kit = Kit("piece", kind)
+    kit = KitPiece("piece", kind)
     for row in rows:
         kit.stats[row[0]].append(Stat(**dict(zip(STAT_COLUMNS, row, strict=True))))
     return kit

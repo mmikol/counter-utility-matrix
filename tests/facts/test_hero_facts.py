@@ -9,7 +9,7 @@ from db import KIND_ABILITY, KIND_ULTIMATE, KIND_WEAPON
 from facts import hero_facts
 from facts.draft import Draft
 from facts.factset import FactSet
-from facts.kit import Kit, Stat
+from facts.kit import KitPiece, Stat
 from facts.model import Resolved
 from facts.records import Modifier, PerkEffect
 
@@ -115,7 +115,7 @@ def test_the_ultimate_and_the_rarer_traits_read_their_own_numbers(synthetic_worl
     w = synthetic_world
     rook = w.hero("Rook")
     assert rook.ult_damage == 500.0 and not _facts(w, "Rook").find("hero.ult_damage")
-    rook.ult = Kit("Death Bloom", KIND_ULTIMATE, "Spins in place.")
+    rook.ult = KitPiece("Death Bloom", KIND_ULTIMATE, "Spins in place.")
     rook.ult_cost = 2100.0
     rook.self_hps, rook.heal_amp, rook.overhealth = 25.0, 15.0, 75.0
     fs = _facts(w, "Rook")
@@ -134,15 +134,16 @@ def test_the_kit_is_told_piece_by_piece(synthetic_world):
     type and slot; each perk, what it alters, and what an ability scales."""
     w = synthetic_world
     kite = w.hero("Kite")
-    slam = Kit("Rocket Punch", KIND_ABILITY, "A fist that flies.", keywords="knockback::movement")
+    slam = KitPiece(
+        "Rocket Punch", KIND_ABILITY, "A fist that flies.", keywords="knockback::movement")
     slam.stats["cooldown"].append(Stat(code="cooldown", value=4, unit_num="seconds",
                                        unit_den=None, den_value=None, condition=None,
                                        text="4 seconds"))
-    gun = Kit("Burst", KIND_WEAPON)
+    gun = KitPiece("Burst", KIND_WEAPON)
     gun.extra.update(weapon="Rotary Cannon", weapon_type="Projectile", slot="secondary_fire")
     gun.stats["damage"].append(Stat(code="damage", value=30, unit_num="hp", unit_den=None,
                                     den_value=None, condition="per shell", text="30"))
-    perk = Kit("Longer Punch", "perk:minor", "Rocket Punch travels further.")
+    perk = KitPiece("Longer Punch", "perk:minor", "Rocket Punch travels further.")
     kite.abilities, kite.weapons, kite.perks = [slam], [gun], [perk]
     kite.perk_effects = [PerkEffect("Longer Punch", "Rocket Punch")]
     kite.modifiers = [Modifier("Rocket Punch", "move_speed", "self", 30.0, "percent")]

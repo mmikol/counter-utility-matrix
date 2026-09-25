@@ -11,14 +11,15 @@ the authored name lists below decide what a kit piece counts toward.
 import statistics
 
 from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON
-from facts.kit import Kit, dual_rate, on_self
+from facts.kit import KitPiece, dual_rate, on_self
 from facts.model import Hero
 
 # Keyword families the wiki tags abilities with, read verbatim from the
 # keywords column; the wiki's prose is read only in facts.kit, and the name
 # lists below (PILOT_GUNS to SAVE_TOOLS) are authored. The wiki writes a
 # keyword as `family;;qualifier` ("area of effect;;spherical", "invulnerable;;
-# targets"): a Kit keeps the family in `keywords` and the whole atom in `atoms`.
+# targets"): a KitPiece keeps the family in `keywords` and the whole atom in
+# `atoms`.
 CC_KEYWORDS = ("stun", "sleep", "immobilize", "hinder", "knockback", "knockdown", "hacked")
 MOBILITY_KEYWORDS = (
     "movement", "strong movement", "active movement", "evasive", "flight", "strong flight")
@@ -70,19 +71,19 @@ def derive_scalars(hero: Hero) -> None:
     _ult(hero, ults)
 
 
-def _body(hero: Hero, base: list[Kit]) -> None:
+def _body(hero: Hero, base: list[KitPiece]) -> None:
     """pool, keywords and form_armor; cooldowns and median_cooldown."""
     hero.pool = hero.health + hero.shield + hero.armor
     hero.keywords = set[str]().union(*(k.keywords for k in base))
     # armor an ability's form wears (Nemesis Form), by the form's uptime. Kept
     # apart from the base row: `armor` and `pool` stay what the hero spawns with
     hero.form_armor = 0.0
-    for kit in base:
-        wait, lasts = kit.max_stat("cooldown"), kit.max_stat("duration")
+    for piece in base:
+        wait, lasts = piece.max_stat("cooldown"), piece.max_stat("duration")
         share = lasts / (lasts + wait) if wait and lasts else 1.0
-        if kit.kind == KIND_ABILITY:
+        if piece.kind == KIND_ABILITY:
             hero.form_armor += sum(
-                s.value * share for s in kit.flat("armor") if s.condition != "allies")
+                s.value * share for s in piece.flat("armor") if s.condition != "allies")
     cds = [
         s.value for k in hero.abilities if k.kind != KIND_ULTIMATE
         for s in k.stats.get("cooldown", ()) if s.value is not None]
@@ -90,7 +91,7 @@ def _body(hero: Hero, base: list[Kit]) -> None:
     hero.median_cooldown = statistics.median(cds) if cds else None
 
 
-def _dps(hero: Hero, steady: list[Kit], guns: list[Kit]) -> None:
+def _dps(hero: Hero, steady: list[KitPiece], guns: list[KitPiece]) -> None:
     """dps: the weapon the hero fights with, sustained."""
     held = [w for w in steady if w.extra.get("slot") in PRIMARY_SLOTS and w.damages]
     rates = [r for r in (w.rate("dps", "damage") for w in (held or steady)) if r]
@@ -99,15 +100,15 @@ def _dps(hero: Hero, steady: list[Kit], guns: list[Kit]) -> None:
     hero.dps = max([*rates, dual_rate(guns) or 0.0])
 
 
-def _burst(hero: Hero, base: list[Kit]) -> None:
+def _burst(hero: Hero, base: list[KitPiece]) -> None:
     """burst: the biggest single hit, a headshot where one counts; a cast that
     throws several pieces is the pieces together."""
-    hits = [hit for kit in base if kit.name not in PILOT_GUNS for hit in kit.hits()]
-    hits += [cast for cast in (kit.cast_hit() for kit in base) if cast]
+    hits = [hit for piece in base if piece.name not in PILOT_GUNS for hit in piece.hits()]
+    hits += [cast for cast in (piece.cast_hit() for piece in base) if cast]
     hero.burst = max(hits, default=0.0)
 
 
-def _healing(hero: Hero, fought: list[Kit], dps: float) -> None:
+def _healing(hero: Hero, fought: list[KitPiece], dps: float) -> None:
     """hps and peak_heal, per second and per cast onto teammates; self_hps and
     self_heal, the hero's own. A rate (hp/s) and a cast (hp) are two
     quantities, and what lands on a teammate is the team's."""
@@ -115,18 +116,18 @@ def _healing(hero: Hero, fought: list[Kit], dps: float) -> None:
     team_cast: list[float] = []
     own_rate: list[float] = []
     own_cast: list[float] = []
-    for kit in fought:
-        mine = not (hero.role == "support" or kit.for_allies or "deployable" in kit.keywords)
-        rate = kit.heal_rate()
-        casts = [s.value for s in kit.flat("heal") if not on_self(s.condition)]
+    for piece in fought:
+        mine = not (hero.role == "support" or piece.for_allies or "deployable" in piece.keywords)
+        rate = piece.heal_rate()
+        casts = [s.value for s in piece.flat("heal") if not on_self(s.condition)]
         if rate:
             (own_rate if mine else team_rate).append(rate)
         if casts:
             (own_cast if mine else team_cast).append(max(casts))
-        own_cast.extend(s.value for s in kit.flat("heal") if on_self(s.condition))
-        if mine and kit.kind != KIND_WEAPON:
-            own_cast.extend(kit.run_casts())
-        share = _share_cast(kit, mine, dps)
+        own_cast.extend(s.value for s in piece.flat("heal") if on_self(s.condition))
+        if mine and piece.kind != KIND_WEAPON:
+            own_cast.extend(piece.run_casts())
+        share = _share_cast(piece, mine, dps)
         if share is not None:
             own_cast.append(share)
     hero.hps = max(team_rate, default=0.0)
@@ -135,21 +136,21 @@ def _healing(hero: Hero, fought: list[Kit], dps: float) -> None:
     hero.self_heal = max(own_cast, default=0.0)
 
 
-def _share_cast(kit: Kit, mine: bool, dps: float) -> float | None:
+def _share_cast(piece: KitPiece, mine: bool, dps: float) -> float | None:
     """A share of the damage dealt, for a duration on a cooldown, is the held
     weapon's rate over it. An ability that deals its own damage heals off
     that, which publishes no rate: unknown is not a number."""
-    runs = kit.max_stat("duration") or 0.0
+    runs = piece.max_stat("duration") or 0.0
     shares = [
-        s.value / 100.0 for s in kit.stats.get("heal", ())
+        s.value / 100.0 for s in piece.stats.get("heal", ())
         if s.value is not None and s.unit_num == "percent"
         and (on_self(s.condition) or (mine and not s.condition))]
-    if shares and runs and kit.max_stat("cooldown") and not kit.damages:
+    if shares and runs and piece.max_stat("cooldown") and not piece.damages:
         return max(shares) * dps * runs
     return None
 
 
-def _reach(hero: Hero, guns: list[Kit]) -> None:
+def _reach(hero: Hero, guns: list[KitPiece]) -> None:
     """max_range and hitscan_range: the weapons' published limits. A weapon
     that publishes none says nothing, and the hero stays out of the range
     metrics: unknown is not a number. A held projectile that publishes no
@@ -164,7 +165,7 @@ def _reach(hero: Hero, guns: list[Kit]) -> None:
     hero.hitscan_range = max((r for r in hitscan if r), default=0.0)
 
 
-def _weapon_kinds(hero: Hero, base: list[Kit], guns: list[Kit]) -> None:
+def _weapon_kinds(hero: Hero, base: list[KitPiece], guns: list[KitPiece]) -> None:
     """weapon_kinds, hitscan, beam, melee and melee_only. A weapon that deals no
     damage says nothing here: a healing beam is not a beam."""
     hero.weapon_kinds = {
@@ -180,7 +181,7 @@ def _weapon_kinds(hero: Hero, base: list[Kit], guns: list[Kit]) -> None:
     hero.melee_only = hero.melee and hero.weapon_kinds <= {"melee"}
 
 
-def _area(hero: Hero, fights: list[Kit]) -> None:
+def _area(hero: Hero, fights: list[KitPiece]) -> None:
     """aoe_count and aoe_damage: the pieces that hit an area, and those of them
     that deal damage. A weapon is in the abilities table too (kind 'weapon',
     no config extra): each weapon counts once, whatever its configs."""
@@ -195,7 +196,7 @@ def _area(hero: Hero, fights: list[Kit]) -> None:
     hero.aoe_damage = sum(area.values())
 
 
-def _barriers(hero: Hero, base: list[Kit], fought: list[Kit]) -> None:
+def _barriers(hero: Hero, base: list[KitPiece], fought: list[KitPiece]) -> None:
     """barrier_hp and pierces_barrier."""
     barriers = [k.plain_stat("barrier_health") for k in base]
     barriers += [
@@ -211,7 +212,7 @@ def _barriers(hero: Hero, base: list[Kit], fought: list[Kit]) -> None:
         for k in fought if k.kind != KIND_PASSIVE)
 
 
-def _amps(hero: Hero, fights: list[Kit], fought: list[Kit]) -> None:
+def _amps(hero: Hero, fights: list[KitPiece], fought: list[KitPiece]) -> None:
     """overhealth, antiheal, heal_amp, dmg_amp and lifesteal."""
     hero.overhealth = max(
         (s.overhealth for k in fights for s in k.stats.get("overhealth", ())
@@ -233,7 +234,7 @@ def _amps(hero: Hero, fights: list[Kit], fought: list[Kit]) -> None:
         default=0.0)
 
 
-def _control(hero: Hero, base: list[Kit], fights: list[Kit]) -> None:
+def _control(hero: Hero, base: list[KitPiece], fights: list[KitPiece]) -> None:
     """cc_tools, mobility_tools and flyer."""
     # crowd control: tagged as such, an ability that slows, or an ABILITY
     # that knocks an enemy back at MIN_KNOCKBACK or more - a weapon's knockback
@@ -252,7 +253,7 @@ def _control(hero: Hero, base: list[Kit], fights: list[Kit]) -> None:
     hero.flyer = any(k.keywords & set(FLIGHT_KEYWORDS) for k in moves)
 
 
-def _saves(hero: Hero, base: list[Kit], ults: list[Kit]) -> None:
+def _saves(hero: Hero, base: list[KitPiece], ults: list[KitPiece]) -> None:
     """cleanse_tools, invuln_tools, team_cleanse_tools, save_tools and
     deployables."""
     # a save is a tool, not a passive: Eject! leaves the mech, it saves no one
@@ -276,12 +277,12 @@ def _saves(hero: Hero, base: list[Kit], ults: list[Kit]) -> None:
         k.name for k in base if "deployable" in k.keywords and "attached" not in k.keywords})
 
 
-def _ult(hero: Hero, ults: list[Kit]) -> None:
+def _ult(hero: Hero, ults: list[KitPiece]) -> None:
     """ult, ult_damage_raw, ult_cost and dmg_ult. The load caps ult_damage_raw
     into ult_damage once the roster's cap is known: Hero.cap_ult."""
     hero.ult = ults[0] if ults else None
     hero.ult_damage_raw = max((u.ult_hit() for u in ults), default=0.0)
-    strongest = max(ults, key=Kit.ult_hit) if ults else None
+    strongest = max(ults, key=KitPiece.ult_hit) if ults else None
     costs = [c for c in (u.max_stat("ult_req") for u in ults) if c]
     strongest_cost = strongest.max_stat("ult_req") if strongest else None
     hero.ult_cost = strongest_cost or max(costs, default=None)

@@ -39,22 +39,22 @@ facts/
 
 ## The modules
 
-### `kit.py` - the kit and its numbers
+### `kit.py` - a kit piece and its numbers
 
-A `Kit` is an ability, a weapon config or a perk; a `Stat` is one of its
-measurements as the data layer stored it - a value in its units, under a
-condition - with the wiki's original words beside it. `rate(code,
-per_shot)` is a piece's sustained rate: the published rate with the reload
-the wiki words beside it, else the firing rate over its magazine and
-reload, else one shot times the fire rate. `hits()` and `cast_hit()` are
-the single hits a hero's burst is read from, `ult_hit()` one ultimate
-cast's damage, `reach` how far a weapon fights, `dual_rate` two guns fired
-from one magazine. This is the one place the wiki's prose is read:
-`db/data/wiki/kits/measurements.py` splits a stat into measurements at ingest
-and keeps its text, and the wording rules - a reload in a row's text, a
-figure that is a sum, an overhealth percent worth its cap, a row on the hero
-itself (`on_self`) - live here, so a misread stat is fixed in this file and
-needs no re-pull.
+A `KitPiece` is one piece of a hero's kit - an ability, a weapon config or
+a perk; a `Stat` is one of its measurements as the data layer stored it -
+a value in its units, under a condition - with the wiki's original words
+beside it. `rate(code, per_shot)` is a piece's sustained rate: the
+published rate with the reload the wiki words beside it, else the firing
+rate over its magazine and reload, else one shot times the fire rate.
+`hits()` and `cast_hit()` are the single hits a hero's burst is read from,
+`ult_hit()` one ultimate cast's damage, `reach` how far a weapon fights,
+`dual_rate` two guns fired from one magazine. This is the one place the
+wiki's prose is read: `db/data/wiki/kits/measurements.py` splits a stat
+into measurements at ingest and keeps its text, and the wording rules - a
+reload in a row's text, a figure that is a sum, an overhealth percent
+worth its cap, a row on the hero itself (`on_self`) - live here, so a
+misread stat is fixed in this file and needs no re-pull.
 
 ### `model.py` - the World
 

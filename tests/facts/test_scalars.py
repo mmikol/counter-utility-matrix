@@ -7,7 +7,7 @@ import pytest
 
 from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON
 from facts import scalars
-from facts.kit import Kit, Stat
+from facts.kit import KitPiece, Stat
 from facts.model import Hero
 
 
@@ -19,7 +19,7 @@ def _stat(code, value, unit_num=None, unit_den=None, den=None, condition=None, t
 def _kit(name, kind, *stats, keywords="", **extra):
     """A kit piece with its stat rows; a weapon config's extra (weapon,
     weapon_type, slot) by keyword."""
-    kit = Kit(name, kind, keywords=keywords)
+    kit = KitPiece(name, kind, keywords=keywords)
     for s in stats:
         kit.stats[s.code].append(s)
     kit.extra.update(extra)
