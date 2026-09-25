@@ -140,7 +140,7 @@ class PlaybookCheck(NamedTuple):
     catalog: list[Strategy] | None
 
 
-def check_playbook(directory: str | None = None, log: Log = print) -> PlaybookCheck:
+def quarantine_playbook(directory: str | None = None, log: Log = print) -> PlaybookCheck:
     """Load the catalog; quarantine what will not load or reads like an
     instruction -> (quarantined names, catalog or None)."""
     directory = directory or catalog_module.strategies_dir()
@@ -306,7 +306,7 @@ def run_once(watch: Watch | None = None, offset: int = 0) -> Report:
     """One pass, reading the audit log from `offset` -> the report, also
     written to the watch's report path."""
     watch = watch or Watch()
-    quarantined, cat = check_playbook(watch.directory, watch.log)
+    quarantined, cat = quarantine_playbook(watch.directory, watch.log)
     flags = check_database(watch.dsn) if watch.scan_database else []
     door = check_door(watch.audit_path, offset)
     if door.crashed:
