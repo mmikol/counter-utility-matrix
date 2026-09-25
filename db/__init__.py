@@ -5,10 +5,9 @@ bottom of the import graph and imports nothing above it: the door (door/)
 drives the pulls through its tools, and the facts and inference layers read
 the tables over db.psql.default_dsn().
 
-    data/         the sources, one package each (blizzard, wiki; authored
-                  names the playbook's source row), and what they
-                  share: the page cache (fetch) and name matching (names).
-                  Page to table.
+    data/         the sources, one package each (blizzard, wiki), and what
+                  they share: the page cache (fetch) and name matching
+                  (names). Page to table.
     psql/         the database: where it is and the helpers every writer
                   needs (psql), the schema, the ledger, rebuild and the
                   generated docs (psql.schema), the migrations, and the

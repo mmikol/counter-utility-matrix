@@ -1,7 +1,6 @@
 """The one input a user writes is the playbook. Every other table is pulled
-from Blizzard or the wiki: no authored CSV exists, load_authored takes the
-playbook alone, no table but `strategies` carries the `user` source, and no
-third source is read."""
+from Blizzard or the wiki: load_authored takes the playbook alone, no table
+but `strategies` carries the `user` source, and no third source is read."""
 
 import contextlib
 import os
@@ -9,16 +8,15 @@ import os
 import pytest
 
 import db
-from db.data import authored
 from door.mcp import tools
+from inference import catalog
 
 
-def test_the_authored_package_holds_the_source_row_and_no_csv():
-    assert authored.AUTHORED.code == "user"
-    assert authored.AUTHORED.url == "inference/strategies/"
-    assert os.path.isdir(os.path.join(db.ROOT, authored.AUTHORED.url))
-    folder = os.path.dirname(authored.__file__)
-    assert [n for n in os.listdir(folder) if n.endswith(".csv")] == []
+def test_the_catalog_holds_the_playbooks_source_row():
+    assert catalog.AUTHORED.code == "user"
+    assert catalog.AUTHORED.url == "inference/strategies/"
+    assert os.path.join(db.ROOT, catalog.AUTHORED.url) == os.path.join(catalog.SHIPPED_DIR, "")
+    assert os.path.isdir(os.path.join(db.ROOT, catalog.AUTHORED.url))
 
 
 def test_load_authored_takes_strategies_and_nothing_else():
@@ -200,7 +198,6 @@ def test_every_path_the_layer_declares_exists():
     # the folder move once doubled a segment of one of these; the containers
     # found out, the suite did not - now it does
     from db.psql import schema
-    from inference import catalog
     for path in (schema.MIGRATIONS_DIR, catalog.strategies_dir(),
                  os.path.join(db.ROOT, "docs")):
         assert os.path.isdir(path), path

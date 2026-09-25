@@ -4,7 +4,8 @@ Pull every source, clean it and store it in Postgres. This layer owns
 `DATA = HEROES ∪ MAPS ∪ META`: the tables a board's facts are derived
 from. Every row carries a `source_id`, and that is the only distinction
 drawn between what was measured, what was judged and what was written by
-hand. Only the strategies are written by hand.
+hand. Only the strategies are written by hand
+([inference.md](inference.md)).
 
 **One door.** The MCP tools in `door/mcp/` ([mcp.md](mcp.md)) are the
 only way to drive the layer, and the only way in for a write. A Claude
@@ -34,7 +35,6 @@ db/
     blizzard/        overwatch.blizzard.com
     wiki/            overwatch.fandom.com
       kits/          the heroes pull's kit pipeline
-    authored/        the `sources` row of the strategies mirror
     fetch.py         the page cache, its freshness policy and the request loop
     names.py         matching hero, map and ability names across sources
   psql/              the database: where it is, the schema, the ledger
@@ -96,19 +96,6 @@ locked across a fetch.
 | `schema.py` | Applies migrations and records them in the `schema_migrations` ledger; `pending` says which files the database has not seen; `state` says how ready the database is - empty, stale, unfilled or current - for every reader of readiness, and `python -m db.psql.schema` prints it for the container entrypoint; `rebuild` drops everything and reapplies; `generate_docs` writes the ER diagrams and the data dictionary at the end of this document from the live schema, each table described by the `--` block directly above its `CREATE TABLE` (`table_prose`) or a later `COMMENT ON TABLE`. |
 | `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment, `018` `map_playstyle` and `comp_archetypes` dropped, `seasons` and `synergies` pulled from the wiki, `019` `map_strategy` and the third source's rates, snapshots and `sources` row dropped, `counters` pulled from the wiki, `020` `map_terrain`, the terrain features each map's wiki article names, `021` `stage_terrain`, with every Hybrid map's two phases and an Escort map's named stretches stored as stages, `022` the `strategies.playbook` comment under the Countrix name. A statement in an applied migration is never edited; a change is a new file, and a populated database catches up with `db_migrate`. The `--` prose is documentation - the data dictionary reads the block above each `CREATE TABLE` - and is kept current. |
 | `cluster/` | The embedded Postgres cluster `db_init` or `db_rebuild` creates through pgserver (gitignored); a reader starts it on first touch and never creates it. The compose stack uses its own `postgres` container instead, reachable from the host through `./docker-db`. |
-
-### `data/authored/` - the one input a user writes
-
-The playbook in [`inference/strategies/`](../inference/strategies/) is the
-only input written by hand; every other table is filled by a pull tool.
-This folder's `__init__.py` declares the `sources` row (`user`) the
-`strategies` mirror carries. `load_authored` reloads the mirror from the
-files, whole-truth, deriving pending drafts first where the `claude` CLI
-is present.
-
-A note that should shape a comp is an assumption in the playbook, where it
-is shown on the board, read by the `/comp` session, and tuned and logged
-with the rest.
 
 ### `raw/` - the mirror
 

@@ -155,7 +155,7 @@ inference/
 | --- | --- |
 | `frontmatter.py` | The dialect a strategy file opens with: flat `key: value` lines between two `---` fences and one indented mapping (`params:`), each value a string, a number, a boolean, null or a list (`parse_frontmatter`); text outside it is a `FrontmatterError`. |
 | `strategy.py` | One strategy (`Strategy`): a file's fields, its `kind`, the `form` they make it, its compiled expressions and the checks every file passes against the metrics registry, the first failure raised as a `CatalogError`; `to_dict` is the `StrategyRecord` the tools, the service and the board serve. `FIELDS` names what each frontmatter field holds - one line of text, a choice, the weight, a flag, an expression or the params block - and `checked_value` applies that rule for every writer, the rule the loader reads each file by; the door declares its strategy arguments from the same table. |
-| `catalog.py` | Reads the playbook in force (`strategies_dir`: the shipped folder, or the one `COUNTRIX_STRATEGIES` names), each file parsed and checked into a `Strategy` and any failure a `CatalogError` naming the file, orders the catalog (constraints - limits, then scored - heuristics, assumptions), mirrors it into the `strategies` table, and writes the catalog at the end of this document. `strategy_files` names a playbook's strategy files (its markdown less `README.md` and `tuning-log.md`), and `playbook_digest` hashes them, names and bytes, into the digest a proven fixture records. |
+| `catalog.py` | Reads the playbook in force (`strategies_dir`: the shipped folder, or the one `COUNTRIX_STRATEGIES` names), each file parsed and checked into a `Strategy` and any failure a `CatalogError` naming the file, orders the catalog (constraints - limits, then scored - heuristics, assumptions), mirrors it into the `strategies` table under its own `sources` row (`AUTHORED`), and writes the catalog at the end of this document. `strategy_files` names a playbook's strategy files (its markdown less `README.md` and `tuning-log.md`), and `playbook_digest` hashes them, names and bytes, into the digest a proven fixture records. |
 | `expr.py` | A safe subset of Python expressions: the AST is checked once, compiled with each `/`, `//` and `%` turned into a call that reads 0 on a zero divisor - for that operation alone - and evaluated over a scope whose missing keys read as zero, so a metric that does not apply to a board never crashes a score. |
 | `scoring.py` | The objective on one board (`Objective`): each strategy's `when` read once where the board settles it, then every candidate prepared (namespace, hard-limit check, raw metric values) and scored with the frozen bounds - a hard limit prunes, a soft one charges, a heuristic normalises and weighs, a scored constraint adds - its breakdown one `Contribution` per strategy. |
 | `shapes.py` | `legal_shapes`: every (tanks, damage, supports) triple the queue (at most two tanks, whatever the playbook holds) and the hard shape limits allow around the locked picks, counted per role as a `Shape` like the triples it returns. |
@@ -170,6 +170,19 @@ inference/
 | `tune.py` | `tune(id, field, value, reason)`: one frontmatter edit; `add(id, name, kind, prose, fields, reason)`: a new file from what the user gave and what `/strategy` inferred; `complete(id, fields, reason)`: a draft's frontmatter in one step. Each takes a reason and writes in one order: validated by loading the catalog with the new text, which must read the id as a strategy (`tuning-log` is the log beside the files), then written, the docs catalog rewritten for the shipped playbook, and logged on one line, the reason and who asked (`by`, 40 characters at most, `claude-code-session` when blank) folded onto it; the door tool that called it re-mirrors the table. `log_tail(n)` reads the last n lines back, none for n below 1. |
 | `derive.py` | `derive()`: for every draft, the prompt (the three inputs, the vocabulary, one finished file of each form for style), `claude -p` on the subscription, the JSON answer through `tune.complete`, one retry carrying the catalog's objection; at most ten drafts a run, the rest waiting as `deferred` for the next. `available()` says whether the CLI is here. |
 | `serve.py` | `/board`, `/infer`, `/evaluate`, `/strategies`, `/health` - the engine over HTTP, for a board that runs in another container. The board calls `handle_board` and `handle_strategies` in-process when no service is named, and the service serves the same ones, `pool` included. `/board` takes the playbook tab's `weights` and a `pool`, solves no countered case, and a newer board from the same `client` supersedes one still solving; the whole query is read before the lane is taken, so a malformed one supersedes nothing. It answers only to the local names and those given with `--allow-host` (`inference` in the compose stack), and each solve leaves a line on stderr with its status and seconds. |
+
+## The one input a user writes
+
+The playbook in [`inference/strategies/`](../inference/strategies/) is the
+only input written by hand; every other table is filled by a pull tool.
+`catalog.AUTHORED` declares the `sources` row (`user`) the `strategies`
+mirror carries, and no other table carries it. `load_authored` reloads the
+mirror from the files, whole-truth, deriving pending drafts first where the
+`claude` CLI is present.
+
+A note that should shape a comp is an assumption in the playbook, where it
+is shown on the board, read by the `/comp` session, and tuned and logged
+with the rest.
 
 ## The skills
 

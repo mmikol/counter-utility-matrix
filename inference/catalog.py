@@ -1,9 +1,10 @@
 """The strategies catalog: the playbook in force read from its folder,
 each file parsed (inference.frontmatter) and checked (inference.strategy)
 into a Strategy, the whole ordered, mirrored into the `strategies` table
-and written into docs/inference.md; and what reads the playbook as a
-whole - the weights one board overrides, whether anything scores, the
-count per kind, the playbook's name and digest.
+under its own `sources` row (AUTHORED) and written into
+docs/inference.md; and what reads the playbook as a whole - the weights
+one board overrides, whether anything scores, the count per kind, the
+playbook's name and digest.
 """
 
 import copy
@@ -15,14 +16,18 @@ from typing import NotRequired, TypedDict
 
 import psycopg
 
-from db import ROOT, Refusal, embed
-from db.data.authored import AUTHORED
+from db import ROOT, Refusal, Source, embed
 from db.psql import now, register_source
 from facts import compute
 from inference.frontmatter import FrontmatterError, parse_frontmatter
 from inference.strategy import FORMS, KINDS, WEIGHT_RANGE, CatalogError, Strategy, finite_number
 
 SHIPPED_DIR = os.path.join(ROOT, "inference", "strategies")
+# The sources row of the strategies table, the one input a user writes.
+# Nothing is downloaded: the "url" is the playbook's folder. No other table
+# may carry this source.
+AUTHORED = Source(code="user", name="The playbook", url="inference/strategies/")
+
 # the id is the filename, so no id may name a path (docs/security.md)
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
 

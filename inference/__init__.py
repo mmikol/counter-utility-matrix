@@ -12,7 +12,8 @@
     strategy      one strategy: its fields, its kind and form, and the rules
                   every file keeps
     catalog       reads the playbook's files into strategies, orders, mirrors
-                  and documents them
+                  and documents them; AUTHORED, the `sources` row the
+                  mirror carries
     expr          the safe expression language the frontmatter uses
     scoring       the objective: what one six scores on one board
     shapes        the legal shapes: the role counts a six may take around the

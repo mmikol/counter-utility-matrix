@@ -7,8 +7,6 @@ page to table, plus what they share.
                   maps, terrain, patches, seasons, playstyles, synergies,
                   matchups (counters) - the markup reader they share, and
                   kits/, the heroes pull's kit pipeline
-    authored/     the source row of the one input a user writes, the
-                  strategies in inference/strategies/
     fetch         the page cache, its freshness and the request loop
     names         matching hero, map and ability names across sources
 
@@ -18,7 +16,6 @@ cached page may be - that returns a PullSummary: the tables it wrote, and
 for a pull that reads one article or page per entity, the ones that would
 not fetch (ArticlePullSummary). A run() fetches every page before its
 first write, so no row stays locked across a fetch.
-authored/ has no run - the strategies mirror is inference.catalog.mirror.
 The MCP pull tools (door/mcp) import and call them. Nothing here is an entry
 point of its own.
 """
