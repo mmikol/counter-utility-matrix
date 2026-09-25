@@ -185,6 +185,15 @@ def _load_weapons(store_pass: _StorePass, hero_id: int, weapons: list[WeaponEntr
                           config["stats"])
 
 
+def _classify(store_pass: _StorePass, ability_id: int, kind: str, keywords: str) -> None:
+    """Set a stored ability's kind and keywords, counted as classified."""
+    store_pass.cursor.execute(
+        "UPDATE abilities SET kind_id = %s, keywords = %s WHERE ability_id = %s",
+        (store_pass.kind_ids[kind], keywords or None, ability_id),
+    )
+    store_pass.tally["classified"] += store_pass.cursor.rowcount
+
+
 def _load_abilities(
         store_pass: _StorePass, hero_id: int, weapon_entries: list[WeaponEntry],
         entries: list[AbilityEntry]) -> None:
@@ -207,12 +216,7 @@ def _load_abilities(
         for candidate in (weapon["name"], weapon["display_name"]):
             ability_id = existing.get(ability_key(candidate))
             if ability_id is not None:
-                cursor.execute(
-                    "UPDATE abilities SET kind_id = %s, keywords = %s"
-                    " WHERE ability_id = %s",
-                    (store_pass.kind_ids[KIND_WEAPON], weapon["keywords"] or None, ability_id),
-                )
-                store_pass.tally["classified"] += cursor.rowcount
+                _classify(store_pass, ability_id, KIND_WEAPON, weapon["keywords"])
                 break
 
     for entry in entries:
@@ -235,12 +239,7 @@ def _load_abilities(
             next_position += 1
             store_pass.tally["added"] += 1
         else:
-            cursor.execute(
-                "UPDATE abilities SET kind_id = %s, keywords = %s"
-                " WHERE ability_id = %s",
-                (store_pass.kind_ids[entry["kind"]], entry["keywords"] or None, ability_id),
-            )
-            store_pass.tally["classified"] += 1
+            _classify(store_pass, ability_id, entry["kind"], entry["keywords"])
 
         if entry["stats"]:
             store_pass.tally["abilities_with_stats"] += 1
