@@ -14,7 +14,8 @@ Bring the roster and the kits up to date. Work through the
 2. **The roster.** `pull_heroes` with `refresh: true`: Blizzard's hero
    pages - a newly released hero arrives here with its role, subrole,
    portrait, ability and perk text, and an announced hero Blizzard now
-   lists flips to released.
+   lists flips to released, its wiki kit replaced by Blizzard's text until
+   step 3 loads the numbers back.
 3. **The kits.** `pull_kits` with `refresh: true`: the wiki's numbers for
    every hero, and the announced heroes - a hero whose article is marked
    upcoming gets a row (role, subrole, health, release day, status

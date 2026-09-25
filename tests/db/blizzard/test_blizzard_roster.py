@@ -222,6 +222,8 @@ def test_a_hero_page_that_will_not_fetch_is_recorded_and_the_rest_are_stored(mon
         params[0] for sql, params in cursor.statements
         if sql.startswith(("INSERT INTO abilities", "INSERT INTO perks"))}
     assert len(owners) == 1                  # one hero's rows, Tracer's; none written for Ana
+    # only a parsed page's hero may lose a wiki kit: Ana's is never cleared
+    assert cursor.written("DELETE FROM") == [(["tracer"], 1), (["tracer"], 1)]
 
 
 def test_a_changed_hero_page_fails_the_pull_and_is_not_counted_missing(monkeypatch):

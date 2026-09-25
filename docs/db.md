@@ -70,7 +70,7 @@ locked across a fetch.
 
 | package | module | stores |
 | --- | --- | --- |
-| `blizzard/` | `heroes.py` | the roster: heroes, roles, subroles, portraits and icons, ability and perk text. Runs first; everything links to heroes. Blizzard publishes prose and no numbers. A hero page that will not fetch is listed under `missing`, and that hero keeps the text it had. |
+| `blizzard/` | `heroes.py` | the roster: heroes, roles, subroles, portraits and icons, ability and perk text. Runs first; everything links to heroes. Blizzard publishes prose and no numbers. A hero page that will not fetch is listed under `missing`, and that hero keeps the text it had. A hero whose page parses for the first time - one the wiki announced - loses the wiki's abilities and perks, their stats and links with them, for Blizzard's; `pull_kits`, run after, adds back what Blizzard omits. |
 | | `meta.py` | win, pick and ban rates as a dated snapshot, sliced by skill tier and by map. Competitive Role Queue (the page offers no Open Queue), console, Americas - all recorded on the snapshot. When a page came from the stale cache the pull stamps no snapshot and writes nothing, and its reply reads `pull_rates: nothing stored`. |
 | `wiki/` | `heroes.py` | hero kits from the Cargo Abilities table: weapons and their firing configs, abilities, perks, keywords, and every stat as a measurement, through `kits/`. Also the announced heroes: a Cargo hero the roster lacks whose article is marked upcoming gets a row (role, subrole, health, release day, status `announced`) so its kit loads ahead of release; Blizzard listing it later flips the status to released. Runs after `blizzard.heroes`. |
 | | `maps.py` | maps, game modes and stages from the Maps article's Standard Play section. |

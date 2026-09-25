@@ -18,10 +18,13 @@ the one the board shows) when it answers, else `countrix`.
    minutes; wait for each): `pull_seasons` with `refresh: true` (a season
    opens with a patch, and a snapshot is stamped with the season live
    that day), `pull_rates` with `refresh: true` (a new dated snapshot,
-   stamped with the patch and the season), `pull_kits` with
-   `refresh: true` (the numbers a patch changes: damage, cooldowns,
-   health), `pull_heroes` with `refresh: true` (Blizzard's ability text
-   and any hero the patch released). If the patch reworked a hero,
+   stamped with the patch and the season), `pull_heroes` with
+   `refresh: true` (Blizzard's ability text and any hero the patch
+   released), `pull_kits` with `refresh: true` (the numbers a patch
+   changes: damage, cooldowns, health). `pull_kits` comes after
+   `pull_heroes`: a hero the patch released trades the wiki's kit for
+   Blizzard's text there, and gets its numbers back only from `pull_kits`.
+   If the patch reworked a hero,
    `pull_synergies` with `refresh: true` (the hero articles refetched),
    then `pull_counters` with no refresh (the same articles' Match-Up
    cells). Then `db_docs` and `export_csv`.

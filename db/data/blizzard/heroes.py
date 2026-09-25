@@ -4,15 +4,20 @@ The roster page carries every hero's role, subrole and portrait, and the
 role and subrole filter icons; each hero page carries an abilities carousel
 and a perks section. Blizzard publishes prose only - no
 numbers, no map data - and omits some abilities outright, so weapons,
-stats, the missing abilities and the maps come from the wiki.
+stats, the missing abilities and the maps come from the wiki. A hero the
+wiki announced holds the wiki's kit until its page parses here; then
+Blizzard's rows replace it, and pull_kits, run after, adds back what
+Blizzard omits.
 """
 
 import re
+from collections.abc import Mapping
 from datetime import datetime
 from typing import NamedTuple
 
 import psycopg
 from bs4 import BeautifulSoup, Tag
+from psycopg.sql import SQL
 
 from db import PERK_TIERS, psql
 from db.data import ArticlePullSummary, fetch
@@ -222,11 +227,31 @@ def parse_perks(soup: BeautifulSoup, slug: str) -> list[PerkText]:
 ROLE_NAMES = {"tank": "Tank", "damage": "Damage", "support": "Support"}
 
 
+def _clear_wiki_kits(
+        cursor: psycopg.Cursor, abilities_by_slug: Mapping[str, list[AbilityText]],
+        perks_by_slug: Mapping[str, list[PerkText]], source_id: int) -> None:
+    """Delete the abilities and perks of each hero whose page parsed and
+    that holds no Blizzard row in the table: the wiki's kit of a hero it
+    announced, or of one listed on a pull its page would not fetch in. The
+    wiki stores that kit in an order of its own, and Blizzard's carousel,
+    weapon first, would collide with it on position. The stats and perk
+    links cascade with the rows; pull_kits, run after, adds back what
+    Blizzard omits. A hero whose page would not fetch keeps its rows."""
+    for table, parsed in (("abilities", abilities_by_slug), ("perks", perks_by_slug)):
+        cursor.execute(
+            SQL("DELETE FROM {table} WHERE hero_id IN"
+                " (SELECT hero_id FROM heroes WHERE slug = ANY(%s)) AND hero_id NOT IN"
+                " (SELECT hero_id FROM {table} WHERE source_id = %s)").format(
+                table=psql.identifier(table)),
+            (sorted(parsed), source_id))
+
+
 def _store(
         cursor: psycopg.Cursor, subroles: dict[str, Subrole], heroes: list[HeroCard],
         abilities_by_slug: dict[str, list[AbilityText]], perks_by_slug: dict[str, list[PerkText]],
         icons: RoleIcons, cao: datetime) -> None:
-    """Upsert the roles, subroles, heroes and each hero's abilities and perks."""
+    """Upsert the roles, subroles, heroes and each hero's abilities and
+    perks, the wiki's kit of a newly described hero cleared first."""
     source_id = psql.register_source(cursor, BLIZZARD, cao)
 
     role_ids: dict[str, int] = {}
@@ -264,6 +289,7 @@ def _store(
         )
         subrole_ids[subrole.code] = psql.scalar(cursor)
 
+    _clear_wiki_kits(cursor, abilities_by_slug, perks_by_slug, source_id)
     for hero in heroes:
         cursor.execute(
             "INSERT INTO heroes (slug, name, role_id, subrole_id, portrait_url,"

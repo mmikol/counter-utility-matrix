@@ -278,7 +278,8 @@ def _load_perks(store_pass: _StorePass, hero_id: int, perks: list[PerkEntry]) ->
             "SELECT status FROM heroes WHERE hero_id = %s", (hero_id,)
             )) == "announced":
         # Blizzard has not published the hero yet: the wiki's perks are the
-        # only ones, so they get rows of their own (Blizzard's replace them)
+        # only ones, so they get rows of their own (blizzard.heroes replaces
+        # them once the hero's page parses)
         position = {"minor": 0, "major": 0}
         for entry in perks:
             tier = entry["tier"]

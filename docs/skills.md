@@ -143,9 +143,10 @@ patch".
 to see whether a patch shipped since the rates were captured. Nothing
 new: it says so and stops. A patch shipped: `pull_seasons` (a season
 opens with a patch), `pull_rates` (a new dated snapshot stamped with the
-patch and the season), `pull_kits` (the numbers a patch changes),
-`pull_heroes` (Blizzard's text and any hero the patch released),
-`pull_synergies` then `pull_counters` if a hero was reworked (the hero
+patch and the season), `pull_heroes` (Blizzard's text and any hero the
+patch released), `pull_kits` (the numbers a patch changes; after
+`pull_heroes`, since a released hero trades the wiki's kit for Blizzard's
+text and gets its numbers back only here), `pull_synergies` then `pull_counters` if a hero was reworked (the hero
 articles refetched once, read twice), then `db_docs` and `export_csv`,
 one call at a time. Reports the patch on record, the
 capture date and each pull's summary.
@@ -157,7 +158,8 @@ capture date and each pull's summary.
 **Does:** `roster` first (every hero with its status - released, or
 announced with its release day). Then `pull_heroes` (Blizzard's roster: a
 released hero's role, subrole, portrait and text; an announced hero
-Blizzard now lists flips to released), `pull_kits` (the wiki's numbers,
+Blizzard now lists flips to released, Blizzard's text replacing the
+wiki's kit), `pull_kits` (the wiki's numbers,
 and the announced heroes: an upcoming article becomes a row with role,
 subrole, health and release day, so the kit loads and the board shows the
 hero in its role column, never picked until it ships), `pull_playstyles`
