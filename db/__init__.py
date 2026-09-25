@@ -16,7 +16,8 @@ the tables over db.psql.default_dsn().
     web           what the three HTTP servers share: the Host-and-Origin
                   guard, the handler that sends and logs, the reply to a
                   request that raised (a Refusal 400, anything else 500 with
-                  its traceback on stderr), and the one MCP client
+                  its traceback on stderr), the one JSON reader and the one
+                  MCP client
     raw/          the CSV mirror the tools export (gitignored)
 
 This file holds what the whole layer must agree on: where things live (ROOT

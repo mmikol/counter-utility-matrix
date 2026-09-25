@@ -9,7 +9,10 @@ and logs one line on stderr for a request that failed or took a timed route.
 A request that raised is answered by failure(): a Refusal is the caller's
 error, 400 with its message; anything else is the server's fault, 500 with
 the error's type and message, and the traceback goes to stderr, never to the
-caller. call_tool() is a tools/call over the MCP door's HTTP transport.
+caller. read_json() is the one HTTP reader - the status and the decoded body
+of any answer - under call_tool(), a tools/call over the MCP door's HTTP
+transport, and under the board's and the orchestrator's calls to the other
+servers.
 
 Stdlib only, besides db.Refusal, so the MCP door's HTTP transport that
 stands on it (door/mcp/http.py) stays dependency-free.
@@ -147,6 +150,30 @@ class Handler(BaseHTTPRequestHandler):
 # --- the client --------------------------------------------------------------
 
 @dataclass(frozen=True)
+class JsonAnswer:
+    """What a server answered over HTTP: its status and its body decoded as
+    JSON, None when the body is not JSON."""
+    status: int
+    body: object
+
+
+def read_json(request: urllib.request.Request | str, timeout: float) -> JsonAnswer:
+    """The status and decoded body of any answer, an error status included.
+    Nothing answering - a refused connection, a timeout - is an OSError and
+    propagates, so each caller keeps the reason in its own words."""
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310  # every caller checks the scheme: call_tool, board.inference_url(), orchestrator's http literals
+            status, raw = response.status, response.read()
+    except urllib.error.HTTPError as error:          # a URLError, so caught first
+        status, raw = error.code, error.read()
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        body = None
+    return JsonAnswer(status, body)
+
+
+@dataclass(frozen=True)
 class CallReply:
     """What a tools/call over HTTP came back with: the tool's text (or why
     there is none), its structured payload, and whether it is an error - the
@@ -156,17 +183,15 @@ class CallReply:
     is_error: bool
 
 
-def _refused_by_door(error: urllib.error.HTTPError) -> CallReply:
-    """The door's error status, in its own words where its body gives them."""
-    try:
-        body = json.loads(error.read().decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return CallReply("the MCP server answered %d" % error.code, None, True)
-    said = body.get("error") if isinstance(body, dict) else None
+def _refused_by_door(answer: JsonAnswer) -> CallReply:
+    """The door's error status, in its own words where its body gives them:
+    its error, or that error's message when it is a JSON-RPC error object."""
+    said = answer.body.get("error") if isinstance(answer.body, dict) else None
     if isinstance(said, dict):                       # a JSON-RPC error object
         said = said.get("message")
-    reason = said or error.msg
-    return CallReply("the MCP server answered %d: %s" % (error.code, reason), None, True)
+    if not said:
+        return CallReply("the MCP server answered %d" % answer.status, None, True)
+    return CallReply("the MCP server answered %d: %s" % (answer.status, said), None, True)
 
 
 def _answer(reply: object) -> CallReply:
@@ -202,8 +227,9 @@ def call_tool(
         url: str, name: str, arguments: Mapping[str, object], token: str | None = None,
         timeout: float = 60) -> CallReply:
     """One tools/call on the MCP server at `url`, with the bearer token when
-    one is given. A URL that is not http or https is a ValueError: urlopen
-    would read a file: URL as a path."""
+    one is given: a 200 is read as the JSON-RPC response, any other status
+    as the door turning the call away. A URL that is not http or https is a
+    ValueError: urlopen would read a file: URL as a path."""
     if urlsplit(url).scheme not in ("http", "https"):
         raise ValueError("the MCP server's URL must be http or https, got %r" % url)
     body = json.dumps({
@@ -214,9 +240,9 @@ def call_tool(
         headers["Authorization"] = "Bearer " + token
     request = urllib.request.Request(url, data=body.encode("utf-8"), headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310  # scheme checked above
-            return _answer(json.loads(response.read().decode("utf-8")))
-    except urllib.error.HTTPError as error:          # a URLError, so caught first
-        return _refused_by_door(error)
-    except (urllib.error.URLError, OSError, json.JSONDecodeError, UnicodeDecodeError) as error:
+        answer = read_json(request, timeout)
+    except OSError as error:
         return CallReply("the MCP server is unreachable: %s" % error, None, True)
+    if answer.status == 200:
+        return _answer(answer.body)
+    return _refused_by_door(answer)

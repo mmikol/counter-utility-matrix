@@ -229,6 +229,31 @@ def test_board_reports_an_unreachable_inference_service(monkeypatch, capsys):
         "countrix board: the inference service at http://127.0.0.1:9 did not answer /health: ")
 
 
+class _Answered:
+    """What a stubbed urlopen answers: a body and a status."""
+
+    def __init__(self, body, status):
+        self.body, self.status = body, status
+
+    def read(self):
+        return self.body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_an_inference_answer_that_is_not_json_is_a_502(monkeypatch):
+    import urllib.request
+    monkeypatch.setenv("COUNTRIX_INFERENCE_URL", "http://inference:8019")
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda request, timeout: _Answered(b"<html>", 200))
+    assert board.remote("/strategies") == (
+        {"error": "the inference service answered 200 with no JSON object"}, 502)
+
+
 # --- served ------------------------------------------------------------------------------
 
 @pytest.fixture()

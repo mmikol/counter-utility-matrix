@@ -15,8 +15,8 @@
 
 The agents run on the host, on the subscription (the claude CLI, signed in
 once); without the CLI the run still brings the stack up and says so. It
-imports the standard library, db's ROOT, db.web's MCP client and
-inference.derive, the headless claude recipe; run it with .venv/bin/python,
+imports the standard library, db's ROOT, db.web's JSON reader and MCP client
+and inference.derive, the headless claude recipe; run it with .venv/bin/python,
 since inference.derive loads psycopg. Exit code 0 means everything answered.
 """
 
@@ -25,8 +25,6 @@ import os
 import subprocess  # nosec B404  # docker compose and the claude CLI, argv lists, never a shell
 import sys
 import time
-import urllib.error
-import urllib.request
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Any, NamedTuple, TypedDict
@@ -79,15 +77,14 @@ def get_json(url: str, timeout: float = 10) -> dict[str, Any] | None:
     whose body is not a JSON object reads as {"status": "error", "error":
     "HTTP <code>"}."""
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:  # nosec B310  # http literals from the URL table
-            return _json_object(response.read())
-    except urllib.error.HTTPError as error:        # a URLError, so caught first
-        try:
-            return _json_object(error.read())
-        except ValueError:
-            return {"status": "error", "error": "HTTP %d" % error.code}
-    except (urllib.error.URLError, OSError, ValueError):
+        answer = web.read_json(url, timeout)
+    except OSError:
         return None
+    if isinstance(answer.body, dict):
+        return answer.body
+    if 200 <= answer.status < 300:
+        return None
+    return {"status": "error", "error": "HTTP %d" % answer.status}
 
 
 def wait_for(url: str, seconds: float, what: str) -> dict[str, Any]:

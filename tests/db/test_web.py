@@ -1,12 +1,14 @@
 """What the three HTTP servers share: the reply to a request that raised, the
-Host-and-Origin guard, the handler base that logs what failed, and the one
-client that calls the MCP door."""
+Host-and-Origin guard, the handler base that logs what failed, the one JSON
+reader and the one client that calls the MCP door."""
 
 import email.message
 import http.client
+import io
 import json
 import re
 import threading
+import urllib.request
 
 import pytest
 
@@ -100,6 +102,35 @@ def _door(tmp_path, token=None):
     httpd = HttpServer(("127.0.0.1", 0), mcp, lambda: {"status": "ok"}, token=token)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd, "http://127.0.0.1:%d/mcp" % httpd.server_address[1]
+
+
+class _Answered(io.BytesIO):
+    """What a stubbed urlopen answers: a body and a status."""
+
+    def __init__(self, body, status=200):
+        super().__init__(body)
+        self.status = status
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_read_json_reads_the_status_and_body_of_any_answer(tmp_path, monkeypatch):
+    httpd, url = _door(tmp_path, token="s3cret")
+    health = url.replace("/mcp", "/health")                  # open without the token
+    assert web.read_json(health, 10) == web.JsonAnswer(200, {"status": "ok"})
+    ping = urllib.request.Request(
+        url, data=b'{"jsonrpc": "2.0", "id": 1, "method": "ping"}',
+        headers={"Content-Type": "application/json"})
+    assert web.read_json(ping, 10) == web.JsonAnswer(401, {"error": "a bearer token is required"})
+    httpd.shutdown()
+    with pytest.raises(OSError):                             # nothing answers: the caller's to word
+        web.read_json("http://127.0.0.1:9/mcp", 5)
+    monkeypatch.setattr(urllib.request, "urlopen", lambda request, timeout: _Answered(b"<html>"))
+    assert web.read_json(health, 10) == web.JsonAnswer(200, None)
 
 
 def test_call_tool_reads_the_answer_the_refusal_and_the_door_turning_it_away(tmp_path):

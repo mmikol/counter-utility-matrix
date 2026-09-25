@@ -26,7 +26,6 @@ import argparse
 import json
 import os
 import sys
-import urllib.error
 import urllib.request
 from collections.abc import Mapping, Sequence
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -93,7 +92,8 @@ def remote(
         path: str, query: Mapping[str, str | Sequence[str]] | None = None,
         payload: object = None) -> web.Reply:
     """Forward to the inference service -> its reply. A service that does
-    not answer is a 502, and a line on stderr naming why."""
+    not answer is a 502, and a line on stderr naming why; one that answers
+    with no JSON object is a 502 too."""
     url = inference_url() + path
     if query:
         url += "?" + urlencode(query, doseq=True)
@@ -101,19 +101,16 @@ def remote(
     request = urllib.request.Request(
         url, data=data, headers={"Content-Type": "application/json"} if data else {})
     try:
-        # the scheme is http or https: inference_url() refuses any other
-        with urllib.request.urlopen(request, timeout=REMOTE_TIMEOUT) as response:  # nosec B310
-            return web.Reply(json.loads(response.read().decode("utf-8")), response.status)
-    except urllib.error.HTTPError as error:
-        try:
-            return web.Reply(json.loads(error.read().decode("utf-8")), error.code)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return web.Reply({"error": "inference service returned %d" % error.code}, error.code)
-    except (urllib.error.URLError, OSError) as error:
+        answer = web.read_json(request, REMOTE_TIMEOUT)
+    except OSError as error:
         sys.stderr.write(
             "countrix board: the inference service at %s did not answer %s: %s\n"
             % (inference_url(), path, error))
         return web.Reply({"error": "inference service unreachable: %s" % error}, 502)
+    if not isinstance(answer.body, dict):
+        said = "the inference service answered %d with no JSON object" % answer.status
+        return web.Reply({"error": said}, 502)
+    return web.Reply(answer.body, answer.status)
 
 
 # --- JSON endpoints ---------------------------------------------------------

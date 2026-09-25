@@ -40,6 +40,8 @@ def test_mcp_posts_a_tool_call_and_reads_the_text(monkeypatch):
     seen = {}
 
     class Reply(io.BytesIO):
+        status = 200
+
         def __enter__(self): return self
         def __exit__(self, *a): return False
 
@@ -63,6 +65,8 @@ def test_a_refused_or_unanswered_tool_call_raises_its_message(monkeypatch):
     import urllib.request
 
     class Reply(io.BytesIO):
+        status = 200
+
         def __enter__(self): return self
         def __exit__(self, *a): return False
 
