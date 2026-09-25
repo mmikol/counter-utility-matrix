@@ -35,16 +35,13 @@ from db.data.wiki import WIKI, WikiError, fetch_articles, synergies
 
 # --- extract: markup -> Python ---------------------------------------------
 
-# verdict +1, 0 or -1; score the signed margin; basis "rating", "prose" or
-# None for an unwritten cell; sentence what decided it.
+# verdict +1, 0 or -1; basis "rating", "prose" or None for an unwritten cell.
 class Reading(NamedTuple):
     verdict: int
-    score: float
     basis: str | None
-    sentence: str
 
 
-UNWRITTEN = Reading(0, 0.0, None, "")
+UNWRITTEN = Reading(0, None)
 
 
 # What the roster and a hero's own article say of it: its name, 'he' or 'she'.
@@ -375,29 +372,25 @@ def read_cell(cell: str, hero: str, other: str, pronouns: Pronouns = (None, None
     if name_key(text) in synergies.PLACEHOLDERS and steps is None and not risk:
         return UNWRITTEN
     if steps is not None and (abs(steps) >= 1 or steps == 0):
-        return Reading((steps > 0) - (steps < 0), float(steps), "rating", " | ".join(label))
+        return Reading((steps > 0) - (steps < 0), "rating")
 
     advantage, threat = max(risk, 0.0), max(-risk, 0.0)
-    swings = [(risk, " | ".join(label))]
     said = sentences(text)
     read = normalise("\n".join(said), hero, other, pronouns).split("\n") if said else []
-    for place, (sentence, normalised) in enumerate(zip(said, read, strict=True)):
+    for place, normalised in enumerate(read):
         gained, lost = score_sentence(normalised)
         weight = PLACE_WEIGHTS[place] if place < len(PLACE_WEIGHTS) else LATER_WEIGHT
         advantage, threat = advantage + gained * weight, threat + lost * weight
-        swings.append(((gained - lost) * weight, sentence))
     margin = advantage - threat
     verdict = ((margin > 0) - (margin < 0)) if abs(margin) >= MARGIN else 0
-    sentence = max(swings, key=lambda swing: swing[0] * verdict)[1] if verdict else ""
-    return Reading(verdict, round(margin, 2), "prose", sentence)
+    return Reading(verdict, "prose")
 
 
 def parse_matchups(text: str, hero: str,
-                   known: Mapping[str, Known] | None = None) -> list[tuple[str, Reading]]:
+                   known: Mapping[str, Known]) -> list[tuple[str, Reading]]:
     """[(enemy name, Reading)] - one article's written Match-Up cells. known is
     {name_key: Known}: a template names its rows by key, and the prose is read
     by the roster's name and the pronoun."""
-    known = known or {}
     unknown = Known(name=None, pronoun=None)
     readings = []
     for row in synergies.section_rows(text, synergies.MATCHUP):
@@ -412,16 +405,15 @@ def parse_matchups(text: str, hero: str,
     return readings
 
 
-# {(loser id, winner id): the sentence that decided it}
-type Edges = dict[tuple[int, int], str]
+# (loser id, winner id): a counters row, countered_by_id answering hero_id.
+type Edge = tuple[int, int]
 
 
 def combine(readings_by_hero: Mapping[str, list[tuple[str, Reading]]],
-            hero_ids: Mapping[str, int]) -> tuple[Edges, list[tuple[int, int]], list[str]]:
-    """Readings per article -> ({(loser id, winner id): sentence}, contradicted
-    pairs, unresolved names). hero_ids is {name_key: hero_id}. The sentence is
-    the first article's by hero name."""
-    seats: Edges = {}
+            hero_ids: Mapping[str, int]) -> tuple[set[Edge], list[tuple[int, int]], list[str]]:
+    """Readings per article -> ({Edge}, contradicted pairs, unresolved names).
+    hero_ids is {name_key: hero_id}."""
+    seats: set[Edge] = set()
     unmatched: list[str] = []
     for hero in sorted(readings_by_hero):
         hero_id = hero_ids[name_key(hero)]
@@ -432,10 +424,10 @@ def combine(readings_by_hero: Mapping[str, list[tuple[str, Reading]]],
             elif other_id != hero_id and reading.verdict:
                 winner, loser = ((hero_id, other_id) if reading.verdict > 0
                                  else (other_id, hero_id))
-                seats.setdefault((loser, winner), reading.sentence)
+                seats.add((loser, winner))
 
     contradicted = sorted({(min(pair), max(pair)) for pair in seats if pair[::-1] in seats})
-    edges = {pair: sentence for pair, sentence in seats.items() if pair[::-1] not in seats}
+    edges = {pair for pair in seats if pair[::-1] not in seats}
     return edges, contradicted, unmatched
 
 

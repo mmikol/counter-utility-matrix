@@ -112,13 +112,13 @@ def test_the_shared_row_parser_reads_a_template_with_its_ratings_leading_the_cel
 
 
 def test_a_wikitable_article_gives_a_reading_per_written_cell():
-    readings = dict(matchups.parse_matchups(WIKITABLE, "Widowmaker"))
+    readings = dict(matchups.parse_matchups(WIKITABLE, "Widowmaker", {}))
     # Unwritten: Orisa "(To be added)", Mei an empty TBA cell. The mirror row is skipped.
     assert list(readings) == ["D.Va", "Hazard", "Pharah", "McCree"]
     assert {name: reading.verdict for name, reading in readings.items()} == {
         "D.Va": -1, "Hazard": 0, "Pharah": 1, "McCree": 1}
     assert readings["McCree"].basis == "rating" and readings["Pharah"].basis == "prose"
-    assert readings["D.Va"].sentence == "D.Va is a significant threat to you."
+    assert readings["D.Va"] == (-1, "prose")
 
 
 def test_a_template_article_is_read_by_the_roster_name_and_pronoun():
@@ -127,15 +127,15 @@ def test_a_template_article_is_read_by_the_roster_name_and_pronoun():
         "reinhardt": Known("Reinhardt", "he"), "roadhog": Known("Roadhog", "he")}
     readings = dict(matchups.parse_matchups(TEMPLATE, "Pharah", known))
     assert list(readings) == ["dva", "reinhardt", "soldier76", "roadhog"]
-    assert readings["dva"] == (-1, -2.0, "rating", "VERY WEAK MATCHUP | EXTREME RISK")
+    assert readings["dva"] == (-1, "rating")
     # "EVEN -> STRONG" is half a step: the prose decides, "her rockets" being Pharah's.
     assert readings["reinhardt"].basis == "prose" and readings["reinhardt"].verdict == 1
     assert readings["soldier76"].verdict == -1
-    assert readings["roadhog"] == (0, 0.0, "rating", "MEDIUM MATCHUP | HIGH RISK")
+    assert readings["roadhog"] == (0, "rating")
 
 
 def test_an_article_without_the_section_reads_nothing():
-    assert matchups.parse_matchups("==Abilities==\n[[Genji]] is fast.", "Ana") == []
+    assert matchups.parse_matchups("==Abilities==\n[[Genji]] is fast.", "Ana", {}) == []
 
 
 # --- a cell -> a verdict -----------------------------------------------------
@@ -225,24 +225,21 @@ def test_a_heros_pronoun_is_counted_outside_the_match_up_section():
 
 
 def test_two_articles_agree_into_one_edge_and_contradict_into_none():
-    def reading(verdict, sentence):
-        return matchups.Reading(verdict, float(verdict), "prose", sentence)
+    def reading(verdict):
+        return matchups.Reading(verdict, "prose")
 
     ids = {"winston": 1, "widowmaker": 2, "reaper": 3, "cassidy": 4, "ana": 5}
     edges, contradicted, unmatched = matchups.combine({
-        "Winston": [("Widowmaker", reading(1, "You counter her.")),
-                    ("Reaper", reading(-1, "One of your worst nightmares.")),
-                    ("McCree", reading(1, "He cannot stop your leap.")),
-                    ("Ana", reading(0, "Mind the dart.")),
-                    ("Winston", reading(1, "A mirror.")), ("Sym", reading(1, "Easy."))],
-        "Widowmaker": [("Winston", reading(-1, "One of your biggest threats."))],
-        "Reaper": [("Winston", reading(0, "Shoot the barrier."))],
-        "Cassidy": [("Winston", reading(1, "Flashbang stops his leap."))],
+        "Winston": [("Widowmaker", reading(1)), ("Reaper", reading(-1)),
+                    ("McCree", reading(1)), ("Ana", reading(0)),
+                    ("Winston", reading(1)), ("Sym", reading(1))],
+        "Widowmaker": [("Winston", reading(-1))],
+        "Reaper": [("Winston", reading(0))],
+        "Cassidy": [("Winston", reading(1))],
         "Ana": [],
     }, ids)
-    # (loser, winner): both articles agree on Widowmaker, the sentence from the first
-    # by hero name; Reaper's says neither; Cassidy's and Winston's each claim the pair.
-    assert edges == {(2, 1): "One of your biggest threats.",
-                     (1, 3): "One of your worst nightmares."}
+    # (loser, winner): both articles agree on Widowmaker; Reaper's says neither;
+    # Cassidy's and Winston's each claim the pair.
+    assert edges == {(2, 1), (1, 3)}
     assert contradicted == [(1, 4)]
     assert unmatched == ["Winston: Sym"]
