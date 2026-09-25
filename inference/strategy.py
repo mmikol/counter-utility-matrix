@@ -8,20 +8,24 @@ A strategy file, in the frontmatter dialect (inference.frontmatter):
 
     ---
     name: Answer every revealed enemy
-    kind: heuristic           # constraint | heuristic | assumption
+    kind: heuristic
     category: matchup
-    direction: maximize       # heuristics: maximize | minimize
+    direction: maximize
     metric: team.coverage_share
     weight: 3
-    when: enemy.size >= 1     # optional guard, either kind
+    when: enemy.size >= 1
     ---
     prose: what it means and why
 
-A HEURISTIC names a numeric fact key (`metric`), min-max normalised
-against a seeded reference sample of legal sixes for the board and
-weighted; `direction` says which end is good. Guarded on the six's own
-state it is a need: weight x (norm - 1). A CONSTRAINT takes one of two
-forms, read off its frontmatter (`form`):
+The kind is constraint, heuristic or assumption, and either of the first
+two takes an optional `when` guard. A HEURISTIC names a numeric fact key
+(`metric`), min-max normalised against the board's scale (inference.scale:
+a seeded reference sample of legal sixes and the board's field) and
+weighted; `direction`, maximize or minimize, says which end is good, and
+an optional `confidence` metric scales the weight by how strongly the
+premise holds. Guarded on the six's own state it is a need: weight x
+(norm - 1). A CONSTRAINT takes one of two forms, read off its frontmatter
+(`form`):
 
     limit   `require: <expr>` must hold. Hard by default - a comp that
             fails is discarded; `soft: true` with `penalty: <number>`
@@ -47,8 +51,9 @@ Each field keeps one rule, which FIELDS names and checked_value applies: a
 line of text or an expression is one line as the loader splits lines,
 within its length cap; a choice is one of its choices; the weight is a
 finite number within 0..10; soft is true or false; a param is NAME: a
-finite number. The loader reads every file through these checks, and every
-writer (inference.tune) checks a value by them before a file changes.
+finite number. The loader reads every file through these checks, every
+writer (inference.tune) checks a value by them before a file changes, and
+the door declares its strategy arguments from FIELDS.
 """
 
 import math

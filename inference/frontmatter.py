@@ -2,7 +2,7 @@
 between two `---` fences, and one level of indented mapping under a key
 with no value (`params:`). A value is a quoted or bare string, an int, a
 float, a boolean, null, or a [list] of those; a bare word is a string. A
-`#` line is a comment.
+`#` line is a comment; a `#` after a value is part of the value.
 
     ---
     name: Answer every revealed enemy
