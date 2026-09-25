@@ -15,8 +15,10 @@ gives cites a fact.
 *King's Row, blue on attack, two picks a side, Widowmaker banned. The solver
 fills blue's six around Ana and Reinhardt. Each badge is a side's six as a share
 of the best six it could field here: blue's fill is its best, 100; red's two
-picks reach 93. The fight odds split those two shares and are not a win
-probability. The screenshots use the reference playbook ([below](#quick-start)).*
+picks reach 92. The fight odds split those two shares and are not a win
+probability. The screenshots run the reference playbook ([below](#quick-start))
+without its two rules that read Blizzard's published win rates, and the cards
+hide the rate figures: Blizzard licenses those for personal use only.*
 
 ## What it does
 
@@ -40,7 +42,7 @@ probability. The screenshots use the reference playbook ([below](#quick-start)).
 
 ![The score breakdown, one bar per strategy](docs/img/breakdown.jpg)
 
-*How they scored: 6,676 candidates in 1.4 s, one bar per strategy, each with
+*How they scored: 5,692 candidates in 1.3 s, one bar per strategy, each with
 the fact it read. A limit that holds adds nothing; what a six gives up shows
 under costing.*
 
@@ -101,7 +103,7 @@ v2 and Python 3.12.
 ```bash
 git clone https://github.com/mmikol/countrix.git && cd countrix
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
-echo COUNTRIX_STRATEGIES=tests/fixtures/playbook >> .env   # the reference playbook, as in the screenshots
+echo COUNTRIX_STRATEGIES=tests/fixtures/playbook >> .env   # the reference playbook
 .venv/bin/python orchestrator.py up
 ```
 

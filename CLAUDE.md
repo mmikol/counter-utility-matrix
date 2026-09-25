@@ -247,6 +247,9 @@ db <- facts <- inference <- door <- ui.
   2 s a Cargo page with six attempts to wait out a rate limit
   (`CARGO_POLICY`), and 0.5 s an article, asked for once
   (`ARTICLE_POLICY`). No third source, no API keys.
+- Blizzard's rates page licenses its win, pick and ban rates for personal
+  use only. Nothing public - a README image, a doc example, a published page -
+  shows a rate figure or text derived from one.
 - A pull matches a hero or map name against the database through
   `db.data.names` - `index` and `name_key`, or `hero_key` where a former
   name can appear - never by `.lower()`.
