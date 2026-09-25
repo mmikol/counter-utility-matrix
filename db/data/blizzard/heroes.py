@@ -16,7 +16,7 @@ from bs4 import BeautifulSoup, Tag
 
 from db import PERK_TIERS, psql
 from db.data import ArticlePullSummary, fetch
-from db.data.blizzard import BASE_URL, BLIZZARD, HEROES_URL, BlizzardError, attr
+from db.data.blizzard import BLIZZARD, HEROES_URL, BlizzardError, attr
 from db.data.fetch import cache_key, cached_get
 
 # One host serves every page. A keep-alive socket it drops fails one request,
@@ -342,7 +342,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummar
         slug = hero.slug
         # only the fetch sits in the try: a changed page's BlizzardError fails the pull
         try:
-            page = cached_get(pull, "%s/heroes/%s/" % (BASE_URL, slug), cache_key(slug),
+            page = cached_get(pull, "%s%s/" % (HEROES_URL, slug), cache_key(slug),
                               policy=PAGE_POLICY)
         except fetch.FetchError as error:
             # the hero is still stored from the roster; its text stays as it was

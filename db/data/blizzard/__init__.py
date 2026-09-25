@@ -21,8 +21,7 @@ HEROES_URL = BASE_URL + "/heroes/"
 RATES_URL = BASE_URL + "/rates/"
 
 # The sources row this module's pages become.
-BLIZZARD = Source(code="blizzard", name="Blizzard Overwatch site",
-                  url="https://overwatch.blizzard.com/en-us/")
+BLIZZARD = Source(code="blizzard", name="Blizzard Overwatch site", url=BASE_URL + "/")
 
 
 class BlizzardError(FetchError):

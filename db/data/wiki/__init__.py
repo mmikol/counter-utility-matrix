@@ -54,11 +54,12 @@ from db.data.fetch import (
     request,
 )
 
-WIKI_API = "https://overwatch.fandom.com/api.php"
+WIKI_HOST = "https://overwatch.fandom.com"
+WIKI_API = WIKI_HOST + "/api.php"
 CARGO_PAGE_SIZE = 500
 
 # The sources row this module's pages become.
-WIKI = Source(code="wiki", name="Overwatch Wiki", url="https://overwatch.fandom.com/")
+WIKI = Source(code="wiki", name="Overwatch Wiki", url=WIKI_HOST + "/")
 
 # Cargo is a handful of paged requests, so it waits out a rate limit or a
 # failed request: 20, 40, 60, 60 and 60 s, then gives up. 2 s between pages.

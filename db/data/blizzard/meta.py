@@ -83,8 +83,7 @@ QUEUE_NAME = "competitive_role_queue"
 QUEUE_LABEL = "Competitive - Role Queue"
 INPUT_PARAM = "Console"           # the site's spelling of PLATFORM
 ALL_TIER = "All"
-REGION_PARAM = "Americas"         # the site's spelling of REGION
-REGION_NAME = "Americas"
+REGION_PARAM = "Americas"         # the site's spelling of REGION, and its name in regions
 
 
 def competitive_rq(pull: fetch.PullContext) -> str:
@@ -170,7 +169,7 @@ def _store(
         "INSERT INTO regions (code, name, source_id) VALUES (%s, %s, %s)"
         " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name"
         " RETURNING region_id",
-        (REGION, REGION_NAME, source_id),
+        (REGION, REGION_PARAM, source_id),
     )
     region_id = psql.scalar(cursor)
 
