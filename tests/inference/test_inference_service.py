@@ -254,6 +254,29 @@ def test_an_inference_answer_that_is_not_json_is_a_502(monkeypatch):
         {"error": "the inference service answered 200 with no JSON object"}, 502)
 
 
+def test_the_services_refusal_is_relayed_and_its_failure_is_a_502(monkeypatch):
+    """The query goes to the service as received, so its 400 is the caller's
+    and is relayed; its crash, or its refusal of the board's own request,
+    is the service failing: 502, with the service's words."""
+    import email.message
+    import io
+    import json
+    import urllib.error
+    import urllib.request
+
+    def answering(code, body):
+        def urlopen(request, timeout):
+            raise urllib.error.HTTPError(request.full_url, code, "x", email.message.Message(),
+                                         io.BytesIO(json.dumps(body).encode()))
+        return urlopen
+    monkeypatch.setenv("COUNTRIX_INFERENCE_URL", "http://inference:8019")
+    for code, body, relayed in ((400, {"error": "no hero named 'Saitama'"}, 400),
+                                (500, {"error": "KeyError: 'x'"}, 502),
+                                (403, {"error": "host or origin not allowed"}, 502)):
+        monkeypatch.setattr(urllib.request, "urlopen", answering(code, body))
+        assert board.remote("/board", {"red": ["Saitama"]}) == (body, relayed)
+
+
 # --- served ------------------------------------------------------------------------------
 
 @pytest.fixture()

@@ -9,10 +9,22 @@ and logs one line on stderr for a request that failed or took a timed route.
 A request that raised is answered by failure(): a Refusal is the caller's
 error, 400 with its message; anything else is the server's fault, 500 with
 the error's type and message, and the traceback goes to stderr, never to the
-caller. read_json() is the one HTTP reader - the status and the decoded body
-of any answer - under call_tool(), a tools/call over the MCP door's HTTP
-transport, and under the board's and the orchestrator's calls to the other
-servers.
+caller.
+
+A route that relays a call to another server - the board's to the MCP door
+and to the inference service - answers by one map. The caller's error is
+400: a Refusal, a tool's isError, or the inference service's 400, since the
+query goes to it as received. The door's 429 passes through. Every other
+outcome upstream is 502: the door's 401, 400 or 413, a JSON-RPC error
+object, a body that is not a JSON object, nothing answering, the service's
+403, 404 or 500. The relaying process's own crash is failure()'s 500. The
+door's 401 is not passed on: the browser sent no credentials, and the token
+the door refused is the board's.
+
+read_json() is the one HTTP reader - the status and the decoded body of any
+answer - under call_tool(), a tools/call over the MCP door's HTTP transport
+read into a CallReply that carries the status the map gives it, and under
+the board's and the orchestrator's calls to the other servers.
 
 Stdlib only, besides db.Refusal, so the MCP door's HTTP transport that
 stands on it (door/mcp/http.py) stays dependency-free.
@@ -176,51 +188,61 @@ def read_json(request: urllib.request.Request | str, timeout: float) -> JsonAnsw
 @dataclass(frozen=True)
 class CallReply:
     """What a tools/call over HTTP came back with: the tool's text (or why
-    there is none), its structured payload, and whether it is an error - the
-    tool's refusal, the door turning the call away, or no server answering."""
+    there is none), its structured payload, and the status a relay answers
+    it with by the module's map - 200 for the tool's answer, 400 for its
+    refusal, 429 for the door's rate limit, 502 for the door turning the
+    call away otherwise, failing, or not answering."""
     text: str
     structured: dict[str, object] | None
-    is_error: bool
+    status: int
+
+    @property
+    def is_error(self) -> bool:
+        """Whether this is anything but the tool's answer."""
+        return self.status != 200
 
 
 def _refused_by_door(answer: JsonAnswer) -> CallReply:
     """The door's error status, in its own words where its body gives them:
-    its error, or that error's message when it is a JSON-RPC error object."""
+    its error, or that error's message when it is a JSON-RPC error object.
+    Its 429 passes through; any other is 502."""
+    status = 429 if answer.status == 429 else 502
     said = answer.body.get("error") if isinstance(answer.body, dict) else None
     if isinstance(said, dict):                       # a JSON-RPC error object
         said = said.get("message")
     if not said:
-        return CallReply("the MCP server answered %d" % answer.status, None, True)
-    return CallReply("the MCP server answered %d: %s" % (answer.status, said), None, True)
+        return CallReply("the MCP server answered %d" % answer.status, None, status)
+    return CallReply("the MCP server answered %d: %s" % (answer.status, said), None, status)
 
 
 def _answer(reply: object) -> CallReply:
     """A JSON-RPC response to tools/call, read: its error's message, or its
-    result."""
+    result. No response, or an error object, is the door failing: 502."""
     if not isinstance(reply, dict):
-        return CallReply("the MCP server answered with no JSON-RPC response", None, True)
+        return CallReply("the MCP server answered with no JSON-RPC response", None, 502)
     if "error" in reply:
         error = reply["error"]
         said = error.get("message", error) if isinstance(error, dict) else error
-        return CallReply(str(said), None, True)
+        return CallReply(str(said), None, 502)
     return _tool_result(reply.get("result"))
 
 
 def _tool_result(result: object) -> CallReply:
     """A tools/call result as the door sends it (door.mcp.server.ToolResult),
     read off the wire into the record a caller gets: the text items of its
-    content joined by newlines, its structured payload, and whether it is an
-    error. A result that is not an object says nothing and is no error, and
-    content or a payload that is not what the door sends reads as none."""
+    content joined by newlines, its structured payload, and 400 when it is
+    the tool's refusal, 200 otherwise. A result that is not an object says
+    nothing and is no error, and content or a payload that is not what the
+    door sends reads as none."""
     if not isinstance(result, dict):
-        return CallReply("", None, False)
+        return CallReply("", None, 200)
     content = result.get("content")
     items = content if isinstance(content, list) else []
     text = "\n".join(
         str(c.get("text", "")) for c in items if isinstance(c, dict) and c.get("type") == "text")
     structured = result.get("structuredContent")
     payload = structured if isinstance(structured, dict) else None
-    return CallReply(text, payload, bool(result.get("isError")))
+    return CallReply(text, payload, 400 if result.get("isError") else 200)
 
 
 def call_tool(
@@ -242,7 +264,7 @@ def call_tool(
     try:
         answer = read_json(request, timeout)
     except OSError as error:
-        return CallReply("the MCP server is unreachable: %s" % error, None, True)
+        return CallReply("the MCP server is unreachable: %s" % error, None, 502)
     if answer.status == 200:
         return _answer(answer.body)
     return _refused_by_door(answer)

@@ -54,7 +54,11 @@ address sends its reads under its own host name. Each board solved and
 each request that fails leaves one line on stderr, the container's log:
 the request line, the status and the seconds; the page and its files are
 quiet, and a service that does not answer is named there with the
-reason.
+reason. A request that raises answers 400 for a refusal and 500
+otherwise; one the board relays - a board or the catalog to the
+inference service, a weight to the door - answers by `db/web.py`'s relay
+map: a refusal is 400, the door's 429 passes through, and a service or
+door that fails or does not answer is 502.
 
 | route | serves |
 | --- | --- |
@@ -66,7 +70,7 @@ reason.
 | `/api/strategies` | the strategies catalog: every constraint, heuristic and assumption with its kind, form, frontmatter and body - `serve.handle_strategies` in-process, or the service's `/strategies` |
 | `/math` | `static/math.html` in the page shell, the code constants it quotes (`SYNERGY_PULL`, `REFERENCE_SIZE`, `NEED_BUDGET` and the search's four) filled in by `pages.py`: the equation, the scoring function (what 100 means, fight odds, the argmax), the board (red's likely starting comp and its formula, blue's optimal counter, the weights) and how the layers fit, with a table of contents; linked from the board's header |
 | `/tests` | `static/tests.html` in the page shell: what the engine is checked against - the designed proof over every legal six, the adversarial hunt against a wider search, the random sample and the rate it bounds, the regression gate, the properties the suite holds, and what none of it proves |
-| `POST /api/weight` `{id, weight}` | the board's one write, a `tune` call - off by default (403): a weight applies to the session only; `COUNTRIX_READ_ONLY=0` turns it and the *store* button on. A body that does not claim `application/json` is refused with 415, and one past 4 KB with 400 |
+| `POST /api/weight` `{id, weight}` | the board's one write, a `tune` call - off by default (403): a weight applies to the session only; `COUNTRIX_READ_ONLY=0` turns it and the *store* button on. A body that does not claim `application/json` is refused with 415, and one past 4 KB with 400. An id that is not one and a weight that is not a number are 400 before the door is called, and tune's refusal - a weight outside 0..10, no such strategy - is 400 too; the door's 429 passes through, and a door that fails or does not answer is 502 |
 
 `/api/roster`, `/api/facts` and an in-process `/api/board` each open their
 own connection and load a fresh World, so a `pull_rates` or a tune shows on
@@ -181,7 +185,10 @@ is no *store* button and `POST /api/weight` answers 403. With
 `COUNTRIX_MCP_URL` with the bearer token in the compose stack,
 in-process on the local cluster - validated, logged with its reason and
 mirrored; the file's weight is then the default and the browser's
-setting is dropped. Only heuristics have a weight to set.
+setting is dropped. Only heuristics have a weight to set. A refusal -
+tune's, a weight outside 0..10 among them - is 400 on either path; over
+HTTP the door's 429 passes through, and a door that fails or does not
+answer is 502, where a crash in-process is 500.
 
 **The header** pins two pills top-right: *the math* and the repository on
 GitHub (`COUNTRIX_REPO_URL` overrides the address). It keeps only

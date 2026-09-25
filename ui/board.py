@@ -18,8 +18,10 @@ A request whose Host or Origin names another server is refused with 403
 before it is routed (db.web's guard; --allow-host adds a name the board is
 published under). A request that raises is answered by db.web.failure: a
 Refusal 400 with its message, anything else 500 with its type and message,
-the traceback on stderr. Every board solved, and every request that fails,
-leaves a line on stderr.
+the traceback on stderr. A service behind the board - the inference service,
+the MCP door - that fails or does not answer is a 502, by db.web's relay
+map. Every board solved, and every request that fails, leaves a line on
+stderr.
 """
 
 import argparse
@@ -91,9 +93,11 @@ def read_only() -> bool:
 def remote(
         path: str, query: Mapping[str, str | Sequence[str]] | None = None,
         payload: object = None) -> web.Reply:
-    """Forward to the inference service -> its reply. A service that does
-    not answer is a 502, and a line on stderr naming why; one that answers
-    with no JSON object is a 502 too."""
+    """Forward to the inference service -> its reply, by db.web's relay map:
+    its 200, 400 (the query went as received) or 429 as it answered, any
+    other status 502 with its body, so a crash on the service reads 502. A
+    service that does not answer is a 502 and a line on stderr naming why;
+    one that answers with no JSON object is a 502 too."""
     url = inference_url() + path
     if query:
         url += "?" + urlencode(query, doseq=True)
@@ -110,7 +114,7 @@ def remote(
     if not isinstance(answer.body, dict):
         said = "the inference service answered %d with no JSON object" % answer.status
         return web.Reply({"error": said}, 502)
-    return web.Reply(answer.body, answer.status)
+    return web.Reply(answer.body, answer.status if answer.status in (200, 400, 429) else 502)
 
 
 # --- JSON endpoints ---------------------------------------------------------
@@ -152,25 +156,28 @@ def tool_context() -> tools.Context:
 def api_weight(payload: Mapping[str, object] | None) -> web.Reply:
     """Store a heuristic's weight in its file - the slider's "store". The
     change goes through the `tune` tool (validated, logged in the tuning
-    log with its reason, mirrored into the database), never around it. The
-    tool's refusal is relayed as 400 over HTTP and raised in-process, where
-    the POST's boundary answers it 400 the same way."""
+    log with its reason, mirrored into the database), never around it, and
+    tune holds the range; a malformed id or a weight that is not a number
+    never reaches it. Over HTTP the call's status is relayed by
+    db.web's map - the tool's refusal 400, the door's 429 as it came, any
+    other failure 502; in-process a refusal is raised and the POST's
+    boundary answers it 400, so it reads the same on both paths. A crash
+    inside tune reads 500 in-process and 502 remote."""
     payload = payload or {}
-    hid = str(payload.get("id") or "")
-    if not catalog_module.ID_RE.fullmatch(hid):
+    strategy_id = str(payload.get("id") or "")
+    if not catalog_module.ID_RE.fullmatch(strategy_id):
         return web.Reply({"error": "no such heuristic"}, 400)
     number = finite_number(payload.get("weight"))
     if number is None:
         return web.Reply({"error": "the weight must be a number"}, 400)
     weight = round(number, 2)
-    if not 0.0 <= weight <= 10.0:
-        return web.Reply({"error": "the weight must be within 0..10"}, 400)
     arguments = {
-        "id": hid, "field": "weight", "value": weight, "reason": STORE_REASON, "by": "the board"}
+        "id": strategy_id, "field": "weight", "value": weight, "reason": STORE_REASON,
+        "by": "the board"}
     if mcp_url():
         reply = web.call_tool(mcp_url(), "tune", arguments, token=mcp_token())
         if reply.is_error:
-            return web.Reply({"error": reply.text}, 400)
+            return web.Reply({"error": reply.text}, reply.status)
         return web.Reply({"line": reply.text.split("\n")[0], "change": reply.structured}, 200)
     text, stored = tool_context().call("tune", **arguments)
     return web.Reply({"line": text.split("\n")[0], "change": stored}, 200)

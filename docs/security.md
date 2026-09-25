@@ -99,10 +99,18 @@ unknown hero, a malformed weight - is 400 with its reason, and anything
 else is 500 with the error's type and message, its traceback written to
 stderr and never into the reply. The MCP door draws the same line in
 JSON-RPC's words: a refusal is `isError`, anything else `INTERNAL`, the
-traceback in its log. Each server writes one line to stderr for every
-request that fails and every board it solves - the request line, the
-status and the seconds - so the containers' logs say what was asked and
-when; an audit line the door cannot write is noted there too.
+traceback in its log. The board relays calls - a weight to the door, a
+board or the catalog to the inference service - and answers every relay
+by one map in `db/web.py`: the caller's error is 400 (a refusal, a
+tool's `isError`, the service's 400 for a query forwarded as received),
+the door's 429 passes through, and any other failure upstream is 502 -
+the door's 401, 400 or 413, a JSON-RPC error, a body that is not a JSON
+object, the service's 403, 404 or 500, or no answer at all. The door's
+401 is not passed on: the browser sent no credentials, and the token the
+door refused is the board's. Each server writes one line to stderr for
+every request that fails and every board it solves - the request line,
+the status and the seconds - so the containers' logs say what was asked
+and when; an audit line the door cannot write is noted there too.
 
 **SQL reads tables, not disks.** The `query` tool accepts one statement
 that starts `SELECT`, `WITH`, `EXPLAIN`, `SHOW`, `TABLE` or `VALUES`,

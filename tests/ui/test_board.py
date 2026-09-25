@@ -89,16 +89,20 @@ def test_a_service_url_that_is_not_http_is_refused(monkeypatch):
 def test_storing_a_weight_is_a_tune_call_over_the_door(monkeypatch):
     """With an MCP URL set (the compose stack) the board sends one tools/call
     for `tune` - the id, the field, the rounded weight, the reason - and
-    relays the tool's line or its refusal; bad input never reaches the door."""
+    relays the tool's line, or its failure with the status the client gave
+    it. A malformed id or a weight that is not a number never reaches the
+    door; the range is tune's."""
     calls = []
 
     def fake_call_tool(url, name, arguments, token=None, timeout=60):
         calls.append((name, arguments))
         if arguments["id"] == "no-such":
-            return board.web.CallReply("no strategy 'no-such'", None, True)
+            return board.web.CallReply("no strategy 'no-such'", None, 400)
+        if arguments["value"] > 10:
+            return board.web.CallReply("weight must be within 0..10", None, 400)
         return board.web.CallReply(
             "tuned %s: weight 1 -> %s\n- log line" % (arguments["id"], arguments["value"]),
-            {"id": arguments["id"], "field": "weight", "old": 1.0, "new": "9.99"}, False)
+            {"id": arguments["id"], "field": "weight", "old": 1.0, "new": "9.99"}, 200)
     monkeypatch.setenv("COUNTRIX_MCP_URL", "http://data:8020/mcp")
     monkeypatch.setattr(board.web, "call_tool", fake_call_tool)
     data, code = board.api_weight({"id": "healing-floor", "weight": "9.994"})
@@ -107,15 +111,45 @@ def test_storing_a_weight_is_a_tune_call_over_the_door(monkeypatch):
                                "reason": board.STORE_REASON, "by": "the board"})]
     data, code = board.api_weight({"id": "no-such", "weight": 2})
     assert code == 400 and "no strategy" in data["error"]
+    assert board.api_weight({"id": "healing-floor", "weight": 11}) == (
+        {"error": "weight must be within 0..10"}, 400)
     for bad in ({"id": "../escape", "weight": 2}, {"id": "healing-floor", "weight": "x"},
-                {"id": "healing-floor", "weight": 11}, {"id": "healing-floor", "weight": [2]},
+                {"id": "healing-floor", "weight": [2]}, {"id": "healing-floor", "weight": True},
                 {"id": "healing-floor", "weight": "nan"},
                 {}, None):
         assert board.api_weight(bad)[1] == 400
-    assert len(calls) == 2                                   # the refusals never knocked
+    assert len(calls) == 3                     # the id and the number are refused before the door
     for low in (0, 0.25):                                    # under 1 is a weight, 0 switches off
         assert board.api_weight({"id": "healing-floor", "weight": low})[1] == 200
         assert calls[-1][1]["value"] == low
+    def replying(said, status):
+        return lambda *a, **k: board.web.CallReply(said, None, status)
+    for status, said in ((502, "the MCP server is unreachable: refused"),
+                         (429, "the MCP server answered 429: too many calls")):
+        monkeypatch.setattr(board.web, "call_tool", replying(said, status))
+        assert board.api_weight({"id": "healing-floor", "weight": 2}) == ({"error": said}, status)
+
+
+def test_an_out_of_range_weight_is_refused_by_tune_in_process(tmp_path, monkeypatch):
+    """Without an MCP URL the range is tune's all the same: it refuses the
+    weight before it writes the file or touches the database."""
+    import os
+    import shutil
+
+    from inference import catalog
+    from tests.inference import FIXTURE_PLAYBOOK
+    for name in os.listdir(FIXTURE_PLAYBOOK):
+        if name.endswith(".md"):
+            shutil.copy(os.path.join(FIXTURE_PLAYBOOK, name), tmp_path / name)
+    heuristic = next(h for h in catalog.load(FIXTURE_PLAYBOOK) if h.kind == "heuristic")
+    stored = tmp_path / (heuristic.id + ".md")
+    before = stored.read_text(encoding="utf-8")
+    monkeypatch.setenv("COUNTRIX_STRATEGIES", str(tmp_path))   # the playbook in force
+    monkeypatch.delenv("COUNTRIX_MCP_URL", raising=False)
+    with pytest.raises(Refusal, match=r"within 0\.\.10"):   # the POST's boundary answers it 400
+        board.api_weight({"id": heuristic.id, "weight": 11})
+    assert stored.read_text(encoding="utf-8") == before
+    assert not (tmp_path / "tuning-log.md").exists()
 
 
 def test_the_boards_in_process_tool_calls_are_audited_as_the_board():
