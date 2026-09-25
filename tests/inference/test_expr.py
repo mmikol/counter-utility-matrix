@@ -54,7 +54,9 @@ def test_the_sandbox_refuses_what_would_hang_or_exhaust_it():
         with pytest.raises(ExprError):
             Expr(bomb)
     assert Expr("team.tanks ** 2").evaluate({"team": {"tanks": 3}}) == 9
-    # a bomb the parse lets through is refused at evaluation with its own message
-    with pytest.raises(ExprError, match=r"OverflowError: .*too large"):
+    # a bomb the parse lets through is refused at evaluation with its own message;
+    # the wording is the platform's (macOS: 'Result too large', Linux: 'Numerical
+    # result out of range'), so the test pins that a message follows the type
+    with pytest.raises(ExprError, match=r"OverflowError: \S"):
         Expr("team.big ** 2").evaluate({"team": {"big": 1e200}})
     assert Expr("team.style_lean == 'dive'").evaluate({"team": {"style_lean": "dive"}}) is True
