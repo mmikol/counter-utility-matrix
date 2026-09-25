@@ -29,7 +29,8 @@ The readers the loaders share, no run():
                     and article wikitext - and the tidying both need
     matchup_tables  a hero article's Match-Ups and Team Synergy section:
                     one column of its tables as rows, in either markup,
-                    and a cell as plain text; synergies and matchups read it
+                    and a cell as plain text; synergies and matchups read
+                    it, over the released heroes' articles it fetches
 
 The article HTML sits behind a bot challenge; the only open path is the
 MediaWiki endpoint below, which returns JSON (Cargo) and raw wikitext and

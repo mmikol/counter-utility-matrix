@@ -7,7 +7,8 @@ two ways - a wikitable, or a {{MatchupTable/<Role>}} template with
 <Hero>_matchup and <Hero>_synergy parameters and their ratings.
 section_rows reads one column of either into rows, and paragraphs reads a
 cell as plain text. The synergies pull reads the Team Synergy column, the
-counters pull (matchups) the Match-Up one. No run(): nothing here stores.
+counters pull (matchups) the Match-Up one, both of every released hero's
+article as released_articles fetches them. No run(): nothing here stores.
 """
 
 import re
@@ -15,7 +16,10 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import NamedTuple
 
-from db.data.wiki import markup
+import psycopg
+
+from db.data.fetch import PullContext
+from db.data.wiki import Articles, fetch_articles, markup
 
 SECTION_RE = re.compile(r"^==(?!=)[^=\n]*synergy[^=\n]*==[ \t]*$", re.M | re.I)
 ROW_SPLIT_RE = re.compile(r"^\|-.*$", re.M)
@@ -30,6 +34,21 @@ SENTENCE_END_RE = re.compile(r"(?<![ .][A-Z])[.!?](?=\s+[A-Z\"'])")
 
 # A cell whose text keys to one of these holds no advice: "(To be added)".
 PLACEHOLDERS = {"", "tobeadded", "tba", "tbd", "na", "none", "todo"}
+
+
+class Released(NamedTuple):
+    """The released heroes, {name: hero_id} in name order, and what
+    fetch_articles read of their articles."""
+    heroes: dict[str, int]
+    articles: Articles
+
+
+def released_articles(cursor: psycopg.Cursor, pull: PullContext) -> Released:
+    """Every released hero and its article: what the synergies and counters
+    pulls read before either writes."""
+    cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
+    heroes: dict[str, int] = dict(cursor.fetchall())
+    return Released(heroes, fetch_articles(pull, heroes))
 
 
 def synergy_section(text: str) -> str:

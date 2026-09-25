@@ -20,12 +20,13 @@ import psycopg
 from db import psql
 from db.data import ArticlePullSummary, fetch
 from db.data.names import hero_key, index, name_key
-from db.data.wiki import WIKI, WikiError, fetch_articles
+from db.data.wiki import WIKI, WikiError
 from db.data.wiki.matchup_tables import (
     PLACEHOLDERS,
     SENTENCE_END_RE,
     Row,
     paragraphs,
+    released_articles,
     section_rows,
 )
 
@@ -151,10 +152,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> SynergiesSum
     """Reload synergies from the Team Synergy column of every released hero's
     article -> the pairs stored, the mutual ones and the heroes left unpaired."""
     cursor = connection.cursor()
-    cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
-    released: dict[str, int] = dict(cursor.fetchall())
-
-    articles = fetch_articles(pull, released)
+    released, articles = released_articles(cursor, pull)
     claims = {name: parse_synergies(text) for name, text in articles.found.items()}
     if not any(claims.values()):
         raise WikiError("no hero article has a synergy claim")

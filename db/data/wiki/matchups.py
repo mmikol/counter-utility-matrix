@@ -31,7 +31,7 @@ import psycopg
 from db import psql
 from db.data import ArticlePullSummary, fetch
 from db.data.names import RENAMED, hero_key, index, name_key, unaccented
-from db.data.wiki import WIKI, WikiError, fetch_articles, matchup_tables
+from db.data.wiki import WIKI, WikiError, matchup_tables
 
 # --- extract: markup -> Python ---------------------------------------------
 
@@ -452,10 +452,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> CountersSumm
     """Reload counters from the Match-Up column of every released hero's
     article -> the edges stored, the cells read and what went unanswered."""
     cursor = connection.cursor()
-    cursor.execute("SELECT name, hero_id FROM heroes WHERE status = 'released' ORDER BY name")
-    released: dict[str, int] = dict(cursor.fetchall())
-
-    articles = fetch_articles(pull, released)
+    released, articles = matchup_tables.released_articles(cursor, pull)
     known = {
         name_key(name): Known(name=name, pronoun=pronoun(articles.found.get(name, "")))
         for name in released}
