@@ -223,7 +223,7 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
   font-size:12px; }
 .bar .lbl { color:#c9d0db; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .bar .trk { height:9px; background:#0b0e14; border-radius:4px; overflow:hidden; position:relative; }
-.bar .fill { height:100%; background:var(--green); }
+.bar .fill { display:block; height:100%; background:var(--green); }
 .bar.neg .fill { background:var(--red); } .bar.off { opacity:.4; }
 .bar .val { text-align:right; font-family:ui-monospace,monospace; color:var(--muted); }
 .alts { margin-top:12px; color:#c9d0db; font-size:13px; }
