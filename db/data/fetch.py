@@ -69,15 +69,12 @@ class RequestPolicy:
     delay: float = 1.0
 
 
-DEFAULT_POLICY = RequestPolicy()
-
-
 USER_AGENT = "countrix/0.1 (personal project; contact via repo)"
 
 
-def session(existing: requests.Session | None = None) -> requests.Session:
-    """A requests session (the given one, or a new one) that says who we are."""
-    s = existing or requests.Session()
+def session() -> requests.Session:
+    """A requests session that says who we are."""
+    s = requests.Session()
     s.headers.update({"User-Agent": USER_AGENT})
     return s
 
@@ -116,9 +113,7 @@ def _age(path: str) -> float:
 
 def is_stale(path: str, max_age: float | None) -> bool:
     """A cached page older than `max_age` seconds (never, when it is None)."""
-    if max_age is None or not os.path.exists(path):
-        return False
-    return _age(path) > max_age
+    return max_age is not None and _age(path) > max_age
 
 
 def _read_cache(path: str) -> str:
@@ -206,8 +201,8 @@ def cached(pull: PullContext, name: str, produce: Callable[[], str]) -> str:
 
 
 def cached_get(
-        pull: PullContext, url: str, key: str, params: Mapping[str, str] | None = None,
-        policy: RequestPolicy = DEFAULT_POLICY) -> str:
+        pull: PullContext, url: str, key: str, params: Mapping[str, str] | None = None, *,
+        policy: RequestPolicy) -> str:
     """One page as text, through the pull's page cache as `key`.html."""
     return cached(pull, key + ".html", lambda: request(
         pull.session, url, params, policy, lambda response: response.text))
