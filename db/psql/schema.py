@@ -115,8 +115,8 @@ def state(connection: psycopg.Connection) -> State:
     (no tables), stale (a migration file the ledger has not recorded),
     unfilled (no heroes yet) or current. The one definition of ready: the
     container entrypoint asks it through main(), db_status reports it, the
-    data container's /health carries it, and compose's healthcheck and
-    orchestrator.py wait on it."""
+    data container's /health carries it, compose's healthcheck holds data
+    unhealthy until it is current, and orchestrator.py reports it."""
     if table_count(connection) == 0:
         return "empty"
     if pending(connection):

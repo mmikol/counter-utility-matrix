@@ -5,7 +5,7 @@ against two public websites. What is worth protecting: your account,
 your operating system, and the playbook and database the board trusts at
 game time.
 
-Nothing is published: every port compose publishes binds to 127.0.0.1,
+Nothing is hosted: every port compose publishes binds to 127.0.0.1,
 and the board is reachable from this machine only.
 
 ## The threat model

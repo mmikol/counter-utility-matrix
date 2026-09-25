@@ -194,9 +194,11 @@ def pull_playstyles(connection: psycopg.Connection, pull: fetch.PullContext) -> 
 
 
 @pull_tool(
-    "pull_synergies", "The Synergy section of every hero's wiki article: one"
-    " row per pair, score 2 when both articles name each other, 1 when one"
-    " does, the wiki's advice as the note. Run after pull_heroes.",
+    "pull_synergies", "The Team Synergy column of every hero's wiki article"
+    " (its Match-Ups and Team Synergy section): one row per pair, score 2"
+    " when both articles name each other, 1 when one does, the wiki's advice"
+    " as the note. Placeholders, cells rated below GOOD and MIRROR are"
+    " dropped. Run after pull_heroes.",
     source="wiki", stored="pairs stored")
 def pull_synergies(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return wiki_synergies.run(connection, pull)

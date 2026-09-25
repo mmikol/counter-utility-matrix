@@ -2,8 +2,9 @@
 
     name_key      a hero or map name across sites. The roster and map pool
                   carry names as Blizzard and the wiki write them - "Lúcio",
-                  "D.Va", "Soldier: 76", "King's Row" - and a third site
-                  writes them its own way: "Lucio", "DVa", "soldier-76".
+                  "D.Va", "Soldier: 76", "King's Row" - and the wiki's
+                  links and templates write them other ways: "Lucio",
+                  "DVa", "Soldier76".
                   The differences are all punctuation and accents, and a
                   name that fails to match is not a loud failure but a row
                   silently dropped, so the key folds a name down to its

@@ -3,7 +3,7 @@ the facts layer always reads what the data layer stored.
 
     world = tables.load(cx)
 
-Loading is a dozen queries and a few thousand rows; cheap enough to do per
+Loading is 27 queries and a few thousand rows; cheap enough to do per
 click, and it is what lets the inference layer's solver evaluate thousands
 of candidate compositions without a query each. Each read step fills one
 part of the World from its tables, and load runs them in the order each

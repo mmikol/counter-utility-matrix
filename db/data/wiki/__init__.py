@@ -5,7 +5,9 @@ Page to table, each ends in run(connection, pull):
     heroes          hero kits via the Cargo Abilities table: weapons and
                     firing configs, abilities, perks, stats, keywords; the
                     announced heroes. kits/ reads and stores its kits
-    maps            maps, game modes and stages from the Maps article
+    maps            maps and game modes from the Maps article, each
+                    map's stages from its own article, the Hybrid
+                    phases from the Hybrid article
     terrain         the ground each map article describes - chokes,
                     interiors, high ground, flanks, sightlines, open ground,
                     hazards, cover - counted per map and per stage

@@ -126,7 +126,7 @@ def test_the_page_is_a_shell_over_static_files():
         assert rule in css, rule
     assert "id='clearall'" in body
     header = body.split("</header>")[0]
-    # the two pills, pinned top-right
+    # the three pills, pinned top-right
     links = header[header.index("<span class='links'>"):]
     assert "href='/math'" in links
     assert pages.repo_url() in links
