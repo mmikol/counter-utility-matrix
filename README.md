@@ -1,85 +1,172 @@
 # Countrix
 
 [![ci](https://github.com/mmikol/countrix/actions/workflows/ci.yml/badge.svg)](https://github.com/mmikol/countrix/actions/workflows/ci.yml)
+![python 3.12](https://img.shields.io/badge/python-3.12-3776ab)
+![license: PolyForm Strict](https://img.shields.io/badge/license-PolyForm%20Strict-555)
 
-Optimal Overwatch 2 team compositions: a database pulled from the
-sources, a board that turns every pick into facts, and a deterministic
-solver over a markdown playbook of constraints, heuristics and
-assumptions. No accounts, no keys, no API billing.
+The Overwatch 2 team composition that counters the one in front of you.
+Countrix keeps hero kits, maps, counters and per-map win rates in PostgreSQL,
+turns a draft into numbered facts, and finds the highest-scoring six under a
+playbook of markdown strategy files a person can read and tune. Every reason it
+gives cites a fact.
 
-*Countrix* is short for *Counter Utility Matrix* - the equation the board
-solves, written out on its [math page](ui/static/math.html).
+![The board: King's Row, blue on attack, Widowmaker banned, both sides scored](docs/img/board.jpg)
 
-## Install
+*King's Row, blue on attack, two picks a side, Widowmaker banned. The solver
+fills blue's six around Ana and Reinhardt. Each badge is a side's six as a share
+of the best six it could field here: blue's fill is its best, 100; red's two
+picks reach 93. The fight odds split those two shares and are not a win
+probability. The screenshots use the reference playbook ([below](#quick-start)).*
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/), or any docker with compose v2
-- Python 3.12 - the version the image runs - for the orchestrator, the tests and a Docker-less run (no PostgreSQL install: `pgserver` embeds one on macOS and Linux x86_64)
-- [Claude Code](https://claude.com/claude-code) for the skills and the agents' run, signed in once with `claude login`
+## What it does
+
+- **Pulls the game.** Blizzard's hero pages and win rates, the Overwatch wiki's
+  kits, maps, counters and synergies - cached, rate-limited, no API keys.
+- **Turns a draft into facts.** Map, side, bans and both teams' picks become
+  numbered facts (F1, F2, ...): a hero on this map, against each enemy, beside
+  each ally, the six against the six.
+- **Solves the comp.** A deterministic search enumerates the sixes each role's
+  strongest heroes allow, then climbs by local search over the whole roster.
+  The playbook's constraints and heuristics score every candidate; the best six
+  comes back with the alternatives and why.
+- **Serves it three ways.** A web board, an HTTP inference service and an MCP
+  (Model Context Protocol) server, the tool interface a Claude Code session
+  uses to draft comps and tune the playbook. The solver is arithmetic; the board
+  never calls a model.
+
+![Each pick with its reasons and the facts behind them](docs/img/reasons.jpg)
+
+*Why these six: each pick's reasons, each cited to a numbered fact.*
+
+![The score breakdown, one bar per strategy](docs/img/breakdown.jpg)
+
+*How they scored: 6,676 candidates in 1.4 s, one bar per strategy, each with
+the fact it read. A limit that holds adds nothing; what a six gives up shows
+under costing.*
+
+## How it works
+
+```mermaid
+flowchart LR
+    SRC["Blizzard + the wiki"] --> DATA["db/ - pulls, cleans, stores"]
+    DATA --> PG[("PostgreSQL")]
+    PG --> FACTS["facts/ - the data in memory, every metric, the facts"]
+    FACTS --> INF["inference/ - the playbook, the solver"]
+    FACTS --> UI["ui/ - the board"]
+    INF --> UI
+    DOOR["door/ - the MCP server"] --> DATA
+    DOOR --> INF
+    CC["Claude Code session"] <--> DOOR
+```
+
+Three layers over one database, each a package, and a test fails any import that
+reaches up a layer. Every write goes through one door, the MCP server, the
+sentry's quarantine rename aside. Every metric is defined once, so the number
+on the board and the number the solver maximises come from the same function.
+The playbook is markdown: each strategy is a file with a few lines of
+frontmatter, and the solver reads nothing else.
+
+## Engineering
+
+- **815 tests, 95% line coverage** with the database built, against a 75%
+  floor. CI runs ruff, mypy and the database-free suite, held to 78%, on every
+  push to main and every pull request.
+- **The search is held to brute force.** A CI gate enumerates every legal six
+  on six small synthetic boards and fails unless the search returns the true
+  maximum.
+- **Deterministic parallel search.** A process pool splits each board, and the
+  pooled and single-process answers are pinned to agree exactly.
+- **Typed throughout.** mypy checks every source module in CI; records that
+  cross a module boundary are dataclasses, NamedTuples or TypedDicts.
+- **One door for writes.** 33 MCP tools over stdio, HTTP or in-process, each
+  schema-checked and audited; the query tool runs as a read-only database login.
+- **Hardened containers.** Five services share one image and run unprivileged
+  on a read-only root with every capability dropped; PostgreSQL keeps the five
+  it needs to start. Every port binds to loopback, and every HTTP server refuses
+  a foreign Host or Origin. A sentry quarantines a strategy file whose prose
+  reads like an injected instruction and flags the same in the scraped text.
+- **Tested documentation.** Relative links resolve, every setting is documented,
+  and the generated schema, tool and catalog references match a fresh render.
+
+About 18,000 lines of Python and 14,000 of tests. Python 3.12, PostgreSQL 16,
+psycopg, requests and beautifulsoup4 for the scrapers, the standard library's
+HTTP server with no web framework, plain JavaScript with no build step, Docker
+Compose.
+
+## Quick start
+
+You need [Docker](https://www.docker.com/products/docker-desktop/) with Compose
+v2 and Python 3.12.
 
 ```bash
-git clone git@github.com:mmikol/countrix.git && cd countrix
+git clone https://github.com/mmikol/countrix.git && cd countrix
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
+echo COUNTRIX_STRATEGIES=tests/fixtures/playbook >> .env   # the reference playbook, as in the screenshots
+.venv/bin/python orchestrator.py up
 ```
 
-## Start
+Then open **http://localhost:8017**. The first start builds the image, then the
+database from the sources, about ten minutes at a polite pace; later starts
+reuse the database.
 
-```bash
-.venv/bin/python orchestrator.py
-```
-
-The stack comes up, one container per role; the agents run headless on
-the `/refresh` skill; the app is left running. The first start pulls
-every source and builds the database, which takes minutes at a polite
-pace.
+The reference playbook is the one the tests prove the solver against. Leave out
+the `echo` line and the board runs the shipped playbook: five assumptions in
+prose that score nothing while its rules are rebuilt, so every six reads
+"unscored".
 
 | | |
 | --- | --- |
-| the board | **http://localhost:8017** |
+| the board | http://localhost:8017 |
 | the inference service | http://localhost:8019 |
 | the MCP server | http://localhost:8020/mcp |
 | PostgreSQL | localhost:5433 (`./docker-db <command>` points a host command at it) |
 
-Every port is published on 127.0.0.1 alone, so only this machine reaches
-the stack. Without the `claude` CLI signed in, the run still brings the
-stack up and says what it skipped. The other verbs:
-
 ```bash
-.venv/bin/python orchestrator.py up        # the stack only
-.venv/bin/python orchestrator.py agents    # the agents' run only
 .venv/bin/python orchestrator.py status    # what is running, how fresh the data is
 .venv/bin/python orchestrator.py refresh   # refetch every source now
 .venv/bin/python orchestrator.py test      # the test suite inside the image
 .venv/bin/python orchestrator.py down      # stop everything; the database volume stays
 ```
 
-Without Docker:
+Without Docker, an embedded PostgreSQL (`pgserver`, macOS and Linux x86_64)
+holds the database:
 
 ```bash
-.venv/bin/python -m door.mcp call db_rebuild   # build the database (the embedded cluster)
+.venv/bin/python -m door.mcp call db_rebuild   # build the database
 .venv/bin/python -m ui.board                   # the board, http://localhost:8017
-.venv/bin/ruff check db facts inference door ui tests scripts orchestrator.py   # the linter
-.venv/bin/python -m mypy db facts inference door ui orchestrator.py scripts     # the types
-.venv/bin/python -m pytest -q --cov   # the tests, under the 75% coverage bar
 ```
 
-Open the repo in a Claude Code session and the skills are there: `/up`,
-`/comp`, `/tune`, `/strategy`, `/patches`, `/heroes`, `/maps`,
-`/refresh`, `/maintain`.
+## Development
 
-## License
+```bash
+.venv/bin/ruff check db facts inference door ui tests scripts orchestrator.py
+.venv/bin/python -m mypy db facts inference door ui orchestrator.py scripts
+.venv/bin/python -m pytest -q --cov                                     # the full suite, 75% floor
+COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q --cov --cov-fail-under=78   # what CI runs
+```
 
-Copyright (c) 2026 Miliano Mikol. Licensed under the
-[PolyForm Strict License 1.0.0](LICENSE): noncommercial use only - no
-redistribution, no changes or new works, no commercial use of any kind.
-Anything else needs a separate written license from the author. The data
-the app pulls - Blizzard's hero pages and the wiki - and the hero
-portraits remain their owners'.
+Open the repo in [Claude Code](https://claude.com/claude-code) and the skills
+are there: `/comp` drafts a comp with cited reasons, `/tune` and `/strategy`
+edit the playbook through the door, `/heroes`, `/maps` and `/patches` keep the
+data current, `/maintain` runs the checks and keeps the docs current.
+[CLAUDE.md](CLAUDE.md) is the guide a session reads first. A bare
+`orchestrator.py` is `up` followed by the refresh agents: headless Claude Code
+sessions on the `/refresh` skill that refetch the sources and may tune the
+playbook. Without the `claude` CLI it stops after `up` and says what it skipped.
 
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) - the three layers, the folders, the root files, the diagrams, the settings, the skills, the scope
-- [docs/db.md](docs/db.md) - the DATA LAYER: the sources, the schema, the refresh, the mirror
-- [docs/inference.md](docs/inference.md) - the INFERENCE LAYER: the strategy files, the solver, the tuning loop, the deriver, the catalog
-- [docs/ui.md](docs/ui.md) - the board: its endpoints, its pages, its look
-- [docs/mcp.md](docs/mcp.md) - the door (`door/`): the two MCP servers and every tool they expose
+- [docs/architecture.md](docs/architecture.md) - the layers, the folders, the settings, the skills, the scope
+- [docs/db.md](docs/db.md) - the data layer: the sources, the schema, the refresh
+- [docs/inference.md](docs/inference.md) - the playbook format, the solver, the tuning loop
+- [docs/ui.md](docs/ui.md) - the board: its pages and endpoints, the math page (the objective, with the code's constants) and the tests page (what is proven and what is not)
+- [docs/mcp.md](docs/mcp.md) - the two MCP servers and every tool
 - [docs/security.md](docs/security.md) - the threat model and what stands in the way
+
+## License
+
+Copyright (c) 2026 Miliano Mikol. [PolyForm Strict License 1.0.0](LICENSE):
+noncommercial use only, no redistribution, no changes or new works; anything
+else needs a separate written license. The game data, hero portraits and
+artwork belong to Blizzard Entertainment and the Overwatch wiki's contributors.
+Countrix is a fan project, not affiliated with or endorsed by Blizzard.
