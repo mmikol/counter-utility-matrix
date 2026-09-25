@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 from db.data.fetch import PullContext
 from db.data.names import ability_key
-from db.data.wiki import fetch_articles, markup
+from db.data.wiki import Articles, fetch_articles, markup
 from db.data.wiki.kits.kit_rows import HeroKit, StatValue
 
 
@@ -27,11 +27,11 @@ class HeroProfile(NamedTuple):
 
 
 class Announcement(NamedTuple):
-    """An upcoming hero's role, subrole, health and release day, from its
-    article; health and the day are None where the article gives none."""
+    """An upcoming hero's role, subrole and release day, from its article;
+    the day is None where the article gives none. Its pools are the
+    HeroProfile's."""
     role: str
     subrole: str
-    health: int | None
     release_date: datetime.date | None
 
 
@@ -64,8 +64,8 @@ RELEASE_RE = re.compile(r"release[^.]{0,80}?\bon\s+([A-Z][a-z]+ \d{1,2}, \d{4})"
 
 
 def parse_announcement(text: str) -> Announcement | None:
-    """An article marked {{Upcoming}} -> {role, subrole, health, release_date}
-    from its infobox and its release sentence; None for a released hero (no
+    """An article marked {{Upcoming}} -> {role, subrole, release_date} from
+    its infobox and its release sentence; None for a released hero (no
     marker) or an infobox without a role."""
     if not UPCOMING_RE.search(text or ""):
         return None
@@ -75,7 +75,6 @@ def parse_announcement(text: str) -> Announcement | None:
         subrole = markup.wikitext_to_text(params.get("sub-role", "")).strip().lower()
         if role not in ("tank", "damage", "support"):
             return None
-        health = re.match(r"\s*(\d+)", markup.wikitext_to_text(params.get("health", "")))
         released = RELEASE_RE.search(markup.wikitext_to_text(text))
         release_date: datetime.date | None = None
         if released:
@@ -83,9 +82,7 @@ def parse_announcement(text: str) -> Announcement | None:
             with contextlib.suppress(ValueError):
                 release_date = datetime.datetime.strptime(released.group(1),
                                                           "%B %d, %Y").date()
-        return Announcement(role=role, subrole=subrole,
-                            health=int(health.group(1)) if health else None,
-                            release_date=release_date)
+        return Announcement(role=role, subrole=subrole, release_date=release_date)
     return None
 
 
@@ -125,16 +122,18 @@ def supplement_from_wikitext(text: str) -> tuple[ExtraStats, HeroProfile | None]
 
 class Supplement(NamedTuple):
     """What the hero articles added: each hero's pools, the stats merged into
-    the kits, and 'hero: error' for each article that would not fetch."""
+    the kits, and the articles read - each hero's wikitext, and 'hero: error'
+    for each that would not fetch."""
     profiles: dict[str, HeroProfile]
     stats: int
-    missing: list[str]
+    articles: Articles
 
 
 def supplement_kits(pull: PullContext, by_hero: dict[str, HeroKit]) -> Supplement:
     """Read every hero's article, merge the stats it adds into the kit in
-    place where Cargo left them empty, and keep the hero's pools. A hero whose
-    article will not fetch keeps its Cargo kit and is recorded as missing."""
+    place where Cargo left them empty, and keep the hero's pools and the
+    articles. A hero whose article will not fetch keeps its Cargo kit and is
+    recorded as missing."""
     articles = fetch_articles(pull, sorted(by_hero))
     profiles: dict[str, HeroProfile] = {}
     stats = 0
@@ -147,4 +146,4 @@ def supplement_kits(pull: PullContext, by_hero: dict[str, HeroKit]) -> Supplemen
                 if code not in entry["stats"]:
                     entry["stats"][code] = value
                     stats += 1
-    return Supplement(profiles, stats, articles.missing)
+    return Supplement(profiles, stats, articles)

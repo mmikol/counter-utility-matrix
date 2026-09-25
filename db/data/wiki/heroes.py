@@ -16,9 +16,9 @@ import psycopg
 from db import psql
 from db.data import ArticlePullSummary, fetch
 from db.data.names import index, name_key, slug
-from db.data.wiki import WIKI, cargo_query, fetch_articles
+from db.data.wiki import WIKI, cargo_query
 from db.data.wiki.kits import kit_store
-from db.data.wiki.kits.hero_articles import Supplement, parse_announcement, supplement_kits
+from db.data.wiki.kits.hero_articles import parse_announcement, supplement_kits
 from db.data.wiki.kits.kit_rows import parse_kits
 from db.data.wiki.kits.kit_store import KitCounts
 
@@ -41,12 +41,12 @@ def _announce_heroes(
         hero_ids: dict[str, int], source_id: int) -> list[str]:
     """Heroes the Cargo table names that the roster lacks, from their
     articles (`found`, {name: wikitext}): those whose article is marked
-    upcoming get a row - role, subrole, health, release day, status
-    announced - so their kit loads and the board can show them; Blizzard
-    listing them later flips the status to released. Returns the names
-    stored, and adds each stored hero's id to `hero_ids` ({name_key:
-    hero_id}), which the kit and ability lookups that follow read; the rest
-    stay unknown."""
+    upcoming get a row - role, subrole, release day, status announced - so
+    their kit loads and the board can show them; store() sets their pools
+    from the same article, and Blizzard listing them later flips the status
+    to released. Returns the names stored, and adds each stored hero's id to
+    `hero_ids` ({name_key: hero_id}), which the kit and ability lookups that
+    follow read; the rest stay unknown."""
     stored: list[str] = []
     for hero_name, text in found.items():
         upcoming = parse_announcement(text)
@@ -61,14 +61,11 @@ def _announce_heroes(
             continue
         subrole_id, role_id = row
         cursor.execute(
-            "INSERT INTO heroes (slug, name, role_id, subrole_id, health, status,"
-            " release_date, source_id) VALUES (%s, %s, %s, %s, %s, 'announced', %s, %s)"
+            "INSERT INTO heroes (slug, name, role_id, subrole_id, status, release_date,"
+            " source_id) VALUES (%s, %s, %s, %s, 'announced', %s, %s)"
             " ON CONFLICT (slug) DO UPDATE SET release_date = EXCLUDED.release_date,"
-            " health = coalesce(EXCLUDED.health, heroes.health), cao = now()"
-            " RETURNING hero_id",
-            (
-                slug(hero_name), hero_name, role_id, subrole_id, upcoming.health,
-                upcoming.release_date, source_id))
+            " cao = now() RETURNING hero_id",
+            (slug(hero_name), hero_name, role_id, subrole_id, upcoming.release_date, source_id))
         hero_ids[name_key(hero_name)] = psql.scalar(cursor)
         stored.append(hero_name)
         pull.log("announced hero stored: %s (%s, %s%s)" % (
@@ -87,33 +84,30 @@ class KitsSummary(KitCounts, ArticlePullSummary):
     announced: list[str]
 
 
-def run(connection: psycopg.Connection, pull: fetch.PullContext, *,
-        supplement: bool = True) -> KitsSummary:
-    """Store the Cargo table's kits, with what each hero article adds unless
-    supplement is off, in one transaction -> every row counted, the heroes
-    announced and skipped, and the articles that would not fetch."""
+def run(connection: psycopg.Connection, pull: fetch.PullContext) -> KitsSummary:
+    """Store the Cargo table's kits, with what each hero article adds, in one
+    transaction -> every row counted, the heroes announced and skipped, and
+    the articles that would not fetch. Each article is asked for once: the
+    heroes the roster lacks are announced from the articles the supplement
+    read."""
     rows = cargo_query(pull, CARGO_TABLE, CARGO_FIELDS)
     by_hero = parse_kits(rows)
     pull.log("cargo rows: %d   heroes named: %d" % (len(rows), len(by_hero)))
-
-    articles = Supplement({}, 0, [])
-    if supplement:
-        articles = supplement_kits(pull, by_hero)
-        pull.log("supplemented stats: %d  (fields Cargo does not expose)" % articles.stats)
+    supplement = supplement_kits(pull, by_hero)
+    pull.log("supplemented stats: %d  (fields Cargo does not expose)" % supplement.stats)
 
     cursor = connection.cursor()
     hero_ids = index(psql.lookup_ids(cursor, "heroes", "name", "hero_id"))
-    # the articles of the heroes the roster lacks, read before the first write
-    unlisted = fetch_articles(
-        pull, sorted(name for name in by_hero if name_key(name) not in hero_ids))
+    unlisted = {name: text for name, text in supplement.articles.found.items()
+                if name_key(name) not in hero_ids}
     source_id = psql.register_source(cursor, WIKI, psql.now())
-    announced = _announce_heroes(cursor, pull, unlisted.found, hero_ids, source_id)
-    stored = kit_store.store(cursor, by_hero, articles.profiles, hero_ids, source_id)
+    announced = _announce_heroes(cursor, pull, unlisted, hero_ids, source_id)
+    stored = kit_store.store(cursor, by_hero, supplement.profiles, hero_ids, source_id)
     connection.commit()
 
     return KitsSummary(
-        **stored.tally, cargo_rows=len(rows), supplemented=articles.stats,
-        missing=articles.missing + unlisted.missing, unknown_heroes=stored.unknown_heroes,
+        **stored.tally, cargo_rows=len(rows), supplemented=supplement.stats,
+        missing=supplement.articles.missing, unknown_heroes=stored.unknown_heroes,
         announced=announced,
         tables=["abilities", "ability_stats", "ability_modifiers", "weapons",
                 "weapon_configs", "weapon_stats", "perk_stats",

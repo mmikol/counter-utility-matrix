@@ -58,7 +58,7 @@ release in [[Season/2026|Season 5]] on October 6, 2026, which will make him the 
 
 def test_an_upcoming_article_yields_the_announcement_and_a_released_one_does_not():
     found = parse_announcement(UPCOMING)
-    assert found == Announcement("support", "survivor", 250, datetime.date(2026, 10, 6))
+    assert found == Announcement("support", "survivor", datetime.date(2026, 10, 6))
     assert parse_announcement(UPCOMING.replace("{{Upcoming}}", "")) is None     # released
     assert parse_announcement(UPCOMING.replace("| role = Support", "")) is None  # no role, no row
     undated = parse_announcement(UPCOMING.replace("on October 6, 2026", "soon"))
@@ -102,8 +102,9 @@ def test_an_unfetchable_hero_page_is_reported_rather_than_read_as_empty(tmp_path
     by_hero = {"Mizuki": kit("Healing Kasa"), "Freja": kit("Quick Dash")}
     added = supplement_kits(
         fetch.PullContext(str(tmp_path), session=Down(), log=lambda line: None), by_hero)
-    [line] = added.missing
+    [line] = added.articles.missing
     assert line.startswith("Freja: ") and "the wiki is unreachable" in line
+    assert added.articles.found == {"Mizuki": KIT_ARTICLE}      # the pull reads no article again
     assert by_hero["Freja"].abilities[0]["stats"] == {}
     # Mizuki's article adds the heal Cargo leaves empty, and the area
     assert added.stats == 2 and set(by_hero["Mizuki"].abilities[0]["stats"]) == {"heal", "aoe"}

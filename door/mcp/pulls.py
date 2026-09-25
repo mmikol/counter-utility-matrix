@@ -31,11 +31,11 @@ from db.data.wiki import seasons as wiki_seasons
 from db.data.wiki import synergies as wiki_synergies
 from db.data.wiki import terrain as wiki_terrain
 from door.mcp.registry import REFRESH, Context, tool
-from door.mcp.schema import Properties, ToolReply
+from door.mcp.schema import ToolReply
 from inference import catalog, derive
 
-# A pull's own function: the source module's run(connection, pull, **options).
-type PullFn = Callable[..., PullSummary]
+# A pull's own function: the source module's run(connection, pull).
+type PullFn = Callable[[psycopg.Connection, fetch.PullContext], PullSummary]
 
 
 def _summary(name: str, stored: str, summary: PullSummary) -> ToolReply:
@@ -81,7 +81,7 @@ def list_sources(ctx: Context) -> ToolReply:
     return ToolReply(text, {"sources": rows})
 
 
-def _pull(ctx: Context, source: str, fn: PullFn, refresh: bool, **options: bool) -> PullSummary:
+def _pull(ctx: Context, source: str, fn: PullFn, refresh: bool) -> PullSummary:
     """One pull against the database, reading through the source's page cache
     and logging to the context's log -> the summary its run() returns, with
     the pages it read from the stale cache under stale."""
@@ -92,21 +92,20 @@ def _pull(ctx: Context, source: str, fn: PullFn, refresh: bool, **options: bool)
     cutoff = (time.time() if ctx.cutoff is None else ctx.cutoff) if refresh else None
     pull = fetch.PullContext(ctx.cache(source), log=ctx.log, cutoff=cutoff)
     with ctx.connect() as cx:
-        summary = fn(cx, pull, **options)
+        summary = fn(cx, pull)
     summary["stale"] = pull.stale
     return summary
 
 
 def _pull_call(
         name: str, stored: str, source: str, fn: PullFn, ctx: Context, /,
-        refresh: bool = False, **options: bool) -> ToolReply:
+        refresh: bool = False) -> ToolReply:
     """A pull tool's call: the pull, and its summary under its headline."""
-    return _summary(name, stored, _pull(ctx, source, fn, refresh, **options))
+    return _summary(name, stored, _pull(ctx, source, fn, refresh))
 
 
 def pull_tool(
-        name: str, description: str, *, source: str, stored: str,
-        properties: Properties = REFRESH) -> Callable[[PullFn], PullFn]:
+        name: str, description: str, *, source: str, stored: str) -> Callable[[PullFn], PullFn]:
     """The decorator that registers a pull as a tool: the tool runs the
     function against `source`'s page cache, refreshing every page when asked,
     and replies under the headline "<name>: <stored>", or "<name>: nothing
@@ -114,7 +113,7 @@ def pull_tool(
     and module, which is its family; the function is returned as it is."""
     def decorate(fn: PullFn) -> PullFn:
         call = functools.partial(_pull_call, name, stored, source, fn)
-        tool(name, description, properties, source=source)(functools.update_wrapper(call, fn))
+        tool(name, description, REFRESH, source=source)(functools.update_wrapper(call, fn))
         return fn
     return decorate
 
@@ -137,15 +136,9 @@ def pull_heroes(connection: psycopg.Connection, pull: fetch.PullContext) -> Pull
     "pull_kits", "The wiki's Cargo ability table and hero articles: weapons"
     " and firing configs, every published number, ability kinds and"
     " keywords, hero health pools. Run after pull_heroes.",
-    source="wiki", stored="kit numbers stored",
-    properties=dict(REFRESH, supplement={
-        "type": "boolean",
-        "description": "also read each hero article for the flags Cargo lacks"
-                       " (default true)"}))
-def pull_kits(
-        connection: psycopg.Connection, pull: fetch.PullContext,
-        supplement: bool = True) -> PullSummary:
-    return wiki_heroes.run(connection, pull, supplement=supplement)
+    source="wiki", stored="kit numbers stored")
+def pull_kits(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
+    return wiki_heroes.run(connection, pull)
 
 
 @pull_tool(
