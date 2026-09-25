@@ -189,7 +189,7 @@ is multiplicative.
 | region - `map_meta` | yes | Americas | drop the region pin; ×3 requests |
 | platform | as `meta_snapshots.platform` | Console | fetch `input=PC` too; ×2 requests |
 | input device | yes | controller (entailed by console) | a source that splits PC by device (see below) |
-| map stage | `map_stages` 36 rows | stage list loaded | a source with per-stage rates (see below) |
+| map stage | `map_stages` | stage list loaded | a source with per-stage rates (see below) |
 | any - PLAYBOOK tables | deliberately none | - | judgements are tier- and region-agnostic by design: a current read of the game, not a measurement of a population. Dimensioned numbers live in META |
 
 Every dimension has a column; what is missing is data to put in one.
@@ -205,10 +205,11 @@ one value the pin entails - `controller`, because the project pins
 console - and a real split would need a source that separates the two;
 neither source does.
 
-**Map stages exist; per-stage rates do not.** The stage list is loaded -
-36 stages across the ten Control and Flashpoint maps, read from each map's
-wiki article - so `map_stages` is populated and `map_meta.stage_id` has a
-real vocabulary to point at. No source reports rates *per stage*:
+**Map stages exist; per-stage rates do not.** The stage list is loaded
+from the wiki - a Control map's three stages, a Flashpoint map's five
+points, a Hybrid map's two phases and an Escort map's named stretches - so
+`map_stages` is populated and `map_meta.stage_id` has a real vocabulary to
+point at. No source reports rates *per stage*:
 Blizzard's map filter stops at whole maps, so every `map_meta` row keeps
 `stage_id` NULL. NULL means the whole map, so `map_meta` uses
 `UNIQUE NULLS NOT DISTINCT`; Postgres treats NULLs as distinct by default,

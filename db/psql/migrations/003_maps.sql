@@ -41,11 +41,12 @@ CREATE TABLE map_modes (
 
 CREATE INDEX ix_map_modes_mode ON map_modes (mode_id);
 
--- Stages within a map: Ilios' Well, Lighthouse and Ruins. Loaded from each
--- map's own article for the Control and Flashpoint maps, which play their
--- rounds on submaps; the other modes have none. No source publishes
--- per-stage rates, so map_meta.stage_id stays NULL - the vocabulary is
--- here for when one does.
+-- Stages within a map, in play order, loaded from the wiki (pull_maps): a
+-- Control map's three stages (Ilios: Lighthouse, Well, Ruins), a Flashpoint
+-- map's five points, and since 021 a Hybrid map's two phases and an Escort
+-- map's stretches where its article names them; Push maps have none. No
+-- source publishes per-stage rates, so map_meta.stage_id stays NULL - the
+-- vocabulary is here for when one does.
 CREATE TABLE map_stages (
     stage_id  integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     map_id    integer NOT NULL REFERENCES maps(map_id) ON DELETE CASCADE,
