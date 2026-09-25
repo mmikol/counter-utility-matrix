@@ -96,7 +96,7 @@ OFF = BaseWeights(rate=0.0, synergy=0.0, counter=0.0)
 
 
 class BaseStamp(TypedDict):
-    """The default engine as a proven fixture records it: the weights and the
+    """The default engine as a recorded fixture holds it: the weights and the
     pick rate that halves an edge, which with the playbook fix what a six
     scores."""
     rate: float
@@ -106,7 +106,7 @@ class BaseStamp(TypedDict):
 
 
 def stamp(weights: BaseWeights) -> BaseStamp | None:
-    """What a fixture proved under `weights` records of the engine; None
+    """What a fixture recorded under `weights` holds of the engine; None
     with it off, as a fixture recorded before the engine had a base reads."""
     if not weights.on:
         return None

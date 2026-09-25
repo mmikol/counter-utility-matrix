@@ -231,17 +231,12 @@ db <- facts <- inference <- door <- ui.
   the default engine on and off, each role's pool cut to two, the search
   against a full enumeration, with no database, so CI runs it. A board it
   misses is a solver defect: fix the search, never swap the board out.
-- `tests/fixtures/optimal.json` is the real-World gate. Regenerate it only
-  after a deliberate change to the objective: re-run the brute force (it
-  lives outside the repo), then `OPTIMAL_SOURCES=<its .jsonl files>
-  .venv/bin/python -m scripts.optimal`, which records proofs and computes
-  none. Say in the commit why every number moved. The fixture records the
-  objective it was proved under - the playbook's digest
-  (`catalog.playbook_digest`) and the default engine's stamp
-  (`base.stamp`) - so the gate skips only while nothing scores and fails
-  under any other objective, a new assumption file included;
-  `.venv/bin/python -m scripts.reach` re-records `reach.json` the same way.
-  Boards with bans are held out until they are re-proven (`pm/backlog.md`).
+- `tests/fixtures/reach.json` records a board per released hero that
+  seats it, beside the objective it was recorded under - the playbook's
+  digest (`catalog.playbook_digest`) and the default engine's stamp
+  (`base.stamp`). After a deliberate change to the objective,
+  `.venv/bin/python -m scripts.reach` re-records it, and the commit says
+  what moved.
 
 ## House rules
 

@@ -1,7 +1,7 @@
 """The inference layer's tests, the reference playbook they prove the solver against, its
 assumptions alone (ASSUMPTIONS_ONLY) for a test that needs a playbook that scores nothing,
-the proven fixtures, each read with the objective it was recorded under and compared with
-the one in force, and timeless(), a board's payload less the seconds each result took, for
+the recorded fixture, read with the objective it was recorded under and compared with the
+one in force, and timeless(), a board's payload less the seconds each result took, for
 comparing two solves."""
 
 import json
@@ -26,7 +26,7 @@ DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
 
 
 class Recorded(TypedDict):
-    """A proven fixture: the objective it was recorded under - the playbook's
+    """A recorded fixture: the objective it was recorded under - the playbook's
     digest (catalog.playbook_digest) and the default engine's stamp
     (base.stamp, None with the engine off) - and its boards as the recorder
     wrote them."""

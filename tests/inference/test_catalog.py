@@ -131,7 +131,7 @@ def test_another_playbook_is_chosen_by_the_environment(monkeypatch, tmp_path):
 
 
 def test_a_playbooks_digest_reads_its_strategy_files_and_nothing_beside_them(catalog_copy):
-    """A proven fixture records the digest of the playbook it was proved under.
+    """A recorded fixture holds the digest of the playbook it was recorded under.
     The tuning log, the README and anything that is not markdown never move
     it; a line added to one strategy file does."""
     digest = catalog.playbook_digest(catalog_copy)

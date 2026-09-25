@@ -192,9 +192,9 @@ def playbook_name(directory: str | None = None) -> str:
 
 def playbook_digest(directory: str | None = None) -> str:
     """The playbook's fingerprint: a sha256 over its strategy files in
-    strategy_files order, each name and then its bytes. A fixture proved
+    strategy_files order, each name and then its bytes. A fixture recorded
     under a playbook records this value, so a test can tell the playbook it
-    was proved under from the one in force. README.md and tuning-log.md
+    was recorded under from the one in force. README.md and tuning-log.md
     never move it."""
     directory = directory or strategies_dir()
     digest = hashlib.sha256()
