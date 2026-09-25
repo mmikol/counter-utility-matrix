@@ -9,11 +9,12 @@ from db.data.wiki.kits.weapons import (
     base_name,
     group_weapons,
     head_noun,
+    slot_id,
 )
 
 
-def entry(name, mode=None):
-    return WeaponEntry(name=name, mode=mode, input_key=None, keywords="", description="",
+def entry(name, mode=None, input_key=None):
+    return WeaponEntry(name=name, mode=mode, input_key=input_key, keywords="", description="",
                        stats={}, display_name=name, weapon_type=None)
 
 
@@ -28,6 +29,17 @@ def test_hip_fire_and_ads_are_one_weapon_named_for_the_weapon():
     # the weapon once grouping has decided what the weapon is
     assert names(grouped) == [("Biotic Rifle",
                                ["Biotic Rifle", "Biotic Rifle (ADS)"])]
+
+
+def test_the_entries_sort_into_firing_order_before_they_group():
+    # Cargo returns rows alphabetically: the scope before its rifle. An entry
+    # with no mode ranks by its input key, and keys its slot by it too.
+    blaster = entry("Blaster", input_key="Primary Fire")
+    grouped = group_weapons([entry("Zoom (ADS)", "ADS"), blaster,
+                             entry("Biotic Rifle", "Hip Fire")])
+    assert names(grouped) == [("Blaster", ["Blaster"]),
+                              ("Biotic Rifle", ["Biotic Rifle", "Biotic Rifle (ADS)"])]
+    assert slot_id(blaster) == 2
 
 
 def test_alt_fire_merges_into_one_weapon():

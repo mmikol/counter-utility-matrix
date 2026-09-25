@@ -173,7 +173,7 @@ def _load_weapons(store_pass: _StorePass, hero_id: int, weapons: list[WeaponEntr
                 " VALUES (%s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (weapon_id, slot_id) DO NOTHING"
                 " RETURNING config_id",
-                (row[0], slot_id(config["mode"] or config["input_key"]),
+                (row[0], slot_id(config),
                  config["display_name"], config["weapon_type"],
                  config["keywords"] or None, config_position, store_pass.source_id),
             )

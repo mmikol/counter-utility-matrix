@@ -7,9 +7,9 @@ A row becomes a weapon's firing mode, an ability or a perk by its
 ability_type ("Weapon;;Hip Fire", "Ultimate Ability", "Major Perk"), which
 split_type unpicks into the base type and the firing mode packed in with
 it, and each kind of entry is a TypedDict that holds the keys its kind
-guarantees.
-Rows come back alphabetically, so weapons are sorted by firing slot here;
-grouping them into weapons is weapons.py's job.
+guarantees. Rows come back alphabetically; weapons.py, which owns the
+firing modes, puts the weapon entries in firing order and groups them into
+weapons.
 """
 
 import re
@@ -51,7 +51,9 @@ class WeaponEntry(KitEntry):
 
 
 class HeroKit(NamedTuple):
-    """One hero's kit, each list in the order the pull stores it."""
+    """One hero's kit, each list in Cargo's order, which is alphabetical;
+    group_weapons sorts the weapons into firing order as the store groups
+    them."""
     weapons: list[WeaponEntry]
     abilities: list[AbilityEntry]
     perks: list[PerkEntry]
@@ -93,21 +95,6 @@ def split_type(ability_type: str | None) -> AbilityType:
         return AbilityType(text, None)
     mode = (match.group(2) or match.group(3) or "").strip() or None
     return AbilityType(match.group(1).strip(), mode)
-
-
-# Cargo returns rows alphabetically, but weapon grouping needs firing order.
-SLOT_RANK = {
-    "primary fire": 0, "hip fire": 0,
-    "secondary fire": 1, "ads": 1,
-}
-
-
-def _slot_rank(entry: KitEntry) -> int:
-    for token in (entry["mode"], entry["input_key"]):
-        rank = SLOT_RANK.get((token or "").strip().lower())
-        if rank is not None:
-            return rank
-    return 2
 
 
 def ability_kind(base_type: str) -> str:
@@ -184,7 +171,4 @@ def parse_kits(rows: Iterable[Mapping[str, str]]) -> dict[str, HeroKit]:
                                            weapon_type=_weapon_type(fields)))
         else:
             kit.abilities.append(AbilityEntry(**base, kind=kind))
-
-    for kit in heroes.values():
-        kit.weapons.sort(key=_slot_rank)
     return heroes

@@ -81,11 +81,11 @@ locked across a fetch.
 | | `synergies.py` | which heroes work with which, from the Team Synergy cells in the "Match-Ups and Team Synergy" section of every released hero's article: a pair is stored once, score 2 when both articles claim it, 1 when one does; note is the wiki's advice cut to one clause. Reloads the table. Runs after `blizzard.heroes`. |
 | | `matchups.py` | who answers whom, from the Match-Up cells of the same section, through `synergies.py`'s section and row parsing. Each written cell is a verdict from the article hero's seat: the other hero answers this one, this one answers the other, or neither. The wiki's MATCHUP or VS. rating decides where there is one; otherwise the prose is scored. A verdict either way is one directed edge in `counters`; a pair the two articles contradict on gets none. Reloads the table. Runs after `blizzard.heroes`. |
 | | `markup.py` | reading the wiki's two markups - Cargo's rendered HTML and article wikitext - and the tidying both need; the link pattern; a section's body, cut at the next heading of any depth; the date grammar, day or month first, that a season's run and an announced hero's release day are read with. |
-| `wiki/kits/` | `kit_rows.py` | a Cargo Abilities row read into one hero's kit: a weapon's firing mode, an ability or a perk, each a TypedDict holding the keys its kind guarantees; weapons sorted by firing slot. |
+| `wiki/kits/` | `kit_rows.py` | a Cargo Abilities row read into one hero's kit: a weapon's firing mode, an ability or a perk, each a TypedDict holding the keys its kind guarantees. |
 | | `hero_articles.py` | a hero's article: the interaction flags and other stats Cargo does not register, merged into the kit where Cargo left them empty; the health pool from the infobox; the announcement of a hero marked upcoming. |
 | | `kit_store.py` | the kits into the tables: weapons, firing configs, stats, modifiers and perk links reloaded whole, abilities classified and the ones Blizzard omits added, each hero's pools set; a tally of every row written. |
 | | `measurements.py` | a stat value ("75 over 0.59 seconds", "10 - 20 meters", a yes/no glyph) into value, unit, window and condition. |
-| | `weapons.py` | the wiki's one-entry-per-firing-mode list grouped into weapons and their configs. |
+| | `weapons.py` | the wiki's one-entry-per-firing-mode list sorted by firing slot and grouped into weapons and their configs. |
 | | `modifiers.py` | what a buff scales and who it lands on, recovered from the value's wording and the ability's keywords. |
 
 ### `psql/` - the database
