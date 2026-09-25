@@ -37,14 +37,10 @@ DROPPED_HEADING_RE = re.compile(
 # wherever it sits ("Development" > "Season 13 rework").
 REWORK_HEADING_RE = re.compile(r"\brework\b(?! images)|design changes", re.I)
 
-# Dropped whole before the markup is stripped: citations, galleries, tables
-# (quote and voice-line lists), files with their captions, templates (ability
-# and hero names, infoboxes, stub notices).
-REF_RE = re.compile(r"<ref[^>/]*/>|<ref[^>]*>.*?</ref>", re.S | re.I)
+# Dropped whole before the markup is stripped, beside markup's citations,
+# tables (quote and voice-line lists) and files with their captions:
+# galleries, and templates (ability and hero names, infoboxes, stub notices).
 GALLERY_RE = re.compile(r"<gallery[^>]*>.*?</gallery>", re.S | re.I)
-TABLE_RE = re.compile(r"^\{\|.*?^\|\}", re.S | re.M)
-FILE_RE = re.compile(
-    r"\[\[(?:File|Image):(?:[^\[\]]|\[\[[^\[\]]*\]\])*\]\]", re.I)
 INNER_TEMPLATE_RE = re.compile(r"\{\{[^{}]*\}\}")
 # The placeholder an empty section carries.
 BLANK_NOTICE_RE = re.compile(r"This section is currently blank\.[^\n]*", re.I)
@@ -100,7 +96,8 @@ def is_kept(path: tuple[str, ...]) -> bool:
 
 def stripped(body: str) -> str:
     """A section's wikitext without what is dropped whole."""
-    for pattern in (markup.COMMENT_RE, REF_RE, GALLERY_RE, TABLE_RE, FILE_RE):
+    for pattern in (markup.COMMENT_RE, markup.REF_RE, GALLERY_RE, markup.TABLE_RE,
+                    markup.FILE_LINK_RE):
         body = pattern.sub(" ", body)
     previous: str | None = None
     while previous != body:

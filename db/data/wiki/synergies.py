@@ -31,10 +31,8 @@ NOTE_LIMIT = 120
 
 SECTION_RE = re.compile(r"^==(?!=)[^=\n]*synergy[^=\n]*==[ \t]*$", re.M | re.I)
 TOP_HEADING_RE = re.compile(r"^==(?!=).*==[ \t]*$", re.M)
-TABLE_RE = re.compile(r"^\{\|.*?^\|\}", re.M | re.S)
 ROW_SPLIT_RE = re.compile(r"^\|-.*$", re.M)
 CELL_ATTRIBUTES_RE = re.compile(r"^[^\[\]{}<>|]*\|(?!\|)")
-REF_RE = re.compile(r"<ref[^>]*/>|<ref[^>]*>.*?</ref>", re.S | re.I)
 PARAGRAPH_RE = re.compile(r"<br\s*/?>|\n\s*\n", re.I)
 # "STRONG SYNERGY advice", or "(6v6 Exclusive Pairing - Weak Synergy) advice".
 RATING_RE = re.compile(r"^(?:\s|<[^>]+>|'{2,5})*(?:([A-Z ]*?)\s*SYNERGY\b"
@@ -155,7 +153,7 @@ def section_rows(text: str, column: Column = SYNERGY) -> list[Row]:
     A template's ratings lead its cell in bold, as a wikitable writes them."""
     section = synergy_section(text)
     rows = list(_template_rows(section, column.parameter, column.ratings))
-    for table in TABLE_RE.findall(section):
+    for table in markup.TABLE_RE.findall(section):
         rows.extend(_table_rows(table, column.heading, column.position))
     return rows
 
@@ -171,7 +169,7 @@ def split_rating(cell: str) -> tuple[str | None, str]:
 
 def paragraphs(cell: str) -> list[str]:
     """A cell's paragraphs as plain text, the empty ones dropped."""
-    text = REF_RE.sub("", markup.COMMENT_RE.sub("", cell))
+    text = markup.REF_RE.sub("", markup.COMMENT_RE.sub("", cell))
     text = markup.FILE_LINK_RE.sub("", text)
     texts = (markup.wikitext_to_text(p.replace("\n", " ")) for p in PARAGRAPH_RE.split(text))
     return [text for text in texts if text]

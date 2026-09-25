@@ -85,3 +85,15 @@ def test_a_section_body_ends_at_the_next_heading_of_any_depth():
     # no heading after it: the body runs to the end
     poke = "=== Poke heroes ==="
     assert markup.section_body(poke + "\n* [[Ana]]", len(poke)) == "\n* [[Ana]]"
+
+
+def test_a_file_a_citation_and_a_wikitable_are_each_matched_whole():
+    # a caption may hold a link of either kind; Image: is File:'s other name
+    caption = "[[Image:Push.png|thumb|The [[Push]] robot, [https://example.org its page]]]"
+    assert markup.FILE_LINK_RE.sub("", "a%sb" % caption) == "ab"
+    assert markup.FILE_LINK_RE.sub("", "a[[File:x.png|20px]]b") == "ab"
+    # a citation self-closed with two slashes closes itself, and swallows no prose
+    cited = 'a<ref name = "PE2015"//> b<ref>[[Source]]</ref>c'
+    assert markup.REF_RE.sub("", cited) == "a bc"
+    assert markup.REF_RE.sub("", "<references/>") == "<references/>"
+    assert markup.TABLE_RE.findall("x\n{|\n| cell\n|}\ny") == ["{|\n| cell\n|}"]

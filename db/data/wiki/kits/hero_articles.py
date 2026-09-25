@@ -98,8 +98,6 @@ SUPPLEMENT_FIELDS = (
 # A retired kit's block: "Teleporter (old)". ability_key() drops the
 # parenthetical, so it would overwrite the live block of the same name.
 RETIRED_BLOCK_RE = re.compile(r"\(old\)\s*$", re.I)
-# A citation is not part of the value.
-REF_RE = re.compile(r"<ref\b[^>]*/>|<ref\b[^>]*>.*?</ref>", re.I | re.S)
 
 
 def supplement_from_wikitext(text: str) -> tuple[ExtraStats, HeroProfile | None]:
@@ -113,7 +111,8 @@ def supplement_from_wikitext(text: str) -> tuple[ExtraStats, HeroProfile | None]
             continue
         stats: dict[str, StatValue] = {}
         for code in SUPPLEMENT_FIELDS:
-            value = markup.wikitext_to_text(REF_RE.sub("", params.get(code, "")))
+            # a citation is not part of the value
+            value = markup.wikitext_to_text(markup.REF_RE.sub("", params.get(code, "")))
             if value:
                 stats[code] = StatValue(text=value, raw=params[code])
         if stats:
