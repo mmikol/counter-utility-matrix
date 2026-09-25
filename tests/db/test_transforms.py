@@ -47,6 +47,16 @@ def test_booleans_become_one_and_zero():
     assert parse_measurements("✕")[0][0] == 0
 
 
+def test_a_bare_one_or_zero_is_a_number_in_the_stats_unit():
+    # Venom Mine's health is 1: one hp, not a yes
+    [(value, num, *_)] = parse_measurements("1", default_unit="hp")
+    assert (value, num) == (1, "hp")
+    before, _with = parse_measurements("0 -> 50", default_unit="hp")
+    assert (before.value, before.numerator, before.condition) == (0, "hp", "before perk")
+    # a flag has no unit to take
+    assert parse_measurements("1")[0][:2] == (1, None)
+
+
 def test_non_numeric_keeps_the_row_with_a_null_value():
     [(value, *_, text)] = parse_measurements("Projectile")
     assert value is None and text == "Projectile"

@@ -28,8 +28,9 @@ RANGE_RE = re.compile(r"^([+-]?\d+(?:\.\d+)?)\s*[-–]\s*([+-]?\d+(?:\.\d+)?)\s*
 # "125 m/s", "14 seconds", "-50%"
 NUMBER_UNIT_RE = re.compile(r"^([+-]?\d+(?:\.\d+)?)\s*([%a-zA-Z/]*)")
 
-TRUE_VALUES = {"✓", "yes", "true", "1"}
-FALSE_VALUES = {"✕", "✗", "no", "false", "0"}
+# A bare 1 or 0 is a number, in the stat's unit like any other.
+TRUE_VALUES = {"✓", "yes", "true"}
+FALSE_VALUES = {"✕", "✗", "no", "false"}
 
 # Units are always base quantities, never rates. A rate is split into the unit
 # on top and the unit underneath, so "125 m/s" is 125 meters per second and
@@ -47,7 +48,7 @@ UNIT_ALIASES = {
     "m": "meters", "meter": "meters", "metre": "meters", "metres": "meters",
     "degree": "degrees", "°": "degrees",
     "%": "percent",
-    "health": "hp", "damage": "hp", "hp": "hp",
+    "health": "hp", "damage": "hp",
     "round": "rounds", "ammo": "rounds", "pellet": "pellets",
     "charge": "charges", "shot": "shots", "volley": "volleys", "swing": "swings",
     "point": "points",
