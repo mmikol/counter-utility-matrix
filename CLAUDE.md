@@ -117,7 +117,7 @@ db <- facts <- inference <- door <- ui.
   kind and prose only). `inference/catalog.py` reads it, each file parsed
   by `frontmatter.py` and checked by `strategy.py` (`Strategy`,
   `CatalogError`); one bad file makes `catalog.load` raise everywhere. The
-  shipped playbook is five assumptions and nothing scored, on purpose, while
+  shipped playbook is six assumptions and nothing scored, on purpose, while
   it is rebuilt rule by rule from the citation record in
   `inference/README.md`. Solver behaviour is tested against the 19-file
   reference playbook in `tests/fixtures/playbook/`, or its four assumptions

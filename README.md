@@ -116,7 +116,7 @@ database from the sources, about ten minutes at a polite pace; later starts
 reuse the database.
 
 The reference playbook is the one the tests prove the solver against. Leave out
-the `echo` line and the board runs the shipped playbook: five assumptions in
+the `echo` line and the board runs the shipped playbook: six assumptions in
 prose that score nothing while its rules are rebuilt, so every six reads
 "unscored".
 

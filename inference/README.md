@@ -1,7 +1,7 @@
 # The playbook's sources
 
-**The playbook was emptied on purpose.** `strategies/` now holds five
-assumptions and no scored rule. This file is the record of the 244 entries it
+**The playbook was emptied on purpose.** `strategies/` now holds six
+assumptions and no scored rule. This file is the record of the 245 entries it
 held, with the citation behind each, and it is the source the playbook is being
 rebuilt from by hand - so it describes more than the folder does, and is meant
 to. `docs/inference.md` is generated from the folder and says what is in force
@@ -243,6 +243,7 @@ the catalog is `docs/inference.md`.
 - `commit-to-one-style` - Half a comp each way fails (constraint). applies on 0/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1rb9vcn/if_rein_is_brawl_why_does_he_feel_useless_against/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1u9mxr2/ive_identified_10_recurring_situations_in_my_low/
+- `console-only` - the user's assumption: console only (assumption, 2026-09-25).
 - `console-pull` - the user's assumption: the rates are a console pull (assumption, 2026-09-17).
 - `contest-a-dive-red` - Contest a dive red (constraint). applies on 4/6 boards, spreads on 0.
   - https://www.reddit.com/r/OverwatchUniversity/comments/1vyt9si/is_it_my_fault_as_a_tank_that_my_teams_dies_a_lot/

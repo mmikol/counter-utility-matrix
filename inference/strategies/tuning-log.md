@@ -994,3 +994,4 @@ Every change to a strategy's frontmatter, newest last: when, what, why, and who.
 - 2026-09-19T23:51Z `vertical-maps-reward-fliers` when: map.style_top == 'dive' -> map.high_ground >= 0.5 (2026-09-19 terrain: the rule is about vertical ground, so it reads the wiki's high ground, not the style label) [claude-code-session]
 - 2026-09-19T23:51Z `sightlines-want-hitscan` when: map.style_top == 'poke' -> map.sightlines >= 0.5 (2026-09-19 terrain: the rule is about long sightlines, so it reads the wiki's sightlines, not the style label) [claude-code-session]
 - 2026-09-19T23:51Z `control-points-have-edges` when: map.mode == 'Control' -> map.hazards >= 0.5 (2026-09-19 terrain: the rule is about drops, so it reads the wiki's hazards, not the mode) [claude-code-session]
+- 2026-09-25T16:36Z `console-only` added as assumption/assumption (The owner plays on console only; console-pull covered the rates alone.) [user]
