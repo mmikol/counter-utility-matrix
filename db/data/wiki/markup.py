@@ -12,9 +12,9 @@ both - file links, comments, <br>, bare URLs - so the tidying is shared.
 So are the patterns the loaders cut an article with: a link, a file with
 its caption, a citation, a wikitable.
 
-section_body cuts an article's section at the next heading of any depth.
-DATE is the wiki's date grammar, day or month first, and parse_date reads a
-match of it.
+section_body cuts an article's section at the next heading of any depth, or
+at the next top-level one. DATE is the wiki's date grammar, day or month
+first, and parse_date reads a match of it.
 """
 
 import re
@@ -68,12 +68,15 @@ def html_to_text(value: str | None) -> str:
 
 # A heading of any depth: "== Gameplay ==", "=== Dive heroes ===".
 ANY_HEADING_RE = re.compile(r"^=+.*=+\s*$", re.M)
+# A top-level heading: "== Gameplay ==", not "=== Dive heroes ===".
+TOP_HEADING_RE = re.compile(r"^==(?!=).*==[ \t]*$", re.M)
 
 
-def section_body(text: str, start: int) -> str:
-    """The text from `start` to the next heading of any depth, or to the end."""
+def section_body(text: str, start: int, top_level: bool = False) -> str:
+    """The text from `start` to the next heading of any depth, or to the end.
+    top_level: to the next top-level heading, the subsections kept."""
     body = text[start:]
-    following = ANY_HEADING_RE.search(body)
+    following = (TOP_HEADING_RE if top_level else ANY_HEADING_RE).search(body)
     return body[: following.start()] if following else body
 
 

@@ -83,11 +83,7 @@ def parse_modes_and_maps(text: str) -> list[Mode]:
 # Escort maps: the stretches of the route, where the article names them.
 # Hybrid maps: the two phases the Hybrid article names. Push maps: none.
 
-GAMEPLAY_SECTION_RE = re.compile(
-    r'^==\s*Gameplay\s*==\s*$(.*?)(?=^==|\Z)', re.M | re.S)
-# The same section with its === subsections ===, cut at the next == heading.
-GAMEPLAY_WHOLE_RE = re.compile(
-    r'^==\s*Gameplay\s*==\s*$(.*?)(?=^==[^=]|\Z)', re.M | re.S)
+GAMEPLAY_RE = re.compile(r'^==[ \t]*Gameplay[ \t]*==[ \t]*$', re.M)
 SUBHEADING_RE = re.compile(r'^===\s*([^=].*?)\s*===\s*$', re.M)
 LEADING_ARTICLE_RE = re.compile(r'^(?:the|an?)\s+', re.I)
 
@@ -108,10 +104,10 @@ def parse_stages(text: str) -> list[str]:
     Hybrid and Push maps describe their route in prose, no bullets - an empty
     result is normal there, not a parse failure.
     """
-    section = GAMEPLAY_SECTION_RE.search(text)
-    if not section:
+    heading = GAMEPLAY_RE.search(text)
+    if not heading:
         return []
-    body = section.group(1)
+    body = markup.section_body(text, heading.end())
     stages: list[str] = []
     for line in body.splitlines():
         if not line.startswith('*') or line.startswith('**'):
@@ -132,10 +128,10 @@ def parse_stretches(text: str) -> list[str]:
     stretch when that opening names it, a leading article aside: Rialto's
     === Gondola Rides === is not one.
     """
-    section = GAMEPLAY_WHOLE_RE.search(text)
-    if not section:
+    heading = GAMEPLAY_RE.search(text)
+    if not heading:
         return []
-    body = section.group(1)
+    body = markup.section_body(text, heading.end(), top_level=True)
     first = SUBHEADING_RE.search(body)
     if not first:
         return []

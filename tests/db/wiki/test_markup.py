@@ -87,6 +87,14 @@ def test_a_section_body_ends_at_the_next_heading_of_any_depth():
     assert markup.section_body(poke + "\n* [[Ana]]", len(poke)) == "\n* [[Ana]]"
 
 
+def test_a_top_level_section_body_keeps_its_subsections():
+    gameplay = "== Gameplay =="
+    text = gameplay + "\nA route.\n=== Docks ===\nA pier.\n== Strategy ==\nHold.\n"
+    assert markup.section_body(text, len(gameplay), top_level=True) == (
+        "\nA route.\n=== Docks ===\nA pier.\n")
+    assert markup.section_body(text, len(gameplay)) == "\nA route.\n"
+
+
 def test_a_file_a_citation_and_a_wikitable_are_each_matched_whole():
     # a caption may hold a link of either kind; Image: is File:'s other name
     caption = "[[Image:Push.png|thumb|The [[Push]] robot, [https://example.org its page]]]"

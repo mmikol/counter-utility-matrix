@@ -30,7 +30,6 @@ from db.data.wiki import WIKI, WikiError, fetch_articles, markup
 NOTE_LIMIT = 120
 
 SECTION_RE = re.compile(r"^==(?!=)[^=\n]*synergy[^=\n]*==[ \t]*$", re.M | re.I)
-TOP_HEADING_RE = re.compile(r"^==(?!=).*==[ \t]*$", re.M)
 ROW_SPLIT_RE = re.compile(r"^\|-.*$", re.M)
 CELL_ATTRIBUTES_RE = re.compile(r"^[^\[\]{}<>|]*\|(?!\|)")
 PARAGRAPH_RE = re.compile(r"<br\s*/?>|\n\s*\n", re.I)
@@ -62,13 +61,10 @@ NO_SYNERGY_RE = re.compile(
 
 
 def synergy_section(text: str) -> str:
-    """The article's synergy section, or '' when it has none."""
+    """The article's synergy section, its subsections included, or '' when
+    it has none."""
     match = SECTION_RE.search(text)
-    if not match:
-        return ""
-    body = text[match.end():]
-    following = TOP_HEADING_RE.search(body)
-    return body[: following.start()] if following else body
+    return markup.section_body(text, match.end(), top_level=True) if match else ""
 
 
 def _cells(row: str) -> list[str]:
