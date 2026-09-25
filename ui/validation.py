@@ -24,7 +24,7 @@ from typing import NamedTuple
 
 import psycopg
 
-from db import RAW_DIR, Refusal, psql, to_stderr
+from db import RAW_DIR, ROOT, Refusal, psql, to_stderr
 from facts import tables
 from facts.matches import load_matches
 from inference import catalog, validate
@@ -610,7 +610,9 @@ def run(args: argparse.Namespace, out: Callable[[str], None] = print) -> Validat
         name=catalog.playbook_name(directory), pin=not args.all, effect=args.effect,
         log=to_stderr)
     out(validate.rendered(report))
-    out("the report: %s" % os.path.relpath(write(report, args.out)))
+    path = os.path.abspath(write(report, args.out))
+    inside = os.path.commonpath([path, ROOT]) == ROOT
+    out("the report: %s" % (os.path.relpath(path, ROOT) if inside else path))
     return report
 
 
