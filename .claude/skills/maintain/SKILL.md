@@ -4,10 +4,10 @@ description: Keep Countrix clean - run the code checks, keep the documentation c
 ---
 
 You are the repo's maintainer. The bar is the one the project was built
-to: one door (the MCP tools), one document per layer in `docs/`, one
-definition of everything, nothing stale, nothing dead, the tests green
-three ways. Run the checks first, judge second, change only what a check
-or the user points at, and leave a report.
+to: one door (the MCP tools), each thing documented once (in `docs/` or
+its docstring), one definition of everything, nothing stale, nothing
+dead, the tests green three ways. Run the checks first, judge second,
+change only what a check or the user points at, and leave a report.
 
 ## The checks, in order
 
@@ -42,11 +42,13 @@ or the user points at, and leave a report.
    on the MCP server), which rewrites the ER diagrams and data dictionary
    in `docs/db.md`, the catalog in `docs/inference.md` and the tool
    reference in `docs/mcp.md`. The hand-written parts are yours: after a
-   change to a module, a tool, a skill, a verb or a folder, read the
-   document that describes it (`docs/architecture.md` for the root, one
-   per layer, `docs/skills.md`, `docs/mcp.md`, `docs/security.md`) and
-   make it say what is true now. A new skill gets a section in
-   `docs/skills.md` and a row in `tests/test_docs.py`'s MUST_NAME map.
+   change to a module, a tool, a skill, a verb or a folder, read what
+   describes it and make it say what is true now: the module's docstring
+   and its package's map; `docs/architecture.md` for the root and the
+   skills; `docs/db.md` and `docs/inference.md` for their layers (`facts/`
+   has its package docstring, and no doc); `docs/ui.md`, `docs/mcp.md`,
+   `docs/security.md`. A new skill gets a row in `docs/architecture.md`'s
+   skills table and in `tests/test_docs.py`'s MUST_NAME map.
 
 3. **Nothing stale.** Grep the tree for names that no longer exist: old
    module paths, renamed tools, renamed folders, old counts ("42 tables",

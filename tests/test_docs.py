@@ -362,11 +362,12 @@ def test_the_strategy_skill_names_only_arguments_the_writes_take():
     assert named - taken == set()
 
 
-@needs_skills
-def test_the_skills_document_covers_every_skill(copy_of):
-    doc = _read("docs", "skills.md")
+def test_the_overview_indexes_every_skill():
+    """docs/architecture.md's skills table has a row for every house skill.
+    It reads no skill file, so it runs in the image too."""
+    doc = _read("docs", "architecture.md")
     for name in MUST_NAME:
-        assert "## `/%s`" % name in doc, name
+        assert "| `/%s` |" % name in doc, name
 
 
 def _record_and_shipped():

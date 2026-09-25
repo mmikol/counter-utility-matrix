@@ -7,9 +7,10 @@ from Blizzard and the wiki, a board that turns every pick into numbered
 facts, and a deterministic solver over a markdown playbook. Python 3.12:
 `http.server` for the served layers, requests and beautifulsoup4 for the
 scrapers, psycopg (pgserver for the embedded cluster), no web framework, no
-JS build step. The docs are
-the reference - [docs/architecture.md](docs/architecture.md) first, then one
-doc per layer. This file is what a session needs before it changes code.
+JS build step. The docs are the reference -
+[docs/architecture.md](docs/architecture.md) first, then docs/db.md and
+docs/inference.md for their layers; `facts/` has its package docstring, and
+no doc. This file is what a session needs before it changes code.
 
 ## Commands
 

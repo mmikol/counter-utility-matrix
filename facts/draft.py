@@ -3,6 +3,7 @@ them, the sides of a sided map, and the Draft - the board at one stage of
 the pick-and-ban draft, which refuses a board no lobby holds - with
 parse_board, the one reader of a board off the wire, shared by the page and
 the service because the page's board runs through serve.handle_board. A
+playbook draft - a strategy awaiting its frontmatter - is another thing. A
 leaf: it imports only the model and db's Refusal, so every other module in
 the package can take these names from it.
 """
