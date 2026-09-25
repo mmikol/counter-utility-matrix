@@ -251,8 +251,11 @@ class Context:
             self._dsn = psql.boot()
         return psycopg.connect(self.dsn)
 
-    def cache(self, source: str) -> str | None:
-        return fetch.prepare_cache(self.caches[source])
+    def cache(self, source: str) -> str:
+        """The page cache folder of `source`, created when it is missing."""
+        path = self.caches[source]
+        os.makedirs(path, exist_ok=True)
+        return path
 
     def call(self, name: str, /, **arguments: object) -> ToolReply:
         """A tool by name, in-process - the refresher's, the shell's, the

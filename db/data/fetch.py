@@ -20,7 +20,6 @@ every source.
                      copy and is listed in the context's stale, so a flaky
                      source degrades to yesterday's numbers, never to an
                      empty table, and the pull says so
-    prepare_cache    the cache directory a tool hands a pull
 
 Each source package (blizzard, wiki) names its own endpoints
 and its own `sources` row, so provenance lives with the source. Fetching
@@ -212,10 +211,3 @@ def cached_get(
     """One page as text, through the pull's page cache as `key`.html."""
     return cached(pull, key + ".html", lambda: request(
         pull.session, url, params, policy, lambda response: response.text))
-
-
-def prepare_cache(path: str | None) -> str | None:
-    """Create a page cache directory; '' or None disables caching."""
-    if path and not os.path.isdir(path):
-        os.makedirs(path)
-    return path or None
