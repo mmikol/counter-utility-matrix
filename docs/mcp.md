@@ -2,15 +2,13 @@
 
 One set of tools, served over the
 [Model Context Protocol](https://modelcontextprotocol.io) by the door
-over all three layers (`door/mcp/`): the data layer's pulls, the facts
-layer's facts, and the inference layer's solver and playbook. A Claude
-Code session calls them as MCP tools; the board, the refresher, Docker's
-entrypoint and the shell call the same functions in-process. The door
-gates every write: a write to Postgres or the playbook runs under one of
-its tools, and the sentry's quarantine rename of a bad strategy file
-(`door/sentry.py`) is the one write outside it, so a session and the
-board see the same numbers. Reading is direct: the facts and inference
-layers and the board `SELECT` over their own connection.
+(`door/mcp/`): the data layer's pulls, the facts layer's facts, and the
+inference layer's solver and playbook. It is the one door for writes
+([architecture.md](architecture.md)). A Claude Code session calls the
+tools over MCP, and so does `orchestrator.py`, at `localhost:8020`. The
+refresher, Docker's entrypoint and the shell call them in-process, and so
+does the board unless `COUNTRIX_MCP_URL` names the door, as it does in
+the stack: there the board's one write goes over HTTP to `data:8020`.
 
 ## The two servers
 
@@ -22,55 +20,41 @@ in the repo:
 | `countrix` | stdio: `.venv/bin/python -m door.mcp` | the local embedded cluster at `db/psql/cluster` (or whatever `DATABASE_URL` names) | the session, on demand |
 | `countrix-docker` | Streamable HTTP: `http://localhost:8020/mcp` | the compose stack's PostgreSQL - the database the board at :8017 shows | the `data` container, after it has built the database |
 
-They expose the same tools. The skills prefer `countrix-docker`
-when the stack is up, so what a session changes is what the board shows;
-the headless agents' run (`orchestrator.py agents`) is allowed an explicit
-list of tools on these two servers and no built-in tool at all.
+They expose the same tools. The skills prefer `countrix-docker` when the
+stack is up, so what a session changes is what the board shows. The
+headless agents' run (`orchestrator.py agents`) may call an explicit list
+of tools on either server and no built-in tool.
 
-The HTTP door checks who is knocking: it binds to 127.0.0.1, answers only
-a request whose `Host` and `Origin` name it - a local name, or `data`, the
-name the board's container calls it by - caps a request at one megabyte
-and a batch at twenty messages, allows 120 tool calls per client address
-per minute, and
-requires `Authorization: Bearer <token>` when `COUNTRIX_MCP_TOKEN`
-is set (in `.env`; `.mcp.json` sends it from the same variable). Every
-tool call is a line in the audit log, `db/raw/audit.jsonl`, that the
-sentry reads - over either transport and in-process, each under its
-caller's name (`stdio:<pid>`, `http:<address>/<session>`, `board`,
-`refresher`, `shell`, `nested:<tool>`) - and so is a request the HTTP
-door turns away; [security.md](security.md) states what a line holds. A
-line it cannot write is noted on stderr and the call goes on. The `query`
-tool connects as `matrix_reader`, a login that can only `SELECT`, runs
-one read-only statement with a timeout, and refuses SQL that reaches for
-files or servers. The whole threat model is in [security.md](security.md).
+The HTTP door listens on `0.0.0.0:8020` inside the `data` container, so
+every container on the stack's network reaches it as `data`; only the
+published port is on 127.0.0.1. What it checks before a message reaches
+the server, and the audit line every call leaves, are in
+[security.md](security.md).
 
-The protocol (`door/mcp/server.py`) and its transports are dependency-free -
-a few hundred lines instead of the SDK, so the door has nothing to audit:
-JSON-RPC 2.0, one message per line over stdio (`stdio.py`), and the same
-surface over HTTP (`http.py`) with a `Mcp-Session-Id`
-per client, the Host-and-Origin guard all three servers share
-(`db/web.py`), `GET /health` for the containers' healthchecks - the
-database's state (`db.psql.schema.state`: empty, stale, unfilled or
-current) and its counts, or degraded when it is out of reach, read
-directly and not through a tool, so a healthcheck leaves no audit line -
-and `405` on a bare `GET /mcp`. The methods:
-`initialize`, `ping`, `tools/list`, `tools/call`, `resources/list`,
-`resources/read`, `resources/templates/list`, and an empty
-`prompts/list`. It logs to stderr, since stdout is the wire.
+## The protocol
 
-A call the caller can fix - an unknown hero, a bad weight, SQL that
-Postgres rejects - raises `db.Refusal`: the reply is `isError` with the
-reason, and the audit line says refused. Every call, in-process too, is
-checked against the tool's schema before the tool runs: an argument it
-does not take, one it requires left out, a value of the wrong type or
-outside the declared values is refused the same way. A request the wire
-cannot serve - params that are not an object, a tool name or uri that is
-not a string or names nothing served - is `INVALID_PARAMS` (-32602), and a
-message without a string method `INVALID_REQUEST` (-32600). Anything else
-is the server's fault, a playbook that does not load included: the reply
-is `INTERNAL` (-32603) with the error's type and message, the traceback
-goes to stderr, and the audit line says crashed, in the reply's words,
-which the sentry counts.
+The protocol (`door/mcp/server.py`) and its transports are
+dependency-free: a few hundred lines instead of the SDK, so the door has
+nothing to audit. JSON-RPC 2.0 goes one message per line over stdio
+(`stdio.py`) and a POST each over HTTP (`http.py`), which adds a
+`Mcp-Session-Id` per client, `405` on a bare `GET /mcp`, and `GET /health`
+for the healthchecks: the database's state (`db.psql.schema.state`) and
+counts, read directly and not through a tool, so a healthcheck leaves no
+audit line. The methods: `initialize`, `ping`, `tools/list`,
+`tools/call`, `resources/list`, `resources/read`,
+`resources/templates/list`, and an empty `prompts/list`. The server logs
+to stderr, since stdout is the wire.
+
+Every call, in-process too, is checked against the tool's schema before
+the tool runs. What goes wrong is answered by its cause:
+
+| cause | reply |
+| --- | --- |
+| a refusal (`db.Refusal`): a call the caller can fix - an unknown hero, a bad weight, SQL that Postgres rejects, arguments the schema does not admit | `isError` with the reason; the audit line says refused |
+| params that are not an object; a tool name or uri that is not a string or names nothing served | `INVALID_PARAMS` (-32602) |
+| a message that is not an object, or a method that is not a string | `INVALID_REQUEST` (-32600) |
+| a message with no method | dropped, no reply |
+| anything else, a playbook that does not load included | `INTERNAL` (-32603) with the error's type and message; the traceback goes to stderr, and the audit line says crashed, which the sentry counts |
 
 ## From a shell
 
@@ -93,41 +77,6 @@ The strategy files are also served as MCP resources, so a session can
 read the playbook without a tool call: `strategy://<id>` is one file (its
 frontmatter and prose, `text/markdown`), and `strategy://tuning-log` is
 the audit trail of every change to them.
-
-## The package - `door/`
-
-`door/` stands over all three layers: it imports `db`, `facts` and
-`inference`, and none of them imports it (`tests/test_docs.py` holds the
-direction). Beside the MCP server it holds the two daemons that run on a
-clock: the refresher, which calls the door's tools, and the sentry, which
-watches what the tools cannot.
-
-| file | purpose |
-| --- | --- |
-| `mcp/` | The MCP server and its tools, below. |
-| `refresh.py` | The clock: the daily refresh ([db.md](db.md) has its schedule and settings), and the full one once the wiki cache is a week old. |
-| `sentry.py` | The guard. Every thirty seconds: every strategy file must load through the catalog and read like a strategy, or it is quarantined (`.md.quarantined`); instruction-like text in the database's free text is flagged; the door's audit log is tallied, an HTTP caller keyed on its address like the door's rate limit. Its report, `db/raw/sentry.json`, is what `orchestrator.py status` prints; `.venv/bin/python -m door.sentry --once` is one pass from a shell. |
-
-### `mcp/` - the server and its tools
-
-The servers and the transports are above, the tool reference below.
-
-| file | purpose |
-| --- | --- |
-| `server.py` | The protocol: JSON-RPC 2.0 answered from a server's tools and resources, whichever transport carries it - `initialize`, `tools/list`, `tools/call`, `resources/*`, each response a typed record. Dependency-free, like the four modules below, so the door has nothing to audit but its own few hundred lines. |
-| `stdio.py` | The stdio transport `.mcp.json` launches: one message a line on stdin, each answer a line on stdout. |
-| `http.py` | The Streamable HTTP transport (`POST /mcp`, `GET /health`): the bearer token, the body and batch caps, and the rate limit per client address. A request it turns away leaves an audit line under that address. |
-| `schema.py` | A tool as the protocol serves it: its arguments as JSON Schema (`ToolSchema`, which `tool_schema` builds, a `Property` per argument, whose type is one JSON type or a list of the types it admits), its reply (`ToolReply`: text, and the same as JSON), and the `Tool` that checks every call against the schema before the tool runs. |
-| `audit.py` | The audit line every call leaves in `db/raw/audit.jsonl`, through any door, in-process too (`AuditLine`): each argument by name with its size or type name, never its value. The sentry reads it. |
-| `registry.py` | The one registry every family declares its tools into (`REGISTRY`, its decorator `tool`). A `ToolSpec` is a tool as registered: name, description, JSON schema, function, its family - the module the function is defined in - and for a pull the source it reads. `Registry` lists the tools family by family in `FAMILIES`' order, whichever family imports first, refuses a name twice and derives the pulls; `run` is the audited in-process call, `write_docs` the tool reference below. `Context` is where a call lands - the database, the page caches, the log, the caller its in-process calls are audited as - and carries the registry, through which one tool calls another on a copy named `nested:<tool>`. |
-| `tools.py` | Every family imported, so the registry is whole. It re-exports `REGISTRY`, `Context`, `Log`, `NoSuchToolError` and `StrategyResources` for the servers, the refresher, the shell and the board; the in-process call is `Context.call`. |
-| `pulls.py` | `list_sources`, the ten `pull_*` tools in dependency order (one source and domain each, each stated once through `pull_tool`), `load_authored`, `sync_all`. |
-| `lifecycle.py` | The database's life: `db_status` over `read_status`, which `/health` reads without the door, `db_init`, `db_migrate`, `db_rebuild`, `export_csv`, `db_docs`, and read-only `query`, which says when it cut rows. |
-| `boards.py` | `BOARD`, the five properties every board tool takes, and `board_tool`, which registers a tool over them and hands its function the one `Draft` they name. |
-| `facts.py` | The facts layer through the door: `roster` and the board tool `facts`. |
-| `solver.py` | The inference layer through the door: the board tools `infer`, `evaluate` and `board`, and `reach`. |
-| `playbook.py` | `metrics`, the vocabulary a strategy may reference, `strategies`, the tools that write the playbook (`tune`, `add_strategy`, `infer_strategy`, `derive_strategies`), each reloading the mirror after the write, and `tuning_log`. The frontmatter arguments the writes take are declared from `inference.strategy.FIELDS`, the rule that checks every field, so an expression takes a string or a number. The strategies are also served as `strategy://` resources. |
-| `__main__.py` | `.venv/bin/python -m door.mcp` serves over stdio (what `.mcp.json` launches); `--http HOST:PORT` serves over HTTP (the `data` container); `list` and `call NAME [JSON]` are the shell. |
 
 ## The tools
 
