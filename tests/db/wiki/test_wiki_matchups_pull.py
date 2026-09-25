@@ -21,12 +21,21 @@ needs_cache = pytest.mark.skipif(
 def test_counters_pull_from_the_cache(sandbox):
     data = matchups.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
     rows = sandbox.execute(
-        "select c.hero_id, c.countered_by_id, src.code from counters c"
+        "select c.hero_id, c.countered_by_id, src.code, c.basis from counters c"
         " join sources src using (source_id)").fetchall()
     assert data["tables"] == ["counters"] and data["unmatched"] == [] and data["missing"] == []
     assert {row[2] for row in rows} == {"wiki"}
 
-    edges = [row[:2] for row in rows]
+    # Measured on the same cache: the Strategy sections state 104 edges, 52 on
+    # pairs the Match-Up column leaves out and 7 the reverse of one of its
+    # edges; 71 pairs are ambiguous or contradicted and dropped
+    stated = [row[:2] for row in rows if row[3] == "strategy"]
+    assert data["strategy"] == len(stated) > 90 and len(set(stated)) == len(stated)
+    assert data["strategy_new"] > 40 and 0 < data["strategy_reversed"] < 15
+    assert not any(edge[::-1] in set(stated) for edge in stated)
+    assert len(data["strategy_dropped"]) > 50
+
+    edges = [row[:2] for row in rows if row[3] == "match-up"]
     assert len(set(edges)) == len(edges) and all(loser != winner for loser, winner in edges)
     assert not any(edge[::-1] in set(edges) for edge in edges)
 
@@ -55,9 +64,17 @@ def test_counters_pull_from_the_cache(sandbox):
 @pytest.mark.invariant
 def test_the_wiki_states_the_well_known_counters(sandbox):
     data = matchups.run(sandbox, PullContext(CACHE_DIRS["wiki"], log=lambda _: None))
-    answers = {(winner, loser) for winner, loser in sandbox.execute(
-        "select w.name, l.name from counters c join heroes w on w.hero_id = c.countered_by_id"
-        " join heroes l on l.hero_id = c.hero_id")}
+    by_basis = sandbox.execute(
+        "select w.name, l.name, c.basis from counters c join heroes w"
+        " on w.hero_id = c.countered_by_id join heroes l on l.hero_id = c.hero_id").fetchall()
+    answers = {(winner, loser) for winner, loser, basis in by_basis if basis == "match-up"}
+    strategy = {(winner, loser) for winner, loser, basis in by_basis if basis == "strategy"}
+    # the Strategy sections, each edge its sentence: Ana's "Biotic Grenade is a strong
+    # counter to all healing effects, such as Roadhog's Take a Breather", the
+    # reverse of the Match-Up column's; Junker Queen's "Mei is one of Junker Queen's
+    # strongest counters"; Brigitte's "Try to avoid Sombra"
+    assert {("Ana", "Roadhog"), ("Mei", "Junker Queen"), ("Sombra", "Brigitte")} <= strategy
+    assert ("Roadhog", "Ana") in answers
     stated = [
         # Winston: "you serve an excellent counter to Widowmaker"; Widowmaker: "Winston is
         # one of your biggest threats."

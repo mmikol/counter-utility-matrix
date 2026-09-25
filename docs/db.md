@@ -64,10 +64,10 @@ db/
 | `wiki/synergies.py` - `pull_synergies` | `synergies` | `pull_heroes` |
 | `wiki/matchups.py` - `pull_counters` | `counters` | `pull_heroes` |
 
-`wiki/kits/` is the kit pipeline `pull_kits` runs; `wiki/markup.py` and
-`wiki/matchup_tables.py` read the wiki's markup and store nothing. Each
-package's `__init__.py` maps its modules, and each module's docstring
-says what it reads.
+`wiki/kits/` is the kit pipeline `pull_kits` runs; `wiki/markup.py`,
+`wiki/matchup_tables.py` and `wiki/strategy_sections.py` read the wiki's
+markup and store nothing. Each package's `__init__.py` maps its modules,
+and each module's docstring says what it reads.
 
 ### `psql/` - the database
 
@@ -75,7 +75,7 @@ says what it reads.
 | --- | --- |
 | `__init__.py` | where the database is: `default_dsn` resolves `DATABASE_URL`, else the embedded cluster at `db/psql/cluster` once one is built, and never creates one; `boot`, for `db_init` and `db_rebuild` alone, creates it; with neither, `NoDatabaseError`. Its docstring maps the helpers every writer needs |
 | `schema.py` | the migrations and the `schema_migrations` ledger; `state` (empty, stale, unfilled or current), which `python -m db.psql.schema` prints for the container entrypoint; `rebuild`; `generate_docs`, the two sections at the end of this document, each table described by the `--` block above its `CREATE TABLE` or a later `COMMENT ON TABLE` |
-| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment, `018` `map_playstyle` and `comp_archetypes` dropped, `seasons` and `synergies` pulled from the wiki, `019` `map_strategy` and the third source's rates, snapshots and `sources` row dropped, `counters` pulled from the wiki, `020` `map_terrain`, the terrain features each map's wiki article names, `021` `stage_terrain`, with every Hybrid map's two phases and an Escort map's named stretches stored as stages, `022` the `strategies.playbook` comment under the Countrix name, `023` the columns nothing read dropped - `raw_value` on the three stat tables, `patches.platform` and `url`, `subroles.icon_url`, `stat_keys.label` and `unit`, `roles.name`, `024` `matches` and `match_picks`, the owner's recorded games, one row a map with both sixes and the bans, under the `user` source, `025` the 6v6 kit beside the 5v5 one: `heroes.health_6v6`, `shield_6v6` and `armor_6v6`, and `kit_6v6`, each 6v6 line of a hero's article. A statement in an applied migration is never edited; a change is a new file, and a populated database catches up with `db_migrate`. The `--` prose above each `CREATE TABLE` is the data dictionary's text, and is kept current. |
+| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment, `018` `map_playstyle` and `comp_archetypes` dropped, `seasons` and `synergies` pulled from the wiki, `019` `map_strategy` and the third source's rates, snapshots and `sources` row dropped, `counters` pulled from the wiki, `020` `map_terrain`, the terrain features each map's wiki article names, `021` `stage_terrain`, with every Hybrid map's two phases and an Escort map's named stretches stored as stages, `022` the `strategies.playbook` comment under the Countrix name, `023` the columns nothing read dropped - `raw_value` on the three stat tables, `patches.platform` and `url`, `subroles.icon_url`, `stat_keys.label` and `unit`, `roles.name`, `024` `matches` and `match_picks`, the owner's recorded games, one row a map with both sixes and the bans, under the `user` source, `025` the 6v6 kit beside the 5v5 one: `heroes.health_6v6`, `shield_6v6` and `armor_6v6`, and `kit_6v6`, each 6v6 line of a hero's article, `026` `counters.basis` and `evidence`: each counter edge marked with the part of the article it was read in, the Match-Up column or the Strategy section, a Strategy edge with its sentence. A statement in an applied migration is never edited; a change is a new file, and a populated database catches up with `db_migrate`. The `--` prose above each `CREATE TABLE` is the data dictionary's text, and is kept current. |
 | `cluster/` | the embedded Postgres `db_init` or `db_rebuild` creates through pgserver (gitignored); a reader starts it on first touch and never creates it. The compose stack runs its own Postgres, the `db` service, which the host reaches through `./docker-db` |
 
 ### `raw/` - the mirror
@@ -467,12 +467,14 @@ One row per measurement, not per stat. A wiki value like "0.67 shots/s (max char
 
 *PLAYBOOK · `005_playbook.sql`*
 
-Who answers whom: one row means countered_by_id answers hero_id. Pulled from the Match-Up column of every hero's wiki article (pull_counters): each written cell is read from the article hero's seat as a verdict - the other hero answers this one, this one answers the other, or neither - and a verdict either way becomes one directed edge. A pair the two articles contradict on gets no edge. Reloaded whole.
+Who answers whom: one row means countered_by_id answers hero_id, read in one part of a hero's wiki article (pull_counters), which basis names. match-up: the Match-Up column of the article's "Match-Ups and Team Synergy" section, each written cell read from the article hero's seat as a verdict - the other hero answers this one, this one answers the other, or neither - a verdict either way one directed edge, and a pair the two articles contradict on no edge. strategy: a sentence of the article's ==Strategy== section that names another hero beside a counter cue and says which way it runs (db/data/wiki/strategy_sections.py); evidence is that sentence, and a pair the two articles' sections contradict on gets no edge. An edge both parts state has a row for each. Reloaded whole.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
 | `hero_id` | integer | no | `heroes.hero_id` |
 | `countered_by_id` | integer | no | `heroes.hero_id` |
+| `basis` | text | no |  |
+| `evidence` | text | yes |  |
 
 #### `game_modes`
 

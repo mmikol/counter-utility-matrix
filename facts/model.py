@@ -211,6 +211,9 @@ class World:
         self.maps: dict[int, Map] = {}
         self.maps_by_key: dict[str, int] = {}
         self.counters: set[tuple[int, int]] = set()             # (loser, winner)
+        # (loser, winner) -> where in the wiki's articles the edge was read:
+        # match-up, strategy or both (the counters table's basis)
+        self.counter_basis: defaultdict[tuple[int, int], set[str]] = defaultdict(set)
         self.answered_by: defaultdict[int, set[int]] = defaultdict(set)     # loser -> {winners}
         self.answers: defaultdict[int, set[int]] = defaultdict(set)         # winner -> {losers}
         self.synergies: dict[frozenset[int], Synergy] = {}      # frozenset({a, b}) -> the pair's

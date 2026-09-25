@@ -247,8 +247,12 @@ def test_wiki_counters_pull_from_the_cache_and_stamp_no_snapshot(ctx, snapshots,
     assert set(data["no_edge"]) <= set(data["unwritten"])
     db.rollback()
     assert db.execute("select count(*) from meta_snapshots").fetchone()[0] == snapshots
-    # the pull's edges are the table's: the built database holds the same count
-    assert db.execute("select count(*) from counters").fetchone()[0] == data["counters"]
+    # the pull's edges are the table's: the built database holds the same count,
+    # the Match-Up column's and the Strategy sections'
+    assert data["strategy"] > 50 and data["strategy_new"] + data["strategy_reversed"] <= data[
+        "strategy"]
+    assert db.execute("select count(*) from counters").fetchone()[0] == (
+        data["counters"] + data["strategy"])
 
 
 @needs_caches

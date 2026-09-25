@@ -192,10 +192,17 @@ def test_counters_are_directed_edges_between_released_heroes(one):
                      or b.status is distinct from 'released'""") == 0
 
 
-def test_no_pair_counters_both_ways(one):
+def test_no_pair_counters_both_ways_in_one_part_of_the_articles(one):
     # two articles that contradict each other leave the pair without an edge
+    # of that basis; a Strategy section may still read a pair the Match-Up
+    # column reads the other way (Ana's Biotic Grenade on Roadhog's Take a
+    # Breather), and the pair runs both ways
     assert one("""select count(*) from counters c join counters r
-                  on r.hero_id = c.countered_by_id and r.countered_by_id = c.hero_id""") == 0
+                  on r.hero_id = c.countered_by_id and r.countered_by_id = c.hero_id
+                  and r.basis = c.basis""") == 0
+    assert one("select count(*) from counters where basis = 'strategy' and evidence is null") == 0
+    advice = "select count(*) from counters where basis = 'match-up' and evidence is not null"
+    assert one(advice) == 0
 
 
 def test_most_released_heroes_answer_and_are_answered(one):

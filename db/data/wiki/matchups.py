@@ -18,8 +18,12 @@ the hero, 0 neither.
         order, not a verdict. A margin under MARGIN is 0.
 
 A pair both articles speak about keeps its edge when they agree or one
-says neither; when they contradict there is no edge. `counters` is
-reloaded wholesale: one row means countered_by_id answers hero_id.
+says neither; when they contradict there is no edge. The same articles'
+Strategy sections are read too (strategy_sections), and each of their
+edges is stored beside the Match-Up ones under its own basis, with the
+sentence that states it. `counters` is reloaded wholesale: one row means
+countered_by_id answers hero_id, read in the part of the article its
+basis names.
 """
 
 import re
@@ -31,7 +35,7 @@ import psycopg
 from db import psql
 from db.data import ArticlePullSummary, fetch
 from db.data.names import RENAMED, hero_key, index, name_key, unaccented
-from db.data.wiki import WIKI, WikiError, matchup_tables
+from db.data.wiki import WIKI, WikiError, matchup_tables, strategy_sections
 
 # --- extract: markup -> Python ---------------------------------------------
 
@@ -284,7 +288,7 @@ def prose(cell: str) -> str:
     return " ".join(" ".join(matchup_tables.paragraphs(cell)).split())
 
 
-def _aliases(hero: str) -> list[str]:
+def aliases(hero: str) -> list[str]:
     """What the prose may call a hero, longest first: its name, that name without
     accents and without punctuation, a former name, its nicknames. A former name
     is its name_key, which the aliases' re.I match reads in any case."""
@@ -306,7 +310,7 @@ def normalise(text: str, hero: str, other: str, pronouns: Pronouns = (None, None
     """The article hero -> you / your; the enemy -> foe / foe's. he, she, him,
     his, her -> the one of the two whose pronoun it is; where that does not
     tell them apart, the enemy where the text says you, else the last named."""
-    sides = [("you", "your", _aliases(hero)), ("foe", "foe's", _aliases(other))]
+    sides = [("you", "your", aliases(hero)), ("foe", "foe's", aliases(other))]
     named = "|".join("(?P<side%d>%s)" % (i, "|".join(re.escape(n) for n in names))
                      for i, (_, _, names) in enumerate(sides))
     token = re.compile(r"\b(?:(?:%s)|%s)(?P<owns>'s)?(?!\w)" % (named, PRONOUN_RE), re.I)
@@ -440,6 +444,10 @@ class CountersSummary(ArticlePullSummary):
     counters: int
     articles: int
     cells: int
+    strategy: int
+    strategy_new: int
+    strategy_reversed: int
+    strategy_dropped: list[str]
     rated: int
     no_verdict: int
     contradicted: list[str]
@@ -448,9 +456,33 @@ class CountersSummary(ArticlePullSummary):
     unmatched: list[str]
 
 
+def strategy_edges(
+        cursor: psycopg.Cursor, released: Mapping[str, int], found: Mapping[str, str],
+        known: Mapping[str, Known]) -> tuple[list[strategy_sections.Claim], list[tuple[str, str]]]:
+    """The counters the released heroes' Strategy sections state, and the
+    pairs dropped as ambiguous or contradicted (strategy_sections). found is
+    {hero: its article}; a hero's abilities, as the roster stores them, are
+    its own side where a sentence names one."""
+    kit: dict[str, list[str]] = {}
+    for hero, ability in cursor.execute(
+            "SELECT h.name, a.name FROM abilities a JOIN heroes h USING (hero_id)"
+            " WHERE h.status = 'released' ORDER BY h.name, a.position").fetchall():
+        kit.setdefault(hero, []).append(ability)
+    names = sorted(released)
+    said = {name: aliases(name) for name in names}
+    readings = {
+        name: strategy_sections.read_article(
+            text, strategy_sections.Side(
+                name=name, names=tuple(said[name]), pronoun=known[name_key(name)].pronoun,
+                kit=tuple(kit.get(name, ()))), names, said)
+        for name, text in found.items() if name_key(name) in known}
+    return strategy_sections.combine(readings)
+
+
 def run(connection: psycopg.Connection, pull: fetch.PullContext) -> CountersSummary:
-    """Reload counters from the Match-Up column of every released hero's
-    article -> the edges stored, the cells read and what went unanswered."""
+    """Reload counters from every released hero's article - its Match-Up
+    column and its Strategy section, each edge marked with its basis -> the
+    edges stored, the cells read and what went unanswered."""
     cursor = connection.cursor()
     released, articles = matchup_tables.released_articles(cursor, pull)
     known = {
@@ -460,24 +492,39 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> CountersSumm
     edges, contradicted, unmatched = combine(readings, index(released))
     if not edges:
         raise WikiError("no hero article has a match-up verdict")
+    claims, dropped = strategy_edges(cursor, released, articles.found, known)
+    stated = sorted((released[c.loser], released[c.winner], c.sentence) for c in claims)
 
     source_id = psql.register_source(cursor, WIKI, psql.now())
     cursor.execute("DELETE FROM counters")
     for loser, winner in sorted(edges):
         cursor.execute(
-            "INSERT INTO counters (hero_id, countered_by_id, source_id) VALUES (%s, %s, %s)",
-            (loser, winner, source_id))
+            "INSERT INTO counters (hero_id, countered_by_id, basis, source_id)"
+            " VALUES (%s, %s, 'match-up', %s)", (loser, winner, source_id))
+    for loser, winner, sentence in stated:
+        cursor.execute(
+            "INSERT INTO counters (hero_id, countered_by_id, basis, evidence, source_id)"
+            " VALUES (%s, %s, 'strategy', %s, %s)", (loser, winner, sentence, source_id))
     connection.commit()
 
     names = {hero_id: name for name, hero_id in released.items()}
     cells = [reading for article in readings.values() for _, reading in article]
-    in_an_edge = {hero_id for pair in edges for hero_id in pair}
+    graph = edges | {(loser, winner) for loser, winner, _ in stated}
+    in_an_edge = {hero_id for pair in graph for hero_id in pair}
+    new = sum(1 for loser, winner, _ in stated if not {(loser, winner), (winner, loser)} & edges)
+    reversed_ = sum(1 for loser, winner, _ in stated if (winner, loser) in edges)
     pull.log(
         "  counters   %d edges from %d articles; %d cells, %d with no verdict;"
         " %d heroes with no edge" % (
             len(edges), sum(1 for r in readings.values() if r), len(cells),
             sum(1 for r in cells if not r.verdict), len(released) - len(in_an_edge)))
+    pull.log(
+        "  strategy   %d edges: %d on pairs the match-ups leave out, %d the reverse of a"
+        " match-up edge; %d pairs ambiguous or contradicted, dropped" % (
+            len(stated), new, reversed_, len(dropped)))
     return {"counters": len(edges),
+            "strategy": len(stated), "strategy_new": new, "strategy_reversed": reversed_,
+            "strategy_dropped": ["%s / %s" % pair for pair in dropped],
             "articles": sum(1 for r in readings.values() if r),
             "cells": len(cells),
             "rated": sum(1 for r in cells if r.basis == "rating"),

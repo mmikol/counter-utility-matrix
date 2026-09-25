@@ -299,18 +299,32 @@ def _hero_best_maps(fs: FactSet, world: World, h: Hero, team: str) -> None:
             source="derived:hero.best_map", team=team)
 
 
+def _by_basis(world: World, edges: list[tuple[int, int]], other: int) -> str:
+    """Counter edges' other heroes as the relations facts list them: the
+    match-up advice's, then those only a Strategy section states."""
+    only = [e for e in edges if world.counter_basis.get(e) == {"strategy"}]
+    advice = sorted(world.heroes[e[other]].name for e in edges if e not in only)
+    said = "in the wiki's match-up advice: %s" % ", ".join(advice) if advice else ""
+    if only:
+        said += "%sin its Strategy sections: %s" % ("; " if said else "", ", ".join(
+            sorted(world.heroes[e[other]].name for e in only)))
+    return said
+
+
 def _hero_relations(fs: FactSet, world: World, h: Hero, team: str) -> None:
-    """The wiki's match-up advice and synergies, whoever else is picked."""
+    """The wiki's counters - its match-up advice and its Strategy sections -
+    and synergies, whoever else is picked."""
     name = h.name
     answered_by = sorted(world.heroes[x].name for x in world.answered_by.get(h.id, ()))
     if answered_by:
-        fs.add("hero", name, "hero.answered_by", "%s is countered by, in the wiki's match-up"
-            " advice: %s" % (name, ", ".join(answered_by)), value=answered_by,
-            source="counters", team=team)
+        fs.add("hero", name, "hero.answered_by", "%s is countered by, %s" % (
+            name, _by_basis(world, [(h.id, x) for x in world.answered_by[h.id]], 1)),
+            value=answered_by, source="counters", team=team)
     answers = sorted(world.heroes[x].name for x in world.answers.get(h.id, ()))
     if answers:
-        fs.add("hero", name, "hero.answers", "%s answers, in the wiki's match-up advice: %s"
-            % (name, ", ".join(answers)), value=answers, source="counters", team=team)
+        fs.add("hero", name, "hero.answers", "%s answers, %s" % (
+            name, _by_basis(world, [(x, h.id) for x in world.answers[h.id]], 0)),
+            value=answers, source="counters", team=team)
     for other, (score, note) in sorted(world.partners.get(h.id, {}).items(),
             key=lambda kv: -(kv[1][0] or 0)):
         fs.add("hero", name, "hero.partner", "%s + %s (%s/2): %s"

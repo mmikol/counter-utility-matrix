@@ -341,9 +341,12 @@ def _read_terrain(cx: Connection, w: World) -> None:
 
 
 def _read_relations(cx: Connection, w: World) -> None:
-    """The wiki's counters, both ways, and its synergy pairs."""
-    for loser, winner in _rows(cx, "select hero_id, countered_by_id from counters"):
+    """The wiki's counters, both ways, each with where it was read, and its
+    synergy pairs."""
+    for loser, winner, basis in _rows(
+            cx, "select hero_id, countered_by_id, basis from counters order by 1, 2, 3"):
         w.counters.add((loser, winner))
+        w.counter_basis[(loser, winner)].add(basis)
         w.answered_by[loser].add(winner)
         w.answers[winner].add(loser)
     for a, b, score, note in _rows(cx, "select hero_id, other_id, score, note from synergies"):

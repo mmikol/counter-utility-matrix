@@ -13,7 +13,7 @@ Page to table, each ends in run(connection, pull):
                     hazards, cover - counted per map and per stage
                     (pull_terrain, after maps)
     matchups        who answers whom (counters), from each hero article's
-                    Match-Up column
+                    Match-Up column and its Strategy section
     patches         game versions from the Patches cargo table
     playstyles      the team-composition playstyles (dive, brawl, poke)
     seasons         the seasons that have started, from the Season pages
@@ -29,6 +29,8 @@ The readers the loaders share, no run():
 
     markup          reading the wiki's two markups - Cargo's rendered HTML
                     and article wikitext - and the tidying both need
+    strategy_sections   a hero article's Strategy section: the counters its
+                    sentences state and which way each runs; matchups reads it
     matchup_tables  a hero article's Match-Ups and Team Synergy section:
                     one column of its tables as rows, in either markup,
                     and a cell as plain text; synergies and matchups read

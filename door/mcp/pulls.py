@@ -209,8 +209,10 @@ def pull_synergies(connection: psycopg.Connection, pull: fetch.PullContext) -> P
 @pull_tool(
     "pull_counters", "The Match-Up column of every hero's wiki article: each"
     " written cell read as a verdict and stored as a directed edge, one row ="
-    " countered_by answers hero. Reloads the table whole. Run after"
-    " pull_heroes.", source="wiki", stored="counters stored")
+    " countered_by answers hero; and the same article's Strategy section, each"
+    " sentence that names a counter and says which way it runs stored as an"
+    " edge of its own basis with the sentence as its evidence. Reloads the"
+    " table whole. Run after pull_heroes.", source="wiki", stored="counters stored")
 def pull_counters(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return wiki_matchups.run(connection, pull)
 
