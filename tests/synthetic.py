@@ -240,6 +240,7 @@ def world() -> World:
     w.subrole_passives = {
         "Stalwart": "Takes less knockback.", "Bruiser": "Heals a little on a kill.",
         "Sharpshooter": "Deals more damage from far away."}
+    w.tier_names = {"bronze": "Bronze", "grandmaster": "Grandmaster and Champion"}
     w.catalog_counts = {"constraint": 2, "heuristic": 3, "assumption": 2}
     # the released supports' peak heals are 60, 70, 75 and 90, their rates
     # 55, 60, 70 and 80: twice each median. The cap is the largest flat

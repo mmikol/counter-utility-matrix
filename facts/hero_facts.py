@@ -31,7 +31,7 @@ def write(fs: FactSet, world: World, board: Resolved, hero: Hero, team: str) -> 
     _hero_abilities(fs, hero, team)
     _hero_weapons(fs, hero, team)
     _hero_perks(fs, hero, team)
-    _hero_rates(fs, hero, team)
+    _hero_rates(fs, world, hero, team)
     _hero_rate_flags(fs, hero, team)
     if board.map is None:
         _hero_best_maps(fs, world, hero, team)
@@ -217,8 +217,9 @@ def _hero_perks(fs: FactSet, h: Hero, team: str) -> None:
 
 # --- the rates ----------------------------------------------------------------
 
-def _hero_rates(fs: FactSet, h: Hero, team: str) -> None:
-    """The all-ranks rates, then each tier's."""
+def _hero_rates(fs: FactSet, world: World, h: Hero, team: str) -> None:
+    """The all-ranks rates, then each tier's up the ladder, named as Blizzard
+    names it."""
     name = h.name
     if h.win is not None:
         fs.add("hero", name, "hero.rate", "%s across all ranks: wins %.1f%%, picked %.1f%%%s"
@@ -226,10 +227,10 @@ def _hero_rates(fs: FactSet, h: Hero, team: str) -> None:
                 ", banned %.1f%%" % h.ban if h.ban is not None else ""),
             value={"win": h.win, "pick": h.pick, "ban": h.ban}, source="hero_meta",
             team=team)
-    for tier, (win, pick, ban) in sorted(h.by_tier.items()):
+    for tier, (win, pick, ban) in h.by_tier.items():
         if win is not None:
             fs.add("hero", name, "hero.rate_tier", "%s in %s lobbies: wins %.1f%%, picked %.1f%%%s"
-                % (name, tier, win, pick or 0,
+                % (name, world.tier_names[tier], win, pick or 0,
                     ", banned %.1f%%" % ban if ban is not None else ""),
                 value={"tier": tier, "win": win}, source="hero_meta", team=team)
 

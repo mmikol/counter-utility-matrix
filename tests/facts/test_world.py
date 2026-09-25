@@ -37,6 +37,18 @@ def test_names_resolve_across_spellings(world):
         world.resolve("Atlantis", [], [])
 
 
+@pytest.mark.invariant
+def test_the_tiers_are_read_up_the_ladder_with_their_names(world, rows):
+    """Every tier's name, and each hero's rates per tier in the ladder's
+    order, which the alphabet's is not (diamond, emerald, gold)."""
+    ladder = rows("select code, name from competitive_tiers order by rank_order")
+    assert list(world.tier_names.items()) == ladder
+    rated = [h for h in world.heroes.values() if h.by_tier]
+    order = [code for code, _ in ladder]
+    assert rated and all(
+        list(h.by_tier) == [code for code in order if code in h.by_tier] for h in rated)
+
+
 def test_one_hero_cannot_hold_two_seats(synthetic_world):
     """A six with a hero twice is a five, and team_metrics would count it
     twice; a hero may play for both teams."""

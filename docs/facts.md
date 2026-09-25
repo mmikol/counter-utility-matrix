@@ -85,7 +85,8 @@ does.
 open psycopg connection it never opens itself: the heroes (role, subrole,
 health/shield/armor, the kit - weapons with their firing configs,
 abilities, perks, every stat as a measurement with unit and condition -
-keywords, the latest and previous rates, the per-map and per-tier rates,
+keywords, the latest and previous rates, the per-map rates, the per-tier
+rates up the ladder with each tier's name,
 counters both ways, playstyles), the maps (mode, stages, terrain), the
 meta snapshots and the patches newer than the capture, synergies and
 partners, the catalog's shape. One read step fills each part, and `load`

@@ -251,12 +251,16 @@ def _rate(value: SupportsFloat | None) -> float | None:
 
 
 def _read_rates(cx: Connection, w: World) -> None:
-    """Each hero's rates in the latest Blizzard capture, overall and per tier,
-    and its overall win rate in the capture before."""
+    """Each hero's rates in the latest Blizzard capture, overall and per tier
+    up the ladder, and its overall win rate in the capture before; the
+    tiers' names."""
+    for code, name in _rows(cx, "select code, name from competitive_tiers order by rank_order"):
+        w.tier_names[code] = name
     for hid, tier, win, pick, ban in _rows(cx, """
             select m.hero_id, t.code, m.win_rate, m.pick_rate, m.ban_rate
             from hero_meta m join competitive_tiers t on t.tier_id = m.tier_id
-            where m.snapshot_id = %s""" % LATEST_BLIZZARD):
+            where m.snapshot_id = %s
+            order by t.rank_order""" % LATEST_BLIZZARD):
         h = w.heroes[hid]
         rates = Rates(win=_rate(win), pick=_rate(pick), ban=_rate(ban))
         if tier == "all":

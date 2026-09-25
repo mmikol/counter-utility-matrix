@@ -56,7 +56,7 @@ class Hero:
     win: float | None = None
     pick: float | None = None
     ban: float | None = None
-    by_tier: dict[str, Rates] = field(default_factory=dict)
+    by_tier: dict[str, Rates] = field(default_factory=dict)         # tier -> rates, up the ladder
     prev_win: float | None = None
     map_rates: dict[int, MapRate] = field(default_factory=dict)
     map_bans: dict[int, float] = field(default_factory=dict)        # map_id -> its ban rate, if any
@@ -211,6 +211,7 @@ class World:
         self.newer_patches: list[Patch] = []
         self.subrole_passives: dict[str, str] = {}              # subrole -> its passive's text
         self.role_icons: dict[str, str | None] = {}
+        self.tier_names: dict[str, str] = {}        # rank tier code -> its name, up the ladder
         self.heal_bench = 0.0
         self.hps_bench = 0.0         # 2 x the median sustained healing across the supports
         self.ult_cap = 0.0           # the largest single figure an ultimate publishes

@@ -11,7 +11,7 @@ from facts.draft import Draft
 from facts.factset import FactSet
 from facts.kit import KitPiece, Stat
 from facts.model import Resolved
-from facts.records import Modifier, PerkEffect
+from facts.records import Modifier, PerkEffect, Rates
 
 
 def _facts(world, name, *, team="blue", map_name=None, red=(), blue=()):
@@ -173,8 +173,8 @@ def test_the_rates_and_what_they_warn_of(synthetic_world):
     assert _texts(needle, "hero.rate", "Needle") == [
         "Needle across all ranks: wins 52.0%, picked 10.0%, banned 30.0%"]
     assert _texts(needle, "hero.rate_tier", "Needle") == [
-        "Needle in bronze lobbies: wins 48.5%, picked 10.0%, banned 30.0%",
-        "Needle in grandmaster lobbies: wins 55.5%, picked 10.0%, banned 30.0%"]
+        "Needle in Bronze lobbies: wins 48.5%, picked 10.0%, banned 30.0%",
+        "Needle in Grandmaster and Champion lobbies: wins 55.5%, picked 10.0%, banned 30.0%"]
     assert _texts(needle, "hero.rank_sensitivity", "Needle") == [
         "RANK-SENSITIVE: Needle swings 7.0 points across ranks (48.5%-55.5%)"]
     assert _texts(needle, "hero.ban_pressure", "Needle") == [
@@ -187,6 +187,18 @@ def test_the_rates_and_what_they_warn_of(synthetic_world):
     w.hero("Rook").ban = 22.0
     assert _texts(_facts(w, "Rook"), "hero.ban_pressure", "Rook") == [
         "Rook is banned in 22% of lobbies - a likely ban"]
+
+
+def test_a_heros_tiers_are_stated_up_the_ladder_by_name(synthetic_world):
+    """The tiers come in the order the load read them, up the ladder - gold
+    before diamond, not the alphabet's order - each by its name."""
+    w = synthetic_world
+    w.tier_names.update(gold="Gold", diamond="Diamond")
+    w.hero("Needle").by_tier = {
+        "gold": Rates(50.0, 10.0, 30.0), "diamond": Rates(53.0, 10.0, 30.0)}
+    assert _texts(_facts(w, "Needle"), "hero.rate_tier", "Needle") == [
+        "Needle in Gold lobbies: wins 50.0%, picked 10.0%, banned 30.0%",
+        "Needle in Diamond lobbies: wins 53.0%, picked 10.0%, banned 30.0%"]
 
 
 def test_with_no_map_a_hero_names_where_it_does_best(synthetic_world):
