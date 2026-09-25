@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
-from db import KIND_ULTIMATE, Refusal
+from db import KIND_ULTIMATE, ROLES, Refusal
 from db.data.names import name_key
 from facts.kit import KitPiece
 from facts.records import (
@@ -26,8 +26,6 @@ from facts.records import (
     StyleScore,
     Synergy,
 )
-
-ROLES = ("tank", "damage", "support")
 
 REMECH = ("Call Mech",)     # climbing back into the mech: an ultimate by kind, not a fight tool
 SQUISHY_POOL = 250

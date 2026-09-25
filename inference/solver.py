@@ -148,8 +148,7 @@ class Solver(Objective):
             need = {"tank": t - len(locked_by_role["tank"]),
                     "damage": d - len(locked_by_role["damage"]),
                     "support": s - len(locked_by_role["support"])}
-            choices = [list(itertools.combinations(pools[r], need[r]))
-                       for r in ("tank", "damage", "support")]
+            choices = [list(itertools.combinations(pools[r], need[r])) for r in ROLES]
             for combo in itertools.product(*choices):
                 yield self.locked + [h for part in combo for h in part]
 

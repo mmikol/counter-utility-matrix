@@ -21,7 +21,7 @@ Shion do not, as of the scale that stopped moving with the bans.
 from typing import NamedTuple, TypedDict
 
 from facts.draft import MAX_BANS, SIDES, Draft, is_sided
-from facts.model import Hero, Map, World
+from facts.model import ROLES, Hero, Map, World
 from inference import engine
 from inference.solver import Infeasible
 
@@ -68,7 +68,7 @@ def reds(world: World, hero: Hero) -> list[list[str]]:
     out: list[list[str]] = [[]]
     for strict in (False, True):
         red: list[str] = []
-        for role in ("tank", "damage", "support"):
+        for role in ROLES:
             pool = [h for h in others if h.role == role
                     and not (strict and world.is_countered_by(hero.id, h.id))]
             pool.sort(key=lambda h: (-bool(world.is_countered_by(h.id, hero.id)),

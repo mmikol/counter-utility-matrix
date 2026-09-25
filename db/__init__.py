@@ -20,9 +20,10 @@ the tables over db.psql.default_dsn().
     raw/          the CSV mirror the tools export (gitignored)
 
 This file holds what the whole layer must agree on: where things live (ROOT
-and the paths under it), the shape of a `sources` row (Source), the ability
-and perk vocabularies the migrations seed (ABILITY_KINDS, PERK_TIERS), the
-scope every rates snapshot is pinned to, the one error a caller can fix
+and the paths under it), the shape of a `sources` row (Source), the roles
+the roster pull stores in role_id order (ROLES), the ability and perk
+vocabularies the migrations seed (ABILITY_KINDS, PERK_TIERS), the scope
+every rates snapshot is pinned to, the one error a caller can fix
 (Refusal), which every layer raises and every door answers as the caller's,
 where a progress line goes (Log) and the stderr writer a pull, a Context
 and the MCP server default to (to_stderr), the hour every age is read in
@@ -82,6 +83,11 @@ class Source:
     name: str
     url: str
 
+
+# The roles: pulled from Blizzard's roster, not seeded. The roster pull
+# (db/data/blizzard/heroes.py) stores them in this order, so role_id follows
+# it, and every layer orders a roster and counts a six's shape by it.
+ROLES = ("tank", "damage", "support")
 
 # The ability vocabulary: db/psql/migrations/002_heroes.sql seeds ability_kinds
 # with these codes, db/data/wiki/kits/kit_store.py resolves each to its

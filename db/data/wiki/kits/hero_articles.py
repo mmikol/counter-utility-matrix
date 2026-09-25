@@ -12,6 +12,7 @@ import datetime
 import re
 from typing import NamedTuple
 
+from db import ROLES
 from db.data.fetch import PullContext
 from db.data.names import ability_key
 from db.data.wiki import Articles, fetch_articles, markup
@@ -80,7 +81,7 @@ def parse_announcement(text: str) -> Announcement | None:
         return None
     role = markup.wikitext_to_text(params.get("role", "")).strip().lower()
     subrole = markup.wikitext_to_text(params.get("sub-role", "")).strip().lower()
-    if role not in ("tank", "damage", "support"):
+    if role not in ROLES:
         return None
     released = RELEASE_RE.search(markup.wikitext_to_text(text))
     release_date = markup.parse_date(released.groups(), released.group(5)) if released else None

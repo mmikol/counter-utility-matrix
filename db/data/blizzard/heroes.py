@@ -19,7 +19,7 @@ import psycopg
 from bs4 import BeautifulSoup, Tag
 from psycopg.sql import SQL
 
-from db import PERK_TIERS, psql
+from db import PERK_TIERS, ROLES, psql
 from db.data import ArticlePullSummary, fetch
 from db.data.blizzard import BLIZZARD, HEROES_URL, BlizzardError, attr
 from db.data.fetch import cache_key, cached_get
@@ -255,7 +255,7 @@ def _store(
     source_id = psql.register_source(cursor, BLIZZARD, cao)
 
     role_ids: dict[str, int] = {}
-    for code in ("tank", "damage", "support"):
+    for code in ROLES:
         cursor.execute(
             "INSERT INTO roles (code, name, icon_url, source_id)"
             " VALUES (%s, %s, %s, %s)"
