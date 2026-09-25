@@ -44,6 +44,20 @@ def strategies_dir() -> str:
     return os.path.abspath(os.path.join(ROOT, chosen)) if chosen else SHIPPED_DIR
 
 
+def named_dir(name: str | None) -> str:
+    """A playbook folder a caller names: relative to the repo root or
+    absolute, and inside the repo; None or blank is the playbook in force. A
+    folder outside the repo, or none there, is a Refusal."""
+    if not (name or "").strip():
+        return strategies_dir()
+    path = os.path.abspath(os.path.join(ROOT, (name or "").strip()))
+    if os.path.commonpath([path, ROOT]) != ROOT:
+        raise Refusal("a playbook folder lies inside the repo, got %r" % name)
+    if not os.path.isdir(path):
+        raise Refusal("no playbook folder at %s" % os.path.relpath(path, ROOT))
+    return path
+
+
 DOCS_PATH = os.path.join(ROOT, "docs", "inference.md")
 NOT_STRATEGIES = ("README.md", "tuning-log.md")     # markdown that lives beside the files
 KIND_ORDER = {k: i for i, k in enumerate(KINDS)}

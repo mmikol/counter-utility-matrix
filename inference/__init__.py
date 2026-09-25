@@ -34,5 +34,14 @@
     tune          one validated, logged edit to a strategy file; add and complete
     derive        the engine asking the model for a draft's frontmatter
     reach         the board each released hero is optimal on, within a match's bans
+    validate      the playbook against the recorded matches: each map rescored
+                  from both seats, five models scored out of sample on a time
+                  and a sessions split, each strategy family ablated, the data
+                  guard and the pin
+    predict       the models validate scores, M0 a coin flip to M4 the heroes
+                  plus the playbook score, and the splits it scores them on
+    fit           the statistics validate reads, in pure Python: a ridge
+                  logistic fit, log loss and Brier, the bootstrap over
+                  sessions, the maps an effect needs
     serve         the engine over HTTP, for the compose stack's board
 """
