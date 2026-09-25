@@ -97,3 +97,10 @@ def test_a_file_a_citation_and_a_wikitable_are_each_matched_whole():
     assert markup.REF_RE.sub("", cited) == "a bc"
     assert markup.REF_RE.sub("", "<references/>") == "<references/>"
     assert markup.TABLE_RE.findall("x\n{|\n| cell\n|}\ny") == ["{|\n| cell\n|}"]
+
+
+def test_a_link_is_read_innermost_first_and_gives_its_target():
+    # a file's caption may hold the link a parser wants
+    assert markup.LINK_RE.findall("[[File:x.png|thumb|[[Hazard]]]] [[Ana|the sniper]]") == [
+        "Hazard", "Ana"]
+    assert markup.LINK_RE.findall("{{flag|kr}} [[Busan]]") == ["Busan"]

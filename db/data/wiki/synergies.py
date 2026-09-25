@@ -39,8 +39,6 @@ RATING_RE = re.compile(r"^(?:\s|<[^>]+>|'{2,5})*(?:([A-Z ]*?)\s*SYNERGY\b"
                        r"|\((?:[^()]*? - )?(?i:([a-z ]*?)\s*synergy)\))(?:\s|'{2,5})*")
 TABLE_END_RE = re.compile(r"\s\|\}\s*$", re.M)
 LINK_PARAM_RE = re.compile(r"\|\s*link\s*=\s*([^|\]]+)")
-# An innermost link: a file's caption may hold the hero's link.
-ROW_LINK_RE = re.compile(r"\[\[([^\[\]|]+)(?:\|[^\[\]]*)?\]\]")
 FILE_TARGET_RE = re.compile(r"\s*(?:file|image)\s*:", re.I)
 # A sentence ends at . ! or ? before a capital; the period of an initial
 # ("D.Va", "B.O.B.") does not end one.
@@ -87,7 +85,7 @@ def _cells(row: str) -> list[str]:
 
 def _row_hero(cell: str) -> str | None:
     """The hero a row is about: its article link, else its icon's link=."""
-    for link in ROW_LINK_RE.finditer(cell):
+    for link in markup.LINK_RE.finditer(cell):
         if not FILE_TARGET_RE.match(link.group(1)):
             return link.group(1).strip()
     match = LINK_PARAM_RE.search(cell)

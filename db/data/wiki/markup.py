@@ -9,8 +9,8 @@ The wiki serves data two ways and both need parsing:
 
 They are different grammars, but the wiki mixes the same furniture through
 both - file links, comments, <br>, bare URLs - so the tidying is shared.
-So are the patterns the loaders cut an article with: a file with its
-caption, a citation, a wikitable.
+So are the patterns the loaders cut an article with: a link, a file with
+its caption, a citation, a wikitable.
 
 section_body cuts an article's section at the next heading of any depth.
 DATE is the wiki's date grammar, day or month first, and parse_date reads a
@@ -35,7 +35,8 @@ TABLE_RE = re.compile(r"^\{\|.*?^\|\}", re.M | re.S)
 BREAK_RE = re.compile(r"<br\s*/?>", re.I)
 TAG_RE = re.compile(r"</?[a-z][^>]*>", re.I)
 COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
-LINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")      # -> the link's target
+# A link -> its target. The innermost one: a file's caption may hold a link.
+LINK_RE = re.compile(r"\[\[([^\[\]|]+)(?:\|[^\[\]]*)?\]\]")
 LINK_LABELLED_RE = re.compile(r"\[\[[^\]|]*\|([^\]]*)\]\]")
 LINK_PLAIN_RE = re.compile(r"\[\[([^\]]*)\]\]")
 URL_RE = re.compile(r"https?://\S+")

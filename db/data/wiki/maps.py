@@ -89,7 +89,6 @@ GAMEPLAY_SECTION_RE = re.compile(
 GAMEPLAY_WHOLE_RE = re.compile(
     r'^==\s*Gameplay\s*==\s*$(.*?)(?=^==[^=]|\Z)', re.M | re.S)
 SUBHEADING_RE = re.compile(r'^===\s*([^=].*?)\s*===\s*$', re.M)
-LINK_TEXT_RE = re.compile(r'\[\[(?:[^|\]]*\|)?([^\]]+)\]\]')
 LEADING_ARTICLE_RE = re.compile(r'^(?:the|an?)\s+', re.I)
 
 HYBRID_PAGE = "Hybrid"
@@ -117,7 +116,7 @@ def parse_stages(text: str) -> list[str]:
     for line in body.splitlines():
         if not line.startswith('*') or line.startswith('**'):
             continue
-        name = LINK_TEXT_RE.sub(r'\1', line.lstrip('* ').strip())
+        name = markup.tidy(line.lstrip('* '))
         name = re.sub(r'\s*\([A-Z]\)\s*$', '', name).strip("'\" ")
         if name and len(name) <= 40 and '. ' not in name:
             stages.append(name)
