@@ -265,6 +265,19 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 .hcard p { margin:6px 0 0; color:#c9d0db; font-size:12.5px; }
 .legend { color:var(--muted); font-size:12px; margin:6px 0 0; }
 
+/* the record panel: the board as a played map, then the day, a note and blue's result */
+.recsum h3 { margin:0 0 8px; font-size:22px; color:var(--gold); }
+.recform { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:14px 0 4px; }
+.recform label { color:var(--muted); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+.recform input { background:#0b0e14; color:var(--text); border:1px solid var(--line);
+  border-radius:6px; padding:8px 10px; font:inherit; color-scheme:dark; }
+.recform input[type=text] { flex:1; min-width:240px; }
+.results { display:inline-flex; gap:8px; }
+.results button { font-family:"Bebas Neue",Impact,sans-serif; font-size:19px; letter-spacing:.1em; min-width:84px; }
+.results button[data-result=win] { border-color:var(--green); }
+.results button[data-result=loss] { border-color:var(--red); }
+.results button:disabled { opacity:.35; cursor:default; }
+
 /* --- the strategies under a comp: two panes, a filter, and a bounded height ---
    the playbook is 244 rules; listing them all under the board buried it */
 .barsbox { margin-top: 10px; }

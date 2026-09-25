@@ -32,17 +32,20 @@ expression language in `inference/expr.py`.
 **The headless runs are fenced.** `orchestrator.py agents` allows the
 tools in `orchestrator.AGENT_TOOL_NAMES` and no built-in tool
 (`--tools ""`): no shell, no file edits, no web, no `add_strategy`, no
-rebuild or migration. It keeps no session and stops at eighty turns. The
+rebuild or migration, no match recorded or deleted. It keeps no session and stops at eighty turns. The
 deriver runs `claude -p` from a neutral directory with no project
 settings, no MCP servers, no tools and two turns, and stores only what the
 catalog validates.
 
-**The board's one write is off by default, and knocks at the door when
-it is on.** `COUNTRIX_READ_ONLY` defaults to `1`: `POST /api/weight`
-answers 403, or 415 first for a body not labelled `application/json`, so
-a slider's weight stays in the session. At `0` the POST becomes a call to
-the door's `tune` tool, which ignores the setting. The board's code
-writes no playbook file, and its container mounts the playbook read-only.
+**The board's two writes are off by default, and knock at the door when
+they are on.** `COUNTRIX_READ_ONLY` defaults to `1`: `POST /api/weight`
+and `POST /api/match` answer 403, or 415 first for a body not labelled
+`application/json`, so a slider's weight stays in the session and a match
+is recorded elsewhere. At `0` the POSTs become calls to the door's `tune`
+and `record_match` tools, which ignore the setting. The board's code
+writes no playbook file and no row, and its container mounts the playbook
+read-only. A match's note is free text a session reads back, so the
+sentry scans it with the rest of the database's text.
 
 **Every server answers only to its own names.** The door, the inference
 service and the board stand on `db/web.py`, which checks each request's

@@ -1,6 +1,6 @@
 """The board's server: its roster and facts speak what the MCP tools serve,
-its settings are read when used, and its one write is a tune call through
-the door. Its board and catalog are the inference service's handlers,
+its settings are read when used, and its two writes are door calls - a
+weight a tune, a match a record_match. Its board and catalog are the inference service's handlers,
 tested in tests/inference/test_inference_service.py. No HTTP server is spun
 up - the handler is thin routing; tests/ui/test_board_server.py serves it."""
 
@@ -83,7 +83,7 @@ def test_a_service_url_that_is_not_http_is_refused(monkeypatch):
     assert board.inference_url() == "" and board.mcp_url() == ""
 
 
-# --- the board's one write: a weight stored through the tune tool ------------------
+# --- the board's first write: a weight stored through the tune tool ----------------
 
 
 def test_storing_a_weight_is_a_tune_call_over_the_door(monkeypatch):
@@ -187,3 +187,61 @@ def test_storing_a_weight_locally_runs_the_tune_tool_in_process(db, dsn, tmp_pat
     assert board.STORE_REASON in log and heuristic.id in log and "[the board]" in log
     with pytest.raises(Refusal, match="no strategy"):  # the POST's boundary answers it 400
         board.api_weight({"id": "no-such-strategy", "weight": 2})
+
+
+# --- the board's second write: a map recorded through record_match -----------------
+
+BLUE = ["Anvil", "Kite", "Rook", "Needle", "Balm", "Myrrh"]
+RED = ["Mortar", "Quarry", "Rook", "Gale", "Sorrel", "Tansy"]
+
+
+def test_recording_a_match_is_a_record_match_call_over_the_door(monkeypatch):
+    """With an MCP URL set (the compose stack) the record panel's POST is one
+    tools/call for `record_match` with the board's keys and no other, and
+    the tool's first line or its refusal comes back as the store's does."""
+    calls = []
+
+    def fake_call_tool(url, name, arguments, token=None, timeout=60):
+        calls.append((name, arguments))
+        if arguments["result"] == "won":
+            return board.web.CallReply("'result' must be one of 'win', 'loss', 'draw'", None,
+                                       400)
+        return board.web.CallReply("recorded match 7: win on Harbor Gate\n#7 ...",
+                                   {"match_id": 7}, 200)
+    monkeypatch.setenv("COUNTRIX_MCP_URL", "http://data:8020/mcp")
+    monkeypatch.setattr(board.web, "call_tool", fake_call_tool)
+    payload = {
+        "map": "Harbor Gate", "side": "attack", "result": "win", "blue": BLUE, "red": RED,
+        "bans": [], "played_on": "2026-09-24", "note": "", "weights": {"x": 1},
+        "client": "tab1"}
+    data, code = board.api_match(payload)
+    assert code == 200 and data == {"line": "recorded match 7: win on Harbor Gate",
+                                    "match": {"match_id": 7}}
+    [(name, arguments)] = calls
+    assert name == "record_match" and set(arguments) == set(board.MATCH_KEYS)
+    data, code = board.api_match(dict(payload, result="won"))
+    assert code == 400 and "must be one of" in data["error"]
+    assert board.api_match({"map": "Harbor Gate", "side": None, "result": "win"})[1] == 200
+    assert "side" not in calls[-1][1]                       # a null is left to the default
+
+
+@pytest.mark.invariant
+def test_recording_a_match_locally_runs_the_tool_in_process(scratch_dsn, monkeypatch):
+    """Without an MCP URL the same call goes through the registry, audited
+    as the board's, into the scratch database; a refusal is raised for the
+    POST's boundary to answer 400."""
+    import psycopg
+
+    from door.mcp import tools
+    from facts.matches import load_matches
+    monkeypatch.delenv("COUNTRIX_MCP_URL", raising=False)
+    monkeypatch.setattr(board, "tool_context",
+                        lambda: tools.Context(dsn=scratch_dsn, client="board"))
+    data, code = board.api_match({"map": "Salt Flats", "side": "", "result": "loss",
+                                  "blue": BLUE, "red": RED, "bans": ["Flint"]})
+    assert code == 200 and data["line"] == "recorded match %d: loss on Salt Flats" % (
+        data["match"]["match_id"])
+    with psycopg.connect(scratch_dsn) as cx:
+        assert [m.match_id for m in load_matches(cx)][-1] == data["match"]["match_id"]
+    with pytest.raises(Refusal, match="Harbor Gate has sides"):
+        board.api_match({"map": "Harbor Gate", "result": "win", "blue": BLUE, "red": RED})

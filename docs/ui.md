@@ -4,8 +4,9 @@ The page over the three layers. Every click - a map, a side, a ban, a hero
 on either roster - becomes a request that reads the database, and back
 come every fact about that board (the facts layer's, in
 [`facts/`](../facts/__init__.py)), the optimal six for both seats with the
-current picks scored, and the playbook as it sits on disk. No layer
-imports the board or its pages.
+current picks scored, and the playbook as it sits on disk. Once the map is
+played, the record tab stores it as a recorded match. No layer imports the
+board or its pages.
 
 ```bash
 .venv/bin/python -m ui.board              # http://localhost:8017, the local cluster
@@ -19,30 +20,36 @@ the `inference` container for comps (`COUNTRIX_INFERENCE_URL`).
 ## `board.py` and `pages.py` - the page and its endpoints
 
 `pages.py` renders the page, a shell over the static files that injects
-only `TEAM` (six), `BANS` (five) and whether the board writes. `board.py`
+only `TEAM` (six), `BANS` (five) and whether the board writes, and the
+record panel's frame: the result buttons `record_match` takes, disabled
+with a note on how to turn recording on while the board writes nothing. `board.py`
 serves it and the JSON endpoints behind the host guard `db/web.py` puts on
 all three servers, and a call it relays answers by that module's status
 map ([security.md](security.md)).
 
 | route | serves |
 | --- | --- |
-| `/` | the board: the map selector, the attack/defense switch (Escort and Hybrid maps), the bans bar, the red and blue rosters grouped by role, and three panels - **comps**, **facts**, **playbook** |
-| `/static/<file>` | `board.css`, `board.js`, `comps.js`, `playbook.js` and `bebas-neue.woff2`, nothing else |
+| `/` | the board: the map selector, the attack/defense switch (Escort and Hybrid maps), the bans bar, the red and blue rosters grouped by role, and four panels - **comps**, **facts**, **playbook**, **record** |
+| `/static/<file>` | `board.css`, `board.js`, `comps.js`, `playbook.js`, `record.js` and `bebas-neue.woff2`, nothing else |
 | `/api/roster` | the roster `facts/roster.py` builds, which the door's `roster` tool lists too: every hero (role, subrole, health pool, portrait, status, release day) and every map (mode, top style, sided or not), with the role icons and the patches newer than the rates |
 | `/api/facts?map=&side=&red=&blue=&bans=` | the FactSet for the board as JSON: the facts, their count and the playbook's record |
 | `/api/board?map=&side=&red=&blue=&bans=[&weights=&client=&pool=]` | the board solved at any stage under the playbook tab's weights: the `board` tool's answer ([mcp.md](mcp.md#the-tools)) without the countered case, which the page never reads. `serve.handle_board` in-process, or the service's `/board` when `COUNTRIX_INFERENCE_URL` is set, the query forwarded as received before any connection opens |
 | `/api/strategies` | the catalog: every constraint, heuristic and assumption with its kind, form, frontmatter and body - `serve.handle_strategies` in-process, or the service's `/strategies` |
 | `/math` | `static/math.html` in the page shell, the constants it quotes (`SYNERGY_PULL`, `REFERENCE_SIZE`, `NEED_BUDGET` and the search's four) filled in by `pages.py`: the equation, the scoring function, the board and how the layers fit |
 | `/tests` | `static/tests.html` in the page shell: the designed proof, the adversarial hunt, the random sample, the regression gate, the suite, and what none of it proves |
-| `POST /api/weight` `{id, weight}` | the board's one write, a `tune` call through the door: over HTTP to `COUNTRIX_MCP_URL` with the bearer token when that is set (the compose stack), in-process otherwise. Off by default; `COUNTRIX_READ_ONLY=0` turns it and the *store* button on |
+| `POST /api/weight` `{id, weight}` | the board's first write, a `tune` call through the door: over HTTP to `COUNTRIX_MCP_URL` with the bearer token when that is set (the compose stack), in-process otherwise. Off by default; `COUNTRIX_READ_ONLY=0` turns it and the *store* button on |
+| `POST /api/match` `{map, side, result, blue, red, bans, played_on, note}` | the board's second write, a `record_match` call by the same path as the weight's: the board as a played map, blue's result from the record panel ([mcp.md](mcp.md#the-recorded-matches)). Any other key is dropped. Off with the weight; `COUNTRIX_READ_ONLY=0` turns it and the result buttons on |
 
-`POST /api/weight` answers in the order `board.py` checks: 415 for a body
-that does not claim `application/json`, with writes off too; 403 while the
-board is read-only, where a weight applies to the session only; 400 for a
-body past 4 KB or not JSON, for an id that is not one or a weight that is
-not a number, and for tune's refusal - a weight outside 0..10, no such
-strategy; the door's 429 as it came; 502 for a door that fails or does not
-answer, and 500 for a crash in-process.
+Both POSTs answer in the order `board.py` checks: 415 for a body that does
+not claim `application/json`, with writes off too; 403 while the board is
+read-only - a weight applies to the session only, and a match is recorded
+once the board runs with `COUNTRIX_READ_ONLY=0` or through `/record`; 400
+for a body past 4 KB (a weight) or 16 KB (a match) or not JSON, for an id
+that is not one or a weight that is not a number, and for the tool's
+refusal - a weight outside 0..10, no such strategy, a team short of six,
+three tanks, a banned hero picked, a side missing on a sided map; the
+door's 429 as it came; 502 for a door that fails or does not answer, and
+500 for a crash in-process.
 
 `/api/roster`, `/api/facts` and an in-process `/api/board` each open their
 own connection and load a fresh World, so a `pull_rates` or a tune shows
@@ -59,11 +66,12 @@ static/
   board.js       state, the rosters, the picks, the bans, the fetches, boot
   comps.js       the comps tab: a seat's result and the two seats
   playbook.js    the playbook tab: the groups, the cards, the weight sliders
+  record.js      the record tab: the board as a played map, and its POST
   math.html      the math page's article
   tests.html     the tests page's article
 ```
 
-`board.js` loads last, since it calls the other two. It keeps the map, the
+`board.js` loads last, since it calls the other three. It keeps the map, the
 side, the bans, both teams' picks and the slider weights in
 `localStorage`, so a reload mid-game keeps the board. A click on a
 portrait toggles that hero on that team: a banned hero cannot be picked,
@@ -147,6 +155,21 @@ setting whose heuristic the catalog no longer holds is dropped when the
 playbook loads. With writes on, *store* sends the weight to
 `POST /api/weight`; the file's weight becomes the default, and the
 browser's setting is dropped.
+
+**The record panel** is the board as a played map: the map and blue's
+side, blue's six, red's six and the bans, as the rosters and the bans bar
+hold them, over the day it was played (the browser's today unless
+changed), a note and three buttons - win, loss, draw, blue's result, blue
+always the owner's team. A six is the six on the field longest, so the
+rosters are set to what was played before a result is pressed. The panel
+names what the board still lacks - the map, a side on a sided map, a team
+short of six - and holds the buttons until it has them; every other rule
+is `record_match`'s, whose refusal comes back as a flash. A result sends
+`POST /api/match`, and the panel says what the door recorded; the buttons
+stay off for that board until it changes, so one map is recorded once. A
+board that writes nothing renders the buttons disabled and says how to
+turn recording on - `COUNTRIX_READ_ONLY=0`, or the `/record` skill in a
+Claude Code session.
 
 **The header** pins three pills top-right: *the math*, *the tests* and the
 repository on GitHub (`COUNTRIX_REPO_URL` overrides the address). Its

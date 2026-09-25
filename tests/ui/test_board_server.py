@@ -45,7 +45,7 @@ def get(url, headers=None):
         return error.code, error.headers.get("Content-Type", ""), error.read()
 
 
-def test_a_read_only_board_refuses_the_one_post(served, monkeypatch):
+def test_a_read_only_board_refuses_to_store_a_weight(served, monkeypatch):
     # the default: a weight set on the page is the session's own and reaches no file.
     # the sentinel records rather than raising: pytest.fail raises BaseException,
     # which do_POST's `except Exception` misses, killing the handler thread instead
@@ -81,7 +81,31 @@ def test_the_board_listens_where_the_environment_says(monkeypatch):
     assert board.command_line(["--allow-host", "x", "--allow-host", "y"]).allow_host == ["x", "y"]
 
 
-def test_the_weight_store_is_the_only_post_and_reads_a_small_json_body(served, monkeypatch):
+def test_a_read_only_board_refuses_a_match_and_says_how_to_record_one(served, monkeypatch):
+    wrote = []
+    monkeypatch.setenv("COUNTRIX_READ_ONLY", "1")
+    monkeypatch.setattr(board, "api_match", lambda payload: (wrote.append(payload), ({}, 200))[1])
+    code, data = post(served + "/api/match", {"map": "Ilios", "result": "win"})
+    assert code == 403 and "COUNTRIX_READ_ONLY=0" in data["error"] and "/record" in data["error"]
+    assert wrote == [], wrote
+
+
+def test_the_board_posts_two_writes_each_checked_alike(served, monkeypatch):
+    """A weight and a match: the same guards before either runs, each its own
+    body limit, and any other POST path 404."""
+    monkeypatch.setenv("COUNTRIX_READ_ONLY", "0")
+    monkeypatch.setattr(board, "api_match",
+                        lambda payload: ({"line": "recorded match 1: %s" % payload["result"]}, 200))
+    match = {"map": "Ilios", "result": "win", "blue": ["Ana"] * 6, "note": "x" * 5000}
+    assert post(served + "/api/match", match) == (200, {"line": "recorded match 1: win"})
+    assert post(served + "/api/match", b"x" * (board.MAX_MATCH_BODY + 1))[0] == 400
+    assert post(served + "/api/match", b"{not json")[0] == 400
+    assert post(served + "/api/match", match, {"Origin": "http://evil.example"})[0] == 403
+    assert post(served + "/api/match", b"{}", {"Content-Type": "text/plain"})[0] == 415
+    assert post(served + "/api/matches", match)[0] == 404
+
+
+def test_the_weight_store_reads_a_small_json_body(served, monkeypatch):
     monkeypatch.setenv("COUNTRIX_READ_ONLY", "0")
     monkeypatch.setattr(board, "api_weight",
                         lambda payload: ({"line": "tuned %s" % payload["id"]}, 200))
@@ -91,7 +115,7 @@ def test_the_weight_store_is_the_only_post_and_reads_a_small_json_body(served, m
     assert post(served + "/api/weight", b"")[0] == 400
     assert post(served + "/api/weight", b"x" * 5000)[0] == 400
     assert post(served + "/api/facts", {"id": "coverage"})[0] == 404
-    # the door's guards, on the board's one write too: a browser sends Origin, and
+    # the door's guards, on the board's writes too: a browser sends Origin, and
     # only a local one passes; a body that does not claim JSON is refused unread
     body = {"id": "coverage", "weight": 3}
     assert post(served + "/api/weight", body, {"Origin": "http://evil.example"})[0] == 403
@@ -110,7 +134,7 @@ def test_a_foreign_host_or_origin_is_refused_on_every_route(served, monkeypatch)
         assert get(served + path, {"Host": "localhost:8017"})[0] == 200, path
 
 
-def test_the_one_post_says_what_went_wrong_and_bad_json_means_only_that(served, monkeypatch):
+def test_a_post_says_what_went_wrong_and_bad_json_means_only_that(served, monkeypatch):
     """The header, the body and the store fail apart: a Content-Length that is
     not a number is named, and what the store raises is its own answer - a
     refusal 400 with its reason, anything else 500 - never "bad JSON"."""

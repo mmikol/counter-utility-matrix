@@ -1,4 +1,5 @@
-/* the board: TEAM and BANS are set by the page before this loads */
+/* the board: TEAM and BANS are set by the page before this loads, and
+   comps.js, playbook.js and record.js before it */
 var el = function (id) { return document.getElementById(id); };
 /* an empty board, and every field's default: a board saved before a field
    existed takes it from here. It is a function because Object.assign copies
@@ -9,7 +10,7 @@ var SHAPES = null;   /* the (tank, damage, support) triples the queue and the pl
 var ROLES = ['tank', 'damage', 'support'];
 try { var saved = JSON.parse(localStorage.getItem('owdb-board2'));
       if (saved && saved.red && saved.blue) st = Object.assign(blank(), saved); } catch (e) {}
-var TABS = ['comps', 'facts', 'playbook'];   /* the panels; the first is the default */
+var TABS = ['comps', 'facts', 'playbook', 'record'];   /* the panels; the first is the default */
 var bansOpen = false;                        /* the ban picker starts collapsed */
 
 function currentMap() { return ROSTER ? ROSTER.maps.filter(function (x) { return x.name === st.map; })[0] : null; }
@@ -166,6 +167,7 @@ function paint() {
   el('sideseg').className = 'sideseg' + (sided ? ' show' : '');
   var sb = el('sideseg').querySelectorAll('button');
   for (var s = 0; s < sb.length; s++) sb[s].className = sb[s].getAttribute('data-side') === st.side ? 'on' : '';
+  renderRecord();                       /* the record tab shows this board as a played map */
 }
 
 document.addEventListener('click', function (e) {
@@ -183,6 +185,8 @@ document.addEventListener('click', function (e) {
     if (team === 'ban') toggleBan(name); else toggle(team, name);
     return;
   }
+  var result = near('[data-result]');                /* the record tab: blue won, lost or drew */
+  if (result) { recordMatch(result.getAttribute('data-result')); return; }
   var tab = near('nav.tabs button');
   if (tab) showTab(tab.getAttribute('data-tab'));
 });

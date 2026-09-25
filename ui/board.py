@@ -11,8 +11,13 @@ the database: the facts panel is the FactSet for (map, side, red, blue, bans);
 the comps panel is the inference layer's board - red's most likely starting
 comp, blue's picks filled and its optimal counter to red's, each seat's
 picks scored as a share of its own optimal, the fight odds and the game
-plan; the playbook panel is the strategies catalog as it sits on disk.
-JSON endpoints under /api/ serve the same three things.
+plan; the playbook panel is the strategies catalog as it sits on disk; the
+record panel is the board as a played map, ready to record. JSON endpoints
+under /api/ serve the first three.
+
+The board writes twice, each a door tool call, and only when
+COUNTRIX_READ_ONLY=0: a weight stored from the playbook panel is a `tune`,
+a map recorded from the record panel a `record_match`.
 
 A request whose Host or Origin names another server is refused with 403
 before it is routed (db.web's guard; --allow-host adds a name the board is
@@ -29,7 +34,8 @@ import json
 import os
 import sys
 import urllib.request
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from typing import NamedTuple
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import psycopg
@@ -47,7 +53,10 @@ from ui import pages
 
 STORE_REASON = "stored from the board's slider"
 MAX_WEIGHT_BODY = 4096        # bytes: a weight is a two-field JSON object
+MAX_MATCH_BODY = 16384        # bytes: a match is two sixes, five bans, a day and a note
 REMOTE_TIMEOUT = 180          # seconds a board may take on the inference service
+# what record_match takes from the record panel's POST; any other key is dropped
+MATCH_KEYS = ("map", "side", "result", "blue", "red", "bans", "played_on", "note")
 
 
 # --- the settings -------------------------------------------------------------
@@ -71,10 +80,10 @@ def inference_url() -> str:
     return _http_url("COUNTRIX_INFERENCE_URL")
 
 
-# the board's one write - storing a heuristic's weight - goes to the door's
-# `tune` tool: over HTTP to the MCP server when a URL is set (the
-# compose stack), in-process through the same registry otherwise. read_only()
-# below is what decides whether that write is offered at all.
+# the board's writes - a heuristic's weight stored, a match recorded - go to
+# the door's `tune` and `record_match` tools: over HTTP to the MCP server when
+# a URL is set (the compose stack), in-process through the same registry
+# otherwise. read_only() below is what decides whether they are offered.
 def mcp_url() -> str:
     return _http_url("COUNTRIX_MCP_URL")
 
@@ -84,8 +93,9 @@ def mcp_token() -> str:
 
 
 # The board writes nothing unless told it may: a weight set on the playbook tab
-# rides with the session's own requests and never reaches a strategy file.
-# COUNTRIX_READ_ONLY=0 brings back the store button and its one POST.
+# rides with the session's own requests and never reaches a strategy file,
+# and the record tab says how to turn recording on. COUNTRIX_READ_ONLY=0
+# brings back the store button and the result buttons, and their POSTs.
 def read_only() -> bool:
     return os.environ.get("COUNTRIX_READ_ONLY", "1").lower() not in ("0", "no", "false")
 
@@ -153,16 +163,29 @@ def tool_context() -> tools.Context:
     return tools.Context(client="board")
 
 
+def door_call(name: str, arguments: Mapping[str, object], key: str) -> web.Reply:
+    """One of the board's writes, a door tool call -> {"line": the reply's
+    first line, key: its payload}. Over HTTP to COUNTRIX_MCP_URL when that
+    is set, the call's status relayed by db.web's map - the tool's refusal
+    400, the door's 429 as it came, any other failure 502; in-process
+    otherwise, where a refusal is raised and the POST's boundary answers it
+    400, so it reads the same on both paths. A crash inside the tool reads
+    500 in-process and 502 remote."""
+    if mcp_url():
+        reply = web.call_tool(mcp_url(), name, dict(arguments), token=mcp_token())
+        if reply.is_error:
+            return web.Reply({"error": reply.text}, reply.status)
+        return web.Reply({"line": reply.text.split("\n")[0], key: reply.structured}, 200)
+    text, data = tool_context().call(name, **arguments)
+    return web.Reply({"line": text.split("\n")[0], key: data}, 200)
+
+
 def api_weight(payload: Mapping[str, object] | None) -> web.Reply:
     """Store a heuristic's weight in its file - the slider's "store". The
     change goes through the `tune` tool (validated, logged in the tuning
     log with its reason, mirrored into the database), never around it, and
     tune holds the range; a malformed id or a weight that is not a number
-    never reaches it. Over HTTP the call's status is relayed by
-    db.web's map - the tool's refusal 400, the door's 429 as it came, any
-    other failure 502; in-process a refusal is raised and the POST's
-    boundary answers it 400, so it reads the same on both paths. A crash
-    inside tune reads 500 in-process and 502 remote."""
+    never reaches it."""
     payload = payload or {}
     strategy_id = str(payload.get("id") or "")
     if not catalog_module.ID_RE.fullmatch(strategy_id):
@@ -170,17 +193,20 @@ def api_weight(payload: Mapping[str, object] | None) -> web.Reply:
     number = finite_number(payload.get("weight"))
     if number is None:
         return web.Reply({"error": "the weight must be a number"}, 400)
-    weight = round(number, 2)
-    arguments = {
-        "id": strategy_id, "field": "weight", "value": weight, "reason": STORE_REASON,
-        "by": "the board"}
-    if mcp_url():
-        reply = web.call_tool(mcp_url(), "tune", arguments, token=mcp_token())
-        if reply.is_error:
-            return web.Reply({"error": reply.text}, reply.status)
-        return web.Reply({"line": reply.text.split("\n")[0], "change": reply.structured}, 200)
-    text, stored = tool_context().call("tune", **arguments)
-    return web.Reply({"line": text.split("\n")[0], "change": stored}, 200)
+    return door_call("tune", {
+        "id": strategy_id, "field": "weight", "value": round(number, 2),
+        "reason": STORE_REASON, "by": "the board"}, "change")
+
+
+def api_match(payload: Mapping[str, object] | None) -> web.Reply:
+    """Record the board as a played map - the record panel's win, loss or
+    draw. The match goes through the `record_match` tool, which checks it
+    against the queue and the roster, stamps the playbook in force and
+    stores it. A key outside MATCH_KEYS is dropped; a value the tool's
+    schema refuses is a refusal like any other."""
+    payload = payload or {}
+    arguments = {key: payload[key] for key in MATCH_KEYS if payload.get(key) is not None}
+    return door_call("record_match", arguments, "match")
 
 
 def api_strategies() -> web.Reply:
@@ -190,6 +216,27 @@ def api_strategies() -> web.Reply:
 
 
 # --- server -----------------------------------------------------------------
+
+class Write(NamedTuple):
+    """One of the board's POST routes: the function that answers it, the
+    largest body it reads, and what a read-only board answers instead."""
+    handler: Callable[[Mapping[str, object] | None], web.Reply]
+    max_body: int
+    read_only: str
+
+
+def post_route(path: str) -> Write | None:
+    """The write a POST path names, or None. Built on each request, so the
+    handler is the one the module holds now."""
+    if path == "/api/weight":
+        return Write(api_weight, MAX_WEIGHT_BODY,
+                     "this board does not write: a weight applies to your session only")
+    if path == "/api/match":
+        return Write(api_match, MAX_MATCH_BODY,
+                     "this board does not write: start it with COUNTRIX_READ_ONLY=0 to record"
+                     " a match, or record it with /record in a Claude Code session")
+    return None
+
 
 class Handler(web.Handler):
     timed = frozenset({"/api/board"})
@@ -213,27 +260,30 @@ class Handler(web.Handler):
         return self._html(pages.page("not found", "<p>Nothing here.</p>"), 404)
 
     def do_POST(self) -> None:
+        """The board's two writes, checked alike before either runs: the
+        route, a body that claims JSON, a board that writes, a small body,
+        JSON."""
         path = urlsplit(self.path).path
-        if path != "/api/weight":
+        write = post_route(path)
+        if write is None:
             return self._json({"error": "nothing here"}, 404)
         if not (self.headers.get("Content-Type") or "").startswith("application/json"):
             return self._json({"error": "a JSON body is required"}, 415)
         if read_only():
-            return self._json({"error": "this board does not write: a weight applies to your"
-                                        " session only"}, 403)
+            return self._json({"error": write.read_only}, 403)
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             return self._json({"error": "a numeric Content-Length is required"}, 400)
-        if not 0 < length <= MAX_WEIGHT_BODY:
+        if not 0 < length <= write.max_body:
             return self._json({"error": "a small JSON body is required"}, 400)
         try:
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
             return self._json({"error": "bad JSON"}, 400)
-        # "bad JSON" means only that: what the store raises is its own answer
+        # "bad JSON" means only that: what the write raises is its own answer
         try:
-            return self._json(*api_weight(payload if isinstance(payload, dict) else {}))
+            return self._json(*write.handler(payload if isinstance(payload, dict) else {}))
         except Exception as error:  # noqa: BLE001  # the request boundary
             return self._failed(path, error)
 

@@ -2,17 +2,20 @@
 files they load - the stylesheet, the scripts and the display font.
 
 The page is a shell over the static files: board.js loads last because it
-calls into comps.js and playbook.js, and TEAM and BANS come from the page so
-the scripts keep no constant in step with the Python. The math page's code
-numbers are filled in here too, from the modules that hold them, so
-math.html quotes no constant of its own. ui/board.py serves these; nothing
-here reads the database or knows a route's handler.
+calls into comps.js, playbook.js and record.js, and TEAM and BANS come from
+the page so the scripts keep no constant in step with the Python; so do the
+record panel's result buttons and its note's limit, from the door's
+record_match. The math page's code numbers are filled in here too, from
+the modules that hold them, so math.html quotes no constant of its own.
+ui/board.py serves these; nothing here reads the database or knows a
+route's handler.
 """
 
 import html
 import os
 from typing import NamedTuple
 
+from door.mcp.matches import NOTE_LIMIT, RESULTS
 from facts import compute
 from facts.draft import MAX_BANS, TEAM_SIZE
 from inference import scale, scoring, solver
@@ -77,10 +80,10 @@ HEAD = ("<!doctype html><meta charset='utf-8'>"
 
 
 def view_board(read_only: bool) -> str:
-    """The board: the header, the bans bar, the two rosters and the three
-    panels, empty until board.js fills them. `read_only` tells the scripts
-    whether to offer the one write."""
-    return (HEAD + "<title>Countrix</title><main>"
+    """The board: the header, the bans bar, the two rosters and the four
+    panels, empty until the scripts fill them. `read_only` tells the scripts
+    whether to offer the writes, and the record panel says it."""
+    shell = (HEAD + "<title>Countrix</title><main>"
             "<header class='top'><h1>Countrix"
             "<span class='expand'> the counter utility matrix</span></h1>"
             "<div class='mapsel'><select id='mapsel'></select><span class='mode' id='mode'></span>"
@@ -123,7 +126,8 @@ def view_board(read_only: bool) -> str:
             "</div>"
             "<nav class='tabs'><button data-tab='comps'>comps</button>"
             "<button data-tab='facts'>facts</button>"
-            "<button data-tab='playbook'>playbook</button></nav>"
+            "<button data-tab='playbook'>playbook</button>"
+            "<button data-tab='record'>record</button></nav>"
             "<section class='panel' id='tab-comps'><div class='plan' id='plan'>"
             "</div><div class='seats'>"
             "<div class='seat blue' id='inf-blue'></div><div class='seat red' id='inf-red'>"
@@ -133,11 +137,39 @@ def view_board(read_only: bool) -> str:
             "<span id='chips'></span><span id='factsn' class='count'></span></div>"
             "<table class='facts'><tbody id='factbody'></tbody></table></section>"
             "<section class='panel' id='tab-playbook'><div id='playbook'></div></section>"
+            "%s"
             "</main><script>var TEAM = %d, BANS = %d, READ_ONLY = %s;</script>"
             "<script src='/static/comps.js'></script>"
             "<script src='/static/playbook.js'></script>"
-            "<script src='/static/board.js'></script>"
-            % (repo_url(), GITHUB_MARK, TEAM_SIZE, MAX_BANS, "true" if read_only else "false"))
+            "<script src='/static/record.js'></script>"
+            "<script src='/static/board.js'></script>")
+    return shell % (
+        repo_url(), GITHUB_MARK, record_panel(read_only), TEAM_SIZE, MAX_BANS,
+        "true" if read_only else "false")
+
+
+# What the record panel says on a board that writes nothing, in place of the
+# POST its result buttons would send.
+RECORD_OFF = (
+    "This board does not write. Start it with <code>COUNTRIX_READ_ONLY=0</code> to record"
+    " a match here, or tell <code>/record</code> in a Claude Code session what was played.")
+
+
+def record_panel(read_only: bool) -> str:
+    """The record panel: the board as a played map, which record.js draws,
+    over the day, a note and a button per result, blue's. On a read-only
+    board the buttons are disabled and the panel says how to turn recording
+    on."""
+    disabled = " disabled" if read_only else ""
+    buttons = "".join("<button data-result='%s'%s>%s</button>" % (result, disabled, result)
+                      for result in RESULTS)
+    off = "<div class='warnbox' id='recoff'>%s</div>" % RECORD_OFF if read_only else ""
+    return (
+        "<section class='panel' id='tab-record'><div class='recsum' id='recsum'></div>"
+        "<div class='recform'><label>played on <input type='date' id='recday'></label>"
+        "<input type='text' id='recnote' maxlength='%d' placeholder='a note (optional)'>"
+        "<span class='results' id='results'>%s</span></div>%s"
+        "<p class='legend' id='recstatus'></p></section>" % (NOTE_LIMIT, buttons, off))
 
 
 def page(title: str, body: str) -> str:

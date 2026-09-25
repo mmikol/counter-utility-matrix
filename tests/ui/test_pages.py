@@ -23,9 +23,9 @@ from ui import board, pages
 
 
 def scripts():
-    """The page's three scripts as one text, in the order the page loads them."""
+    """The page's four scripts as one text, in the order the page loads them."""
     return "".join(pages.static_file(name)[0].decode()
-                   for name in ("comps.js", "playbook.js", "board.js"))
+                   for name in ("comps.js", "playbook.js", "record.js", "board.js"))
 
 
 def function(script, name):
@@ -36,12 +36,12 @@ def function(script, name):
     return script[start:] if end < 0 else script[start:end]
 
 
-def test_board_page_has_two_rosters_and_the_three_panels():
+def test_board_page_has_two_rosters_and_the_four_panels():
     body = pages.view_board(True)
     assert "class='team red'" in body and "class='team blue'" in body
     nav = body[body.index("<nav class='tabs'>"):body.index("</nav>")]
-    assert nav.count("<button") == 3
-    for name in ("comps", "facts", "playbook"):
+    assert nav.count("<button") == 4
+    for name in ("comps", "facts", "playbook", "record"):
         assert "<button data-tab='%s'>%s</button>" % (name, name) in nav
         assert "id='tab-%s'" % name in body
     # the facts total sits inside the facts panel, beside the filter - not on the tab
@@ -98,7 +98,7 @@ def test_every_stylesheet_class_is_used_by_the_page():
 def test_the_page_is_a_shell_over_static_files():
     body = pages.view_board(True)
     assert "/static/board.css" in body and "/static/board.js" in body
-    order = [body.index("/static/%s.js" % n) for n in ("comps", "playbook", "board")]
+    order = [body.index("/static/%s.js" % n) for n in ("comps", "playbook", "record", "board")]
     assert order == sorted(order)      # board.js loads last: it calls the others
     assert "id='momentum'" in body and "id='plan'" in body
     # scores live in the boxes
@@ -141,6 +141,8 @@ def test_the_page_is_a_shell_over_static_files():
     assert ctype.startswith("application/javascript") and b"function renderResult" in data
     data, ctype = pages.static_file("playbook.js")
     assert ctype.startswith("application/javascript") and b"function renderPlaybook" in data
+    data, ctype = pages.static_file("record.js")
+    assert ctype.startswith("application/javascript") and b"function renderRecord" in data
     assert pages.static_file("math.html") is None          # the article is not served on its own
     data, ctype = pages.static_file("board.css")
     assert ctype.startswith("text/css") and b".tile.banned" in data
@@ -167,7 +169,8 @@ def test_the_scripts_send_the_routes_and_query_keys_the_board_reads():
     is sent in the spelling parse_board reads, with the sliders' weights and
     the page's client, which serve.handle_board reads beside them."""
     script = scripts()
-    for route in ("/api/roster", "/api/facts?", "/api/board?", "/api/strategies", "/api/weight"):
+    for route in ("/api/roster", "/api/facts?", "/api/board?", "/api/strategies", "/api/weight",
+                  "/api/match"):
         assert route in script, route
     assert "/api/infer" not in script
     for key in ("map", "side", "red", "blue", "bans", "weights", "client"):
@@ -183,7 +186,7 @@ def test_the_scripts_write_the_ids_and_read_the_globals_the_shell_holds():
     ids = set(re.findall(r"\bel\('([^']+)'\)", script))
     assert len(ids) >= 20
     assert [i for i in sorted(ids) if "id='%s'" % i not in body] == []
-    for attribute in ("data-tab", "data-clear", "data-side"):
+    for attribute in ("data-tab", "data-clear", "data-side", "data-result"):
         assert attribute in script and attribute in body, attribute
     shell = re.search(r"<script>var (.*?);</script>", body).group(1)
     names = [part.split(" = ")[0] for part in shell.split(", ")]
@@ -227,6 +230,45 @@ def test_the_scripts_read_payload_keys_the_server_writes(synthetic_world, monkey
     read("name role subrole portrait status release_date", roster["heroes"][0])
     read("name mode style sided", roster["maps"][0])
     assert not re.search(r"\.score\b", script)
+
+
+def _record_panel(body):
+    start = body.index("id='tab-record'")
+    return body[start:body.index("</section>", start)]
+
+
+def test_the_record_panel_is_the_board_as_a_played_map_with_blues_result():
+    """The panel's frame is the shell's: the summary record.js draws, the
+    day, the note at the door's limit, and one button per result
+    record_match takes, in its order."""
+    from door.mcp.matches import NOTE_LIMIT, RESULTS
+    panel = _record_panel(pages.view_board(False))
+    for element in ("id='recsum'", "type='date' id='recday'", "id='recnote'", "id='recstatus'"):
+        assert element in panel, element
+    assert "maxlength='%d'" % NOTE_LIMIT in panel
+    assert re.findall(r"data-result='(\w+)'>", panel) == list(RESULTS)
+    assert "disabled" not in panel and "COUNTRIX_READ_ONLY" not in panel
+
+
+def test_a_read_only_board_says_how_to_record_and_offers_no_result():
+    """Whether the board writes is decided on the server: the shell disables
+    every result button and says how to turn recording on, or where else to
+    record the match."""
+    panel = _record_panel(pages.view_board(True))
+    assert panel.count(" disabled>") == 3
+    assert "COUNTRIX_READ_ONLY=0" in panel and "/record" in panel
+    assert pages.RECORD_OFF in panel
+
+
+def test_the_record_script_posts_what_record_match_takes():
+    """The body the record panel posts holds the keys the board forwards
+    (board.MATCH_KEYS), and each is an argument record_match declares."""
+    from door.mcp import tools
+    post = function(scripts(), "recordMatch")
+    sent = re.findall(r"\b(\w+): ", post[post.index("var body = {"):post.index("};")])
+    assert set(sent) == set(board.MATCH_KEYS)
+    assert set(board.MATCH_KEYS) == set(tools.REGISTRY.get("record_match").schema["properties"])
+    assert "READ_ONLY" in post and "'/api/match'" in post
 
 
 def test_a_reply_to_an_older_request_is_dropped_and_its_board_cancelled():
