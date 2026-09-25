@@ -186,6 +186,27 @@ assumptions. The core palette is tokens in `:root`; the rest, the sand
 served from `static/`, Impact standing in until the font arrives; the
 portraits and role icons load as `<img>` from Blizzard's CDNs.
 
+## `validation.py` - the validation report
+
+```bash
+.venv/bin/python -m ui.validation                                  # the playbook in force
+.venv/bin/python -m ui.validation --playbook tests/fixtures/playbook --all --effect 0.55
+```
+
+The playbook judged against the recorded matches
+([inference.md](inference.md#how-the-playbook-is-judged)): the text the
+`validate_playbook` tool answers goes to stdout, and a page of charts and
+its JSON to `db/raw/validation.html` (`--out` moves them). The page loads
+nothing: its styles, its tooltip script and every chart, inline SVG, are
+in the file. It draws the decided maps against the maps an effect needs,
+each model's log loss against the coin flip's with its interval, each
+family's ablation, M4's calibration, the playbook score difference by
+result and the hero effects, each with a table of the same numbers, then
+the digests and every judged map. Light and dark follow the system. The
+page carries rate-derived figures and is never published; `db/raw` is
+gitignored. A refusal - a folder outside the repo, an effect that is not
+a win chance - exits with status 2.
+
 ## One click on the board
 
 ```mermaid

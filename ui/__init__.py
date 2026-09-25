@@ -1,5 +1,6 @@
 """The board: the page over the facts layer's facts and the inference
-layer's answer. It is the only presentation code, and no layer imports it.
+layer's answer, and the validation report. It is the only presentation
+code, and no layer imports it.
 
     board.py    the board's server: its settings, its JSON endpoints over
                 the facts and the inference layer, and the handler that
@@ -9,4 +10,7 @@ layer's answer. It is the only presentation code, and no layer imports it.
                 they load
     static/     what the browser loads: the stylesheet, the scripts, the
                 display font and its licence, math.html and tests.html
+    validation  the validation report: `python -m ui.validation` judges a
+                playbook against the recorded matches, prints the text and
+                writes a page of charts to db/raw, for the owner's own use
 """
