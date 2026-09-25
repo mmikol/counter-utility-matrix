@@ -82,13 +82,11 @@ class _StorePass:
 def _insert_modifiers(store_pass: _StorePass, ability_id: int, entry: AbilityEntry) -> None:
     """Store the buffs and debuffs an ability applies to someone's numbers."""
     cursor = store_pass.cursor
+    keywords = entry["keywords"]
     for code, (value_text, _) in entry["stats"].items():
-        if code not in modifiers.MODIFIER_STATS:
-            continue
-        keywords = entry["keywords"]
         affects = modifiers.affected_quantity(code, value_text, keywords)
         if affects is None:
-            continue
+            continue                # not a modifier stat, or the wording settles nothing
         for measured in parse_measurements(value_text, "percent"):
             if measured.value is None or measured.numerator is None:
                 continue
