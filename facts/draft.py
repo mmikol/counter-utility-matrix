@@ -60,10 +60,10 @@ class Draft:
 # --- the board off the wire -----------------------------------------------------
 #
 # Both HTTP doors - ui/board.py and inference/serve.py - read a board off a
-# query string with parse_board alone; the page's board runs through
-# serve.handle_board. The limits belong to Draft, so these doors and the MCP
-# board tools (door/mcp/boards.py) refuse the same boards. A Draft holds
-# tuples: a list in a field makes an equal-looking Draft compare unequal.
+# query string with parse_board. The limits belong to Draft, so these doors
+# and the MCP board tools (door/mcp/boards.py) refuse the same boards. A
+# Draft holds tuples: a list in a field makes an equal-looking Draft compare
+# unequal.
 
 # A parsed query string, as both doors hand it to parse_board
 type Query = Mapping[str, Sequence[str]]
