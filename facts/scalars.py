@@ -182,9 +182,10 @@ def _weapon_kinds(hero: Hero, base: list[KitPiece], guns: list[KitPiece]) -> Non
 
 
 def _area(hero: Hero, fights: list[KitPiece]) -> None:
-    """aoe_count and aoe_damage: the pieces that hit an area, and those of them
-    that deal damage. A weapon is in the abilities table too (kind 'weapon',
-    no config extra): each weapon counts once, whatever its configs."""
+    """aoe_count and aoe_damage_count: the pieces that hit an area, and those
+    of them that deal damage. A weapon is in the abilities table too (kind
+    'weapon', no config extra): each weapon counts once, whatever its
+    configs."""
     area: dict[str, bool] = {}                  # piece -> does it damage
     for k in fights:
         # tagged, or a damaging piece typed Area of effect with no tag (Trailblazer)
@@ -193,7 +194,7 @@ def _area(hero: Hero, fights: list[KitPiece]) -> None:
             piece = k.extra.get("weapon", k.name)
             area[piece] = area.get(piece, False) or k.damages
     hero.aoe_count = len(area)
-    hero.aoe_damage = sum(area.values())
+    hero.aoe_damage_count = sum(area.values())
 
 
 def _barriers(hero: Hero, base: list[KitPiece], fought: list[KitPiece]) -> None:
@@ -278,8 +279,9 @@ def _saves(hero: Hero, base: list[KitPiece], ults: list[KitPiece]) -> None:
 
 
 def _ult(hero: Hero, ults: list[KitPiece]) -> None:
-    """ult, ult_damage_raw, ult_cost and dmg_ult. The load caps ult_damage_raw
-    into ult_damage once the roster's cap is known: Hero.cap_ult."""
+    """ult, ult_damage_raw, ult_cost and ult_deals_damage. The load caps
+    ult_damage_raw into ult_damage once the roster's cap is known:
+    Hero.cap_ult."""
     hero.ult = ults[0] if ults else None
     hero.ult_damage_raw = max((u.ult_hit() for u in ults), default=0.0)
     strongest = max(ults, key=KitPiece.ult_hit) if ults else None
@@ -288,5 +290,5 @@ def _ult(hero: Hero, ults: list[KitPiece]) -> None:
     hero.ult_cost = strongest_cost or max(costs, default=None)
     # a damage ultimate by its rows: EMP's percent of current health counts,
     # and adds no hit points to ult_damage
-    hero.dmg_ult = any(
+    hero.ult_deals_damage = any(
         s.value for u in ults for c in ("damage", "dps") for s in u.stats.get(c, ()))

@@ -180,8 +180,9 @@ def _damage_facts(w: _TeamWriter, figures: dict[str, float], heroes: Sequence[He
         also=("team.melee", "team.projectile", "team.beam"))
     w.listed("hitscan_reach")
     if metrics["aoe_count"]:
-        w.fact("aoe_count", "%s area-damage volume: %d kit pieces tagged area of effect"
-            % (label, figures["aoe_count"]))
+        w.fact("aoe_count", "%s area volume: %d kit pieces tagged area of effect, %d of them"
+            " damaging" % (label, figures["aoe_count"], figures["aoe_damage_count"]),
+            also=("team.aoe_damage_count",))
     if metrics["range_median"]:
         w.fact("range_median", "%s reach: median %gm across the %d of %d picks whose weapons"
             " publish one (%gm to %gm) - reads as %s"

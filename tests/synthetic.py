@@ -88,14 +88,14 @@ def _tanks() -> list[Hero]:
             pool=700, styles={"brawl"}, dps=85.0, burst=300.0, melee=True, melee_only=True,
             weapon_kinds={"melee"}, max_range=5.0, barrier_hp=1200.0,
             cc_tools=["Quake Slam"], mobility_tools=["Bull Rush"], cooldowns=[7.0, 10.0],
-            median_cooldown=8.5, ult_damage_raw=250.0, dmg_ult=True,
+            median_cooldown=8.5, ult_damage_raw=250.0, ult_deals_damage=True,
             **_rates(50.0, 11.0, 4.0, (2.5, 0.0, -3.0), (12.0, 9.0, 8.0))),
         # a flying tank, and an ultimate over the roster's cap
         Hero(
             id=2, name="Kite", role="tank", subrole="Initiator", health=350, armor=300,
             pool=650, styles={"dive"}, dps=110.0, burst=30.0, weapon_kinds={"projectile"},
             max_range=15.0, flyer=True, mobility_tools=["Thrusters"], cooldowns=[4.0, 8.0],
-            median_cooldown=6.0, ult_damage_raw=900.0, dmg_ult=True,
+            median_cooldown=6.0, ult_damage_raw=900.0, ult_deals_damage=True,
             **_rates(51.0, 9.0, 10.0, (-1.0, 3.0, 1.0), (8.0, 11.0, 7.0))),
         # a form's 275 armor for half its time: 137.5 more, outside the spawn pool;
         # the form's swing is the biggest hit, though a gun is its other weapon
@@ -126,7 +126,7 @@ def _damage() -> list[Hero]:
             weapon_kinds={"hitscan"}, max_range=25.0, lifesteal=0.3,
             cleanse_tools=["Shade Step"], invuln_tools=["Shade Step"],
             mobility_tools=["Shadow Walk"], cooldowns=[6.0, 8.0], median_cooldown=7.0,
-            ult_damage_raw=500.0, dmg_ult=True,
+            ult_damage_raw=500.0, ult_deals_damage=True,
             **_rates(51.5, 8.0, 5.0, (2.0, -2.5, -2.0), (7.0, 5.0, 6.0), trend=-1.0)),
         # 250 at range, the most banned and the most rank-sensitive
         Hero(
@@ -139,8 +139,8 @@ def _damage() -> list[Hero]:
         Hero(
             id=7, name="Gale", role="damage", subrole="Specialist", health=250, pool=250,
             styles={"dive"}, dps=120.0, burst=120.0, weapon_kinds={"projectile"}, flyer=True,
-            aoe_count=2, aoe_damage=2, mobility_tools=["Jump Jet"], cooldowns=[6.0, 12.0],
-            median_cooldown=9.0, ult_damage_raw=600.0, dmg_ult=True,
+            aoe_count=2, aoe_damage_count=2, mobility_tools=["Jump Jet"], cooldowns=[6.0, 12.0],
+            median_cooldown=9.0, ult_damage_raw=600.0, ult_deals_damage=True,
             **_rates(49.5, 5.0, 12.0, (-3.0, 1.0, -1.0), (5.5, 7.0, 4.0), trend=2.0)),
         # 30 m of hitscan: enough to answer a flier
         Hero(

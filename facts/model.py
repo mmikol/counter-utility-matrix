@@ -85,7 +85,7 @@ class Hero:
     melee: bool = False
     melee_only: bool = False
     aoe_count: int = 0
-    aoe_damage: int = 0
+    aoe_damage_count: int = 0
     barrier_hp: float = 0.0
     pierces_barrier: bool = False
     overhealth: float = 0.0
@@ -104,7 +104,7 @@ class Hero:
     ult_damage_raw: float = 0.0
     ult_damage: float = 0.0
     ult_cost: float | None = None
-    dmg_ult: bool = False
+    ult_deals_damage: bool = False
     rank_spread: float = 0.0
     trend: float | None = None
 

@@ -154,7 +154,7 @@ def test_area_pieces_count_once_and_those_that_hurt_apart():
     # the same weapon as the abilities table lists it: counted once, as the weapon
     listed = _kit("Launcher", KIND_WEAPON, _stat("damage", 50, "hp"), keywords="area of effect")
     hero = _hero(weapons=[grenade], abilities=[blast, wave, suzu, listed])
-    assert (hero.aoe_count, hero.aoe_damage) == (4, 3)
+    assert (hero.aoe_count, hero.aoe_damage_count) == (4, 3)
 
 
 def test_barriers_count_their_health_and_a_passives_swing_pierces_nothing():
@@ -215,9 +215,9 @@ def test_the_ultimate_is_its_own_numbers_and_the_mech_call_is_not_one():
                   _stat("ult_req", 1500, "points"))
     hero = _hero(abilities=[barrage, remech])
     assert hero.ult is barrage and hero.ult_damage_raw == 450.0
-    assert hero.ult_cost == 2100.0 and hero.dmg_ult
+    assert hero.ult_cost == 2100.0 and hero.ult_deals_damage
     # an ultimate with no damage row is no damage ultimate
     sound = _kit("Sound Barrier", KIND_ULTIMATE, _stat("overhealth", 750, "hp"))
     quiet = _hero("support", abilities=[sound])
-    assert quiet.ult is sound and not quiet.dmg_ult and quiet.ult_damage_raw == 0.0
+    assert quiet.ult is sound and not quiet.ult_deals_damage and quiet.ult_damage_raw == 0.0
     assert _hero().ult is None and _hero().ult_cost is None

@@ -74,7 +74,7 @@ def test_hitscan_answers_a_flier_from_thirty_metres(synthetic_world):
     assert (t["range_median"], t["range_max"], t["range_min"]) == (30, 70, 25)
     assert t["dps_floor"] == 500 and t["dps_count"] == 4
     assert t["ult_damage_total"] == 1100 and t["dmg_ults"] == 2      # Rook 500, Gale 600
-    assert (t["aoe_count"], t["aoe_damage"], t["beam"], t["melee"]) == (2, 2, 0, 0)
+    assert (t["aoe_count"], t["aoe_damage_count"], t["beam"], t["melee"]) == (2, 2, 0, 0)
     # Kite's 900 counts at the roster's cap
     assert team_metrics(w, _picks(w, "Kite"))["ult_damage_total"] == 600
 

@@ -262,7 +262,7 @@ the `team.*` metrics computed for the red side.
 | `team.beam` | picks with a damaging beam |
 | `team.melee` | picks with a melee weapon |
 | `team.aoe_count` | kit pieces tagged area of effect or shockwave |
-| `team.aoe_damage` | kit pieces that damage an area |
+| `team.aoe_damage_count` | kit pieces that damage an area |
 | `team.range_median` | median of each pick's longest published range |
 | `team.range_max` | the longest range on the team |
 | `team.range_min` | the shortest longest-range |

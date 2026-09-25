@@ -45,7 +45,7 @@ def test_kit_rows_are_read_in_their_own_units(world):
     assert world.hero("Domina").self_heal == 0
     assert world.hero("Sigma").overhealth == 400 and mauga.overhealth == 150
     assert world.hero("Lifeweaver").overhealth == 100 == world.hero("Brigitte").overhealth
-    assert sombra.dmg_ult and sombra.ult_damage == 0 and sombra.dmg_amp == 0
+    assert sombra.ult_deals_damage and sombra.ult_damage == 0 and sombra.dmg_amp == 0
     # a sum, a volley and a window's total are not one hit or a rate
     hazard = world.hero("Hazard")
     assert hazard.burst == 75 and hazard.ult_damage == 90
@@ -95,15 +95,15 @@ def test_the_weapon_a_hero_fights_with_sets_its_kind_and_reach(world):
 def test_tools_are_counted_once_and_for_what_they_do(world):
     names = ("Sigma", "Junkrat", "Pharah", "Freja", "Reinhardt", "Doomfist", "Mauga")
     assert [world.hero(n).aoe_count for n in names] == [3, 4, 3, 2, 1, 3, 3]
-    assert world.hero("Baptiste").aoe_count == 3 and world.hero("Baptiste").aoe_damage == 0
+    assert world.hero("Baptiste").aoe_count == 3 and world.hero("Baptiste").aoe_damage_count == 0
     # a damaging piece typed Area of effect counts without the tag; a piece that
     # deals no damage (Defense Matrix, Kinetic Grasp) does not
     names = ("Sierra", "Orisa", "Emre", "Lúcio", "Jetpack Cat", "D.Va", "Sigma")
-    area = {n: (world.hero(n).aoe_count, world.hero(n).aoe_damage) for n in names}
+    area = {n: (world.hero(n).aoe_count, world.hero(n).aoe_damage_count) for n in names}
     assert area == {
         "Sierra": (2, 2), "Orisa": (2, 2), "Emre": (3, 3), "Lúcio": (4, 1),
         "Jetpack Cat": (3, 2), "D.Va": (2, 2), "Sigma": (3, 3)}
-    assert world.hero("Junkrat").aoe_damage == 4
+    assert world.hero("Junkrat").aoe_damage_count == 4
     assert world.hero("Soldier: 76").cc_tools == [] and world.hero("Emre").cc_tools == []
     assert "Concussion Mine" in world.hero("Junkrat").cc_tools
     assert world.hero("Sierra").mobility_tools == ["Anchor Drone"]
