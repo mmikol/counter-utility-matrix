@@ -9,6 +9,7 @@ blizzard.heroes owns are filled in, never replaced.
 """
 
 import dataclasses
+import re
 from collections.abc import Iterable, Mapping
 from typing import NamedTuple, TypedDict
 
@@ -16,7 +17,7 @@ import psycopg
 from psycopg.sql import SQL
 
 from db import PERK_TIERS, psql
-from db.data.names import abilities_named_in, ability_key, name_key
+from db.data.names import ability_key, name_key
 from db.data.wiki.kits import modifiers
 from db.data.wiki.kits.hero_articles import HeroProfile
 from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, StatValue, WeaponEntry
@@ -247,6 +248,21 @@ def _load_abilities(
         _insert_modifiers(store_pass, ability_id, entry)
 
 
+def _abilities_named_in(description: str, ability_names: Iterable[str]) -> list[str]:
+    """Ability names this text names, longest first so overlaps resolve.
+
+    Matching is scoped to one hero's kit, so a bare name cannot collide with a
+    different hero's ability.
+    """
+    found: list[str] = []
+    for name in sorted(ability_names, key=len, reverse=True):
+        # Skip a name already covered by a longer one just matched.
+        if re.search(r"\b%s\b" % re.escape(name), description) and not any(
+                name in seen for seen in found):
+            found.append(name)
+    return found
+
+
 def _load_perks(store_pass: _StorePass, hero_id: int, perks: list[PerkEntry]) -> None:
     """Perk stats, and the link from a perk to the ability it alters."""
     cursor = store_pass.cursor
@@ -289,7 +305,7 @@ def _load_perks(store_pass: _StorePass, hero_id: int, perks: list[PerkEntry]) ->
         if entry["stats"]:
             store_pass.tally["perks_with_stats"] += 1
         _insert_stats(store_pass, "perk_stats", "perk_id", perk_id, entry["stats"])
-        for name in abilities_named_in(entry["description"], ability_names):
+        for name in _abilities_named_in(entry["description"], ability_names):
             cursor.execute(
                 "INSERT INTO perk_ability_effects (perk_id, ability_id,"
                 " source_id) SELECT %s, ability_id, %s FROM abilities"

@@ -10,16 +10,14 @@ The wiki serves data two ways and both need parsing:
 They are different grammars, but the wiki mixes the same furniture through
 both - file links, comments, <br>, bare URLs - so the tidying is shared.
 
-split_type unpicks Cargo's typed fields, where a base type and a firing mode
-are packed into one string: "Weapon;;Hip Fire". section_body cuts an article's
-section at the next heading of any depth. DATE is the wiki's date grammar,
-day or month first, and parse_date reads a match of it.
+section_body cuts an article's section at the next heading of any depth.
+DATE is the wiki's date grammar, day or month first, and parse_date reads a
+match of it.
 """
 
 import re
 from collections.abc import Iterator, Sequence
 from datetime import date
-from typing import NamedTuple
 
 from bs4 import BeautifulSoup
 
@@ -55,29 +53,6 @@ def html_to_text(value: str | None) -> str:
     if "<" in text:
         text = BeautifulSoup(text, "html.parser").get_text(" ")
     return tidy(text)
-
-
-# "Weapon;;Hip Fire" and "Weapon (Hip Fire)" mean the same thing; the wiki uses
-# both. "Ultimate Ability (Mech)" and "Ultimate Ability;;Mech" likewise.
-TYPE_SPLIT_RE = re.compile(r"^(.*?)\s*(?:;;\s*(.+)|\(([^)]*)\))\s*$")
-
-
-class AbilityType(NamedTuple):
-    """A Cargo ability type unpicked: the base type, and the firing mode
-    packed in with it or None."""
-    base: str
-    mode: str | None
-
-
-def split_type(ability_type: str | None) -> AbilityType:
-    """'Weapon;;Hip Fire' -> AbilityType('Weapon', 'Hip Fire'). No suffix ->
-    the type and None."""
-    text = (ability_type or "").strip()
-    match = TYPE_SPLIT_RE.match(text)
-    if not match:
-        return AbilityType(text, None)
-    mode = (match.group(2) or match.group(3) or "").strip() or None
-    return AbilityType(match.group(1).strip(), mode)
 
 
 # --- article wikitext --------------------------------------------------

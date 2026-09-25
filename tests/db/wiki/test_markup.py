@@ -42,15 +42,6 @@ def test_a_cargo_field_is_read_as_rendered_html():
     assert markup.html_to_text("") == ""
 
 
-def test_an_ability_type_splits_on_either_spelling_the_wiki_uses():
-    assert markup.split_type("Weapon;;Hip Fire") == ("Weapon", "Hip Fire")
-    assert markup.split_type("Weapon (Hip Fire)") == ("Weapon", "Hip Fire")
-    assert markup.split_type("Ultimate Ability;;Mech") == ("Ultimate Ability", "Mech")
-    assert markup.split_type("Ability") == ("Ability", None)
-    assert markup.split_type("  Weapon ()  ") == ("Weapon", None)
-    assert markup.split_type("") == ("", None) and markup.split_type(None) == ("", None)
-
-
 def test_a_date_reads_day_or_month_first_and_needs_a_year():
     date_re = re.compile(markup.DATE)
     for text in ("6 October 2026", "October 6, 2026", "october 6 2026"):

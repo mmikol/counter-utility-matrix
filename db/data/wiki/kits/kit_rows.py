@@ -4,12 +4,15 @@ The table has one row per ability: every stat as its own column, an explicit
 `removed` flag for retired kit, an `ability_key` naming the input slot and a
 keyword list ("hitscan", "strong movement", "stun", "lesser cleanse", ...).
 A row becomes a weapon's firing mode, an ability or a perk by its
-ability_type ("Weapon;;Hip Fire", "Ultimate Ability", "Major Perk"), and
-each kind of entry is a TypedDict that holds the keys its kind guarantees.
+ability_type ("Weapon;;Hip Fire", "Ultimate Ability", "Major Perk"), which
+split_type unpicks into the base type and the firing mode packed in with
+it, and each kind of entry is a TypedDict that holds the keys its kind
+guarantees.
 Rows come back alphabetically, so weapons are sorted by firing slot here;
 grouping them into weapons is weapons.py's job.
 """
 
+import re
 from collections.abc import Iterable, Mapping
 from typing import Literal, NamedTuple, TypedDict
 
@@ -67,6 +70,29 @@ NON_STAT_FIELDS = frozenset(
 )
 
 STAT_ALIASES = {"range_distance": "range"}
+
+
+# "Weapon;;Hip Fire" and "Weapon (Hip Fire)" mean the same thing; the wiki uses
+# both. "Ultimate Ability (Mech)" and "Ultimate Ability;;Mech" likewise.
+TYPE_SPLIT_RE = re.compile(r"^(.*?)\s*(?:;;\s*(.+)|\(([^)]*)\))\s*$")
+
+
+class AbilityType(NamedTuple):
+    """A Cargo ability type unpicked: the base type, and the firing mode
+    packed in with it or None."""
+    base: str
+    mode: str | None
+
+
+def split_type(ability_type: str | None) -> AbilityType:
+    """'Weapon;;Hip Fire' -> AbilityType('Weapon', 'Hip Fire'). No suffix ->
+    the type and None."""
+    text = (ability_type or "").strip()
+    match = TYPE_SPLIT_RE.match(text)
+    if not match:
+        return AbilityType(text, None)
+    mode = (match.group(2) or match.group(3) or "").strip() or None
+    return AbilityType(match.group(1).strip(), mode)
 
 
 # Cargo returns rows alphabetically, but weapon grouping needs firing order.
@@ -142,7 +168,7 @@ def parse_kits(rows: Iterable[Mapping[str, str]]) -> dict[str, HeroKit]:
         if not hero_name or not name:
             continue
 
-        ability_type = markup.split_type(markup.html_to_text(fields.get("ability_type")))
+        ability_type = split_type(markup.html_to_text(fields.get("ability_type")))
         if not ability_type.base:
             continue
 

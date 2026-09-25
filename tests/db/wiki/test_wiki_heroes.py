@@ -1,6 +1,7 @@
-"""The kits pull's readers: a Cargo row's ability type against the shared
-vocabulary, an announced hero's article, and what a hero's article adds to
-its kit. No database, no network."""
+"""The kits pull's readers: a Cargo row's ability type, split into its base
+and firing mode and read against the shared vocabulary, an announced hero's
+article, and what a hero's article adds to its kit. No database, no
+network."""
 
 import datetime
 import os
@@ -16,7 +17,7 @@ from db.data.wiki.kits.hero_articles import (
     supplement_from_wikitext,
     supplement_kits,
 )
-from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, ability_kind
+from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, ability_kind, split_type
 from db.data.wiki.kits.measurements import parse_measurements
 
 # --- the ability vocabulary ----------------------------------------------------------
@@ -40,6 +41,15 @@ def test_the_ability_vocabulary_is_one_list():
     assert all(
         ability_kind(t) in db.ABILITY_KINDS
         for t in ("weapon", "WEAPON x", "an ultimate", "a passive", "anything"))
+
+
+def test_an_ability_type_splits_on_either_spelling_the_wiki_uses():
+    assert split_type("Weapon;;Hip Fire") == ("Weapon", "Hip Fire")
+    assert split_type("Weapon (Hip Fire)") == ("Weapon", "Hip Fire")
+    assert split_type("Ultimate Ability;;Mech") == ("Ultimate Ability", "Mech")
+    assert split_type("Ability") == ("Ability", None)
+    assert split_type("  Weapon ()  ") == ("Weapon", None)
+    assert split_type("") == ("", None) and split_type(None) == ("", None)
 
 
 # --- an announced hero, from its article ----------------------------------------------

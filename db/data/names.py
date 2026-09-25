@@ -24,13 +24,11 @@
     unaccented          a name with its accents dropped: "Lúcio" -> "Lucio"
     slug                a hero's slug as Blizzard's links write it:
                         "Soldier: 76" -> soldier-76, "D.Va" -> dva
-    abilities_named_in  the ability names a text mentions, longest first
-                        so an overlap resolves to the longer name
 """
 
 import re
 import unicodedata
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 
 NOT_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 NOT_ALNUM_OR_SPACE_RE = re.compile(r"[^a-z0-9\s]+")
@@ -70,18 +68,3 @@ def index(name_to_id: Mapping[str, int]) -> dict[str, int]:
 def ability_key(name: str) -> str:
     """Key for recognising the same ability across both sources."""
     return TRAILING_PARENTHETICAL_RE.sub("", name).strip().lower()
-
-
-def abilities_named_in(description: str, ability_names: Iterable[str]) -> list[str]:
-    """Ability names this text names, longest first so overlaps resolve.
-
-    Matching is scoped to one hero's kit, so a bare name cannot collide with a
-    different hero's ability.
-    """
-    found: list[str] = []
-    for name in sorted(ability_names, key=len, reverse=True):
-        # Skip a name already covered by a longer one just matched.
-        if re.search(r"\b%s\b" % re.escape(name), description) and not any(
-                name in seen for seen in found):
-            found.append(name)
-    return found
