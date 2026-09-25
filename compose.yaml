@@ -16,10 +16,13 @@
 #               database, watches the MCP audit log; its report is what
 #               `orchestrator.py status` prints
 #
-# Every container runs as an unprivileged user on a read-only root filesystem
-# with every capability dropped and no new privileges, on one network. Only
-# data and refresher open a connection out, to two fixed hosts. Every
-# published port binds to 127.0.0.1. No keys, no accounts.
+# Every container but db runs as an unprivileged user on a read-only root
+# filesystem, with every capability dropped, no new privileges and process
+# and memory limits. db takes no new privileges and keeps only the five
+# capabilities its image needs to start as root and drop to postgres (below).
+# All six share one network. Only data and refresher open a connection out,
+# to two fixed hosts. Every published port binds to 127.0.0.1. No keys, no
+# accounts.
 # COUNTRIX_MCP_TOKEN (in .env) requires a bearer token on the MCP server.
 # One image, built once by `data`, shared by every container; each container
 # mounts only what it reads, read-only unless it writes there.
