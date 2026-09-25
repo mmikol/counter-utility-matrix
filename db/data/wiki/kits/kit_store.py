@@ -16,7 +16,7 @@ from typing import NamedTuple, TypedDict
 import psycopg
 from psycopg.sql import SQL
 
-from db import PERK_TIERS, psql
+from db import KIND_WEAPON, PERK_TIERS, psql
 from db.data.names import ability_key, name_key
 from db.data.wiki.kits import modifiers
 from db.data.wiki.kits.hero_articles import HeroProfile
@@ -210,7 +210,7 @@ def _load_abilities(
                 cursor.execute(
                     "UPDATE abilities SET kind_id = %s, keywords = %s"
                     " WHERE ability_id = %s",
-                    (store_pass.kind_ids[weapon["kind"]], weapon["keywords"] or None, ability_id),
+                    (store_pass.kind_ids[KIND_WEAPON], weapon["keywords"] or None, ability_id),
                 )
                 store_pass.tally["classified"] += cursor.rowcount
                 break
@@ -223,7 +223,7 @@ def _load_abilities(
                 " keywords, position, source_id)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s)"
                 " ON CONFLICT (hero_id, name) DO NOTHING RETURNING ability_id",
-                (hero_id, store_pass.kind_ids[entry["kind"]], entry["display_name"],
+                (hero_id, store_pass.kind_ids[entry["kind"]], entry["name"],
                  entry["description"], entry["keywords"] or None,
                  next_position, store_pass.source_id),
             )

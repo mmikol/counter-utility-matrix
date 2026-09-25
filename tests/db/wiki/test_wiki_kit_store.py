@@ -4,7 +4,7 @@ sets, weapons and their configs, the abilities it classifies and adds, a
 modifier read off an ability's wording, perk stats and the abilities a perk
 alters, and an announced hero's perks. No database."""
 
-from db import KIND_ABILITY, KIND_PASSIVE, KIND_WEAPON
+from db import KIND_ABILITY, KIND_PASSIVE
 from db.data.wiki.kits import kit_store
 from db.data.wiki.kits.hero_articles import HeroProfile
 from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, StatValue, WeaponEntry
@@ -20,14 +20,12 @@ def _stats(**values):
 
 def _ability(name, kind=KIND_ABILITY, description="", **stats):
     return AbilityEntry(name=name, mode=None, input_key=None, keywords="",
-                        description=description, stats=_stats(**stats), kind=kind,
-                        display_name=name)
+                        description=description, stats=_stats(**stats), kind=kind)
 
 
 def _weapon(name, **stats):
     return WeaponEntry(name=name, mode=None, input_key=None, keywords="melee", description="",
-                       stats=_stats(**stats), kind=KIND_WEAPON, display_name=name,
-                       weapon_type="melee")
+                       stats=_stats(**stats), display_name=name, weapon_type="melee")
 
 
 def _perk(name, tier="minor", description="", **stats):

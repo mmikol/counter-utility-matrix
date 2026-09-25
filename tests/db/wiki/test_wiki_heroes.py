@@ -110,8 +110,7 @@ def test_an_unfetchable_hero_page_is_reported_rather_than_read_as_empty(tmp_path
 
     def kit(name):
         return HeroKit([], [AbilityEntry(name=name, mode=None, input_key=None, keywords="",
-                                         description="", stats={}, kind=db.KIND_ABILITY,
-                                         display_name=name)], [])
+                                         description="", stats={}, kind=db.KIND_ABILITY)], [])
 
     (tmp_path / "Mizuki.wikitext").write_text(KIT_ARTICLE, encoding="utf-8")
     by_hero = {"Mizuki": kit("Healing Kasa"), "Freja": kit("Quick Dash")}

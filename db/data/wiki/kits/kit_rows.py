@@ -43,10 +43,10 @@ class PerkEntry(KitEntry):
 
 class AbilityEntry(KitEntry):
     kind: str                   # a code from db.ABILITY_KINDS
+
+
+class WeaponEntry(KitEntry):
     display_name: str           # the name stored; weapons.py renames an ADS config
-
-
-class WeaponEntry(AbilityEntry):
     weapon_type: str | None     # the shot type: "hitscan", "projectile", ...
 
 
@@ -180,10 +180,10 @@ def parse_kits(rows: Iterable[Mapping[str, str]]) -> dict[str, HeroKit]:
             continue
         kind = ability_kind(ability_type.base)
         if kind == KIND_WEAPON:
-            kit.weapons.append(WeaponEntry(**base, kind=kind, display_name=name,
+            kit.weapons.append(WeaponEntry(**base, display_name=name,
                                            weapon_type=_weapon_type(fields)))
         else:
-            kit.abilities.append(AbilityEntry(**base, kind=kind, display_name=name))
+            kit.abilities.append(AbilityEntry(**base, kind=kind))
 
     for kit in heroes.values():
         kit.weapons.sort(key=_slot_rank)
