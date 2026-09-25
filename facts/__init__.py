@@ -32,4 +32,6 @@ imports only db.
     hero_facts      a named hero's facts: its kit, rates and relations, then
                     the ones only this board has
     team_facts      a team's facts, one per team metric, and the matchup's
+    matches         the owner's recorded matches: Match, one map played, and
+                    load_matches, every one oldest first
 """

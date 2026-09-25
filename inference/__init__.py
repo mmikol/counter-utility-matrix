@@ -15,7 +15,7 @@
                   every file keeps
     catalog       reads the playbook's files into strategies, orders, mirrors
                   and documents them; AUTHORED, the `sources` row the
-                  mirror carries
+                  mirror and the recorded matches carry
     expr          the safe expression language the frontmatter uses
     scoring       the objective: what one six scores on one board
     shapes        the legal shapes: the role counts a six may take around the

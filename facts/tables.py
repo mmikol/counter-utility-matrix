@@ -8,7 +8,9 @@ click, and it is what lets the inference layer's solver evaluate thousands
 of candidate compositions without a query each. Each read step fills one
 part of the World from its tables, and load runs them in the order each
 relies on, then derives what the rows imply. Every data table is named
-here: a test greps this module's source for each one.
+here: a test greps this module's source for each one. The owner's recorded
+matches, `matches` and `match_picks`, are no part of a board's World:
+facts.matches reads them, whole, for whoever asks.
 """
 
 import statistics

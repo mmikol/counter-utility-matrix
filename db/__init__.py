@@ -17,6 +17,8 @@ the tables over db.psql.default_dsn().
                   request that raised (a Refusal 400, anything else 500 with
                   its traceback on stderr), the one JSON reader and the one
                   MCP client
+    matches       the one writer of the owner's recorded matches, by id:
+                  the door's record_match, delete_match and db_rebuild call it
     raw/          the CSV mirror the tools export (gitignored)
 
 This file holds what the whole layer must agree on: where things live (ROOT
@@ -33,8 +35,8 @@ docs/db.md walks the tree.
 
 Every row carries a source_id, and that is the only distinction drawn
 between what was measured, what was judged and what was written by hand.
-Only the strategies are written by hand: no other table carries the `user`
-source.
+Two inputs are written by hand, the strategies and the matches the owner
+records: no other table carries the `user` source.
 """
 
 import os

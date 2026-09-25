@@ -52,7 +52,8 @@ def test_initialize_then_list_tools_over_stdio():
             "db_rebuild", "db_migrate", "query",
             "facts", "infer", "evaluate", "board", "strategies", "load_authored",
             "tune", "tuning_log", "metrics",
-            "add_strategy", "infer_strategy", "derive_strategies", "db_docs"} <= names
+            "add_strategy", "infer_strategy", "derive_strategies", "db_docs",
+            "record_match", "list_matches", "delete_match"} <= names
     assert len(names) == len(tools.REGISTRY)      # every registered tool is served
     for t in replies[1]["result"]["tools"]:
         assert t["inputSchema"]["type"] == "object" and t["description"]

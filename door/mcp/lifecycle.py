@@ -2,6 +2,12 @@
 is, creating, migrating and rebuilding it, the CSV mirror, the generated
 docs, and read-only SQL against it.
 
+db_rebuild drops every table, and the owner's recorded matches are the one
+thing in them no source can give back. It keeps them: written to
+KEPT_MATCHES before the drop, written back by name once sync_all has
+refilled the roster, each under its own id, and the file removed when every
+one is back. A rebuild that fails leaves the file for the next one.
+
 query is the one tool that runs a caller's SQL. It is guarded twice: the
 statement is checked before any connection opens (one read-only statement,
 no function that reaches a file or a server), and it runs as the reader
@@ -11,6 +17,7 @@ says when it left rows out.
 """
 
 import datetime
+import json
 import os
 import re
 from collections.abc import Mapping, Sequence
@@ -19,10 +26,15 @@ from typing import TypedDict
 import psycopg
 from psycopg.sql import SQL
 
-from db import ROOT, Refusal, psql
+from db import RAW_DIR, ROOT, Refusal, psql
+from db import matches as recorded
+from db.data.names import hero_key
 from db.psql import schema
 from door.mcp.registry import REFRESH, Context, tool
 from door.mcp.schema import ToolReply
+from facts import tables
+from facts.matches import Match, load_matches
+from facts.model import World
 from inference import catalog
 
 
@@ -50,7 +62,8 @@ class DbStatus(TypedDict):
 
 # the tables db_status counts, where they exist
 COUNTED = (
-    "heroes", "abilities", "maps", "hero_meta", "map_meta", "counters", "synergies", "strategies")
+    "heroes", "abilities", "maps", "hero_meta", "map_meta", "counters", "synergies", "strategies",
+    "matches")
 
 
 def read_status(ctx: Context) -> DbStatus:
@@ -140,14 +153,116 @@ def db_migrate(ctx: Context) -> ToolReply:
 
 @tool(
     "db_rebuild", "Drop everything, reapply the migrations and run"
-    " sync_all. Creates the embedded cluster first when DATABASE_URL is unset"
-    " and none is built.", REFRESH)
+    " sync_all. The owner's recorded matches are kept across the drop and"
+    " written back by name. Creates the embedded cluster first when DATABASE_URL"
+    " is unset and none is built.", REFRESH)
 def db_rebuild(ctx: Context, refresh: bool = False) -> ToolReply:
     with ctx.connect(boot=True) as cx:
+        kept = _keep_matches(cx)
         dropped = schema.rebuild(cx)
     results = ctx.call("sync_all", refresh=refresh).data
-    return ToolReply("db_rebuild: dropped %d tables, rebuilt" % len(dropped),
-                     {"dropped": len(dropped), "sync": results})
+    restored = Restored(restored=0, unrestored=[])
+    if kept:
+        with ctx.connect() as cx:
+            restored = _restore_matches(cx, kept)
+    text = "db_rebuild: dropped %d tables, rebuilt" % len(dropped)
+    if restored["restored"]:
+        text += ", %d recorded match(es) restored" % restored["restored"]
+    if restored["unrestored"]:
+        text += "; %d recorded match(es) kept in %s, their names gone from the roster" % (
+            len(restored["unrestored"]), os.path.relpath(KEPT_MATCHES, ROOT))
+    return ToolReply(text, {"dropped": len(dropped), "sync": results, "matches": restored})
+
+
+# --- the recorded matches across a rebuild ------------------------------------
+
+# Where a rebuild holds the recorded matches while it drops the tables.
+KEPT_MATCHES = os.path.join(RAW_DIR, "kept-matches.json")
+
+
+class Restored(TypedDict):
+    """What a rebuild wrote back: how many matches, and the ids of those whose
+    map or heroes the refilled roster no longer names, left in KEPT_MATCHES."""
+    restored: int
+    unrestored: list[int]
+
+
+def _read_kept() -> list[Match]:
+    """The matches KEPT_MATCHES holds; none when there is no file."""
+    if not os.path.exists(KEPT_MATCHES):
+        return []
+    with open(KEPT_MATCHES, encoding="utf-8") as handle:
+        rows = json.load(handle)
+    return [Match(**dict(
+        row, played_on=datetime.date.fromisoformat(row["played_on"]), blue=tuple(row["blue"]),
+        red=tuple(row["red"]), bans=tuple(row["bans"]))) for row in rows]
+
+
+def _write_kept(kept: Sequence[Match]) -> None:
+    """KEPT_MATCHES, holding these matches, the days as YYYY-MM-DD."""
+    os.makedirs(os.path.dirname(KEPT_MATCHES), exist_ok=True)
+    with open(KEPT_MATCHES, "w", encoding="utf-8") as handle:
+        json.dump([dict(m._asdict(), played_on=m.played_on.isoformat()) for m in kept],
+                  handle, indent=1)
+
+
+def _keep_matches(cx: psycopg.Connection) -> list[Match]:
+    """The recorded matches a rebuild must not lose, written to KEPT_MATCHES
+    before the drop: any a failed rebuild left there, then the database's."""
+    kept = _read_kept()
+    kept += [m for m in load_matches(cx) if m not in kept]
+    if kept:
+        _write_kept(kept)
+    return kept
+
+
+def _hero_ids(world: World, names: Sequence[str]) -> tuple[int, ...] | None:
+    """Heroes' names as the refilled roster's ids, each by hero_key so a
+    renamed hero is found under its new name; None when one is gone."""
+    ids: list[int] = []
+    for name in names:
+        hero_id = world.by_key.get(hero_key(name))
+        if hero_id is None:
+            return None
+        ids.append(hero_id)
+    return tuple(ids)
+
+
+def _stored(world: World, match: Match) -> recorded.StoredMatch | None:
+    """A kept match as the refilled roster's ids, or None when its map or a
+    hero is gone."""
+    played = world.map(match.map_name)
+    blue, red, bans = (_hero_ids(world, names) for names in (match.blue, match.red, match.bans))
+    if played is None or blue is None or red is None or bans is None:
+        return None
+    return recorded.StoredMatch(
+        played_on=match.played_on, map_id=played.id, side=match.side, result=match.result,
+        playbook_digest=match.playbook_digest, note=match.note, blue=blue, red=red, bans=bans)
+
+
+def _restore_matches(cx: psycopg.Connection, kept: Sequence[Match]) -> Restored:
+    """Write the kept matches back once sync_all has refilled the roster,
+    each under its own id unless the table holds that id already. A match
+    the roster can no longer name stays in KEPT_MATCHES; the file goes once
+    every match is back."""
+    world = tables.load(cx)
+    cursor = cx.cursor()
+    source_id = psql.register_source(cursor, catalog.AUTHORED, psql.now())
+    taken = {match_id for (match_id,) in cursor.execute("SELECT match_id FROM matches")}
+    left: list[Match] = []
+    for match in kept:
+        stored = _stored(world, match)
+        if stored is None:
+            left.append(match)
+            continue
+        keep_id = None if match.match_id in taken else match.match_id
+        taken.add(recorded.store(cursor, stored, source_id, keep_id))
+    cx.commit()
+    if left:
+        _write_kept(left)
+    elif os.path.exists(KEPT_MATCHES):
+        os.remove(KEPT_MATCHES)
+    return Restored(restored=len(kept) - len(left), unrestored=[m.match_id for m in left])
 
 
 @tool("export_csv", "Refresh db/raw/*.csv: one CSV per table.")

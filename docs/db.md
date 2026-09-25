@@ -4,8 +4,10 @@ Pull every source, clean it and store it in Postgres. This layer owns
 `DATA = HEROES ∪ MAPS ∪ META`: the tables a board's facts are derived
 from. Every row carries a `source_id`, and that is the only distinction
 drawn between what was measured, what was judged and what was written by
-hand. Only the strategies are written by hand
-([inference.md](inference.md)).
+hand. Two inputs are written by hand, and carry the `user` source: the
+strategies ([inference.md](inference.md)) and the matches the owner
+records, one row a map played (`matches`, `match_picks`). Every other table
+is pulled from Blizzard or the wiki.
 
 **One door.** Every write runs under a door tool ([mcp.md](mcp.md)); a
 read opens its own connection through `db.psql.default_dsn()`.
@@ -23,6 +25,7 @@ read opens its own connection through `db.psql.default_dsn()`.
 db/
   __init__.py        where things live, and the scope; the package's map
   web.py             what the three HTTP servers share, the JSON reader and the MCP client
+  matches.py         the one writer of the owner's recorded matches
   data/              the sources, page to table
     blizzard/        overwatch.blizzard.com
     wiki/            overwatch.fandom.com
@@ -44,6 +47,7 @@ db/
 | `data/fetch.py` | the page cache, its freshness and the one request loop: `cached_get`, `cached`, `request` under a `RequestPolicy`, and `PullContext`, what a pull's `run()` takes beside its connection |
 | `data/names.py` | one hero, map or ability across sources: `name_key`, `hero_key` through `RENAMED`, `slug`, `ability_key` and `index` |
 | `web.py` | what the three HTTP servers share: the Host and Origin guard, the reply to a request that raised, `read_json`, and `call_tool`, the door's HTTP client; its docstring holds the relay's status map |
+| `matches.py` | the one writer of `matches` and `match_picks`: `store` takes a match by id - the map's, each hero's - and `delete` removes one with its picks. The door's `record_match` and `delete_match` call it, and `db_rebuild`, which keeps the matches across its drop; `facts/matches.py` reads them back |
 
 ### `data/` - one package per source
 
@@ -71,7 +75,7 @@ says what it reads.
 | --- | --- |
 | `__init__.py` | where the database is: `default_dsn` resolves `DATABASE_URL`, else the embedded cluster at `db/psql/cluster` once one is built, and never creates one; `boot`, for `db_init` and `db_rebuild` alone, creates it; with neither, `NoDatabaseError`. Its docstring maps the helpers every writer needs |
 | `schema.py` | the migrations and the `schema_migrations` ledger; `state` (empty, stale, unfilled or current), which `python -m db.psql.schema` prints for the container entrypoint; `rebuild`; `generate_docs`, the two sections at the end of this document, each table described by the `--` block above its `CREATE TABLE` or a later `COMMENT ON TABLE` |
-| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment, `018` `map_playstyle` and `comp_archetypes` dropped, `seasons` and `synergies` pulled from the wiki, `019` `map_strategy` and the third source's rates, snapshots and `sources` row dropped, `counters` pulled from the wiki, `020` `map_terrain`, the terrain features each map's wiki article names, `021` `stage_terrain`, with every Hybrid map's two phases and an Escort map's named stretches stored as stages, `022` the `strategies.playbook` comment under the Countrix name, `023` the columns nothing read dropped - `raw_value` on the three stat tables, `patches.platform` and `url`, `subroles.icon_url`, `stat_keys.label` and `unit`, `roles.name`. A statement in an applied migration is never edited; a change is a new file, and a populated database catches up with `db_migrate`. The `--` prose above each `CREATE TABLE` is the data dictionary's text, and is kept current. |
+| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment, `018` `map_playstyle` and `comp_archetypes` dropped, `seasons` and `synergies` pulled from the wiki, `019` `map_strategy` and the third source's rates, snapshots and `sources` row dropped, `counters` pulled from the wiki, `020` `map_terrain`, the terrain features each map's wiki article names, `021` `stage_terrain`, with every Hybrid map's two phases and an Escort map's named stretches stored as stages, `022` the `strategies.playbook` comment under the Countrix name, `023` the columns nothing read dropped - `raw_value` on the three stat tables, `patches.platform` and `url`, `subroles.icon_url`, `stat_keys.label` and `unit`, `roles.name`, `024` `matches` and `match_picks`, the owner's recorded games, one row a map with both sixes and the bans, under the `user` source. A statement in an applied migration is never edited; a change is a new file, and a populated database catches up with `db_migrate`. The `--` prose above each `CREATE TABLE` is the data dictionary's text, and is kept current. |
 | `cluster/` | the embedded Postgres `db_init` or `db_rebuild` creates through pgserver (gitignored); a reader starts it on first touch and never creates it. The compose stack runs its own Postgres, the `db` service, which the host reaches through `./docker-db` |
 
 ### `raw/` - the mirror
@@ -100,12 +104,17 @@ stateDiagram-v2
     stale --> current: db_migrate<br/>keeps the data
     empty --> current: db_rebuild
     unfilled --> current: db_rebuild
-    stale --> current: db_rebuild<br/>drops the rates history
+    stale --> current: db_rebuild<br/>drops the rates history,<br/>keeps the recorded matches
     current --> current: the refresher - pull_seasons + pull_rates daily,<br/>sync_all weekly, entities upsert in place,<br/>rates APPEND a dated snapshot
 ```
 
 `db_rebuild` drops every table, reapplies the migrations and runs
-`sync_all`, whatever the state. Docker's `data` container asks
+`sync_all`, whatever the state. The owner's recorded matches are the one
+thing no source gives back, so it keeps them: they go to
+`db/raw/kept-matches.json` before the drop and come back by name once
+`sync_all` has refilled the roster, each under its own id. A rebuild that
+fails leaves the file for the next one, and a match whose map or hero the
+roster no longer names stays in it. Docker's `data` container asks
 `python -m db.psql.schema` for the state (`schema.state`), runs
 `db_rebuild` on anything but current, then serves the door. `db_status`
 and the door's `/health` report the same state, which the inference, ui
@@ -180,10 +189,10 @@ not reachable in one pass at any polite rate. The page cache makes it
 tractable: it is permanent and keyed by the full query, so granularity
 widens one dimension at a time across many runs, each resuming from what
 is on disk. Widen first along the dimension that separates the numbers
-most. The evidence points at rank: in the snapshot of 2026-09-19,
-Widowmaker's win rate over all maps runs from 44.5 in Bronze to 55.6 in
-Grandmaster (`hero_meta`), a spread each map's all-ranks figure averages
-away.
+most: `hero_meta` carries every tier, so a query over it says how far one
+hero's rates move up the ladder - the spread each map's all-ranks figure
+averages away. The rates are Blizzard's, for personal use, so this
+document quotes none of them.
 
 ## The schema
 
@@ -195,18 +204,20 @@ hand.
 ### Entity relationship diagrams
 
 <!-- generated:erd -->
-Five domains. Three hold the data the sources are pulled for: which
+Six domains. Three hold the data the sources are pulled for: which
 hero (HEROES), on which map (MAPS), performing how well (META).
 Every domain
 yields independent facts (a selection's own row) and dependent ones
 (the selection joined with others: map_meta is heroes ⋈ maps ⋈ meta,
 counters and synergies are heroes ⋈ heroes), and a join belongs to
-every domain it touches. The other two are the
-playbook's record: the judgements pulled from the wiki
-(PLAYBOOK) and the mirror of the strategies, the one input a user writes,
-that the inference layer solves with (INFERENCE). The composition is
-the argmax of the strategies - the constraints, heuristics and assumptions
-in inference/strategies/ - over the facts.
+every domain it touches. Two are the playbook's record: the
+judgements pulled from the wiki (PLAYBOOK) and the mirror of the
+strategies that the inference layer solves with (INFERENCE). The last
+is the owner's record of the games played, one row a map (MATCHES).
+The strategies and the recorded matches are the two inputs a user
+writes; every other table is pulled. The composition is the argmax of
+the strategies - the constraints, heuristics and assumptions in
+inference/strategies/ - over the facts.
 
 ```
 DATA        = HEROES ∪ MAPS ∪ META
@@ -218,7 +229,7 @@ COMP        = ARGMAX[ STRATEGIES( FACTS ) ]
 
 Every table but `sources` and `schema_migrations` also carries
 `source_id` -> `sources` and a `cao` timestamp. Those edges are left off -
-they would connect `sources` to 33 tables and obscure everything else.
+they would connect `sources` to 35 tables and obscure everything else.
 
 #### HEROES
 
@@ -293,6 +304,15 @@ erDiagram
 erDiagram
 ```
 
+#### MATCHES
+
+```mermaid
+erDiagram
+    heroes ||--o{ match_picks : "hero_id"
+    maps ||--o{ matches : "map_id"
+    matches ||--o{ match_picks : "match_id"
+```
+
 #### The whole database
 
 ```mermaid
@@ -309,6 +329,7 @@ erDiagram
     heroes ||--o{ counters : "hero_id"
     heroes ||--o{ hero_meta : "hero_id"
     heroes ||--o{ map_meta : "hero_id"
+    heroes ||--o{ match_picks : "hero_id"
     heroes ||--o{ perks : "hero_id"
     heroes ||--o{ playstyle : "hero_id"
     heroes ||--o{ synergies : "hero_id"
@@ -320,6 +341,8 @@ erDiagram
     maps ||--o{ map_modes : "map_id"
     maps ||--o{ map_stages : "map_id"
     maps ||--o{ map_terrain : "map_id"
+    maps ||--o{ matches : "map_id"
+    matches ||--o{ match_picks : "match_id"
     meta_snapshots ||--o{ hero_meta : "snapshot_id"
     meta_snapshots ||--o{ map_meta : "snapshot_id"
     patches ||--o{ meta_snapshots : "patch_id"
@@ -361,6 +384,7 @@ was read. Every table but `sources` and `schema_migrations` carries both;
 | **META** | `competitive_tiers` · `hero_meta` · `map_meta` · `meta_snapshots` · `patches` · `regions` · `seasons` |
 | **PLAYBOOK** | `counters` · `playstyle` · `synergies` |
 | **INFERENCE** | `strategies` |
+| **MATCHES** | `match_picks` · `matches` |
 
 
 #### `abilities`
@@ -557,6 +581,35 @@ A map's terrain, counted in its wiki article (pull_terrain). The sections about 
 | --- | --- | --- | --- |
 | `map_id` | integer | no |  |
 | `name` | text | no |  |
+
+#### `match_picks`
+
+*MATCHES · `024_matches.sql`*
+
+Both sixes and the bans of a recorded match. team is blue (the owner's), red or ban; position orders a team's heroes as they were entered, from 1. A six is the six on the field longest, so a hero swapped in late is not in it. A hero holds one seat a team, and may play for both teams.
+
+| column | type | null | references |
+| --- | --- | --- | --- |
+| `match_id` | integer | no | `matches.match_id` |
+| `team` | text | no |  |
+| `position` | smallint | no |  |
+| `hero_id` | integer | no | `heroes.hero_id` |
+
+#### `matches`
+
+*MATCHES · `024_matches.sql`*
+
+The owner's recorded games, one row a map, written by record_match. blue is always the owner's team, so side and result are blue's: side is attack or defense on an Escort or Hybrid map and '' on a map without sides, result is win, loss or draw. played_on is the day the map was played. playbook_digest is catalog.playbook_digest of the playbook in force when the match was recorded, so a reader can tell which rules the board scored under. note is the owner's own line, '' when there is none.
+
+| column | type | null | references |
+| --- | --- | --- | --- |
+| `match_id` | integer | no |  |
+| `played_on` | date | no |  |
+| `map_id` | integer | no | `maps.map_id` |
+| `side` | text | no |  |
+| `result` | text | no |  |
+| `playbook_digest` | text | no |  |
+| `note` | text | no |  |
 
 #### `meta_snapshots`
 

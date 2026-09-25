@@ -23,10 +23,13 @@ from inference.frontmatter import FrontmatterError, parse_frontmatter
 from inference.strategy import FORMS, KINDS, WEIGHT_RANGE, CatalogError, Strategy, finite_number
 
 SHIPPED_DIR = os.path.join(ROOT, "inference", "strategies")
-# The sources row of the strategies table, the one input a user writes.
-# Nothing is downloaded: the "url" is the playbook's folder. No other table
-# may carry this source.
-AUTHORED = Source(code="user", name="The playbook", url="inference/strategies/")
+# The sources row of the two inputs a user writes: the strategies, mirrored
+# here, and the matches the owner records through the door's record_match.
+# Nothing is downloaded: the "url" is the playbook's folder, and a match
+# comes in by hand. No other table may carry this source.
+AUTHORED = Source(
+    code="user", name="The user: the playbook and the recorded matches",
+    url="inference/strategies/")
 
 # the id is the filename, so no id may name a path (docs/security.md)
 ID_RE = re.compile(r"[a-z0-9][a-z0-9-]*\Z")

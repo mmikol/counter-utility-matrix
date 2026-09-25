@@ -6,7 +6,10 @@ Two kinds of test:
     invariant    properties the built database must hold
 
 A unit test that needs a World takes synthetic_world, built by hand in
-tests/synthetic.py. The second kind defaults to the repo's own build at
+tests/synthetic.py; a test that records matches takes scratch_dsn, a
+scratch database holding that World's roster (tests/scratch.py), so the
+owner's record in the built database is never touched. The second kind
+defaults to the repo's own build at
 db/psql/cluster, the database `.venv/bin/python -m door.mcp call db_rebuild` produces,
 and skips itself when it is absent. COUNTRIX_LOCAL_SERVER or DATABASE_URL
 override the target; COUNTRIX_NO_DATABASE=1 runs the suite with no database,
@@ -100,6 +103,18 @@ def world(db):
     w = tables.load(db)
     db.rollback()
     return w
+
+
+@pytest.fixture(scope="module")
+def scratch_dsn(dsn):
+    """A scratch database for one module's recorded matches: every
+    migration, the synthetic roster and maps, dropped after the module
+    (tests/scratch.py). It rides on `dsn`, so it skips the same way."""
+    from tests import scratch
+
+    with scratch.database(dsn) as target:
+        scratch.seed(target)
+        yield target
 
 
 @pytest.fixture()

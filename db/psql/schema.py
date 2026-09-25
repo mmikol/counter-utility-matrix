@@ -42,7 +42,10 @@ DOC_DOMAIN = {
     "005_playbook.sql": "PLAYBOOK",
     "008_schema_migrations.sql": "foundation",
     "010_constraints_and_heuristics.sql": "INFERENCE",
-    "020_map_terrain.sql": "MAPS", "021_stage_terrain.sql": "MAPS"}
+    "020_map_terrain.sql": "MAPS", "021_stage_terrain.sql": "MAPS",
+    "024_matches.sql": "MATCHES"}
+# The domains in the order the diagrams and the dictionary list them.
+DOMAINS = ("HEROES", "MAPS", "META", "PLAYBOOK", "INFERENCE", "MATCHES")
 
 
 class SchemaError(Exception):
@@ -258,18 +261,20 @@ def _edges(fks: list[ForeignKey], keep: Callable[[str], bool]) -> list[str]:
 def _erd(tables: list[str], fks: list[ForeignKey], domain: dict[str, str]) -> str:
     """The ER diagrams: one per domain, then the whole database."""
     erd = [
-        "Five domains. Three hold the data the sources are pulled for: which",
+        "Six domains. Three hold the data the sources are pulled for: which",
         "hero (HEROES), on which map (MAPS), performing how well (META).",
         "Every domain",
         "yields independent facts (a selection's own row) and dependent ones",
         "(the selection joined with others: map_meta is heroes ⋈ maps ⋈ meta,",
         "counters and synergies are heroes ⋈ heroes), and a join belongs to",
-        "every domain it touches. The other two are the",
-        "playbook's record: the judgements pulled from the wiki",
-        "(PLAYBOOK) and the mirror of the strategies, the one input a user writes,",
-        "that the inference layer solves with (INFERENCE). The composition is",
-        "the argmax of the strategies - the constraints, heuristics and assumptions",
-        "in inference/strategies/ - over the facts.",
+        "every domain it touches. Two are the playbook's record: the",
+        "judgements pulled from the wiki (PLAYBOOK) and the mirror of the",
+        "strategies that the inference layer solves with (INFERENCE). The last",
+        "is the owner's record of the games played, one row a map (MATCHES).",
+        "The strategies and the recorded matches are the two inputs a user",
+        "writes; every other table is pulled. The composition is the argmax of",
+        "the strategies - the constraints, heuristics and assumptions in",
+        "inference/strategies/ - over the facts.",
         "",
         "```",
         "DATA        = HEROES ∪ MAPS ∪ META",
@@ -285,7 +290,7 @@ def _erd(tables: list[str], fks: list[ForeignKey], domain: dict[str, str]) -> st
         % (len(tables) - 2),
         "",
     ]
-    for d in ("HEROES", "MAPS", "META", "PLAYBOOK", "INFERENCE"):
+    for d in DOMAINS:
         members = {t for t, owner in domain.items() if owner == d}
         erd += ["#### %s" % d, "", "```mermaid", "erDiagram",
                 *_edges(fks, members.__contains__), "```", ""]
@@ -313,7 +318,7 @@ def _dictionary(
         "| domain | tables |",
         "| --- | --- |",
     ]
-    for d in ("foundation", "HEROES", "MAPS", "META", "PLAYBOOK", "INFERENCE"):
+    for d in ("foundation", *DOMAINS):
         dd.append("| **%s** | %s |" % (d, " · ".join(
             "`%s`" % t for t in tables if domain[t] == d)))
     dd.append("")

@@ -107,7 +107,8 @@ def normalised(text: str | None) -> str:
 # Free text in the database worth scanning: (table, columns).
 TEXT_COLUMNS = (("abilities", ("description",)), ("perks", ("description",)),
                 ("subroles", ("passive_description",)), ("synergies", ("note",)),
-                ("seasons", ("name", "note")), ("strategies", ("body",)))
+                ("seasons", ("name", "note")), ("strategies", ("body",)),
+                ("matches", ("note",)))
 
 
 def injection_in(text: str) -> str | None:

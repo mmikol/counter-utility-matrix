@@ -1,8 +1,9 @@
 """The door over all three layers: an MCP server whose tools are the data
 layer's pulls - every source fetched, cleaned and stored in Postgres - and
 the tools the facts and inference layers expose through it: the facts, the
-solver and the playbook. Every write to Postgres or the playbook runs under
-one of them, the sentry's quarantine rename aside.
+solver and the playbook, and the owner's recorded matches. Every write to
+Postgres or the playbook runs under one of them, the sentry's quarantine
+rename aside.
 
     .venv/bin/python -m door.mcp                  serve over stdio (what .mcp.json launches)
     python -m door.mcp --http H:PORT              serve over HTTP (the data container)
@@ -31,6 +32,8 @@ one of them, the sentry's quarantine rename aside.
     solver       the inference layer: infer, evaluate, reach and board
     playbook     the metric vocabulary, the strategies and the tools that
                  write them, the tuning log, the strategy:// resources
+    matches      the owner's recorded matches: record_match, which checks a
+                 played map before it stores it, list_matches, delete_match
     __main__     the command line above
 
 The protocol and its transports are dependency-free (server, stdio, http,

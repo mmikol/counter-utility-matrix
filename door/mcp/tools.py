@@ -8,7 +8,7 @@ ctx.call(name, **arguments).
 from db import Log
 
 # each family declares its tools into REGISTRY as it imports
-from door.mcp import facts, lifecycle, playbook, pulls, solver  # noqa: F401
+from door.mcp import facts, lifecycle, matches, playbook, pulls, solver  # noqa: F401
 from door.mcp.playbook import StrategyResources
 from door.mcp.registry import REGISTRY, Context, NoSuchToolError
 

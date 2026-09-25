@@ -1,6 +1,8 @@
-"""The one input a user writes is the playbook. Every other table is pulled
-from Blizzard or the wiki: load_authored takes the playbook alone, no table
-but `strategies` carries the `user` source, and no third source is read."""
+"""Two inputs are written by hand: the playbook and the matches the owner
+records. Every other table is pulled from Blizzard or the wiki:
+load_authored takes the playbook alone, the `user` source is carried by
+`strategies`, `matches` and `match_picks` alone, and no third source is
+read."""
 
 import contextlib
 import os
@@ -181,9 +183,11 @@ def test_a_pull_that_stores_no_table_says_nothing_stored(monkeypatch, tmp_path):
     assert data["tables"] == [] and data["snapshot_id"] is None
 
 
-def test_the_sentry_scans_the_wiki_tables_and_the_playbook():
+def test_the_sentry_scans_the_wiki_tables_the_playbook_and_the_match_notes():
     from door import sentry
-    assert {"synergies", "seasons", "strategies"} <= {table for table, _ in sentry.TEXT_COLUMNS}
+    scanned = dict(sentry.TEXT_COLUMNS)
+    assert {"synergies", "seasons", "strategies"} <= set(scanned)
+    assert scanned["matches"] == ("note",)          # a note is read back to a session
 
 
 def test_the_data_dictionary_says_where_seasons_and_synergies_come_from():
@@ -260,8 +264,33 @@ def test_every_path_the_layer_declares_exists():
 
 # --- the built database ----------------------------------------------------
 
+# The owner's record: the tables a user fills by playing, empty until the
+# first map is recorded.
+RECORDED = ("matches", "match_picks")
+
+
+def test_the_recorded_matches_are_their_own_domain_in_the_dictionary():
+    from db.psql import schema
+    described = schema._migration_tables()
+    for table in RECORDED:
+        assert described[table][0] == "024_matches.sql", table
+        assert schema.DOC_DOMAIN[described[table][0]] == "MATCHES"
+    assert "record_match" in described["matches"][1] and "blue" in described["matches"][1]
+    assert "both sixes" in described["match_picks"][1].lower()
+    assert "MATCHES" in schema.DOMAINS
+
+
+def test_the_migration_that_adds_the_matches_is_one_transaction():
+    from db.psql import schema
+    [sql] = [m.sql for m in schema.read_migrations() if m.name == "024_matches.sql"]
+    body = [line for line in sql.splitlines() if line and not line.startswith("--")]
+    assert body[0] == "BEGIN;" and body[-1] == "COMMIT;"
+    for column in ("source_id", "cao"):
+        assert sql.count("    %s " % column) == 2, column     # both tables carry both
+
+
 @pytest.mark.invariant
-def test_only_strategies_carries_the_user_source(rows):
+def test_only_the_strategies_and_the_recorded_matches_carry_the_user_source(rows):
     tables = [t for (t,) in rows(
         "select table_name from information_schema.columns"
         " where table_schema = 'public' and column_name = 'source_id'"
@@ -270,16 +299,18 @@ def test_only_strategies_carries_the_user_source(rows):
     carrying = [t for t in tables if rows(
         "select 1 from %s t join sources s using (source_id)"
         " where s.code = 'user' limit 1" % t)]
-    assert carrying == ["strategies"]
+    assert "strategies" in carrying and set(carrying) <= {"strategies", *RECORDED}
 
 
 @pytest.mark.invariant
-def test_the_dropped_tables_are_gone_and_no_table_is_empty(rows, one):
+def test_the_dropped_tables_are_gone_and_no_pulled_table_is_empty(rows, one):
+    """Every table the pulls or the playbook fill holds rows; the recorded
+    matches fill only as the owner plays."""
     tables = [t for (t,) in rows(
         "select tablename from pg_tables where schemaname = 'public' order by 1")]
     assert not {"map_playstyle", "comp_archetypes", "map_strategy"} & set(tables)
     empty = [t for t in tables if one("select count(*) from %s" % t) == 0]
-    assert empty == []
+    assert set(empty) <= set(RECORDED), empty
 
 
 @pytest.mark.invariant

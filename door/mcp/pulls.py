@@ -214,8 +214,9 @@ def pull_counters(connection: psycopg.Connection, pull: fetch.PullContext) -> Pu
 
 
 @tool(
-    "load_authored", "Store the one input a user writes: the mirror of the"
-    " strategies in inference/strategies/. A whole-truth reload; where the"
+    "load_authored", "Store the playbook, one of the two inputs a user writes (the"
+    " recorded matches are the other): the mirror of the strategies in"
+    " inference/strategies/. A whole-truth reload; where the"
     " claude CLI is present, it first completes pending drafts as"
     " derive_strategies does, writing their files and the tuning log.")
 def load_authored(ctx: Context) -> ToolReply:
