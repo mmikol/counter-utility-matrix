@@ -12,11 +12,13 @@ both - file links, comments, <br>, bare URLs - so the tidying is shared.
 
 split_type unpicks Cargo's typed fields, where a base type and a firing mode
 are packed into one string: "Weapon;;Hip Fire". section_body cuts an article's
-section at the next heading of any depth.
+section at the next heading of any depth. DATE is the wiki's date grammar,
+day or month first, and parse_date reads a match of it.
 """
 
 import re
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
+from datetime import date
 from typing import NamedTuple
 
 from bs4 import BeautifulSoup
@@ -89,6 +91,30 @@ def section_body(text: str, start: int) -> str:
     body = text[start:]
     following = ANY_HEADING_RE.search(body)
     return body[: following.start()] if following else body
+
+
+MONTHS = [
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december"]
+# "4 October 2022", "June 20, 2024", "June 20 2024", or no year at all, the
+# month in any case. Five groups: day, month, month, day, year.
+DATE = (r"(?i:(?:(\d{1,2})\s+(%(m)s)|(%(m)s)\s+(\d{1,2}))(?:,?\s*(\d{4}))?)"
+        % {"m": "|".join(MONTHS)})
+
+
+def parse_date(groups: Sequence[str | None], year: str | None) -> date | None:
+    """A date from a DATE match's first four groups - the day and the month in
+    either order, one pair matched and the other None - and a year, its own
+    or one the text gives elsewhere; None without a year, or for a day the
+    month does not have."""
+    day_first, month_first, month_second, day_second = groups[:4]
+    day, month = day_first or day_second, month_first or month_second
+    if day is None or month is None or year is None:
+        return None
+    try:
+        return date(int(year), MONTHS.index(month.lower()) + 1, int(day))
+    except ValueError:
+        return None
 
 
 def find_templates(text: str, name_pattern: str) -> Iterator[str]:

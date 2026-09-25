@@ -8,7 +8,6 @@ not publish, and for a hero marked {{Upcoming}}, its role, subrole and
 release day.
 """
 
-import contextlib
 import datetime
 import re
 from typing import NamedTuple
@@ -46,11 +45,17 @@ def parse_hero_profile(text: str) -> HeroProfile | None:
     article rather than in a Cargo table, so it comes from the same page fetch
     the stat supplement already makes.
     """
-    for block in markup.find_templates(text, r"Infobox character"):
-        params = markup.parse_params(block)
-        return HeroProfile(health=_pool(params, "health"), shield=_pool(params, "shield"),
-                           armor=_pool(params, "armor"))
-    return None
+    params = _infobox(text)
+    if params is None:
+        return None
+    return HeroProfile(health=_pool(params, "health"), shield=_pool(params, "shield"),
+                       armor=_pool(params, "armor"))
+
+
+def _infobox(text: str) -> dict[str, str] | None:
+    """The parameters of an article's character infobox; None without one."""
+    block = next(markup.find_templates(text, r"Infobox character"), None)
+    return markup.parse_params(block) if block is not None else None
 
 
 def _pool(params: dict[str, str], field: str) -> int | None:
@@ -60,7 +65,8 @@ def _pool(params: dict[str, str], field: str) -> int | None:
 
 
 UPCOMING_RE = re.compile(r"\{\{\s*Upcoming\s*\}\}", re.I)
-RELEASE_RE = re.compile(r"release[^.]{0,80}?\bon\s+([A-Z][a-z]+ \d{1,2}, \d{4})")
+# "... set to release in Season 5 on October 6, 2026": markup.DATE's groups
+RELEASE_RE = re.compile(r"release[^.]{0,80}?\bon\s+%s" % markup.DATE)
 
 
 def parse_announcement(text: str) -> Announcement | None:
@@ -69,21 +75,16 @@ def parse_announcement(text: str) -> Announcement | None:
     marker) or an infobox without a role."""
     if not UPCOMING_RE.search(text or ""):
         return None
-    for block in markup.find_templates(text, r"Infobox character"):
-        params = markup.parse_params(block)
-        role = markup.wikitext_to_text(params.get("role", "")).strip().lower()
-        subrole = markup.wikitext_to_text(params.get("sub-role", "")).strip().lower()
-        if role not in ("tank", "damage", "support"):
-            return None
-        released = RELEASE_RE.search(markup.wikitext_to_text(text))
-        release_date: datetime.date | None = None
-        if released:
-            # a date the wiki spells another way leaves release_date as it is
-            with contextlib.suppress(ValueError):
-                release_date = datetime.datetime.strptime(released.group(1),
-                                                          "%B %d, %Y").date()
-        return Announcement(role=role, subrole=subrole, release_date=release_date)
-    return None
+    params = _infobox(text)
+    if params is None:
+        return None
+    role = markup.wikitext_to_text(params.get("role", "")).strip().lower()
+    subrole = markup.wikitext_to_text(params.get("sub-role", "")).strip().lower()
+    if role not in ("tank", "damage", "support"):
+        return None
+    released = RELEASE_RE.search(markup.wikitext_to_text(text))
+    release_date = markup.parse_date(released.groups(), released.group(5)) if released else None
+    return Announcement(role=role, subrole=subrole, release_date=release_date)
 
 
 # Declared on Template:Ability details but not registered as Cargo fields.

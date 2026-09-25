@@ -1,6 +1,9 @@
 """The wiki's markup, reduced to text: the six parsers all read through these.
 Pure - no network, no database, so the pull-request gate covers them."""
 
+import re
+from datetime import date
+
 from db.data.wiki import markup
 
 
@@ -46,6 +49,19 @@ def test_an_ability_type_splits_on_either_spelling_the_wiki_uses():
     assert markup.split_type("Ability") == ("Ability", None)
     assert markup.split_type("  Weapon ()  ") == ("Weapon", None)
     assert markup.split_type("") == ("", None) and markup.split_type(None) == ("", None)
+
+
+def test_a_date_reads_day_or_month_first_and_needs_a_year():
+    date_re = re.compile(markup.DATE)
+    for text in ("6 October 2026", "October 6, 2026", "october 6 2026"):
+        match = date_re.fullmatch(text)
+        assert match and markup.parse_date(match.groups(), match.group(5)) == date(2026, 10, 6)
+    yearless = date_re.fullmatch("February 18")
+    assert yearless and markup.parse_date(yearless.groups(), yearless.group(5)) is None
+    # a year the text gives elsewhere, as the far end of a season's run does
+    assert markup.parse_date(yearless.groups(), "2025") == date(2025, 2, 18)
+    impossible = date_re.fullmatch("30 February 2026")
+    assert impossible and markup.parse_date(impossible.groups(), impossible.group(5)) is None
 
 
 def test_a_template_body_splits_on_its_own_pipes_only():

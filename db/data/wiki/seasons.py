@@ -14,7 +14,6 @@ is restamped with its season.
 """
 
 import re
-from collections.abc import Sequence
 from datetime import date
 
 import psycopg
@@ -31,24 +30,9 @@ SUBPAGE_RE = re.compile(r"\{\{\s*main\s*\|\s*(%s/[^}|]+?)\s*\}\}" % SEASON_PAGE,
 ARC_RE = re.compile(r"^\s*'{2,5}([^'\n]+?)'{2,5} is the \d{4} arc\b", re.M)
 HEADING_RE = re.compile(r"^===\s*(Season\s+\d+.*?)\s*===[ \t]*$", re.M | re.I)
 
-MONTHS = [
-    "january", "february", "march", "april", "may", "june", "july", "august",
-    "september", "october", "november", "december"]
-# "4 October 2022", "June 20, 2024", "June 20 2024"; the year may be left
-# to the other end of the run: "(February 18 - 22 April 2025)".
-DATE = (r"(?:(\d{1,2})\s+(%(m)s)|(%(m)s)\s+(\d{1,2}))(?:,?\s*(\d{4}))?"
-        % {"m": "|".join(MONTHS)})
-RUN_RE = re.compile(r"\(\s*%s\s*[-–—]\s*%s\s*\)" % (DATE, DATE), re.I)
-
-
-def _date(groups: Sequence[str | None], year: str) -> date:
-    """A date from a DATE match's first four groups - the day and the month in
-    either order, one pair matched and the other None - and a year."""
-    day_first, month_first, month_second, day_second = groups[:4]
-    day, month = day_first or day_second, month_first or month_second
-    if day is None or month is None:
-        raise ValueError("not a DATE match: %r" % (groups,))
-    return date(int(year), MONTHS.index(month.lower()) + 1, int(day))
+# The year may be left to the other end of the run: "(February 18 - 22
+# April 2025)".
+RUN_RE = re.compile(r"\(\s*%s\s*[-–—]\s*%s\s*\)" % (markup.DATE, markup.DATE), re.I)
 
 
 def parse_run(text: str) -> date | None:
@@ -58,11 +42,11 @@ def parse_run(text: str) -> date | None:
         return None
     start, end = match.groups()[:5], match.groups()[5:]
     if start[4]:
-        return _date(start, start[4])
-    if not end[4]:
+        return markup.parse_date(start, start[4])
+    started, ended = markup.parse_date(start, end[4]), markup.parse_date(end, end[4])
+    if started is None or ended is None:
         return None
-    started = _date(start, end[4])
-    if started > _date(end, end[4]):                  # "(December 9 - February 10, 2026)"
+    if started > ended:                               # "(December 9 - February 10, 2026)"
         started = started.replace(year=started.year - 1)
     return started
 

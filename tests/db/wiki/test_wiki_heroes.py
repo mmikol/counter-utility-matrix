@@ -63,6 +63,11 @@ def test_an_upcoming_article_yields_the_announcement_and_a_released_one_does_not
     assert parse_announcement(UPCOMING.replace("| role = Support", "")) is None  # no role, no row
     undated = parse_announcement(UPCOMING.replace("on October 6, 2026", "soon"))
     assert undated and undated.release_date is None
+    # the day may come first, as the wiki writes a season's run
+    day_first = parse_announcement(UPCOMING.replace("October 6, 2026", "6 October 2026"))
+    assert day_first and day_first.release_date == datetime.date(2026, 10, 6)
+    yearless = parse_announcement(UPCOMING.replace("October 6, 2026", "October 6"))
+    assert yearless and yearless.release_date is None
 
 
 # --- the article supplement ------------------------------------------------------------
