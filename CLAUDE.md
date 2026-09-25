@@ -74,8 +74,8 @@ db <- facts <- inference <- door <- ui.
 
 - **One door for writes.** Every write to Postgres or the playbook runs
   under a tool. Each family module (`pulls`, `lifecycle`, `facts`, `solver`,
-  `playbook` in `door/mcp/`) declares its tools with `@tool(...)` into the
-  one `REGISTRY` (`door/mcp/registry.py`), which lists them in `FAMILIES`'
+  `playbook`, `matches` in `door/mcp/`) declares its tools with `@tool(...)`
+  into the one `REGISTRY` (`door/mcp/registry.py`), which lists them in `FAMILIES`'
   order, and `door/mcp/tools.py` imports every family. A call arrives over
   stdio, HTTP or in-process (`ctx.call`), is checked against the
   tool's schema by the same `Tool` wrapper on every path, and is audited to
@@ -83,12 +83,21 @@ db <- facts <- inference <- door <- ui.
   except the sentry, which renames a bad strategy
   file to `.md.quarantined` outside the door. The code that writes lives
   with what it writes - the pulls in `db/data`, the strategies table in
-  `inference.catalog.mirror`, the playbook's files in `inference.tune` - and
+  `inference.catalog.mirror`, the playbook's files in `inference.tune`, the
+  recorded matches in `db.matches` - and
   only the tools call it. Reads bypass the door: the board, `facts/` and
   `inference/` read through `db.psql.default_dsn()` - `DATABASE_URL`, else
   the embedded pgserver cluster at `db/psql/cluster`, started on first
   touch; only db_init and db_rebuild create it (`psql.boot`), and a read
   with neither raises `psql.NoDatabaseError`.
+- **Two user inputs.** The strategies and the recorded matches are the only
+  data written by hand, and the only rows under the `user` source; every
+  other table is pulled from Blizzard or the wiki. A recorded match is one
+  map the owner played on console, entered by hand through `record_match`
+  (the board's record tab, the `/record` skill): the map, blue's side,
+  blue's result, both sixes and the bans, blue always the owner's team.
+  `facts/matches.py` reads them back as `Match` records; the inference
+  layer reads those, never the tables.
 - **One definition per metric.** `facts/team.py` defines every team
   metric and `facts/compute.py` the matchup, map and world ones, each in a
   registry, and `compute.registry()` gathers them. The facts engine words
@@ -128,13 +137,15 @@ db <- facts <- inference <- door <- ui.
   `/api/facts` in-process and answers `/api/board` and `/api/strategies`
   with `inference/serve.py`'s handlers, in-process or on the service
   `COUNTRIX_INFERENCE_URL` names. It is read-only unless
-  `COUNTRIX_READ_ONLY=0`; its one write is a `tune` call through the door.
+  `COUNTRIX_READ_ONLY=0`; its two writes, a weight's `tune` and a match's
+  `record_match`, go through the door.
   All three HTTP servers stand on `db/web.py`: a request whose Host or Origin
   is not a local name or one given with `--allow-host` is refused with 403.
 - **Docker** runs one image as five roles plus postgres (`compose.yaml`,
   `docker-entrypoint.sh`). Migrations ship in the image, not a mount: once
   `orchestrator.py up` rebuilds it, any new migration file makes the `data`
-  container `db_rebuild` on start, which drops the dated rates history.
+  container `db_rebuild` on start, which drops the dated rates history and
+  keeps the recorded matches (`db/raw/kept-matches.json` across the drop).
 
 ## What the tests hold you to
 
@@ -184,8 +195,9 @@ db <- facts <- inference <- door <- ui.
   A house skill or a doc names a strategy only by an id the playbook
   holds: a backticked id the record cites and `inference/strategies/`
   lacks is a dropped rule, and fails.
-- A new table carries `source_id` and `cao`, has rows, is exported to
-  `db/raw` (`export_csv`) and is named in `facts/tables.py` (a test greps
+- A new table carries `source_id` and `cao`, has rows (`matches` and
+  `match_picks` alone may be empty: they fill as the owner plays), is
+  exported to `db/raw` (`export_csv`) and is named in `facts/tables.py` (a test greps
   its source); regenerate the schema sections of docs/db.md. Its migration
   also wants a `schema.DOC_DOMAIN` entry keyed by filename, or docs/db.md
   files it under foundation - no test catches that one.
@@ -233,7 +245,8 @@ db <- facts <- inference <- door <- ui.
   file either way). The ledger records filenames only: never edit a
   statement in an applied migration, add the next number. The `--` prose
   is documentation the data dictionary reads, and is kept current.
-  Locally, `db_migrate` keeps the data; `db_rebuild` drops it.
+  Locally, `db_migrate` keeps the data; `db_rebuild` drops it, the
+  recorded matches aside.
 - Over stdio, stdout is the JSON-RPC wire. Code reachable from a tool logs
   through `ctx.log` or stderr, never `print`. A refusal raises `db.Refusal`;
   anything else is the server's fault.

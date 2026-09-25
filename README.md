@@ -31,6 +31,10 @@ hide the rate figures: Blizzard licenses those for personal use only.*
   strongest heroes allow, then climbs by local search over the whole roster.
   The playbook's constraints and heuristics score every candidate; the best six
   comes back with the alternatives and why.
+- **Records what was played.** Each map played is entered by hand - both
+  sixes, the bans, the side and the result - from the board's record tab or a
+  Claude Code session, checked against the roster and the queue's limits. The
+  playbook and these matches are the only data a person writes.
 - **Serves it three ways.** A web board, an HTTP inference service and an MCP
   (Model Context Protocol) server, the tool interface a Claude Code session
   uses to draft comps and tune the playbook. The solver is arithmetic; the board
@@ -80,7 +84,7 @@ frontmatter, and the solver reads nothing else.
   pooled and single-process answers are pinned to agree exactly.
 - **Typed throughout.** mypy checks every source module in CI; records that
   cross a module boundary are dataclasses, NamedTuples or TypedDicts.
-- **One door for writes.** 33 MCP tools over stdio, HTTP or in-process, each
+- **One door for writes.** 36 MCP tools over stdio, HTTP or in-process, each
   schema-checked and audited; the query tool runs as a read-only database login.
 - **Hardened containers.** Five services share one image and run unprivileged
   on a read-only root with every capability dropped; PostgreSQL keeps the five
@@ -149,8 +153,9 @@ COUNTRIX_NO_DATABASE=1 .venv/bin/python -m pytest -q --cov --cov-fail-under=78  
 
 Open the repo in [Claude Code](https://claude.com/claude-code) and the skills
 are there: `/comp` drafts a comp with cited reasons, `/tune` and `/strategy`
-edit the playbook through the door, `/heroes`, `/maps` and `/patches` keep the
-data current, `/maintain` runs the checks and keeps the docs current.
+edit the playbook through the door, `/record` logs a map you played,
+`/heroes`, `/maps` and `/patches` keep the data current, `/maintain` runs the
+checks and keeps the docs current.
 [CLAUDE.md](CLAUDE.md) is the guide a session reads first. A bare
 `orchestrator.py` is `up` followed by the refresh agents: headless Claude Code
 sessions on the `/refresh` skill that refetch the sources and may tune the

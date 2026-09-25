@@ -323,6 +323,7 @@ MUST_NAME = {   # a skill is a playbook over these tools; if a tool is renamed, 
     "patches": {"pull_patches", "pull_rates", "pull_kits", "pull_heroes", "db_docs", "export_csv"},
     "heroes": {"roster", "pull_heroes", "pull_kits", "pull_synergies", "pull_counters"},
     "maps": {"roster", "pull_maps", "pull_terrain", "pull_rates", "pull_playstyles", "facts"},
+    "record": {"roster", "record_match", "list_matches", "delete_match"},
 }
 
 

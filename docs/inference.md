@@ -20,8 +20,10 @@ Two things infer:
   where arithmetic cannot. It runs when you ask it to, never on its own,
   on your subscription.
 
-The playbook is the only input written by hand; a pull tool fills every
-other table. The shipped playbook is five assumptions that score nothing,
+The playbook is one of the two inputs written by hand, and the only one
+the solver reads; the other is the owner's recorded matches, which the
+door's `record_match` stores and `facts.matches` reads back as `Match`
+records. A pull tool fills every other table. The shipped playbook is five assumptions that score nothing,
 so a board reads unscored while the playbook is rebuilt from the
 citations in [inference/README.md](../inference/README.md). The solver
 tests run on the reference playbook in

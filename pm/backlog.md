@@ -73,9 +73,10 @@ keeps it current.
   an hour in the repo.
 - **Weights that learn on their own.** The user wants them to, with the
   sliders as the manual override. The weights were fitted once to a
-  benchmark of community comps; nothing refits them. No match result is
-  recorded, and a record of results would be a user input, which the
-  database does not take. The signal the data holds: fit the weights so
+  benchmark of community comps; nothing refits them. The owner's played
+  maps are recorded now (`record_match`, migration 024), each stamped with
+  the playbook's digest, so a fit can read results under the playbook they
+  were played under once enough accrue. The signal the data holds: fit the weights so
   that the solver's per-hero contribution ranks agree with each hero's
   published win rate on the map, capped per step, every change a
   tuning-log line with "fit" as its reason. Cost: a day.
@@ -183,6 +184,15 @@ few match-ups the wiki rates (the counters table is a list).
 
 ## Done
 
+- **The owner's matches are the second user input** - `exec/match-record`
+  branch. Migration 024 adds `matches` and `match_picks`, one row a map
+  with both sixes, the bans, blue's side and blue's result, under the
+  `user` source. The door's `record_match` checks a map as the board
+  checks a board and as only a played map can be, and stamps the
+  playbook's digest; `list_matches` and `delete_match` read and fix the
+  record; the board's record tab and the `/record` skill call it;
+  `facts/matches.py` reads it back as `Match` records; `db_rebuild` keeps
+  it across the drop.
 - **The strategies are the one user input** - `data-only-inputs` branch.
   `seasons` and `synergies` are pulled from the wiki (`pull_seasons`,
   `pull_synergies`); `map_playstyle` and `comp_archetypes` are dropped
