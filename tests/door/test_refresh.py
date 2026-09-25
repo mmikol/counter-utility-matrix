@@ -7,6 +7,7 @@ from datetime import datetime
 import pytest
 
 from door import refresh
+from door.mcp.schema import ToolReply
 from tests.db.test_fetch import write_aged
 
 
@@ -36,7 +37,8 @@ def test_refresh_once_survives_a_bad_day(monkeypatch):
     assert ok is False and "504" in text and any("FAILED" in line for line in logs)
     traceback = next(line for line in logs if line.startswith("Traceback"))
     assert traceback.endswith("RuntimeError: blizzard 504")
-    monkeypatch.setattr(tools.Context, "call", lambda ctx, name, **kw: ("sync_all: done", {}))
+    monkeypatch.setattr(tools.Context, "call",
+                        lambda ctx, name, **kw: ToolReply("sync_all: done", {}))
     ok, _ = refresh.refresh_once(nowhere, logs.append)
     assert ok is True
 
@@ -109,12 +111,14 @@ def test_daily_refresh_touches_only_what_moves(monkeypatch):
     from door.mcp import tools
     calls = []
     monkeypatch.setattr(tools.Context, "call", lambda ctx, name, **kw: calls.append(
-        (name, kw.get("refresh"))) or ("%s: ok" % name, {}))
-    ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere", client="test"),
-                                 lambda m: None, full=False)
+        (name, kw.get("refresh"))) or ToolReply("%s: ok\n  rows  1" % name, {}))
+    ok, text = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere", client="test"),
+                                    lambda m: None, full=False)
     # seasons first: the day's snapshots are stamped with the season live today
     assert ok and calls == [("pull_seasons", True), ("pull_rates", True),
                             ("load_authored", None), ("export_csv", None)]
+    # the log keeps each tool's headline line, not its counts
+    assert text == "pull_seasons: ok; pull_rates: ok; load_authored: ok; export_csv: ok"
     # the hero articles (kits, synergies, counters) are the full refresh's: a
     # daily refetch would keep the wiki cache young and full_due() never true
     assert not set(refresh.DAILY) & {"pull_kits", "pull_synergies", "pull_counters"}
@@ -122,7 +126,7 @@ def test_daily_refresh_touches_only_what_moves(monkeypatch):
     # the calls above are stubbed, so a renamed tool would pass them: the names are checked here
     assert {name for name, _ in calls} <= set(tools.REGISTRY.names())
     calls.clear()
-    ok, _ = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere", client="test"),
-                                 lambda m: None, full=True)
-    assert ok and calls == [("sync_all", True)]
+    ok, text = refresh.refresh_once(tools.Context(dsn="postgresql://nowhere", client="test"),
+                                    lambda m: None, full=True)
+    assert ok and calls == [("sync_all", True)] and text == "sync_all: ok"
     assert {name for name, _ in calls} <= set(tools.REGISTRY.names())

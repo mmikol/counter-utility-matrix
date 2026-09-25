@@ -13,7 +13,10 @@ from db import Refusal
 
 class ToolReply(NamedTuple):
     """What a tool returns: its text, and the same as a JSON object for a
-    structured reply."""
+    structured reply. The database's writers - the pulls, load_authored,
+    sync_all, export_csv, db_init, db_migrate and db_rebuild - open the text
+    with one headline line, "<tool>: <what it did>", and the refresher logs
+    that line alone."""
     text: str
     data: Mapping[str, object]
 

@@ -121,8 +121,9 @@ def refresh_once(
         ctx: tools.Context, log: tools.Log = print, full: bool | None = None,
         full_days: float = DEFAULT_FULL_DAYS) -> Refreshed:
     """One refresh -> (ok, text): daily (seasons, rates, strategies, export)
-    or full (every source) - decided by full_due() unless `full` is given.
-    Never raises; a failure returns (False, the error)."""
+    or full (every source) - decided by full_due() unless `full` is given -
+    its text each tool's headline, joined by "; ". Never raises; a failure
+    returns (False, the error)."""
     started = time.time()
     try:
         # inside the try: full_due() lists and stats the page cache, which can
@@ -132,14 +133,12 @@ def refresh_once(
         log("refresh: starting a %s refresh at %s" % (
             "FULL" if full else "daily", datetime.now().strftime("%Y-%m-%d %H:%M")))
         if full:
-            text, _ = ctx.call("sync_all", refresh=True)
+            calls: list[tuple[str, dict[str, object]]] = [("sync_all", {"refresh": True})]
         else:
-            parts: list[str] = []
-            for name in DAILY:
-                parts.append(ctx.call(name, refresh=True)[0].splitlines()[0])
-            parts.append(ctx.call("load_authored")[0].split(";")[0])
-            parts.append(ctx.call("export_csv")[0])
-            text = "; ".join(parts)
+            calls = [(name, {"refresh": True}) for name in DAILY]
+            calls += [("load_authored", {}), ("export_csv", {})]
+        text = "; ".join(ctx.call(name, **arguments).text.partition("\n")[0]
+                         for name, arguments in calls)
     except Exception as error:  # noqa: BLE001  # a failed refresh leaves yesterday's data in place
         log(traceback.format_exc().rstrip())
         log("refresh: FAILED after %.0fs: %s: %s"
