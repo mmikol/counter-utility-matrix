@@ -93,6 +93,14 @@ def test_a_compact_infer_names_the_silent_heuristics_and_fits_a_reply(ctx):
 
 @pytest.mark.invariant
 def test_db_migrate_is_idle_when_the_ledger_is_current(ctx):
+    """A ledger behind the files is skipped, not migrated: a test run never
+    applies a migration to the database the suite reads, which may be one
+    another checkout shares."""
+    with ctx.connect() as cx:
+        behind = schema.pending(cx)
+    if behind:
+        pytest.skip("the ledger is behind the files (%s): db_migrate is not the suite's to run"
+                    % ", ".join(behind))
     text, data = ctx.call("db_migrate")
     assert data["applied"] == [] and text.startswith("db_migrate: applied 0")
 
