@@ -121,7 +121,8 @@ def test_the_pull_reads_each_article_once_and_stores_every_kit_in_one_transactio
     assert summary["unknown_heroes"] == ["All heroes", "Wraith"]
     assert summary["missing"] == ["Wraith: failed after 1 attempt: gone"]
     assert (summary["weapons"], summary["added"], summary["health"]) == (1, 1, 2)
-    assert "heroes" in summary["tables"] and "abilities" in summary["tables"]
+    # an announced hero's perks are the pull's rows too
+    assert {"heroes", "abilities", "perks"} <= set(summary["tables"])
     assert lines[:2] == ["cargo rows: 5   heroes named: 4",
                          "supplemented stats: 3  (fields Cargo does not expose)"]
     (cursor,) = connection.cursors

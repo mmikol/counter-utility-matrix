@@ -110,5 +110,5 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> KitsSummary:
         missing=supplement.articles.missing, unknown_heroes=stored.unknown_heroes,
         announced=announced,
         tables=["abilities", "ability_stats", "ability_modifiers", "weapons",
-                "weapon_configs", "weapon_stats", "perk_stats",
+                "weapon_configs", "weapon_stats", "perks", "perk_stats",
                 "perk_ability_effects", "stat_keys", "heroes"])
