@@ -29,7 +29,8 @@ rename aside.
     boards       the five properties a board tool takes, and board_tool,
                  which hands its function the one Draft they name
     facts        the facts layer: roster and a board's facts
-    solver       the inference layer: infer, evaluate, reach and board
+    solver       the inference layer: infer, evaluate, reach, board, and
+                 validate_playbook, the playbook against the recorded matches
     playbook     the metric vocabulary, the strategies and the tools that
                  write them, the tuning log, the strategy:// resources
     matches      the owner's recorded matches: record_match, which checks a

@@ -22,8 +22,10 @@ def test_the_agents_run_is_headless_claude_on_the_refresh_skill(monkeypatch):
     assert "mcp__countrix-docker__sync_all" in allowed
     assert "mcp__countrix__infer_strategy" in allowed
     assert "mcp__countrix-docker__query" in allowed      # read-only, its own login
+    # validate_playbook: the agents tune, and a tune read off the maps that judge it
+    # is the leak the pin guards against; the recorded matches are the owner's to write
     for never in ("add_strategy", "db_rebuild", "db_init", "db_migrate", "record_match",
-                  "delete_match"):
+                  "delete_match", "validate_playbook"):
         assert not any(t.endswith("__" + never) for t in allowed), never
     from inference import derive
     monkeypatch.setattr(derive, "cli", lambda: None)

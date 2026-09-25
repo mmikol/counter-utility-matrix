@@ -1,5 +1,6 @@
 """The inference layer through the door: the solver's infer, evaluate, reach
-and board. infer, evaluate and board are board tools (boards.board_tool);
+and board, and validate_playbook, the playbook judged against the recorded
+matches. infer, evaluate and board are board tools (boards.board_tool);
 reach takes a hero. Each call loads a World from the database the context
 points at, and none of these tools writes.
 """
@@ -7,13 +8,16 @@ points at, and none of these tools writes.
 from collections.abc import Mapping
 from typing import TypedDict
 
+from db import Refusal
 from door.mcp.boards import board_tool
 from door.mcp.registry import Context, tool
 from door.mcp.schema import Property, ToolReply
 from facts import tables
 from facts.draft import Draft
-from inference import catalog, engine, reach
+from facts.matches import load_matches
+from inference import catalog, engine, reach, validate
 from inference.result import Result
+from inference.strategy import CatalogError
 
 COMPACT_TERMS = 15        # the heaviest terms a compact reply carries
 
@@ -164,3 +168,49 @@ def board(
     brief = engine.Brief(pool_size=pool, weights=catalog.parse_weights(weights or {}))
     b = engine.board(world, draft, brief=brief)
     return ToolReply(b.rendered(), b.to_dict())
+
+
+@tool(
+    "validate_playbook", "Judge a playbook against the recorded matches: each map's two"
+    " sixes rescored with evaluate from both seats, then five models fitted and scored on"
+    " maps they were not fitted on - M0 a coin flip, M1 the map and side's base rate, M2"
+    " the map win rates (rate-derived: personal use), M3 one effect per hero, M4 the heroes"
+    " plus the playbook score difference and the matchup metrics - on a time split and a"
+    " leave-sessions-out split, by log loss and Brier with 95% intervals over sessions,"
+    " with each strategy family dropped from M4 in turn. Judges a playbook only on the maps"
+    " from the first one played under its digest, and gives no verdict while the decided"
+    " maps are fewer than the effect needs. Rescores a map in about three seconds; writes"
+    " nothing.",
+    {
+        "playbook": {"type": "string",
+                     "description": "a playbook folder inside the repo (default: the one"
+                                    " in force)"},
+        "pin": {"type": "boolean",
+                "description": "true (default): only the maps from the first one played"
+                               " under the playbook's digest on; false: every map, the ones"
+                               " it may have been tuned on included"},
+        "effect": {"type": "number",
+                   "description": "the win chance an effect moves an even map to, which"
+                                  " the guard sizes the sample for (default %.2f: 191 maps;"
+                                  " 0.55 needs 779)" % validate.EFFECT},
+        "detail": {"type": "boolean",
+                   "description": "true: each map's team metrics, both seats, in the"
+                                  " structured reply"}})
+def validate_playbook(
+        ctx: Context, playbook: str | None = None, pin: bool = True,
+        effect: float = validate.EFFECT, detail: bool = False) -> ToolReply:
+    directory = catalog.named_dir(playbook)
+    try:
+        strategies = catalog.load(directory)
+    except CatalogError as error:
+        raise Refusal("the playbook at %s does not load: %s"
+                      % (catalog.playbook_name(directory), error)) from error
+    validate.check_effect(effect)
+    with ctx.connect() as cx:
+        world = tables.load(cx)
+        recorded = load_matches(cx)
+    report = validate.validate(
+        world, recorded, strategies, digest=catalog.playbook_digest(directory),
+        name=catalog.playbook_name(directory), pin=pin, effect=effect, detail=detail,
+        log=ctx.log)
+    return ToolReply(validate.rendered(report), report)
