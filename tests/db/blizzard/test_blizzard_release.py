@@ -19,8 +19,7 @@ HERALD, WARDEN = "Test Herald", "Test Warden"
 def _ability(name, kind=KIND_ABILITY, **stats):
     return AbilityEntry(
         name=name, mode=None, input_key=None, keywords="", description="%s." % name,
-        stats={code: StatValue(text, text) for code, text in stats.items()}, kind=kind,
-        display_name=name)
+        stats={code: StatValue(text, text) for code, text in stats.items()}, kind=kind)
 
 
 def _perk(name, tier, description="", **stats):
