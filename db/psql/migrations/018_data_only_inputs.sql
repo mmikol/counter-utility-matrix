@@ -19,7 +19,4 @@ COMMENT ON TABLE patches IS
 COMMENT ON TABLE seasons IS
     'Seasons: the coarser delineator. A patch tweaks numbers; a season swaps the hero pool and map rotation, so a snapshot records both. Pulled from the wiki''s Season pages (pull_seasons): every season that has started, with its start date; note is the wiki subpage it came from. Reloaded whole; every rates snapshot is restamped with its season.';
 
-COMMENT ON TABLE synergies IS
-    'Which heroes work WITH which. Pulled from the Synergy section of every hero''s wiki article (pull_synergies): a pair per hero linked in another hero''s section. score is 2 when both articles name each other, 1 when one does; note is the wiki''s advice for the pair, cut to one clause. Bidirectional, unlike counters: each pair is stored once, lower hero_id first, and read from either side. Reloaded whole.';
-
 COMMIT;

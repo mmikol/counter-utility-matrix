@@ -24,13 +24,12 @@ CREATE TABLE maps (
     cao       timestamptz NOT NULL DEFAULT now()
 );
 
--- One row per playable combination: this table is the set of matches that can
--- actually be drawn in Open Queue Competitive.
+-- One row per playable combination: the maps and modes of Standard Play, the
+-- competitive rotation (pull_maps).
 --
--- Every map currently belongs to exactly one mode, so today this holds one row
--- per map. It is modelled many-to-many anyway because that is what the domain
--- allows - a map can be re-released under a second mode - and because a
--- degenerate join here costs nothing.
+-- Every map belongs to one mode today, so this holds one row per map. It is
+-- many-to-many anyway: a map can be re-released under a second mode, and the
+-- degenerate join costs nothing.
 CREATE TABLE map_modes (
     map_id    integer NOT NULL REFERENCES maps(map_id) ON DELETE CASCADE,
     mode_id   integer NOT NULL REFERENCES game_modes(mode_id),

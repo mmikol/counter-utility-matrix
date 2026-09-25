@@ -571,7 +571,7 @@ Rates per map. The source's filters compose, so a hero's rates on King's Row in 
 
 *MAPS · `003_maps.sql`*
 
-One row per playable combination: this table is the set of matches that can actually be drawn in Open Queue Competitive. Every map currently belongs to exactly one mode, so today this holds one row per map. It is modelled many-to-many anyway because that is what the domain allows - a map can be re-released under a second mode - and because a degenerate join here costs nothing.
+One row per playable combination: the maps and modes of Standard Play, the competitive rotation (pull_maps). Every map belongs to one mode today, so this holds one row per map. It is many-to-many anyway: a map can be re-released under a second mode, and the degenerate join costs nothing.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -813,7 +813,7 @@ The ten subroles, each belonging to exactly one role, each carrying the passive 
 
 *PLAYBOOK · `005_playbook.sql`*
 
-Which heroes work WITH which. Pulled from the Synergy section of every hero's wiki article (pull_synergies): a pair per hero linked in another hero's section. score is 2 when both articles name each other, 1 when one does; note is the wiki's advice for the pair, cut to one clause. Bidirectional, unlike counters: each pair is stored once, lower hero_id first, and read from either side. Reloaded whole.
+Which heroes work WITH which. Pulled from the Team Synergy column of the "Match-Ups and Team Synergy" section of every released hero's wiki article (pull_synergies). A cell is a claim unless it is a placeholder, rated below GOOD or MIRROR, or unrated and saying there is no synergy. score is 2 when both articles claim the pair, 1 when one does; note is the advice's first sentence, cut to a clause under 120 characters. No snapshot, region or tier: a judgement has no population behind it. Reloaded whole. Bidirectional, unlike counters. Synergy is a property of the PAIR: if Mei works with Tracer then Tracer works with Mei - one fact, one row. A counter is an arrow: Mei answering Tracer says nothing about the reverse. So each pair is stored once, lower hero_id first (a CHECK holds it), and read from either side.
 
 | column | type | null | references |
 | --- | --- | --- | --- |

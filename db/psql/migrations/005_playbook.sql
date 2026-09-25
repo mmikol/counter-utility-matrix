@@ -60,17 +60,19 @@ CREATE TABLE map_strategy (
     PRIMARY KEY (hero_id, map_id)
 );
 
--- Which heroes work WITH which. Proprietary, not scraped: hand-authored in
--- db/data/authored/synergies.csv. No snapshot, region or tier, because an
--- authored judgement has no population behind it.
+-- Which heroes work WITH which. Pulled from the Team Synergy column of the
+-- "Match-Ups and Team Synergy" section of every released hero's wiki article
+-- (pull_synergies). A cell is a claim unless it is a placeholder, rated below
+-- GOOD or MIRROR, or unrated and saying there is no synergy. score is 2 when
+-- both articles claim the pair, 1 when one does; note is the advice's first
+-- sentence, cut to a clause under 120 characters. No snapshot, region or
+-- tier: a judgement has no population behind it. Reloaded whole.
 --
 -- Bidirectional, unlike counters. Synergy is a property of the PAIR: if Mei
 -- works with Tracer then Tracer works with Mei - one fact, one row. A counter
--- is an arrow: Mei answering Tracer says nothing about the reverse. So this
--- table stores each pair once, in canonical order (lower hero_id first,
--- enforced below), and a query reads it from either side. score is whatever
--- scale the author keeps consistently; note carries the reasoning, which is
--- the part a model actually wants.
+-- is an arrow: Mei answering Tracer says nothing about the reverse. So each
+-- pair is stored once, lower hero_id first (a CHECK holds it), and read from
+-- either side.
 CREATE TABLE synergies (
     hero_id   integer NOT NULL REFERENCES heroes(hero_id) ON DELETE CASCADE,
     other_id  integer NOT NULL REFERENCES heroes(hero_id) ON DELETE CASCADE,

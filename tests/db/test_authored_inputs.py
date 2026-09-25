@@ -187,15 +187,16 @@ def test_the_sentry_scans_the_wiki_tables_and_the_playbook():
 
 
 def test_the_data_dictionary_says_where_seasons_and_synergies_come_from():
-    # a statement in an applied migration is never edited: 018's COMMENT ON
-    # TABLE replaces the prose 004 and 005 wrote above their CREATE TABLE
+    # 018's COMMENT ON TABLE replaces the prose 004 wrote above CREATE TABLE
+    # seasons; 005's prose above CREATE TABLE synergies is kept current itself
     from db.psql import schema
     described = schema._migration_tables()
     assert described["seasons"][0] == "004_meta.sql"           # the domain stays the creator's
     assert described["synergies"][0] == "005_playbook.sql"
     assert "pull_seasons" in described["seasons"][1]
+    assert "wiki's Season pages" in described["seasons"][1]    # '' unescaped
     assert "pull_synergies" in described["synergies"][1]
-    assert "hero's wiki article" in described["synergies"][1]   # '' unescaped
+    assert "hero's wiki article" in described["synergies"][1]
     for table in ("seasons", "synergies"):
         assert "authored" not in described[table][1].lower(), table
         assert ".csv" not in described[table][1], table
