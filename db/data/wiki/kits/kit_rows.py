@@ -177,12 +177,13 @@ def parse_kits(rows: Iterable[Mapping[str, str]]) -> dict[str, HeroKit]:
         lowered = ability_type.base.lower()
         if "perk" in lowered:
             kit.perks.append(PerkEntry(**base, tier="major" if "major" in lowered else "minor"))
-        elif lowered.startswith("weapon"):
-            kit.weapons.append(WeaponEntry(**base, kind=KIND_WEAPON, display_name=name,
+            continue
+        kind = ability_kind(ability_type.base)
+        if kind == KIND_WEAPON:
+            kit.weapons.append(WeaponEntry(**base, kind=kind, display_name=name,
                                            weapon_type=_weapon_type(fields)))
         else:
-            kit.abilities.append(AbilityEntry(**base, kind=ability_kind(ability_type.base),
-                                              display_name=name))
+            kit.abilities.append(AbilityEntry(**base, kind=kind, display_name=name))
 
     for kit in heroes.values():
         kit.weapons.sort(key=_slot_rank)
