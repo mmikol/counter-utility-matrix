@@ -215,6 +215,14 @@ def test_names_and_pronouns_are_put_in_the_heros_seat():
         "Keep foe away; foe is an easy target.")
 
 
+def test_a_heros_former_name_and_its_name_unpunctuated_read_as_the_hero():
+    normalise = matchups.normalise
+    assert normalise("McCree's Flashbang stops you.", "Winston", "Cassidy") == (
+        "foe's Flashbang stops you.")
+    assert normalise("Soldier 76 outranges Pharah.", "Pharah", "Soldier: 76") == (
+        "foe outranges you.")
+
+
 def test_a_heros_pronoun_is_counted_outside_the_match_up_section():
     article = (
         "He is a scientist. His cannon arcs. He leaps.\n"

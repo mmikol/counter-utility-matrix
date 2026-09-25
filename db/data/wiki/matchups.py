@@ -30,7 +30,7 @@ import psycopg
 
 from db import psql
 from db.data import ArticlePullSummary, fetch
-from db.data.names import hero_key, index, name_key, unaccented
+from db.data.names import RENAMED, hero_key, index, name_key, unaccented
 from db.data.wiki import WIKI, WikiError, fetch_articles, synergies
 
 # --- extract: markup -> Python ---------------------------------------------
@@ -64,11 +64,12 @@ RISK_WEIGHTS = {"extreme": -1.0, "extremely high": -1.0, "extermely high": -1.0,
                 "very high": -1.0, "high": -0.5, "medium": 0.0, "low": 0.5, "very low": 1.0}
 RISK_RATING_RE = re.compile(r"^(.*?)\s*RISK$", re.I)
 
-# Names the wiki's prose uses for a hero besides the article title.
+# Names the wiki's prose uses for a hero besides the article title, its
+# name unpunctuated and a former name (names.RENAMED).
 NICKNAMES = {
-    "soldier76": ("Soldier 76", "Soldier"), "wreckingball": ("Hammond", "Ball"),
+    "soldier76": ("Soldier",), "wreckingball": ("Hammond", "Ball"),
     "junkerqueen": ("Queen",), "reinhardt": ("Rein",), "torbjorn": ("Torb",),
-    "roadhog": ("Hog",), "cassidy": ("McCree",), "jetpackcat": ("Fika",)}
+    "roadhog": ("Hog",), "jetpackcat": ("Fika",)}
 # "her" before an article, a preposition or a stop is an object: "making her a threat".
 PRONOUN_RE = (r"he|she|him|her(?= (?:an?|the|to|at|in|on|with|from|for"
         r"|if|when|and|or|but|as|out|off|down|up|while|before|after|is|are|was|will"
@@ -285,10 +286,12 @@ def prose(cell: str) -> str:
 
 def _aliases(hero: str) -> list[str]:
     """What the prose may call a hero, longest first: its name, that name without
-    accents and without punctuation, its nicknames."""
-    plain = unaccented(hero)
+    accents and without punctuation, a former name, its nicknames. A former name
+    is its name_key, which the aliases' re.I match reads in any case."""
+    plain, key = unaccented(hero), name_key(hero)
     names = {hero, plain, "".join(c for c in plain if c.isalnum() or c in " -")}
-    return sorted(names | set(NICKNAMES.get(name_key(hero), ())), key=len, reverse=True)
+    names |= {former for former, current in RENAMED.items() if current == key}
+    return sorted(names | set(NICKNAMES.get(key, ())), key=len, reverse=True)
 
 
 def pronoun(text: str) -> str | None:

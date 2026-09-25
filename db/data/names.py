@@ -33,7 +33,8 @@ from collections.abc import Mapping
 NOT_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 NOT_ALNUM_OR_SPACE_RE = re.compile(r"[^a-z0-9\s]+")
 TRAILING_PARENTHETICAL_RE = re.compile(r"\s*\([^)]*\)\s*$")
-# A hero the wiki's older rows still link under a former name.
+# A hero the wiki's older rows still link under a former name. The former
+# name is also what matchups reads the hero by in the wiki's prose.
 RENAMED = {"mccree": "cassidy"}
 
 
