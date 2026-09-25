@@ -8,18 +8,20 @@ every source.
                      a reader; a failure is retried while attempts remain
     RequestPolicy    a source's attempts, backoff, timeout and pace
     is_stale         whether a cached page is older than the max_age it is
-                     given
+                     given, or was written before the cutoff
     cache_key        a request as a file name in the cache
     session          a requests session that identifies this project
     PullContext      what a pull's run() takes beside its connection: the page
                      cache, the session, the log (stderr unless the caller
                      names another - over stdio, stdout is the MCP wire) and
-                     the freshness, max_age. None keeps a page forever (a
-                     build from the caches), 0 refetches every page (the
-                     refresh); a page that fails to refetch keeps its cached
-                     copy and is listed in the context's stale, so a flaky
-                     source degrades to yesterday's numbers, never to an
-                     empty table, and the pull says so
+                     the freshness. With neither max_age nor cutoff a page
+                     is kept forever (a build from the caches); a refresh's
+                     cutoff, the moment it began, refetches every page
+                     written before it, so the pulls of one refresh fetch a
+                     shared article once. A page that fails to refetch
+                     keeps its cached copy and is listed in the context's
+                     stale, so a flaky source degrades to yesterday's
+                     numbers, never to an empty table, and the pull says so
 
 Each source package (blizzard, wiki) names its own endpoints
 and its own `sources` row, so provenance lives with the source. Fetching
@@ -82,9 +84,12 @@ def session() -> requests.Session:
 @dataclasses.dataclass(frozen=True)
 class PullContext:
     """What a pull runs with: the page cache it reads through (None reads
-    none), the session it fetches on, where its progress lines go, and the
-    seconds a cached page stays fresh - None keeps a page forever (a build
-    from the caches), 0 refetches every page (a refresh).
+    none), the session it fetches on, where its progress lines go, and when a
+    cached page is stale. max_age is the seconds a page stays fresh; cutoff,
+    a time.time() stamp, makes every page written before it stale - the
+    moment a refresh began, so a page one pull of the refresh wrote is fresh
+    for the next. With both None a page is kept forever (a build from the
+    caches).
 
     stale holds 'name: error' for each page whose refetch failed and whose
     cached copy was read instead. The context stays frozen: only the list's
@@ -93,6 +98,7 @@ class PullContext:
     session: requests.Session = dataclasses.field(default_factory=session)
     log: Log = to_stderr
     max_age: float | None = None
+    cutoff: float | None = None
     stale: list[str] = dataclasses.field(default_factory=list)
 
 
@@ -101,9 +107,11 @@ def _age(path: str) -> float:
     return time.time() - os.path.getmtime(path)
 
 
-def is_stale(path: str, max_age: float | None) -> bool:
-    """A cached page older than `max_age` seconds (never, when it is None)."""
-    return max_age is not None and _age(path) > max_age
+def is_stale(path: str, max_age: float | None, cutoff: float | None = None) -> bool:
+    """A cached page older than `max_age` seconds or written before `cutoff`,
+    a time.time() stamp; a bound that is None never makes it stale."""
+    return ((max_age is not None and _age(path) > max_age)
+            or (cutoff is not None and os.path.getmtime(path) < cutoff))
 
 
 def _read_cache(path: str) -> str:
@@ -169,16 +177,16 @@ def cached(pull: PullContext, name: str, produce: Callable[[], str]) -> str:
     """The text of cache file `name` in the pull's cache, fresh from the cache
     or from produce().
 
-    A copy younger than the pull's max_age is read and nothing is asked for.
-    Otherwise produce() runs and its text is written. When it fails with a
-    FetchError, the stale copy is kept and named in the pull's stale, and
-    the failure surfaces only when there is none. Without a cache_dir it only
-    produces.
+    A copy the pull counts as fresh - within its max_age and written after
+    its cutoff - is read and nothing is asked for. Otherwise produce() runs
+    and its text is written. When it fails with a FetchError, the stale copy
+    is kept and named in the pull's stale, and the failure surfaces only
+    when there is none. Without a cache_dir it only produces.
     """
     if not pull.cache_dir:
         return produce()
     path = os.path.join(pull.cache_dir, name)
-    if os.path.exists(path) and not is_stale(path, pull.max_age):
+    if os.path.exists(path) and not is_stale(path, pull.max_age, pull.cutoff):
         return _read_cache(path)
     try:
         text = produce()

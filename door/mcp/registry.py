@@ -12,8 +12,8 @@ call lands in.
                      each of its tools with
     Context          where a call lands: the database, the page caches, the
                      log, the caller the audit line names (board, refresher,
-                     shell, nested:<tool>), and the registry one tool calls
-                     another through (call)
+                     shell, nested:<tool>), a refresh's cutoff, and the
+                     registry one tool calls another through (call)
     REFRESH          the refresh argument of every pull and of the rebuild
 
 A family module - pulls, lifecycle, facts, solver, playbook - declares its
@@ -29,6 +29,7 @@ schema.ToolReply.
 import copy
 import functools
 import os
+import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import ClassVar, Self
@@ -74,9 +75,10 @@ class NoSuchToolError(KeyError):
 
 REFRESH: Properties = {
     "refresh": {"type": "boolean",
-                "description": "fetch every page again instead of reading the cache; a page"
-                               " that fails to fetch keeps its cached copy and is listed"
-                               " under stale"}}
+                "description": "fetch again every page cached before the call began instead"
+                               " of reading the cache, so each page is fetched once, across"
+                               " sync_all's pulls too; a page that fails to fetch keeps its"
+                               " cached copy and is listed under stale"}}
 
 
 class Registry:
@@ -211,6 +213,10 @@ class Context:
     tool, which one tool reaches another through. It is whole once tools.py
     has imported every family.
 
+    cutoff is the moment a refresh began, which the pulls called through
+    the context share (refreshing); None, and a pull that refreshes takes
+    the moment it starts.
+
     The client is required, so no in-process call is anonymous: 'board',
     'refresher' or 'shell' where one is built, and 'nested:<tool>' on the
     copy a tool is handed (nested), whichever door the tool's own call came
@@ -225,14 +231,24 @@ class Context:
         self.caches: dict[str, str] = dict(CACHE_DIRS, **(caches or {}))
         self.log: Log = log or to_stderr
         self.client = client
+        self.cutoff: float | None = None
 
     def nested(self, tool: str) -> Self:
         """A copy for `tool` to call others through, audited as nested:<tool>.
         A copy keeps its class - a test's connect() with it - and shares the
-        caches and the log; one made before this context resolved its dsn
-        resolves the same one on first use (psql.default_dsn is idempotent)."""
+        caches, the log and the cutoff; one made before this context resolved
+        its dsn resolves the same one on first use (psql.default_dsn is
+        idempotent)."""
         copied = copy.copy(self)
         copied.client = "nested:%s" % tool
+        return copied
+
+    def refreshing(self) -> Self:
+        """A copy whose pulls refresh as one, against a cutoff of now: a page
+        written before it is fetched again, and a page one pull fetched is
+        read from the cache by the next. sync_all runs its pulls through it."""
+        copied = copy.copy(self)
+        copied.cutoff = time.time()
         return copied
 
     @property

@@ -80,16 +80,26 @@ def test_a_fresh_cache_is_read_without_fetching(tmp_path):
     assert session.calls == 0
 
 
-def test_refresh_refetches_a_stale_page_and_rewrites_the_cache(tmp_path):
+def test_refresh_refetches_a_page_written_before_it_began_and_rewrites_the_cache(tmp_path):
+    """A refresh's cutoff is the moment it began: the page cached before it
+    is fetched and rewritten, and the next pull of the same refresh reads
+    the rewritten page without asking again."""
     write_aged(tmp_path / "k.html", "cached")
     session = FakeSession("new page")
-    pull = fetch.PullContext(str(tmp_path), session=session, max_age=0)
+    began = time.time() - 60                       # the refresh began a minute ago
+    pull = fetch.PullContext(str(tmp_path), session=session, cutoff=began)
     assert fetch.cached_get(pull, "u", "k", policy=INSTANT) == "new page"
     assert session.calls == 1
     assert (tmp_path / "k.html").read_text(encoding="utf-8") == "new page"
-    # the rewritten page is fresh under any finite max_age but the refresh's
+    later = fetch.PullContext(str(tmp_path), session=FakeSession("newer page"), cutoff=began)
+    assert fetch.cached_get(later, "u", "k", policy=INSTANT) == "new page"
+    assert later.session.calls == 0
+    # the rewritten page is fresh under any finite max_age, and stale only to a
+    # refresh that begins after it was written
     assert not fetch.is_stale(str(tmp_path / "k.html"), 3600)
     assert not fetch.is_stale(str(tmp_path / "k.html"), None)
+    assert not fetch.is_stale(str(tmp_path / "k.html"), None, began)
+    assert fetch.is_stale(str(tmp_path / "k.html"), None, time.time() + 60)
 
 
 def test_a_failed_refetch_keeps_the_cached_copy(tmp_path):

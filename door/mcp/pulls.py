@@ -11,6 +11,7 @@ the summary back.
 
 import functools
 import os
+import time
 from collections.abc import Callable, Mapping
 from typing import TypedDict
 
@@ -84,9 +85,12 @@ def _pull(ctx: Context, source: str, fn: PullFn, refresh: bool, **options: bool)
     """One pull against the database, reading through the source's page cache
     and logging to the context's log -> the summary its run() returns, with
     the pages it read from the stale cache under stale."""
-    # refresh: every cached page counts as stale and is fetched again; the
-    # cached copy survives a failed fetch and is listed (see fetch.cached)
-    pull = fetch.PullContext(ctx.cache(source), log=ctx.log, max_age=0 if refresh else None)
+    # refresh: every page cached before the refresh began is fetched again -
+    # before sync_all's start under it (ctx.cutoff), else before this pull's
+    # - and a page written since is read. The cached copy survives a failed
+    # fetch and is listed (see fetch.cached)
+    cutoff = (time.time() if ctx.cutoff is None else ctx.cutoff) if refresh else None
+    pull = fetch.PullContext(ctx.cache(source), log=ctx.log, cutoff=cutoff)
     with ctx.connect() as cx:
         summary = fn(cx, pull, **options)
     summary["stale"] = pull.stale
@@ -243,9 +247,13 @@ def load_authored(ctx: Context) -> ToolReply:
 def sync_all(ctx: Context, refresh: bool = False) -> ToolReply:
     results: dict[str, Mapping[str, object]] = {}
     pulls = ctx.tools.pulls()
+    # one cutoff for every pull: the hero articles pull_kits, pull_synergies
+    # and pull_counters read, and the map articles pull_maps and pull_terrain
+    # read, are fetched by the first and read from the cache by the rest
+    run = ctx.refreshing() if refresh else ctx
     for spec in pulls:
         ctx.log("=== %s ===" % spec.name)
-        results[spec.name] = ctx.call(spec.name, refresh=refresh).data
+        results[spec.name] = run.call(spec.name, refresh=refresh).data
     ctx.log("=== load_authored ===")
     results["load_authored"] = ctx.call("load_authored").data
     results["export_csv"] = ctx.call("export_csv").data

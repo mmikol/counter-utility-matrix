@@ -4,11 +4,14 @@ but `strategies` carries the `user` source, and no third source is read."""
 
 import contextlib
 import os
+import time
 
 import pytest
+import requests
 
 import db
 from door.mcp import tools
+from door.mcp.schema import ToolReply
 from inference import catalog
 
 
@@ -88,14 +91,60 @@ def test_a_pull_hands_run_its_sources_cache_and_the_context_log(monkeypatch, tmp
     monkeypatch.setattr(meta, "run", run)
     ctx = Offline(dsn="postgresql://nowhere", caches={"blizzard": str(tmp_path / "blizzard")},
                   log=lambda line: None, client="test")
+    began = time.time()
     text, _ = ctx.call("pull_rates", refresh=True)
     assert text.splitlines()[0] == "pull_rates: snapshot stored"
     assert seen["connection"] == "cx"
     assert seen["pull"].cache_dir == ctx.caches["blizzard"]
     assert seen["pull"].log is ctx.log
-    assert seen["pull"].max_age == 0               # refresh: every cached page is stale
+    # refresh: every page cached before the call began is stale
+    assert began <= seen["pull"].cutoff <= time.time()
+    assert seen["pull"].max_age is None
     ctx.call("pull_rates")
-    assert seen["pull"].max_age is None            # a build keeps every cached page
+    assert seen["pull"].cutoff is None and seen["pull"].max_age is None   # a build keeps every page
+
+
+class Synced(Offline):
+    """A context whose sync reaches the pulls and stops short of the
+    database: the strategies mirror and the export answer empty."""
+
+    def call(self, name, /, **arguments):
+        if name in ("load_authored", "export_csv"):
+            return ToolReply("%s: skipped" % name, {})
+        return super().call(name, **arguments)
+
+
+def test_a_full_refresh_holds_every_pull_to_the_moment_it_began(monkeypatch, tmp_path):
+    """sync_all refreshes against one cutoff, so the hero article pull_kits
+    refetched is read from the cache by pull_synergies and pull_counters, and
+    a map article pull_maps refetched by pull_terrain."""
+    from door.mcp import pulls
+    seen = []
+
+    def run(connection, pull, **options):
+        seen.append((pull.cutoff, pull.max_age))
+        return {"tables": []}
+
+    def no_request(*args, **kwargs):
+        raise AssertionError("a stubbed pull asks the network for nothing")
+    monkeypatch.setattr(requests.Session, "get", no_request)
+    for module in (pulls.blizzard_heroes, pulls.wiki_heroes, pulls.wiki_maps,
+                   pulls.wiki_terrain, pulls.wiki_patches, pulls.wiki_seasons,
+                   pulls.blizzard_meta, pulls.wiki_playstyles, pulls.wiki_synergies,
+                   pulls.wiki_matchups):
+        monkeypatch.setattr(module, "run", run)
+    caches = {"blizzard": str(tmp_path / "blizzard"), "wiki": str(tmp_path / "wiki")}
+    ctx = Synced(dsn="postgresql://nowhere", caches=caches, log=lambda line: None,
+                 client="test")
+    began = time.time()
+    ctx.call("sync_all", refresh=True)
+    assert len(seen) == len(tools.REGISTRY.pulls())
+    [(cutoff, max_age)] = set(seen)
+    assert began <= cutoff <= time.time() and max_age is None
+    assert ctx.cutoff is None                       # the caller's context holds none
+    seen.clear()
+    ctx.call("sync_all")
+    assert set(seen) == {(None, None)}              # a build keeps every cached page
 
 
 def test_a_stale_page_is_named_in_the_pull_reply(monkeypatch, tmp_path):
