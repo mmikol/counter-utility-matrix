@@ -6,9 +6,11 @@ strategy files served as MCP resources.
 Every write validates through the catalog, rewrites the docs catalog for the
 shipped playbook and logs a reasoned line (inference.tune does all three),
 then reloads the strategies table from the files (_remirror): the database
-half of the write, and the one step this module adds. The frontmatter
-fields the writes take are declared from inference.strategy.FIELDS, the
-rule that checks them, so the door admits what a file may hold.
+half of the write, and the one step this module adds. derive_strategies
+reloads only when it completed a draft, since otherwise it wrote nothing.
+The frontmatter fields the writes take are declared from
+inference.strategy.FIELDS, the rule that checks them, so the door admits
+what a file may hold.
 """
 
 import os
