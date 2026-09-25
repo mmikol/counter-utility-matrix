@@ -23,7 +23,7 @@ def test_sh_gives_up_on_a_command_past_its_timeout(monkeypatch):
     import subprocess
     given = []
 
-    def overrun(argv, timeout=None):
+    def overrun(argv, timeout=None, env=None):
         given.append(timeout)
         raise subprocess.TimeoutExpired(argv, timeout)
     monkeypatch.setattr(subprocess, "run", overrun)
@@ -46,7 +46,8 @@ def stubbed(monkeypatch):
         "ui": {"heroes": [{}] * 54, "maps": [{}] * 30},
         "board": {"seconds": 1.0, "picks": []}}
     # every command is given a timeout: a call without one raises TypeError here
-    monkeypatch.setattr(orchestrator, "sh", lambda *a, timeout: calls.append(("sh", *a)) or "")
+    monkeypatch.setattr(orchestrator, "sh",
+                        lambda *a, timeout, env=None: calls.append(("sh", *a)) or "")
     monkeypatch.setattr(orchestrator, "wait_for", lambda url, s, what: calls.append(("wait", what)))
     monkeypatch.setattr(orchestrator, "health", lambda: healthy)
     monkeypatch.setattr(orchestrator, "mcp",
@@ -90,7 +91,7 @@ def test_up_reads_the_health_again_after_deriving_drafts(stubbed, monkeypatch):
     assert orchestrator.up() == 0
     assert len(read) == 2
     assert any(c[0] == "sh" and "derive_strategies" in c for c in calls)
-    assert ("mcp", "load_authored") in calls
+    assert ("mcp", "load_authored") not in calls        # the derive mirrors into the stack itself
 
 
 def test_refresh_test_down_and_main_dispatch(stubbed, monkeypatch, capsys):

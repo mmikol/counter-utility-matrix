@@ -1,6 +1,6 @@
 """orchestrator.py's agents: the headless claude run on the refresh skill, its
-allowlist of tools, and the drafts derived on the host before the stack
-remirrors them. The CLI and the stack are stubbed out."""
+allowlist of tools, and the drafts derived on the host against the stack's
+database. The CLI and the stack are stubbed out."""
 
 import os
 import re
@@ -39,19 +39,26 @@ def test_the_allowlist_is_exactly_the_tools_the_refresh_skill_names():
     assert set(orchestrator.AGENT_TOOL_NAMES) == named & registered
 
 
-def test_drafts_are_derived_on_the_host_then_the_stack_remirrors(monkeypatch):
+def test_drafts_are_derived_on_the_host_against_the_stacks_database(monkeypatch):
+    """The derive runs through ./docker-db with .env's password, so its own
+    mirror writes the stack's strategies table and no second mirror follows
+    over the door."""
+    import subprocess
+    import sys
     calls = []
-    monkeypatch.setattr(orchestrator, "sh", lambda *a, **k: calls.append(("sh", a[-1])))
+    monkeypatch.setattr(orchestrator, "sh", lambda *a, timeout, env=None: calls.append((a, env)))
     monkeypatch.setattr(orchestrator, "mcp",
-                        lambda name, args=None, **k: calls.append(("mcp", name)))
+                        lambda name, args=None, **k: pytest.fail("the door was called: %s" % name))
+    monkeypatch.setattr(orchestrator, "dotenv", lambda: {"POSTGRES_PASSWORD": "pw"})
+    monkeypatch.delenv("POSTGRES_PASSWORD", raising=False)
     assert orchestrator.derive_pending({"inference": {"strategies": 38, "pending": 0}}) is False
     assert orchestrator.derive_pending({"inference": None}) is False
     assert calls == []
     assert orchestrator.derive_pending({"inference": {"strategies": 39, "pending": 1}}) is True
-    assert calls == [("sh", "derive_strategies"), ("mcp", "load_authored")]
-
-    def refused(name, args=None, **k):
-        raise RuntimeError("a bearer token is required")
-    monkeypatch.setattr(orchestrator, "mcp", refused)
-    with pytest.raises(SystemExit, match="load_authored failed: a bearer token"):
-        orchestrator.derive_pending({"inference": {"strategies": 39, "pending": 1}})
+    [(args, env)] = calls
+    assert args[0] == os.path.join(orchestrator.ROOT, "docker-db")
+    assert args[-1] == "derive_strategies" and env["POSTGRES_PASSWORD"] == "pw"
+    printed = subprocess.run(
+        [args[0], sys.executable, "-c", "import os; print(os.environ['DATABASE_URL'])"],
+        env=env, capture_output=True, text=True, timeout=60, check=True)
+    assert printed.stdout.strip() == "postgresql://overwatch:pw@localhost:5433/overwatch"

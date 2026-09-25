@@ -11,6 +11,7 @@ import orchestrator
 
 def test_dotenv_token_sentry_line_and_the_http_helpers(tmp_path, monkeypatch):
     monkeypatch.setattr(orchestrator, "ROOT", str(tmp_path))
+    monkeypatch.setattr(orchestrator.sentry, "REPORT_PATH", str(tmp_path / "sentry.json"))
     assert orchestrator.dotenv() == {} and orchestrator.sentry_line() is None
     (tmp_path / ".env").write_text("# a comment\nCOUNTRIX_MCP_TOKEN='t0k'\nX=1\n")
     monkeypatch.delenv("COUNTRIX_MCP_TOKEN", raising=False)
@@ -20,13 +21,13 @@ def test_dotenv_token_sentry_line_and_the_http_helpers(tmp_path, monkeypatch):
     (tmp_path / ".env").mkdir()                   # there, and unreadable: said, not skipped
     with pytest.raises(IsADirectoryError):
         orchestrator.dotenv()
-    raw = tmp_path / "db" / "raw"
-    raw.mkdir(parents=True)
-    (raw / "sentry.json").write_text(json.dumps({
+    (tmp_path / "sentry.json").write_text(json.dumps({
         "ok": False, "checked_at": "t", "quarantined": ["x.md"], "flags": ["f1"],
         "calls_last_minute": 4}))
     line = orchestrator.sentry_line()
     assert "FLAGS" in line and "quarantined x.md" in line and "1 flag(s): f1" in line
+    (tmp_path / "sentry.json").write_text(json.dumps({"ok": True, "checked_at": "t"}))
+    assert orchestrator.sentry_line() is None          # a report short of a field says nothing
     # get_json swallows a dead endpoint; wait_for gives up loudly
     assert orchestrator.get_json("http://127.0.0.1:9/never", timeout=1) is None
     monkeypatch.setattr(orchestrator.time, "sleep", lambda s: None)

@@ -15,9 +15,10 @@
 
 The agents run on the host, on the subscription (the claude CLI, signed in
 once); without the CLI the run still brings the stack up and says so. It
-imports the standard library, db's ROOT, db.web's JSON reader and MCP client
-and inference.derive, the headless claude recipe; run it with .venv/bin/python,
-since inference.derive loads psycopg. Exit code 0 means everything answered.
+imports the standard library, db's ROOT, db.web's JSON reader and MCP
+client, the sentry's report (door.sentry) and inference.derive, the headless
+claude recipe; run it with .venv/bin/python, since inference.derive loads
+psycopg. Exit code 0 means everything answered.
 """
 
 import json
@@ -25,11 +26,12 @@ import os
 import subprocess  # nosec B404  # docker compose and the claude CLI, argv lists, never a shell
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import timedelta
-from typing import Any, NamedTuple, TypedDict
+from typing import Any, NamedTuple, TypedDict, cast
 
 from db import ROOT, web
+from door import sentry
 from inference import derive
 
 # the compose stack's ports on this host (compose.yaml)
@@ -39,23 +41,23 @@ BOARD = "http://localhost:8017"
 URLS = {"data": DATA + "/health", "inference": INFERENCE + "/health", "ui": BOARD + "/api/roster"}
 MCP_URL = DATA + "/mcp"
 # one board solved through the service before the stack is called ready: only
-# the container (1 GiB, a read-only root) shows whether this playbook fits its
-# memory and time
+# the container (its memory limit in compose.yaml, a read-only root) shows
+# whether this playbook fits its memory and time
 PROBE = INFERENCE + "/board?map=King%27s%20Row&red=Zarya&red=Pharah&side=attack"
 
 MINUTE = 60                         # seconds
 HOUR = 60 * MINUTE
 # a derive on the host: every draft refused once, each attempt at the CLI's
-# timeout, then the mirror
+# timeout, then the mirror into the stack's database
 DERIVE_TIMEOUT = 2 * derive.MAX_PER_RUN * derive.TIMEOUT + 5 * MINUTE
 
 
-def sh(*args: str, timeout: float) -> None:
-    """Run one command; a failure or an overrun past `timeout` seconds stops
-    the run."""
+def sh(*args: str, timeout: float, env: Mapping[str, str] | None = None) -> None:
+    """Run one command, in `env` when one is given; a failure or an overrun
+    past `timeout` seconds stops the run."""
     try:
         result = subprocess.run(  # nosec B603  # argv lists built here from literals and this interpreter, never a shell
-            list(args), timeout=timeout)
+            list(args), timeout=timeout, env=env)
     except subprocess.TimeoutExpired as error:
         raise SystemExit("error: %s did not finish within %d minutes"
                          % (" ".join(args), timeout // MINUTE)) from error
@@ -248,18 +250,21 @@ def mcp(name: str, arguments: dict[str, Any] | None = None, timeout: float = 10 
 
 
 def derive_pending(h: Health) -> bool:
-    """Drafts in inference/strategies/ are completed on the host (the claude CLI
-    lives here, not in the containers), then the stack's database re-mirrors.
-    True when drafts were pending and the derive ran, so the health is stale."""
+    """The stack's pending drafts completed on the host, where the claude
+    CLI lives, through ./docker-db: .env fills what the environment lacks -
+    POSTGRES_PASSWORD for docker-db, COUNTRIX_STRATEGIES for the playbook
+    the stack serves - so derive_strategies' own mirror writes the stack's
+    strategies table. True when drafts were pending and the derive ran, so
+    the health is stale."""
     pending = (h["inference"] or {}).get("pending")
     if not pending:
         return False
     print("%d draft strategy(ies) await frontmatter; deriving on the host..." % pending)
-    sh(sys.executable, "-m", "door.mcp", "call", "derive_strategies", timeout=DERIVE_TIMEOUT)
-    try:
-        mcp("load_authored")
-    except RuntimeError as error:
-        raise SystemExit("error: load_authored failed: %s" % error) from error
+    env = dict(os.environ)
+    env.update({k: v for k, v in dotenv().items() if k not in env})
+    sh(
+        os.path.join(ROOT, "docker-db"), sys.executable, "-m", "door.mcp", "call",
+        "derive_strategies", env=env, timeout=DERIVE_TIMEOUT)
     return True
 
 
@@ -287,21 +292,20 @@ def up() -> int:
 
 
 def sentry_line() -> str | None:
-    """What the sentry last saw, from the report it leaves in db/raw
-    (door.sentry.Report); None without one, or when it is not a JSON object."""
-    path = os.path.join(ROOT, "db", "raw", "sentry.json")
+    """What the sentry last saw, from the report it leaves at
+    sentry.REPORT_PATH (a door.sentry.Report); None without one, or when it
+    is not a JSON object or lacks a field the line reads."""
     try:
-        with open(path, "rb") as handle:
-            seen = _json_object(handle.read())
-    except (OSError, ValueError):
+        with open(sentry.REPORT_PATH, "rb") as handle:
+            seen = cast(sentry.Report, _json_object(handle.read()))
+        parts = ["sentry: %s at %s" % ("ok" if seen["ok"] else "FLAGS", seen["checked_at"])]
+        if seen["quarantined"]:
+            parts.append("quarantined %s" % ", ".join(seen["quarantined"]))
+        if seen["flags"]:
+            parts.append("%d flag(s): %s" % (len(seen["flags"]), "; ".join(seen["flags"][:3])))
+        parts.append("%d tool call(s) in the last minute" % seen["calls_last_minute"])
+    except (OSError, ValueError, KeyError):
         return None
-    parts = ["sentry: %s at %s" % ("ok" if seen.get("ok") else "FLAGS",
-                                    seen.get("checked_at", "?"))]
-    if seen.get("quarantined"):
-        parts.append("quarantined %s" % ", ".join(seen["quarantined"]))
-    if seen.get("flags"):
-        parts.append("%d flag(s): %s" % (len(seen["flags"]), "; ".join(seen["flags"][:3])))
-    parts.append("%d tool call(s) in the last minute" % seen.get("calls_last_minute", 0))
     return " - ".join(parts)
 
 

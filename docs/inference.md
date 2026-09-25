@@ -74,9 +74,9 @@ skill does, headless - and stores it through the same validated path,
 sending the catalog's objection back once if the first answer is refused.
 It runs wherever the claude CLI is signed in, which is the host:
 `load_authored` derives pending drafts before it mirrors, `orchestrator.py
-up` derives them and re-mirrors the stack's database, and the
-`derive_strategies` tool does it on demand. Inside the containers the CLI
-is absent, so drafts stay pending until the host runs. No API key
+up` derives them against the stack's database through `./docker-db`, and
+the `derive_strategies` tool does it on demand. Inside the containers the
+CLI is absent, so drafts stay pending until the host runs. No API key
 anywhere. Sign the CLI in once with `claude login`; until then the engine
 says so and leaves the draft as it was.
 
