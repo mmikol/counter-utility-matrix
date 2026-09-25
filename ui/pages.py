@@ -18,7 +18,7 @@ from typing import NamedTuple
 from door.mcp.matches import NOTE_LIMIT, RESULTS
 from facts import compute
 from facts.draft import MAX_BANS, TEAM_SIZE
-from inference import scale, scoring, solver
+from inference import base, scale, scoring, solver
 
 GITHUB_MARK = (
     "<svg viewBox='0 0 16 16' width='15' height='15' aria-hidden='true'><path fill='currentColor' d='M8 0C3.58 0 0 3.58 0 8"  # noqa: E501
@@ -191,6 +191,10 @@ def view_math() -> str:
     constants it quotes filled in from their modules on every call, so the
     page follows the code. A literal percent in math.html is written %%."""
     return page("the math", _article("math.html") % {
+        "W_RATE": base.W_RATE,
+        "W_SYNERGY": base.W_SYNERGY,
+        "W_COUNTER": base.W_COUNTER,
+        "RATE_PICK_HALF": base.RATE_PICK_HALF,
         "SYNERGY_PULL": compute.SYNERGY_PULL,
         "REFERENCE_SIZE": format(scale.REFERENCE_SIZE, ","),
         "NEED_BUDGET": scoring.NEED_BUDGET,

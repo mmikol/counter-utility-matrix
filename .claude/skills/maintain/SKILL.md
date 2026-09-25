@@ -131,7 +131,8 @@ is a lesson the next run relearns.
   the board showed 0 and 100 / 100 for every comp; the user read it as
   scoring being broken, and it was the display being confident about
   nothing. Now: a state the board cannot compute reads as what it is
-  ("unscored", from `catalog.has_scoring_terms`), never as a figure that looks like
+  ("unscored", from `result.scores`: the default engine off and no
+  scoring term in the playbook), never as a figure that looks like
   an answer - and a run checks the playbook in force (`.env`, the
   `strategies` tool's "playbook in force" prefix) before judging a score.
 - **Prose that parses and still says the wrong thing.** "a few polite

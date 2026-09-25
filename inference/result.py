@@ -15,7 +15,9 @@ from facts.draft import TEAM_SIZE
 from facts.factset import Fact, FactSet
 from facts.model import ROLES
 from facts.team import text
+from inference import base as base_module
 from inference import catalog as catalog_module
+from inference.base import BaseWeights
 from inference.scoring import Candidate, Contribution
 from inference.strategy import Strategy
 
@@ -101,8 +103,20 @@ HEADINGS: dict[ResultKind, str] = {
     "infer": "optimal comp", "evaluate": "evaluation", "current": "current comp",
     "countered": "if countered optimally", "fill": "your picks, the rest filled",
     "expected": "their likely starting comp"}
+# the reason while the default engine is off and the playbook scores nothing
 UNSCORED = ("unscored - the playbook in force holds no heuristic, scored constraint or soft"
             " limit, so every legal six ties at zero; add one and the board scores")
+# the reason red's likely six carries no share while the default engine is on:
+# it is drawn, never scored
+LIKELIHOOD = (
+    "unscored - a likelihood from the map's pick rates and the wiki's synergies, which"
+    " nothing scores")
+
+
+def scores(catalog: Iterable[Strategy], base: BaseWeights) -> bool:
+    """Whether anything scores a six: the default engine, or a term of the
+    playbook's. With neither, every legal six ties at zero."""
+    return base.on or catalog_module.has_scoring_terms(catalog)
 
 
 @dataclass(kw_only=True, eq=False)
@@ -117,6 +131,7 @@ class Result:
     blue: list[str]
     locked: list[str]
     catalog: list[Strategy]
+    base: BaseWeights                  # the default engine's weights it was scored under
     bans: list[str] = field(default_factory=list)
     side: str = ""
     seat: Seat = "blue"
@@ -166,23 +181,31 @@ class Result:
     def unscored(self) -> str | None:
         """Why the result carries no share of a best, or None when it does.
         The optimal six is 100 by definition - it is the reference, and scored
-        always; any other comp reads unscored when nothing can be a share of
-        anything: the playbook holds no term that scores, or none of its terms
-        applies to this board (a heuristic waiting on its `when`), so the best
-        six itself sums to zero."""
+        always; red's likely six is a likelihood, never scored, and says so
+        while the default engine is on; any other comp reads unscored when
+        nothing can be a share of anything: the default engine is off and the
+        playbook holds no term that scores, or none of its terms applies to
+        this board (a heuristic waiting on its `when`), so the best six itself
+        sums to zero, or the best six scores at or below zero."""
         if self.kind == "infer":
             return None
+        if self.kind == "expected" and self.base.on:
+            return LIKELIHOOD
         return self.waiting()
 
     def waiting(self) -> str | None:
         """The reason nothing on this board scores, or None: read off any
         result, the optimal included (a seat with no picks has no comp to read
         it from)."""
-        if not catalog_module.has_scoring_terms(self.catalog):
+        if not scores(self.catalog, self.base):
             return UNSCORED
         best = self._hundred()
         if best > 0:
             return None
+        below = ("unscored on this board - the optimal six scores %.2f, not above zero,"
+                 " so no comp is a share of it" % best)
+        if self.base.on:                             # the engine's terms always apply
+            return below
         by_id = {h.id: h for h in self.catalog}
         waiting = []
         for c in self.contributions:
@@ -190,8 +213,7 @@ class Result:
             if h is None:
                 continue
             if c["applies"] and h.form != "limit":   # terms apply: the best is just not above zero
-                return ("unscored on this board - the optimal six scores %.2f, not above zero,"
-                        " so no comp is a share of it" % best)
+                return below
             if not c["applies"]:
                 waiting.append("%s waits for %s" % (h.name, h.when.source) if h.when else h.name)
         return ("unscored on this board - no scoring strategy applies yet"
@@ -219,9 +241,26 @@ class Result:
                                    evidence=evidence))
         by_id = {h.id: h for h in self.catalog}
         for c in self.contributions:
-            fact = _cited_fact(fs, _metric_keys(by_id.get(c["id"])))
+            if c["kind"] == "base":
+                fact = self._base_fact(fs, c)
+            else:
+                fact = _cited_fact(fs, _metric_keys(by_id.get(c["id"])))
             if fact is not None:
                 c["fact"], c["text"] = fact.id, fact.text
+
+    def _base_fact(self, fs: FactSet, c: Contribution) -> Fact | None:
+        """The fact a default-engine term cites: for synergy, the board's own
+        cohesion fact; for the other two, a fact of their own, written after
+        the board's so no board fact's number moves."""
+        if c["id"] == base_module.SYNERGY:
+            return _cited_fact(fs, ["team.synergy_score"])
+        if c["id"] == base_module.RATES:
+            return base_module.write_rates_fact(fs, seat=self.seat, map_name=self.map_name,
+                                                rates=c.get("raw") or 0.0)
+        return base_module.write_counters_fact(
+            fs, seat=self.seat, map_name=self.map_name, against=c.get("against", []),
+            likely=c.get("likely", False), answers=c.get("answers", 0),
+            exposures=c.get("exposures", 0))
 
     def to_dict(self) -> Payload:
         """The result as JSON-ready data. The facts it cites ride along as

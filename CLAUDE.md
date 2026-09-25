@@ -124,6 +124,17 @@ db <- facts <- inference <- door <- ui.
   alone (`ASSUMPTIONS_ONLY` in tests/inference/__init__.py) where a test
   needs a playbook that scores nothing; no solver test reads
   `inference/strategies/`.
+- **The default engine scores first.** `inference/base.py` scores every six
+  on its win rates on the map (each pick's edge over 50, trusted by its pick
+  rate), the wiki's synergy scores and its counter edges against the other
+  side - its locked picks, else its likely six - and the playbook's terms
+  sit on top, so the shipped playbook's boards are scored, never
+  *unscored*. A `BaseWeights` rides the `Brief` (`base=` on `infer`,
+  `evaluate`, `Objective`, `Solver` and the pool's `Spec`); the board, the
+  tools and the service run `base.DEFAULT`. `base.OFF` is the playbook
+  alone, byte for byte the engine before it had a base: a test that pins
+  the reference playbook's sixes or scores passes it, and the validation's
+  rescore runs under it.
 - **The solver is deterministic.** `engine.board()` returns a Board of up to
   seven Results (blue, red, current, red_current, fill, countered, expected);
   fill is None unless one to five blue picks are locked, countered is None
@@ -216,20 +227,21 @@ db <- facts <- inference <- door <- ui.
   them in), so a literal percent in `ui/static/math.html` is written `%%`.
 - `test_the_search_reaches_the_enumerated_maximum` in
   `tests/inference/test_solver.py` is the regression gate on the search:
-  six synthetic boards under the reference playbook and a role queue, each
-  role's pool cut to two, the search against a full enumeration, with no
-  database, so CI runs it. A board it misses is a solver defect: fix the
-  search, never swap the board out.
-- `tests/fixtures/optimal.json` is the real-World gate, dormant. Regenerate
-  it only after a deliberate change to the objective: re-run the brute
-  force (it lives outside the repo), then `OPTIMAL_SOURCES=<its .jsonl
-  files> .venv/bin/python -m scripts.optimal`, which records proofs and
-  computes none. Say in the commit why every number moved. The fixture
-  records its playbook's digest (`catalog.playbook_digest`), so the gate
-  skips while the shipped playbook scores nothing and fails under any other
-  playbook that scores; `.venv/bin/python -m scripts.reach` re-records
-  `reach.json` the same way. Boards with bans are held out until they are
-  re-proven (`pm/backlog.md`).
+  six synthetic boards under the reference playbook and a role queue, with
+  the default engine on and off, each role's pool cut to two, the search
+  against a full enumeration, with no database, so CI runs it. A board it
+  misses is a solver defect: fix the search, never swap the board out.
+- `tests/fixtures/optimal.json` is the real-World gate. Regenerate it only
+  after a deliberate change to the objective: re-run the brute force (it
+  lives outside the repo), then `OPTIMAL_SOURCES=<its .jsonl files>
+  .venv/bin/python -m scripts.optimal`, which records proofs and computes
+  none. Say in the commit why every number moved. The fixture records the
+  objective it was proved under - the playbook's digest
+  (`catalog.playbook_digest`) and the default engine's stamp
+  (`base.stamp`) - so the gate skips only while nothing scores and fails
+  under any other objective, a new assumption file included;
+  `.venv/bin/python -m scripts.reach` re-records `reach.json` the same way.
+  Boards with bans are held out until they are re-proven (`pm/backlog.md`).
 
 ## House rules
 

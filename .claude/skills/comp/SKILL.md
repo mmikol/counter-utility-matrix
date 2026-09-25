@@ -20,10 +20,12 @@ shows). Prefer whichever is connected; they expose the same tools.
    One clarifying question at most, only if the request is truly empty.
 2. Call the `infer` tool: `{"map": "King's Row", "side": "attack",
    "red": ["Zarya", "Pharah"], "blue": ["Ana"], "bans": ["Widowmaker"]}`.
-   It returns the optimal six under the markdown strategies in
-   inference/strategies/ (players assumed to play optimally), each pick
-   with its reasons and the fact ids (F#) that justify it, the score
-   breakdown per strategy, and alternatives. `board` with the same
+   It returns the optimal six under the default engine - win rates on
+   the map, the wiki's synergies, counters to the other side, always on
+   - and the markdown strategies in inference/strategies/ on top of it
+   (players assumed to play optimally), each pick with its reasons and
+   the fact ids (F#) that justify it, the score breakdown per engine term
+   and per strategy, and alternatives. `board` with the same
    arguments also returns the game plan in prose, red's best counter to
    the user's picks, both current comps scored, the user's picks against
    that counter, their locked picks with the empty slots filled, red's

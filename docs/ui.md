@@ -35,7 +35,7 @@ map ([security.md](security.md)).
 | `/api/facts?map=&side=&red=&blue=&bans=` | the FactSet for the board as JSON: the facts, their count and the playbook's record |
 | `/api/board?map=&side=&red=&blue=&bans=[&weights=&client=&pool=]` | the board solved at any stage under the playbook tab's weights: the `board` tool's answer ([mcp.md](mcp.md#the-tools)) without the countered case, which the page never reads. `serve.handle_board` in-process, or the service's `/board` when `COUNTRIX_INFERENCE_URL` is set, the query forwarded as received before any connection opens |
 | `/api/strategies` | the catalog: every constraint, heuristic and assumption with its kind, form, frontmatter and body - `serve.handle_strategies` in-process, or the service's `/strategies` |
-| `/math` | `static/math.html` in the page shell, the constants it quotes (`SYNERGY_PULL`, `REFERENCE_SIZE`, `NEED_BUDGET` and the search's four) filled in by `pages.py`: the equation, the scoring function, the board and how the layers fit |
+| `/math` | `static/math.html` in the page shell, the constants it quotes (the default engine's three weights and `RATE_PICK_HALF`, `SYNERGY_PULL`, `REFERENCE_SIZE`, `NEED_BUDGET` and the search's four) filled in by `pages.py`: the equation, the scoring function with the default engine under the playbook, the board and how the layers fit |
 | `/tests` | `static/tests.html` in the page shell: the designed proof, the adversarial hunt, the random sample, the regression gate, the suite, and what none of it proves |
 | `POST /api/weight` `{id, weight}` | the board's first write, a `tune` call through the door: over HTTP to `COUNTRIX_MCP_URL` with the bearer token when that is set (the compose stack), in-process otherwise. Off by default; `COUNTRIX_READ_ONLY=0` turns it and the *store* button on |
 | `POST /api/match` `{map, side, result, blue, red, bans, played_on, note}` | the board's second write, a `record_match` call by the same path as the weight's: the board as a played map, blue's result from the record panel ([mcp.md](mcp.md#the-recorded-matches)). Any other key is dropped. Off with the weight; `COUNTRIX_READ_ONLY=0` turns it and the result buttons on |
@@ -113,10 +113,12 @@ blue's own picks never constrain. Red's (right) is their most likely
 starting comp, a two-two-two filled slot by slot from the map's pick rates
 and the wiki's synergies, past the bans; it reads no strategy, and only a
 new map, side or ban sends it back to *searching*. Under a six's cards sit
-the search's numbers (candidates, seconds, the lean), the strategies in
-three tabs - *satisfied*, *costing* with the summed cost, *did not read* -
-under a filter, each bar's tooltip saying why it paid or did not, and last
-the alternatives.
+the search's numbers (candidates, seconds, the lean), the default engine's
+three terms - `base.rates`, `base.synergy`, `base.counters`, a bar each
+with the fact it read, always shown - then the strategies in three tabs -
+*satisfied*, *costing* with the summed cost, *did not read* - under a
+filter, each bar's tooltip saying why it paid or did not, and last the
+alternatives. The bars share one scale.
 
 **The badges** above the pickers are each seat's comp as a share of its
 own optimal: blue's picks against blue's optimal, red's against red's best
@@ -130,9 +132,12 @@ shows the suggested six's 100. The engine words each badge
 red's. With both seats scored, each bar is its side's share over the two
 shares' sum, a split of 100, the share in the tooltip; with one seat
 scored, its share alone; with neither, the engine's verdict sits under
-them. Not a fitted probability. When the playbook holds no heuristic,
-scored constraint or soft limit, or none applies to this board yet, a seat
-reads *unscored*, picks or not, the engine's reason in the tooltips.
+them. Not a fitted probability. The default engine scores every seat, so
+the page's boards always carry a share; a seat reads *unscored*, picks or
+not, the engine's reason in the tooltips, only where a caller turns the
+engine off and the playbook holds no heuristic, scored constraint or soft
+limit, or none applies to this board yet, or where the optimal scores at
+or below zero.
 
 **The suggestions.** Blue's empty slots carry the fill - the best six that
 keeps your locked picks, the optimal six before any pick - each a click

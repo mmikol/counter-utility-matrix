@@ -12,8 +12,8 @@ functions of an Objective.
                         freeze draws in one process, since both take them from
                         _bounds_over
     reference_standing  each hero's summed score across one slice of the reference
-                        sixes it is in: its mean is the playbook's own ranking of the
-                        roster on this board
+                        sixes it is in: its mean is the objective's own ranking of the
+                        roster on this board, the default engine's terms included
 """
 
 import itertools

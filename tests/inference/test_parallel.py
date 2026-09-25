@@ -91,11 +91,11 @@ def test_a_board_without_the_countered_case_sends_none_of_its_rounds(
 @pytest.mark.invariant
 def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(world, monkeypatch):
     """Every search is cut into slices across the pool and merged here; the
-    answer is byte-for-byte the sequential one, the board's weight overrides
-    included (a worker loads the playbook from its files). The reference
-    playbook is in force, so the sixes score and the overrides weigh
-    something. The workers are primed under the shipped playbook, so they
-    score the reference one only by the folder each task names."""
+    answer is byte-for-byte the sequential one, the default engine's terms
+    and the board's weight overrides included (a worker loads the playbook
+    from its files). The reference playbook is in force, so the overrides
+    weigh something. The workers are primed under the shipped playbook, so
+    they score the reference one only by the folder each task names."""
     from inference import engine, parallel
     if not parallel.available():
         pytest.skip("one core, or COUNTRIX_PARALLEL=0")
@@ -110,6 +110,8 @@ def test_the_board_splits_its_solves_across_workers_and_agrees_with_one_process(
         split = engine.board(world, draft, brief=engine.Brief(weights=weights))
         assert split.blue.to_dict()["weights"] == weights     # the override reached the worker
         assert split.blue.unscored() is None                  # the six scored
+        assert {c["id"] for c in split.blue.contributions if c["kind"] == "base"} == {
+            "base.rates", "base.synergy", "base.counters"}
         monkeypatch.setenv("COUNTRIX_PARALLEL", "0")
         assert not parallel.available()
         straight = engine.board(world, draft, brief=engine.Brief(weights=weights))

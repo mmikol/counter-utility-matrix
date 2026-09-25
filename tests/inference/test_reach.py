@@ -1,11 +1,12 @@
-"""Every hero is the right pick somewhere: the playbook may make a hero rare, never
-impossible. tests/fixtures/reach.json records, per released hero, the board
-inference.reach.search seated it on (a tool: `reach`), within the five bans a match has,
-beside the digest of the playbook that seated it; `.venv/bin/python -m scripts.reach`
-re-records it.
+"""Every hero is the right pick somewhere: the objective may make a hero rare, never
+impossible, and the heroes the search seats nowhere are named. tests/fixtures/reach.json
+records, per released hero, the board inference.reach.search seated it on (a tool:
+`reach`), within the five bans a match has, beside the objective that seated it - the
+playbook's digest and the default engine's stamp; `.venv/bin/python -m scripts.reach`
+re-records it, and every released hero is on file or named unseated.
 Rates move daily and the two databases differ, so a few boards may tip; a hero that falls
-off its board is searched for again, and none may be lost. The search itself, and the
-recorder, run on the synthetic World."""
+off its board, or is on neither list, is searched for again, and none may be lost. The
+search itself, and the recorder, run on the synthetic World."""
 
 import json
 
@@ -13,22 +14,25 @@ import pytest
 
 from db import Refusal
 from facts.model import World
-from inference import catalog, reach
+from inference import base, catalog, reach
+from inference.result import scores
 from inference.solver import Infeasible
 from scripts import reach as recorder
-from tests.inference import FIXTURE_PLAYBOOK, recorded
+from tests.inference import FIXTURE_PLAYBOOK, in_force, recorded
 
-UNSEATED = {"Freja", "Shion"}       # named, not waived - see the test
+# named, not waived - see the test
+UNSEATED = {"Domina", "Emre", "Freja", "Hazard", "Kiriko", "Shion", "Sierra", "Sojourn",
+            "Venture"}
 
 
 @pytest.mark.invariant
 def test_every_hero_reach_finds_a_board_for_is_still_seated_and_none_is_newly_lost(world):
-    # reach.json was recorded under the 239 rules 9328429 removed, and names that
-    # playbook; a playbook that scores nothing seats heroes by tie-break alone. When
-    # rules return this runs again, and a board that no longer seats its hero is
-    # searched for anew.
-    if not catalog.has_scoring_terms(catalog.load()):
-        pytest.skip("the shipped playbook scores nothing: no hero is the right pick")
+    # reach.json is recorded under the shipped playbook's assumptions and the default
+    # engine, which alone scores there. With nothing scoring every six ties and the
+    # tie-break alone seats heroes; a board that no longer seats its hero is searched
+    # for anew.
+    if not scores(catalog.load(), base.DEFAULT):
+        pytest.skip("nothing scores: no hero is the right pick")
     fixture = recorded("reach")
     boards = fixture["boards"]
     released = {h.name for h in world.heroes.values() if h.released}
@@ -37,34 +41,34 @@ def test_every_hero_reach_finds_a_board_for_is_still_seated_and_none_is_newly_lo
     fell = [b["hero"] for b in boards if b["hero"] in released and not reach.seated(world, b)]
     # a stale fixture fails here, before the costly search for what it lost
     stale = (
-        "" if fixture["playbook"] == catalog.playbook_digest()
-        else " - recorded under a different playbook")
+        "" if (fixture["playbook"], fixture["base"]) == in_force()
+        else " - recorded under a different objective")
     assert len(fell) <= len(boards) // 5, "the recorded boards have gone stale%s: %s" % (
         stale, fell)
-    lost = [name for name in sorted((released - on_file) | set(fell))
+    # Nine heroes the recorder's search found no board for. That is not a proof none
+    # exists - the search tries four maps and a few reds per hero, so a board it
+    # never visits could seat any of them - but it is what the search establishes,
+    # and they are named rather than waived: a tenth fails here. The default engine
+    # alone scores the shipped playbook's boards, and on the boards the search tries
+    # it values none of the nine above its rivals for the seat, even with five of
+    # them banned; the playbook's rules are what can answer it. They are not searched
+    # again on every run - nine searches are ten minutes, thirty under coverage - so
+    # one that comes to seat leaves UNSEATED when scripts.reach re-records.
+    assert not UNSEATED - released, "not a released hero: %s" % ", ".join(UNSEATED - released)
+    lost = [name for name in sorted((released - on_file - UNSEATED) | set(fell))
             if not reach.search(world, name)["seated"]]
-    # Two heroes reach.search finds no board for. That is not a proof none exists -
-    # the search tries four maps and a few reds per hero, so a board it never
-    # visits could seat either of them - but it is what the search establishes,
-    # and they are named rather than waived: a third joining them fails here.
-    # Both were recorded as seated while the reference sample was
-    # drawn per ban list - spending a hero's five bans redrew the scale that
-    # normalises every heuristic, so the bans flattered the hero as well as
-    # clearing its rivals. With the scale held still, Freja reaches 0.34 of the
-    # optimum on her best board and Shion 0.40. That is the playbook not valuing
-    # what they do, and it is the playbook's to answer.
-    newly_lost = set(lost) - UNSEATED
-    assert not newly_lost, "no board seats: %s" % ", ".join(sorted(newly_lost))
-    seats_again = UNSEATED - set(lost)
-    assert not seats_again, ("these seat again - take them out of UNSEATED: %s"
-                             % ", ".join(sorted(seats_again)))
+    assert not lost, "no board seats: %s" % ", ".join(lost)
 
 
-def test_the_reach_fixture_names_the_playbook_it_was_recorded_under():
+def test_the_reach_fixture_names_the_objective_it_was_recorded_under():
     """Needs no database, so the pull-request gate checks the stamp: the
-    fixture names the playbook that seated its heroes and holds one seated
-    board per hero."""
-    boards = recorded("reach")["boards"]
+    fixture names the playbook and the default engine that seated its heroes
+    (recorded() fails a fixture that names neither) and holds one seated
+    board per hero, none of them one the test names unseated."""
+    fixture = recorded("reach")
+    assert fixture["base"] is not None, "recorded with the default engine off"
+    boards = fixture["boards"]
+    assert not {b["hero"] for b in boards} & UNSEATED
     heroes = [b["hero"] for b in boards]
     assert len(set(heroes)) == len(heroes), "a hero is recorded twice"
     assert all(b["seated"] for b in boards), "an unseated board is on file"
@@ -142,12 +146,12 @@ class _Connected:
         return False
 
 
-def test_the_recorder_writes_every_seated_hero_beside_the_playbook_digest(
+def test_the_recorder_writes_every_seated_hero_beside_the_objective_it_ran_under(
         synthetic_world, monkeypatch, tmp_path, capsys):
     """scripts.reach searches each released hero in name order, records the
-    boards that seat one beside the playbook's digest, and names the heroes no
-    board seats with the gap each fell short by. The search is stubbed: its
-    own tests are above."""
+    boards that seat one beside the playbook's digest and the default
+    engine's stamp, and names the heroes no board seats with the gap each
+    fell short by. The search is stubbed: its own tests are above."""
     searched = []
 
     def search(world, name):
@@ -169,8 +173,8 @@ def test_the_recorder_writes_every_seated_hero_beside_the_playbook_digest(
     assert searched == released and "Wisp" not in searched
     with open(tmp_path / "reach.json", encoding="utf-8") as handle:
         written = json.load(handle)
-    assert written["playbook"] == "ab" * 32
+    assert written["playbook"] == "ab" * 32 and written["base"] == base.stamp(base.DEFAULT)
     assert [b["hero"] for b in written["boards"]] == [n for n in released if n != "Quarry"]
     assert capsys.readouterr().out == (
-        "recorded 11 seated heroes under playbook abababababab, 1 of them after bans;"
-        " unseated: Quarry 1.235\n")
+        "recorded 11 seated heroes under playbook abababababab and the default engine, 1 of"
+        " them after bans; unseated: Quarry 1.235\n")

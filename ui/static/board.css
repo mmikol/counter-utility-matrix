@@ -280,6 +280,8 @@ table.facts tr.warn td { color:#ff9d8f; } table.facts tr.derived td.text { color
 
 /* --- the strategies under a comp: two panes, a filter, and a bounded height ---
    the playbook is 244 rules; listing them all under the board buried it */
+.basebars { margin-top: 10px; }
+.basebars .legend { margin: 0 0 4px; }
 .barsbox { margin-top: 10px; }
 .barstabs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
 .barstabs button {

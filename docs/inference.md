@@ -25,14 +25,65 @@ reads, and the owner's recorded matches, one map each, which the door's
 `record_match` stores and `facts.matches` reads back as `Match` records. A
 pull tool fills every other table. The matches judge the playbook
 ([How the playbook is judged](#how-the-playbook-is-judged)) and never
-change it. The shipped playbook is six assumptions that score nothing,
-so a board reads unscored while the playbook is rebuilt from the
-citations in [inference/README.md](../inference/README.md). The solver
-tests run on the reference playbook in
+change it. The shipped playbook is six assumptions that score nothing
+while it is rebuilt from the citations in
+[inference/README.md](../inference/README.md), and the default engine
+scores every board meanwhile ([The objective](#the-objective)). The
+solver tests run on the reference playbook in
 [tests/fixtures/playbook/](../tests/fixtures/playbook/), which holds a
 file of every form but the draft. The package's map is the
 [inference/__init__.py](../inference/__init__.py) docstring, and each
 module's docstring holds its detail.
+
+## The objective
+
+The solver maximises one number per six, the default engine's terms
+first and the playbook's on top:
+
+```
+score(six) = base(six) + the playbook's terms (How a strategy file works)
+base(six)  = W_RATE x rates + W_SYNERGY x synergy + W_COUNTER x counters
+```
+
+`base` is the default engine, `inference/base.py`. It is always on and
+needs no playbook, so a playbook of assumptions alone gets the sixes its
+three terms favour, scored and explained:
+
+- **rates**: each pick's all-ranks win rate on the map - its overall rate
+  with no map, or no row for it there - as points over 50, times
+  `p / (p + RATE_PICK_HALF)` for its pick rate `p` on the same footing,
+  averaged over the six. A rarely picked hero's rate rests on few
+  matches, so its edge is pulled toward a coin flip; `RATE_PICK_HALF` sits
+  at the tenth percentile of the released heroes' pick rates, so only the
+  rarest tenth lose more than half their edge. The term is centred on 50
+  and not on the reference sample's mean: the zero is the same on every
+  board and needs no sample, and a comp's share of the optimal is its
+  share of the optimal's edge over a coin flip.
+- **synergy**: `team.synergy_score`, the wiki's synergy scores among the
+  six.
+- **counters**: the wiki's counter edges between the six and the other
+  side, answers less exposures. The other side is its locked picks, or,
+  with none, its likely six on this map past the bans
+  (`compute.expected_picks`, the six the board's red panel shows); either
+  seat reads the other the same way. Only this term reads the likely six:
+  `enemy.*` and every other metric still see the picks alone.
+
+`W_RATE` is 1, so the rate term is in win-rate points. `W_SYNERGY` and
+`W_COUNTER` are set so that each term's median spread across a board's
+reference sample is about half the rate term's; the module docstring holds
+the calibration, and recorded match outcomes are to refit it. A heuristic
+still moves a six by its weight at most; the math page says how that
+compares with the base's spread. Each term is a bar of the breakdown,
+with the fact it read: the counter bar's fact names the six it read.
+
+A `BaseWeights` rides the `Brief`, and `infer` and `evaluate`'s `base`,
+into every `Objective` and every worker's `Spec`; `base.OFF` turns the
+engine off, and a board is the playbook's alone, as it was before the
+engine had a base. The board, the MCP tools and the inference service run
+`DEFAULT`. The tests that pin the reference playbook's sixes turn it off,
+and the validation rescores the playbook alone. With the engine off and a
+playbook that scores nothing, every six ties at zero and a board reads
+*unscored*.
 
 ## How a strategy file works
 
@@ -106,7 +157,8 @@ API key anywhere.
 
 Weights do not learn on their own. The recorded matches judge the
 playbook and move nothing; [pm/backlog.md](../pm/backlog.md) holds what
-learning from them would take. The
+learning from them would take. The default engine's weights are constants
+in `inference/base.py`, and no slider moves them. The
 board's sliders override a weight for one board - `weights=<id>:<0..10>`
 on `/board`, `weights` on the `board` tool - and every result names the
 weights it was scored under. Four tools write a strategy file - `tune`,
@@ -134,8 +186,10 @@ it runs writes to the database or the playbook.
 **The rescore.** Each map goes through `evaluate` from both seats: blue's
 six against red's on blue's side, red's against blue's on the other
 side. Each seat's score is the playbook's objective on its own seat's
-scale, so the two are the same kind of number, and their difference is
-the playbook score difference. The team metrics of both sixes and the
+scale, with the default engine off: the question is what the playbook
+adds, and M2 already reads the rates and M3 the heroes. The two are the
+same kind of number, and their difference is the playbook score
+difference. The team metrics of both sixes and the
 matchup metrics ride along. A map the engine refuses - a hero the
 database no longer holds, a board no six satisfies - is listed, not
 judged. About three seconds a map on the real roster.

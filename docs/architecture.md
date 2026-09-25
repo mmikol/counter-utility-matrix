@@ -19,6 +19,13 @@ STRATEGIES     = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS   the playbook: mark
 COMP           = ARGMAX[ STRATEGIES( FACTS ) ]            the solver searches, the agent argues
 ```
 
+The function the argmax takes is two layers. The default engine
+(`inference/base.py`) is always on: it scores a six on its win rates on
+the map, the wiki's synergy pairs among its picks and the wiki's counter
+edges against the other side, so a playbook of assumptions alone still
+gets scored sixes. The playbook's terms sit on top and adjust that
+answer ([inference.md](inference.md#the-objective)).
+
 Two inputs are the user's, and every other table is pulled from Blizzard
 or the wiki: the strategies, which the solver reads, and the matches the
 owner records - one row a map played, with both sixes, the bans, blue's
@@ -43,7 +50,7 @@ Code on your subscription, and the board never calls a model.
 | `tests/` | one folder per layer beside the root files' tests, with `synthetic.py`, a World of twelve released heroes, one announced hero and three maps built by hand, so a test works out its expected values with no database, `matches.py`, recorded matches on that World with an effect planted on the heroes or the playbook score, `scratch.py`, a scratch database on the test server holding that World's roster, where the recorded-match tests write instead of the built database, and `tests/fixtures/playbook/`, the reference playbook of every kind and form of strategy that the solver tests run on in place of `inference/strategies/` | |
 | `.claude/skills/` | the skills a Claude Code session runs here, one `SKILL.md` each | [The skills](#the-skills) |
 | `pm/` | `backlog.md`: what is worth doing next, why and at what cost, in payoff order; the maintainer skill keeps it current | |
-| `scripts/` | the recorders of the proven fixtures, run from the repo root as `.venv/bin/python -m scripts.<name>`: `optimal` writes `tests/fixtures/optimal.json`, the proven maxima the dormant real-World gate re-solves, and `reach` writes `tests/fixtures/reach.json`, a board per released hero | |
+| `scripts/` | the recorders of the proven fixtures, run from the repo root as `.venv/bin/python -m scripts.<name>`: `optimal` writes `tests/fixtures/optimal.json`, the proven maxima the real-World gate re-solves, and `reach` writes `tests/fixtures/reach.json`, a board per released hero | |
 | `.github/workflows/` | `ci.yml`: lint, the types (mypy) and the tests that need no built database, held to 78% coverage, on pushes to `main` and on pull requests | |
 | `.cache-blizzard/` `.cache-wiki/` | the page caches (gitignored): every build after the first costs almost no requests | |
 

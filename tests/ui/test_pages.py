@@ -14,7 +14,7 @@ import pytest
 
 from facts import board_facts, compute
 from facts.draft import Draft
-from inference import catalog, engine, scale, scoring, solver
+from inference import base, catalog, engine, scale, scoring, solver
 from inference.result import Badge, Momentum, Pick
 from inference.scoring import Contribution
 from inference.strategy import WEIGHT_RANGE, StrategyRecord
@@ -215,8 +215,8 @@ def test_the_scripts_read_payload_keys_the_server_writes(synthetic_world, monkey
         " blue", solved["current"])
     read("hero role why evidence portrait", Pick.__annotations__)
     read(
-        "id applies ok weighted form when bonus penalty norm spread need metric raw confidence"
-        " confidence_raw fact text", Contribution.__annotations__)
+        "id kind applies ok weighted form when bonus penalty norm spread need metric raw"
+        " weight confidence confidence_raw fact text", Contribution.__annotations__)
     read("blue red odds verdict badges", Momentum.__annotations__)
     read("label tip", Badge.__annotations__)
     read(
@@ -294,6 +294,11 @@ def test_an_apostrophe_cannot_close_a_single_quoted_attribute():
 
 
 @pytest.mark.parametrize(("module", "name", "phrase"), [
+    (base, "W_RATE", "base(x) = %s &middot; rates(x)"),
+    (base, "W_RATE", "The rate term is in win-rate points and weighs %s."),
+    (base, "W_SYNERGY", "+ %s &middot; synergy(x)"),
+    (base, "W_COUNTER", "+ %s &middot; counters(x)"),
+    (base, "RATE_PICK_HALF", "t_p = pick_p / ( pick_p + %s )"),
     (compute, "SYNERGY_PULL", "likelihood(h) = pick(h, map) + %s &times; partners"),
     (scale, "REFERENCE_SIZE", "against %s random legal sixes"),
     (scoring, "NEED_BUDGET", "min( 1, %s / &Sigma; w over the needs"),
@@ -332,9 +337,14 @@ def test_the_math_page_states_the_equation_and_the_layers():
     # every domain yields both kinds; the dependent ones are the joins, stated as such
     assert "<b>independent</b> facts" in page and "<b>dependent</b> facts" in page
     assert "heroes\n&#8904; map_meta" in page or "heroes &#8904; map_meta" in page
-    # the function itself: what it reads, its terms, the formula, the scale, the empty case
+    # the function itself: what it reads, the default engine under the playbook's terms,
+    # the formula, the scale, how a heuristic's reach compares with the base, the empty case
     assert "The function: STRATEGIES( FACTS )" in page
-    assert "score(x) = &Sigma; heuristics h" in page and "norm_h(v) = clamp(" in page
+    flat = " ".join(page.split())
+    assert "<b>The default engine</b>" in page and "only this term reads the likely six" in flat
+    assert "score(x) = base(x)\n         + &Sigma; heuristics h" in page
+    assert "norm_h(v) = clamp(" in page
+    assert "A heuristic moves a six by its weight at most" in flat
     assert "What 100 means" in page and "not a win probability" in page
     assert "When nothing scores" in page
     assert "The data layer" in page and "The inference layer" in page and "The board" in page

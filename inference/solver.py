@@ -28,6 +28,7 @@ from typing import NamedTuple
 from db import Refusal
 from facts.model import ROLES, Hero, Map, World
 from inference import scale
+from inference.base import BaseWeights
 from inference.scoring import Candidate, Interval, Objective, SixKey
 from inference.shapes import Shape, legal_shapes
 from inference.strategy import Strategy
@@ -71,8 +72,9 @@ class Solver(Objective):
 
     def __init__(self, world: World, m: Map | None, *, red: Sequence[Hero],
                  locked: Sequence[Hero], banned: Sequence[Hero] = (), side: str = "",
-                 catalog: list[Strategy], pool_size: int = 6) -> None:
-        super().__init__(world, m, red=red, banned=banned, side=side, catalog=catalog)
+                 catalog: list[Strategy], base: BaseWeights, pool_size: int = 6) -> None:
+        super().__init__(world, m, red=red, banned=banned, side=side, catalog=catalog,
+                         base=base)
         self.locked = list(locked)
         self._locked_by_role = {r: [h for h in self.locked if h.role == r] for r in ROLES}
         self.pool_size = pool_size
@@ -98,9 +100,10 @@ class Solver(Objective):
 
     def adopt_standing(self, tally: Mapping[int, scale.Standing]) -> None:
         """A hero's standing: the mean score of the reference sixes it is in -
-        how the playbook in force rates it on this board, red and the map
-        included. It ranks each role's pool, so the heroes searched in full
-        are the ones the strategies favour, not the ones a side formula does."""
+        how the default engine and the playbook in force rate it on this
+        board, red and the map included. It ranks each role's pool, so the
+        heroes searched in full are the ones the objective favours, not the
+        ones a side formula does."""
         self._standing = {hid: s.total / s.sixes for hid, s in tally.items() if s.sixes}
 
     # --- enumeration ---------------------------------------------------------------
@@ -369,8 +372,9 @@ class Solver(Objective):
 def _beats(cand: Candidate, best: Candidate) -> bool:
     """Whether a six ranks above another in the order rank() sorts by: score,
     then tie-break, then names. Every move of the local search asks this, so
-    where sixes tie - all of them, under a playbook that scores nothing - it
-    still climbs toward the six rank() puts first."""
+    where sixes tie - all of them, with the default engine off under a
+    playbook that scores nothing - it still climbs toward the six rank()
+    puts first."""
     if cand.score != best.score:
         return cand.score > best.score
     return Solver._rank_key(cand) < Solver._rank_key(best)
@@ -407,15 +411,15 @@ def _seatings(open_slots: Mapping[str, Sequence[int]], a: Hero,
 
 def evaluate_comp(world: World, m: Map | None, heroes: Sequence[Hero], *,
                   red: Sequence[Hero], banned: Sequence[Hero] = (), side: str = "",
-                  catalog: list[Strategy], pool_size: int = 6,
+                  catalog: list[Strategy], base: BaseWeights, pool_size: int = 6,
                   swept: Swept | None = None) -> Evaluated:
     """Score one full six against the field the solver would search. `swept`
     takes a Swept from elsewhere - the same board's optimal search, which
-    sweeps the same field. A board with no feasible six is Infeasible, as
-    infer refuses it."""
+    sweeps the same field under the same base. A board with no feasible six
+    is Infeasible, as infer refuses it."""
     if swept is None:
         solver = Solver(world, m, red=red, locked=[], banned=banned, side=side,
-                        catalog=catalog, pool_size=pool_size)
+                        catalog=catalog, base=base, pool_size=pool_size)
         solver.freeze_bounds()                # the same reference scale as infer
         swept = solver.sweep()
     solver = swept.solver

@@ -56,10 +56,11 @@ class CompactInfer(TypedDict):
 
 @board_tool(
     "infer", "The INFERENCE LAYER: the optimal six for this board under"
-    " the markdown strategies in inference/strategies/ (players assumed"
+    " the default engine (win rates, synergies, counters) and the"
+    " markdown strategies in inference/strategies/ on top (players assumed"
     " to play optimally). Locked blue picks are kept; the rest is"
     " searched. Returns the comp, per-pick reasons with fact citations,"
-    " the strategy score breakdown, and alternatives.",
+    " the score breakdown per engine term and strategy, and alternatives.",
     {
         "top": TOP,
         "pool": POOL,
@@ -106,9 +107,10 @@ def _compact(result: Result) -> tuple[str, CompactInfer]:
 
 
 @board_tool(
-    "evaluate", "Score a FULL blue six against the strategies without"
-    " searching: the breakdown per strategy, constraint violations, and"
-    " how it ranks against the optimum.", required=["blue"])
+    "evaluate", "Score a FULL blue six against the default engine and the"
+    " strategies without searching: the breakdown per engine term and"
+    " strategy, constraint violations, and how it ranks against the"
+    " optimum.", required=["blue"])
 def evaluate(ctx: Context, draft: Draft) -> ToolReply:
     # the schema requires blue: the engine takes a full six, so a call
     # without one never reaches the engine

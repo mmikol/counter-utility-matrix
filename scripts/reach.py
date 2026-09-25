@@ -1,9 +1,10 @@
 """Record a board per released hero that seats it, for the reach test.
 
 Runs inference.reach.search for every released hero, in name order, on the
-built database and the playbook in force, and writes the boards it finds to
-tests/fixtures/reach.json beside that playbook's digest. Minutes of solving in
-one process. Run from the repo root:
+built database, the playbook in force and the default engine, and writes the
+boards it finds to tests/fixtures/reach.json beside that playbook's digest and
+the engine's stamp (inference.base.stamp). Minutes of solving in one process.
+Run from the repo root:
 
     .venv/bin/python -m scripts.reach
 
@@ -17,7 +18,7 @@ import psycopg
 
 from db import ROOT, psql
 from facts import tables
-from inference import catalog, reach
+from inference import base, catalog, reach
 
 OUT = os.path.join(ROOT, "tests", "fixtures", "reach.json")
 
@@ -36,9 +37,11 @@ def main() -> int:
             seated.append(found)
     playbook = catalog.playbook_digest()
     with open(OUT, "w", encoding="utf-8") as handle:
-        json.dump({"playbook": playbook, "boards": seated}, handle, indent=1)
+        json.dump({"playbook": playbook, "base": base.stamp(base.DEFAULT), "boards": seated},
+                  handle, indent=1)
     print(
-        "recorded %d seated heroes under playbook %s, %d of them after bans; unseated: %s"
+        "recorded %d seated heroes under playbook %s and the default engine, %d of them after"
+        " bans; unseated: %s"
         % (
             len(seated), playbook[:12], sum(1 for b in seated if b["banned"]),
             ", ".join(unseated) or "none"))

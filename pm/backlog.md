@@ -51,26 +51,26 @@ keeps it current.
 - **Re-prove the real-World gate's boards, banned boards included.** In
   CI the search is gated by an enumeration of six synthetic boards
   (`test_the_search_reaches_the_enumerated_maximum`, two bans on one of
-  them); the real roster's gate is dormant. `tests/fixtures/optimal.json`
-  was proved under the 239 rules 9328429 removed, and its digest names
-  that playbook: the gate test skips while the shipped playbook scores
-  nothing and fails at the digest once it scores again.
-  `scripts/optimal.py` also holds out every board with bans
-  (`OPTIMAL_STALE_BANNED`, on by default), since those boards were
-  enumerated before the scale went ban-blind, so that gate proves nothing
-  about the real roster under bans. The work: enumerate a fresh set, with one
-  to five bans among the shapes, under the reference playbook
-  `tests/fixtures/playbook` (`COUNTRIX_STRATEGIES` selects it). A tune of
-  the live playbook never stales that set; a set proved under the live
-  playbook holds only until the next tune. Record it with
-  `.venv/bin/python -m scripts.optimal`. The gate test then solves with
-  `catalog=catalog.load(FIXTURE_PLAYBOOK)`, compares the fixture's digest
-  with `catalog.playbook_digest(FIXTURE_PLAYBOOK)` and drops its skip;
-  `OPTIMAL_STALE_BANNED` and `read_proofs`' `stale_banned` filter go, and
-  `test_the_proven_boards_cover_every_input` trades its no-bans assert for
-  a bans clause (at least one board with bans) and drops the bans
-  sentences from its docstring. Cost: the enumeration's hours offline and
-  an hour in the repo.
+  them). `tests/fixtures/optimal.json` is live again: its 24 boards were
+  enumerated under the shipped playbook and the default engine, whose
+  score splits into a term per hero and one per pair, so every legal six
+  of a board scores in seconds; the fixture stamps both, and any change to
+  either - a new assumption file included, since the digest covers every
+  strategy file - fails the gate until the boards are enumerated again.
+  `scripts/optimal.py` still holds out every board with bans
+  (`OPTIMAL_STALE_BANNED`, on by default), so the gate proves nothing
+  about the real roster under bans. The work: enumerate a set with one to
+  five bans among the shapes; and, once the playbook scores, under the
+  reference playbook `tests/fixtures/playbook` (`COUNTRIX_STRATEGIES`
+  selects it), whose heuristics do not split per hero, so that
+  enumeration is hours offline again. A tune of the live playbook never
+  stales that set. The gate test then solves with
+  `catalog=catalog.load(FIXTURE_PLAYBOOK)` and compares the stamp with
+  that playbook's digest; `OPTIMAL_STALE_BANNED` and `read_proofs`'
+  `stale_banned` filter go, and `test_the_proven_boards_cover_every_input`
+  trades its no-bans assert for a bans clause. Cost: minutes for the
+  banned boards under the engine alone, the enumeration's hours for the
+  reference playbook, an hour in the repo.
 - **Weights that learn on their own.** The user wants them to, with the
   sliders as the manual override. The weights were fitted once to a
   benchmark of community comps; nothing refits them. The owner's played
@@ -82,7 +82,9 @@ keeps it current.
   after it. Until then the signal the data holds: fit the weights so that
   the solver's per-hero contribution ranks agree with each hero's
   published win rate on the map, capped per step, every change a
-  tuning-log line with "fit" as its reason. Cost: a day.
+  tuning-log line with "fit" as its reason. The default engine's three
+  weights (`inference/base.py`) are calibrated defaults, not a fit: the
+  same recorded maps are to refit them. Cost: a day.
 - **Memoize the per-hero parts of the metrics.** `team.team_metrics`
   rebuilds each hero's pool, kit sums and keyword sets for every
   candidate and is ~41% of a sequential board. A per-world term table

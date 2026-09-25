@@ -5,6 +5,7 @@ queued tasks all the same."""
 
 import pytest
 
+from inference.base import DEFAULT
 from tests.inference.tracing import TRACED, Call, traced_board
 
 
@@ -25,7 +26,7 @@ def test_a_superseded_search_cancels_every_task_that_has_not_started(
     newer = []
     watch = supersede.Watch(lambda: bool(newer))
     run = parallel.Run(Queued(), synthetic_world, scratch_playbook, None, 6, watch)
-    split = parallel.Split(run, parallel.Spec(TRACED, 6), 3)
+    split = parallel.Split(run, parallel.Spec(TRACED, 6, DEFAULT), 3)
     assert len(watch.futures) == 3 and not any(f.cancelled() for f in watch.futures)
     newer.append("the next board")
     with pytest.raises(supersede.Superseded):

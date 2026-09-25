@@ -3,12 +3,15 @@
 Proving one costs a full enumeration of every legal six - about 18 million
 candidates, minutes of CPU - so it is done offline and the answer recorded.
 `tests/fixtures/optimal.json` holds, per board, the six a brute force found and
-what it scored, beside the digest of the playbook it was proved under. This
-re-solves each and checks the solver still reaches it.
+what it scored, beside the objective it was proved under: the playbook's digest
+and the default engine's stamp. This re-solves each and checks the solver
+still reaches it.
 
-It is the real-World gate, dormant: the boards were proved under a playbook
-that no longer exists, so it skips until they are re-proven (pm/backlog.md). The
-enumeration that gates the search in CI is
+It is the real-World gate. The boards are proved under the objective a board
+is solved under by default - the playbook in force and the default engine -
+and the fixture stamps both, so it skips only while nothing scores and fails
+under any other objective until the boards are re-proven. Boards with bans
+are held out (pm/backlog.md). The enumeration that gates the search in CI is
 test_the_search_reaches_the_enumerated_maximum in test_solver.py, on synthetic
 boards. Regenerate with `.venv/bin/python -m scripts.optimal` after a deliberate
 change to the objective, and say in the commit why every number moved.
@@ -22,24 +25,28 @@ import re
 import pytest
 
 from facts.draft import Draft
-from inference import catalog, engine
+from inference import base, catalog, engine
+from inference.result import scores
 from scripts import optimal
-from tests.inference import recorded
+from tests.inference import in_force, recorded
 
 
 @pytest.mark.invariant
 def test_the_solver_reaches_the_proven_maximum(world):
-    # the boards were proven under the 239 rules 9328429 removed, and the fixture
-    # names that playbook; a playbook that scores nothing ties every six at zero and
-    # has no maximum to reach. When rules return this fails at the digest until the
-    # boards are re-proven under them.
-    if not catalog.has_scoring_terms(catalog.load()):
-        pytest.skip("the shipped playbook scores nothing: no optimum to reach")
+    # the boards are proven under the shipped playbook's assumptions and the default
+    # engine, which alone scores there, and the fixture names both. With nothing
+    # scoring - the engine off and a playbook with no scoring term - every six ties at
+    # zero and there is no maximum to reach. A playbook that gains a rule, or an
+    # engine that changes a weight, fails at the stamp until the boards are
+    # re-proven under it.
+    if not scores(catalog.load(), base.DEFAULT):
+        pytest.skip("nothing scores: no optimum to reach")
     proven = recorded("optimal")
-    in_force = catalog.playbook_digest()
-    assert proven["playbook"] == in_force, (
-        "recorded under a different playbook (%s, in force %s): re-prove the boards"
-        % (proven["playbook"][:12], in_force[:12]))
+    playbook, engine_stamp = in_force()
+    assert (proven["playbook"], proven["base"]) == (playbook, engine_stamp), (
+        "recorded under a different objective (playbook %s, engine %s; in force %s, %s):"
+        " re-prove the boards" % (proven["playbook"][:12], proven["base"], playbook[:12],
+                                  engine_stamp))
     missed = []
     for row in proven["boards"]:
         b = row["board"]
@@ -58,8 +65,8 @@ def test_the_proven_boards_cover_every_input():
     not among the shapes: a board proved under the old scale was proved against
     an objective that read the bans, so scripts/optimal.py holds them out
     (OPTIMAL_STALE_BANNED) until they are enumerated again. Needs no database -
-    it reads the fixture, its playbook digest included - so the pull-request
-    gate checks it."""
+    it reads the fixture, its stamp included - so the pull-request gate checks
+    it."""
     boards = [row["board"] for row in recorded("optimal")["boards"]]
     assert len({b["map"] for b in boards}) >= 5
     assert {len(b["red"]) for b in boards} >= {0, 2}
@@ -112,7 +119,7 @@ def test_the_recorder_holds_out_banned_and_unproven_rows(tmp_path):
         {"board": banned, "six": SIX, "score": 3.0, "needed_outside": False}, proven]
 
 
-def test_the_recorder_stamps_the_playbook_in_force_and_refuses_a_vacuous_gate(
+def test_the_recorder_stamps_the_objective_in_force_and_refuses_a_vacuous_gate(
         tmp_path, monkeypatch):
     board = {"map": "Busan", "side": "attack", "red": [], "bans": [], "locked": []}
     source, gone = tmp_path / "proof.jsonl", tmp_path / "gone.jsonl"
@@ -134,6 +141,6 @@ def test_the_recorder_stamps_the_playbook_in_force_and_refuses_a_vacuous_gate(
                                "true_score": 1.0, "true_six_outside_pool": True})
     assert optimal.main() == 0
     written = json.loads((tmp_path / "optimal.json").read_text(encoding="utf-8"))
-    assert written == {"playbook": catalog.playbook_digest(),
+    assert written == {"playbook": catalog.playbook_digest(), "base": base.stamp(base.DEFAULT),
                        "boards": [{"board": board, "six": SIX, "score": 1.0,
                                    "needed_outside": True}]}

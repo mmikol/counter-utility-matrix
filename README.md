@@ -29,8 +29,10 @@ hide the rate figures: Blizzard licenses those for personal use only.*
   each ally, the six against the six.
 - **Solves the comp.** A deterministic search enumerates the sixes each role's
   strongest heroes allow, then climbs by local search over the whole roster.
-  The playbook's constraints and heuristics score every candidate; the best six
-  comes back with the alternatives and why.
+  A default engine scores every candidate on its win rates on the map, the
+  wiki's synergies and its counters to the other side; the playbook's
+  constraints and heuristics adjust that score. The best six comes back with
+  the alternatives and why.
 - **Records what was played.** Each map played is entered by hand - both
   sixes, the bans, the side and the result - from the board's record tab or a
   Claude Code session, checked against the roster and the queue's limits. The
@@ -117,8 +119,8 @@ reuse the database.
 
 The reference playbook is the one the tests prove the solver against. Leave out
 the `echo` line and the board runs the shipped playbook: six assumptions in
-prose that score nothing while its rules are rebuilt, so every six reads
-"unscored".
+prose that score nothing while its rules are rebuilt, so the default engine
+alone scores the sixes, on their win rates, synergies and counters.
 
 | | |
 | --- | --- |

@@ -8,12 +8,14 @@ import shutil
 from facts import board_facts
 from facts.draft import Draft
 from inference import catalog
+from inference.base import OFF
 from tests.inference import FIXTURE_PLAYBOOK
 
 
 def test_a_playbook_that_scores_nothing_reads_unscored(synthetic_world):
-    """Hard limits and prose alone tie every legal six at zero: the results
-    carry no share of a best, say so, and the verdict is the one line."""
+    """With the default engine off, hard limits and prose alone tie every
+    legal six at zero: the results carry no share of a best, say so, and the
+    verdict is the one line."""
     from inference import engine
     world = synthetic_world
     reference = catalog.load(FIXTURE_PLAYBOOK)
@@ -21,7 +23,7 @@ def test_a_playbook_that_scores_nothing_reads_unscored(synthetic_world):
     limit_only = [h for h in reference if h.form == "limit" and not h.soft]
     assert limit_only and not catalog.has_scoring_terms(limit_only)
     draft = Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm", "Anvil"))
-    b = engine.board(world, draft, catalog=limit_only)
+    b = engine.board(world, draft, catalog=limit_only, brief=engine.Brief(base=OFF))
     d = b.to_dict()
     for key in ("blue", "red"):                     # the optimal is the reference: 100, always
         assert d[key]["scoring"] is True and d[key]["normalized"] == 100
@@ -38,14 +40,34 @@ def test_a_playbook_that_scores_nothing_reads_unscored(synthetic_world):
     assert scored["current"]["unscored"] is None
 
 
+def test_the_default_engine_scores_a_playbook_that_scores_nothing(synthetic_world):
+    """The same limits alone under the default engine: every seat scores and
+    carries a share, no badge reads unscored, and only red's likely six, a
+    likelihood nothing scores, says why it has none."""
+    from inference import engine
+    from inference.result import LIKELIHOOD
+    reference = catalog.load(FIXTURE_PLAYBOOK)
+    limit_only = [h for h in reference if h.form == "limit" and not h.soft]
+    draft = Draft("Harbor Gate", ("Mortar", "Gale"), ("Balm", "Anvil"))
+    d = engine.board(synthetic_world, draft, catalog=limit_only).to_dict()
+    for key in ("blue", "red", "current", "red_current", "fill", "countered"):
+        assert d[key]["scoring"] is True and d[key]["unscored"] is None, key
+    assert 0 < d["fill"]["normalized"] <= 100 and d["momentum"]["blue"] is not None
+    assert "unscored" not in {badge["label"] for badge in d["momentum"]["badges"].values()}
+    assert "unscored" not in d["momentum"]["verdict"]
+    assert d["expected"]["unscored"] == LIKELIHOOD and d["expected"]["normalized"] is None
+
+
 def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reason(
         synthetic_world, tmp_path):
-    """A playbook whose only scoring term is guarded (hitscan cover while red
-    fields a flier) scores nothing until the guard holds: the best six itself
-    is zero, so no comp is a share of anything - the board says which
-    strategy waits and for what, and scores once the flier appears."""
+    """With the default engine off, a playbook whose only scoring term is
+    guarded (hitscan cover while red fields a flier) scores nothing until the
+    guard holds: the best six itself is zero, so no comp is a share of
+    anything - the board says which strategy waits and for what, and scores
+    once the flier appears."""
     from inference import engine
     world = synthetic_world
+    off = engine.Brief(base=OFF)
     # the two-tank limit and one guarded heuristic: a scoring term that waits on red
     shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), tmp_path)
     (tmp_path / "fliers-need-cover.md").write_text(
@@ -54,7 +76,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     scratch = catalog.load(str(tmp_path))
     assert catalog.has_scoring_terms(scratch)
     grounded = engine.board(world, Draft("Harbor Gate", ("Anvil", "Balm"), ("Mortar", "Needle")),
-                            catalog=scratch).to_dict()
+                            catalog=scratch, brief=off).to_dict()
     for key in ("blue", "red"):
         assert grounded[key]["scoring"] is True and grounded[key]["normalized"] == 100
     for key in ("current", "red_current", "fill"):
@@ -69,7 +91,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
     assert "waits for enemy.light_flyers >= 1" in grounded["momentum"]["verdict"]
     # no picks at all: blue's seat counters red's likely six, the optimal is the
     # reference (100), and the verdict is the plain "no picks yet"
-    empty = engine.board(world, Draft(), catalog=scratch).to_dict()
+    empty = engine.board(world, Draft(), catalog=scratch, brief=off).to_dict()
     assert empty["blue"]["normalized"] == 100 and empty["blue"]["unscored"] is None
     # enemy.light_flyers counts fliers tanks aside: a flying tank does not raise the guard
     if any(
@@ -80,7 +102,7 @@ def test_a_scoring_strategy_that_waits_on_its_board_reads_unscored_with_the_reas
         assert "waits for enemy.light_flyers >= 1" in empty["momentum"]["verdict"]
     assert empty["blue"]["red"] == empty["expected"]["blue"]           # countering the likely six
     flying = engine.board(world, Draft("Harbor Gate", ("Mortar", "Gale"), ("Anvil", "Needle")),
-                          catalog=scratch).to_dict()
+                          catalog=scratch, brief=off).to_dict()
     assert flying["blue"]["scoring"] is True and flying["blue"]["normalized"] == 100
     assert flying["current"]["unscored"] is None
     assert flying["current"]["normalized"] is None   # partial: the fill holds the share
@@ -101,7 +123,7 @@ def test_the_rendered_breakdown_marks_a_need():
     terms are needs; the flag rides to_dict() on each contribution."""
     from inference.result import Result
     r = Result(
-        kind="evaluate", map_name=None, red=[], blue=[], locked=[], catalog=[],
+        kind="evaluate", map_name=None, red=[], blue=[], locked=[], catalog=[], base=OFF,
         contributions=[
             {
                 "id": "a-reward", "kind": "heuristic", "form": "heuristic",

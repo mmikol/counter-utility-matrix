@@ -22,6 +22,8 @@ function verdictOf(c) {
    board quietly ignored */
 function why(c) {
   var n = function (x) { return typeof x === 'number' ? +x.toFixed(2) : x; };
+  if (c.form === 'base') return 'The default engine reads ' + c.metric + ': ' + n(c.raw) +
+    ' at weight ' + n(c.weight) + '. Worth ' + n(c.weighted) + '.';
   if (c.form === 'limit') return c.ok ? 'A hard limit. This six keeps it.'
                                       : 'A hard limit. This six breaks it.';
   if (!c.applies) {
@@ -58,9 +60,19 @@ function barRow(c, mx) {
     ((c.weighted || 0) >= 0 ? '+' : '') + (+(c.weighted || 0)).toFixed(2) + '</span></div>';
 }
 
+/* the default engine's three terms, a bar each above the playbook's panes on the
+   same scale: they always read, so they are never filtered or tabbed away */
 function bars(contribs) {
   var mx = 0.01;
   contribs.forEach(function (c) { mx = Math.max(mx, Math.abs(c.weighted || 0)); });
+  var base = contribs.filter(function (c) { return c.kind === 'base'; });
+  var rules = contribs.filter(function (c) { return c.kind !== 'base'; });
+  var engine = base.length ? "<div class='basebars'><p class='legend'>the default engine</p>" +
+    base.map(function (c) { return barRow(c, mx); }).join('') + '</div>' : '';
+  return engine + (rules.length ? playbookBars(rules, mx) : '');
+}
+
+function playbookBars(contribs, mx) {
   var byName = function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; };
   var group = { met: [], costing: [], unread: [] };
   contribs.forEach(function (c) { group[verdictOf(c)].push(c); });

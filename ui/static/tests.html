@@ -73,21 +73,23 @@ confidence</b>. A thousand would put it under 0.3%.</p>
 <p>Proving a board of the real roster costs a full enumeration, which is far too slow to run
 on every change. The gate that runs on every change is small instead: six boards of a
 twelve-hero test roster under the reference playbook and a two-two-two role queue &mdash; no
-red, red revealed, one lock, two locks, two bans, and a pair that pays only together. Each
-role's pool is cut to two of its four heroes, every legal six is enumerated and scored, and
-the search has to return the maximum. On at least one of the boards the winning six holds a
-hero the pool cut, so the reaching back is what finds it. It needs no database, so it runs
-in CI.</p>
+red, red revealed, one lock, two locks, two bans, and a pair that pays only together &mdash;
+once with the default engine under the playbook and once without it. Each role's pool is cut
+to two of its four heroes, every legal six is enumerated and scored, and the search has to
+return the maximum. On at least one of the boards the winning six holds a hero the pool cut,
+so the reaching back is what finds it. It needs no database, so it runs in CI.</p>
 <p>That is what stops a later change quietly undoing this &mdash; a narrowed pool, a dropped
 two-swap, a broken constraint shows up as a board that used to be exact and is not.</p>
 <p>The real-World gate is <code>tests/fixtures/optimal.json</code>: per board, the six a brute
 force over the real roster found and what it scored, which the suite re-solves. The
-enumerations it is cut from are hours of compute and live outside this repository;
-<code>scripts/optimal.py</code> reads them from the paths in <code>OPTIMAL_SOURCES</code> and
-rewrites the fixture. It records the digest of the playbook its boards were proved under, and
-that playbook is gone: while the shipped playbook scores nothing every legal six ties and the
-gate skips, and under any other playbook that scores it fails with <i>recorded under a
-different playbook</i>. Boards with bans are held out until they are enumerated again.</p>
+enumerations it is cut from live outside this repository; <code>scripts/optimal.py</code>
+reads them from the paths in <code>OPTIMAL_SOURCES</code> and rewrites the fixture. It records
+the objective its boards were proved under, the playbook's digest and the default engine's
+weights: twenty-four boards over eight maps, every legal six of each scored under the shipped
+playbook and the default engine, and in four of them the best six holds a hero the pool cut.
+With nothing scoring every legal six ties and the gate skips; under any other objective it
+fails with <i>recorded under a different objective</i> until the boards are enumerated again.
+Boards with bans are held out until they are.</p>
 
 <h2 id='suite'>The suite</h2>
 <p>Beyond the boards, the properties the engine has to hold whatever it is asked:</p>
@@ -117,8 +119,9 @@ see, and it changes as red reveals. The hedge is the <i>if countered optimally</
 <li><b>That no board fails.</b> A hundred designed and a few hundred sampled boards are a
 vanishing fraction of the space. What is established is a bounded rate and no systematic bug,
 which is not the same as none.</li>
-<li><b>That every hero is pickable.</b> Fifty-one of the fifty-three released heroes have a
-board found for them, each a proof they seat. Two have none found - which is not a proof
-that none exists. The reach search is a limited one, and its silence is not a theorem.</li>
+<li><b>That every hero is pickable.</b> Under the shipped playbook and the default engine,
+forty-four of the fifty-three released heroes have a board found for them, each a proof they
+seat. Nine have none found - which is not a proof that none exists. The reach search is a
+limited one, and its silence is not a theorem.</li>
 </ul>
 </article>

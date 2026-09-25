@@ -12,6 +12,7 @@ from db import Refusal
 from facts import board_facts
 from facts.draft import Draft
 from inference import catalog
+from inference.base import DEFAULT, OFF
 from tests.inference import ASSUMPTIONS_ONLY, FIXTURE_PLAYBOOK
 
 
@@ -143,19 +144,22 @@ def test_an_announced_hero_is_described_but_never_picked(synthetic_world):
     assert h.name not in r.blue and not any(h.name in a["blue"] for a in r.alternatives)
 
 
-def test_the_fill_is_the_optimal_whenever_the_optimal_holds_every_lock(synthetic_world):
+@pytest.mark.parametrize("base", [OFF, DEFAULT], ids=["base-off", "base-on"])
+def test_the_fill_is_the_optimal_whenever_the_optimal_holds_every_lock(synthetic_world, base):
     """Locking a hero of the optimal six leaves the optimal six the best one
-    that keeps the lock, so the fill must find it again. Under a playbook that
-    scores nothing every six scores zero and only the tie-break tells them
-    apart: a search that moved on score alone stood still there, and locking
-    Reinhardt on King's Row came back with Mizuki for Juno."""
+    that keeps the lock, so the fill must find it again. With the default
+    engine off, under a playbook that scores nothing every six scores zero
+    and only the tie-break tells them apart: a search that moved on score
+    alone stood still there, and locking Reinhardt on King's Row came back
+    with Mizuki for Juno. With it on, the same playbook scores by the engine."""
     from inference import engine
     world = synthetic_world
     assert not catalog.has_scoring_terms(ASSUMPTIONS_ONLY)
     for map_name in ("Harbor Gate", "Ember Ruins"):
-        best = engine.infer(world, Draft(map_name), catalog=ASSUMPTIONS_ONLY)
+        best = engine.infer(world, Draft(map_name), catalog=ASSUMPTIONS_ONLY, base=base)
         for hero in best.blue:
-            fill = engine.infer(world, Draft(map_name, blue=(hero,)), catalog=ASSUMPTIONS_ONLY)
+            fill = engine.infer(world, Draft(map_name, blue=(hero,)), catalog=ASSUMPTIONS_ONLY,
+                                base=base)
             assert fill.blue == best.blue, (map_name, hero, fill.blue)
 
 
@@ -171,20 +175,24 @@ def test_a_seat_solved_across_the_pool_is_timed_from_when_its_search_began(
     draft = Draft("Harbor Gate", ("Anvil",), side="attack")
     m, red_h, _, _ = synthetic_world.resolve(draft.map_name, draft.red, (), ())
     solved = Solver(synthetic_world, m, red=red_h, locked=[], side="attack",
-                    catalog=scratch_playbook).solve(top=2)
-    seat = engine._optimal(synthetic_world, draft, catalog=scratch_playbook, pool_size=6, top=1,
-                           seat="blue", kind="infer", solved=solved, began=time.time() - 5)
+                    catalog=scratch_playbook, base=DEFAULT).solve(top=2)
+    seat = engine._optimal(synthetic_world, draft, catalog=scratch_playbook, base=DEFAULT,
+                           pool_size=6, top=1, seat="blue", kind="infer", solved=solved,
+                           began=time.time() - 5)
     assert seat.result.seconds >= 5 and seat.result.to_dict()["seconds"] >= 5
-    alone = engine._optimal(synthetic_world, draft, catalog=scratch_playbook, pool_size=6,
-                            top=1, seat="blue", kind="infer", solved=None, began=None)
+    alone = engine._optimal(synthetic_world, draft, catalog=scratch_playbook, base=DEFAULT,
+                            pool_size=6, top=1, seat="blue", kind="infer", solved=None,
+                            began=None)
     assert alone.result.seconds < 5 and parallel.NullSplit.started is None
 
 
 def test_a_six_in_a_field_that_scores_nothing_has_no_rank(
         synthetic_world, scratch_playbook, tmp_path):
-    """evaluate counts the sixes that score strictly higher, and where the
-    playbook scores nothing every six ties at zero, so every six ranked first.
-    An unscored six now carries no rank; a scored one keeps its place."""
+    """evaluate counts the sixes that score strictly higher, and where nothing
+    scores - the default engine off, a playbook of limits alone - every six
+    ties at zero, so every six ranked first. An unscored six now carries no
+    rank; a scored one keeps its place, and the default engine alone scores
+    the limits' field."""
     import shutil
 
     from inference import engine
@@ -192,12 +200,13 @@ def test_a_six_in_a_field_that_scores_nothing_has_no_rank(
     limit_only = tmp_path / "limit-only"            # the scratch playbook is tmp_path's own
     limit_only.mkdir()
     shutil.copy(os.path.join(FIXTURE_PLAYBOOK, "open-queue-tanks.md"), limit_only)
-    unscored = engine.evaluate(synthetic_world, Draft("Harbor Gate", (), six, side="attack"),
-                               catalog=catalog.load(str(limit_only)))
+    board = Draft("Harbor Gate", (), six, side="attack")
+    unscored = engine.evaluate(synthetic_world, board, catalog=catalog.load(str(limit_only)),
+                               base=OFF)
     assert unscored.unscored() is not None
     assert unscored.rank is None and unscored.to_dict()["rank"] is None
     assert "(rank " not in unscored.rendered() and "UNSCORED" in unscored.rendered()
-    scored = engine.evaluate(synthetic_world, Draft("Harbor Gate", (), six, side="attack"),
-                             catalog=scratch_playbook)
-    assert scored.unscored() is None and scored.rank >= 1
-    assert "(rank %d among the feasible field)" % scored.rank in scored.rendered()
+    for scored in (engine.evaluate(synthetic_world, board, catalog=scratch_playbook, base=OFF),
+                   engine.evaluate(synthetic_world, board, catalog=catalog.load(str(limit_only)))):
+        assert scored.unscored() is None and scored.rank >= 1
+        assert "(rank %d among the feasible field)" % scored.rank in scored.rendered()

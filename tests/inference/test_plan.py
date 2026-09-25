@@ -12,6 +12,7 @@ from facts.draft import Draft
 from facts.records import StyleScore
 from facts.team import team_metrics
 from inference import catalog
+from inference.base import OFF
 from inference.expr import Expr
 from inference.result import Result
 from tests.inference import FIXTURE_PLAYBOOK
@@ -23,7 +24,7 @@ def comp(blue, score, best, partial=False, seat="blue"):
     """A seat's current comp of `blue` under the reference playbook, scoring
     `score` on a scale whose 100 is `best`."""
     return Result(kind="current", map_name=None, red=[], blue=blue, locked=blue,
-                  catalog=FIX, score=score, best=best, partial=partial, seat=seat)
+                  catalog=FIX, base=OFF, score=score, best=best, partial=partial, seat=seat)
 
 
 def test_the_momentum_verdict_reads_the_two_current_comps():
@@ -212,7 +213,7 @@ def test_the_plan_says_nothing_the_board_contradicts(synthetic_world):
     assert red_lean == "brawl"
     # a real Result, not a stand-in: _plan reads .facts, which Result defines
     six = Result(kind="infer", map_name=m.name, red=["Anvil", "Mortar"], blue=[],
-                 locked=[], catalog=rules, playstyle="brawl", contributions=terms)
+                 locked=[], catalog=rules, base=OFF, playstyle="brawl", contributions=terms)
     said = plan.plan(world, m, "", [], red_h, six)                     # a mirror
     assert "(Anvil, Mortar) lean brawl too: %s." % plan.SAME_LEAN["brawl"] in said
     assert plan.THEIR_LEAN["brawl"] not in said
@@ -249,10 +250,10 @@ def test_the_plan_says_nothing_the_board_contradicts(synthetic_world):
 
 def test_a_playbook_that_scores_nothing_gets_a_plan_that_claims_no_counter(
         synthetic_world, tmp_path):
-    """With nothing scored the six is only the highest win rates the search
-    found, so the plan says that: no counter to their likely six, nothing
-    built to fit together, and the style worded from the roles the six
-    actually holds - which a support-less six would not be told to lean on."""
+    """With nothing scored, the default engine off, the six is only the highest
+    win rates the search found, so the plan says that: no counter to their
+    likely six, nothing built to fit together, and the style worded from the
+    roles the six actually holds - which a support-less six would not be told to lean on."""
     import shutil
 
     from inference import engine, plan
@@ -260,7 +261,7 @@ def test_a_playbook_that_scores_nothing_gets_a_plan_that_claims_no_counter(
     limit_only = catalog.load(str(tmp_path))
     assert not catalog.has_scoring_terms(limit_only)
     for draft in (Draft(), Draft("Harbor Gate", side="attack")):
-        b = engine.board(synthetic_world, draft, catalog=limit_only)
+        b = engine.board(synthetic_world, draft, catalog=limit_only, brief=engine.Brief(base=OFF))
         assert "the six counters" not in b.plan, draft
         assert "built to fit together" not in b.plan, draft
         assert "the six is the highest win-rate six the search found" in b.plan, draft
@@ -285,7 +286,7 @@ def test_the_plan_describes_the_six_the_comps_tab_shows(synthetic_world, scratch
 
     def board(red, blue):
         return engine.board(synthetic_world, Draft("Harbor Gate", red, blue, side="attack"),
-                            catalog=scratch_playbook)
+                            catalog=scratch_playbook, brief=engine.Brief(base=OFF))
     none = board(("Anvil",), ())
     assert "your pick" not in none.plan and "The six keeps" not in none.plan
     one = board(("Anvil",), ("Balm",))

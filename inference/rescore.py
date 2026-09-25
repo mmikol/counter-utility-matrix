@@ -11,7 +11,9 @@ strategies in the families an ablation drops.
                 so it is never judged on the maps it was tuned on
     rescore     each map through engine.evaluate from both seats - blue's six
                 against red's on blue's side, red's against blue's on the
-                other - with the team and matchup metrics of both sixes
+                other - with the default engine off, so the score is the
+                playbook's alone, and the team and matchup metrics of both
+                sixes
     without     a map's playbook score difference with some strategies'
                 terms dropped
 """
@@ -26,6 +28,7 @@ from facts.matches import Match
 from facts.model import World
 from facts.team import VERSUS_METRICS, numbers, team_metrics
 from inference import engine
+from inference.base import OFF
 from inference.strategy import Strategy
 
 POOL = 2                    # the field evaluate ranks against: a six's score is the
@@ -188,10 +191,12 @@ def rescored(
         world: World, match: Match, catalog: list[Strategy],
         pool_size: int = POOL) -> Rescored:
     """One map rescored: engine.evaluate from both seats, then the team and
-    matchup metrics. A board the engine refuses raises its Refusal."""
+    matchup metrics. A board the engine refuses raises its Refusal. The
+    default engine is off: the score judged is the playbook's alone, and
+    predict's M2 already reads the rates and M3 the heroes."""
     blue_seat, red_seat = seats(match)
-    blue = engine.evaluate(world, blue_seat, catalog=catalog, pool_size=pool_size)
-    red = engine.evaluate(world, red_seat, catalog=catalog, pool_size=pool_size)
+    blue = engine.evaluate(world, blue_seat, catalog=catalog, pool_size=pool_size, base=OFF)
+    red = engine.evaluate(world, red_seat, catalog=catalog, pool_size=pool_size, base=OFF)
     m, red_h, blue_h, _bans = world.resolve(match.map_name, match.red, match.blue, match.bans)
     blue_team = team_metrics(world, blue_h, m, red_h, lean=True)
     red_team = team_metrics(world, red_h, m, blue_h, lean=True)

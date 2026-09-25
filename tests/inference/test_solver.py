@@ -19,6 +19,7 @@ from facts.draft import Draft
 from facts.records import StyleScore, Synergy
 from facts.team import team_metrics
 from inference import catalog
+from inference.base import DEFAULT, OFF
 from inference.shapes import legal_shapes
 from tests.inference import FIXTURE_PLAYBOOK
 
@@ -43,15 +44,21 @@ def legal_sixes(world, playbook, locked=(), banned=()):
     return [six for six in sixes if shape(six) in shapes]
 
 
-def test_the_search_reaches_the_enumerated_maximum(synthetic_world, catalog_copy):
+@pytest.mark.parametrize(("base", "pair"), [(OFF, ("Anvil", "Tansy")),
+                                            (DEFAULT, ("Anvil", "Balm"))],
+                         ids=["base-off", "base-on"])
+def test_the_search_reaches_the_enumerated_maximum(synthetic_world, catalog_copy, base, pair):
     """The regression gate on the search. On six small boards - no red, red
     revealed, one lock, two locks, two bans, and a pair that pays only
     together - every legal six is enumerated and scored, and infer returns
     the best of them, tie-break included. Each role's pool holds two of its
     four heroes, so the reach-back steps have to find the rest. The playbook
     is the reference plus a role queue: a shape the pools cannot seat is
-    never searched, and pools of two cannot seat three of a role. A board
-    this misses is a solver defect: fix the search, never swap the board out."""
+    never searched, and pools of two cannot seat three of a role. It holds
+    with the default engine under the playbook and without it; the pair is
+    two heroes the pools cut, and what ranks the pools differs between the
+    two, so each names its own. A board this misses is a solver defect: fix
+    the search, never swap the board out."""
     from inference import engine, scoring
     from inference import solver as solver_module
     with open(os.path.join(catalog_copy, "role-queue.md"), "w", encoding="utf-8") as handle:
@@ -62,7 +69,7 @@ def test_the_search_reaches_the_enumerated_maximum(synthetic_world, catalog_copy
     def searched(world, draft):
         m, red, locked, banned = world.resolve(draft.map_name, draft.red, draft.blue, draft.bans)
         solver = solver_module.Solver(world, m, red=red, locked=locked, banned=banned,
-                                      side=draft.side, catalog=fix, pool_size=2)
+                                      side=draft.side, catalog=fix, base=base, pool_size=2)
         solver.freeze_bounds()
         return solver, legal_sixes(world, fix, locked, banned)
 
@@ -72,7 +79,7 @@ def test_the_search_reaches_the_enumerated_maximum(synthetic_world, catalog_copy
     alone = copy.copy(synthetic_world)
     alone.synergies, alone.partners = {}, {}
     solver, _ = searched(alone, pair_board)
-    a, b = synthetic_world.hero("Anvil"), synthetic_world.hero("Tansy")
+    a, b = (synthetic_world.hero(name) for name in pair)
     assert not {a.id, b.id} & {h.id for pool in solver.pools().values() for h in pool}
     paired = copy.copy(synthetic_world)
     synergy = Synergy(1, "scratch")
@@ -93,7 +100,7 @@ def test_the_search_reaches_the_enumerated_maximum(synthetic_world, catalog_copy
         feasible = sorted((c for c in scored if not c.violations), key=solver._rank_key)
         best = feasible[0]
         assert best.score > feasible[-1].score, draft          # the playbook tells sixes apart
-        got = engine.infer(world, draft, catalog=fix, pool_size=2, top=1)
+        got = engine.infer(world, draft, catalog=fix, pool_size=2, top=1, base=base)
         if sorted(got.blue) != sorted(best.names) or abs(got.score - best.score) > 1e-9:
             missed.append("%s: %.6f %s, enumerated %.6f %s"
                           % (draft, got.score, sorted(got.blue), best.score, sorted(best.names)))
@@ -135,7 +142,7 @@ def test_a_soft_limit_charges_its_penalty_and_never_prunes(synthetic_world):
     from inference import scoring
     w = synthetic_world
     objective = scoring.Objective(w, w.map("Harbor Gate"), red=[w.hero("Gale")],
-                                  catalog=catalog.load(FIXTURE_PLAYBOOK))
+                                  catalog=catalog.load(FIXTURE_PLAYBOOK), base=DEFAULT)
     cand = scoring.Candidate(
         [w.hero(n) for n in ("Anvil", "Mortar", "Balm", "Myrrh", "Sorrel", "Tansy")])
     objective.score(objective.prepare(cand))
@@ -205,9 +212,9 @@ def test_partners_that_only_pay_together_are_brought_in_together(synthetic_world
     scratch = catalog.load(str(tmp_path))
     locked, banned = [world.hero("Anvil")], [world.hero("Needle")]
 
-    def solver_on(w):
+    def solver_on(w):              # the playbook alone: the pair is its to pay
         return solver_module.Solver(w, None, red=[], locked=locked, banned=banned,
-                                    catalog=scratch, pool_size=2)
+                                    catalog=scratch, base=OFF, pool_size=2)
 
     alone = copy.copy(world)                   # the same roster, no synergy pair yet
     alone.synergies, alone.partners = {}, {}
@@ -268,7 +275,7 @@ def test_a_ban_does_not_rescale_the_board(synthetic_world):
     def score_under(bans):
         m, red_h, _, bans_h = world.resolve("Harbor Gate", red, [], bans)
         solver = solver_module.Solver(world, m, red=red_h, locked=[], banned=bans_h,
-                                      side="attack", catalog=catalog)
+                                      side="attack", catalog=catalog, base=DEFAULT)
         solver.freeze_bounds()
         cand = solver.prepare(scoring.Candidate([world.hero(n) for n in six]))
         return solver.score(cand, detail=False).score
@@ -320,11 +327,12 @@ def test_a_rule_scales_by_the_metric_it_names(synthetic_world, tmp_path):
     def points(map_name, strategy_id):
         m, red, _, _ = world.resolve(map_name, ["Anvil", "Gale"], [], [])
         solver = solver_module.Solver(world, m, red=red, locked=[],
-                                      side=engine._side(m, "attack"), catalog=playbook)
+                                      side=engine._side(m, "attack"), catalog=playbook,
+                                      base=OFF)
         solver.freeze_bounds()
         best = engine.infer(world, Draft(map_name, ("Anvil", "Gale"),
                                          side=engine._side(m, "attack")),
-                            top=1, catalog=playbook)
+                            top=1, catalog=playbook, base=OFF)
         cand = solver.prepare(scoring.Candidate([world.hero(n) for n in best.blue]))
         solver.score(cand, detail=True)
         return next(c for c in cand.contributions if c["id"] == strategy_id)
@@ -390,7 +398,7 @@ def test_a_board_confidence_reads_the_boards_own_ban_count(synthetic_world, tmp_
     m, red, _, banned = world.resolve("Harbor Gate", ["Mortar", "Gale"], [],
                                       ["Needle", "Rook"])
     solver = solver_module.Solver(world, m, red=red, locked=[], banned=banned, side="attack",
-                                  catalog=playbook)
+                                  catalog=playbook, base=DEFAULT)
     solver.freeze_bounds()
     assert solver.bounds["scale-by-the-bans" + scoring.CONFIDENCE_KEY] == (2.0, 2.0)
 
@@ -408,7 +416,7 @@ def test_merged_slices_bound_a_confidence_metric_as_one_process_does(synthetic_w
         encoding="utf-8")
     playbook = catalog.load(str(tmp_path))
     assert [h.confidence for h in playbook] == ["team.pick_mass"]
-    objective = scoring.Objective(synthetic_world, None, red=[], catalog=playbook)
+    objective = scoring.Objective(synthetic_world, None, red=[], catalog=playbook, base=DEFAULT)
     valued = []
     for raw, sure in ((0.4, -2.0), (0.7, -1.0)):
         cand = scoring.Candidate([])
@@ -429,7 +437,7 @@ def test_a_roster_with_fewer_legal_sixes_than_the_reference_is_sampled_whole(syn
     from inference import scale, scoring
     playbook = catalog.load(FIXTURE_PLAYBOOK)
     legal = {frozenset(h.id for h in six) for six in legal_sixes(synthetic_world, playbook)}
-    objective = scoring.Objective(synthetic_world, None, red=[], catalog=playbook)
+    objective = scoring.Objective(synthetic_world, None, red=[], catalog=playbook, base=DEFAULT)
     drawn = scale.sample(objective)
     assert len(legal) < scale.REFERENCE_SIZE
     assert [c.key for c in drawn] == [c.key for c in scale.sample(objective)]

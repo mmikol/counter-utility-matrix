@@ -1,10 +1,11 @@
 """The board in prose: the momentum verdict read off the two current comps,
 the badge above each picker, and the game plan - the ground, what to play
 on it, what red's picks mean, the family of heroes to stay in and what the
-six is built for - worded from the facts and strategies the solver scored.
-Where the playbook scores nothing, the six is only the highest win rates
-the search found, and the plan says so: it claims no counter and no fit,
-and words the style from the roles the six holds.
+six is built for - worded from the facts, the default engine's terms and
+the strategies the solver scored. Where nothing scores - the default engine
+off and a playbook with no scoring term - the six is only the highest win
+rates the search found, and the plan says so: it claims no counter and no
+fit, and words the style from the roles the six holds.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -14,8 +15,8 @@ from facts.draft import TEAM_SIZE
 from facts.factset import FactSet
 from facts.model import ROLES, Hero, Map, World
 from facts.team import team_metrics, text
-from inference import catalog as catalog_module
-from inference.result import Badge, Badges, Momentum, Odds, Result, rates_queue
+from inference import base
+from inference.result import Badge, Badges, Momentum, Odds, Result, rates_queue, scores
 
 
 class Seats(NamedTuple):
@@ -284,7 +285,7 @@ def plan(
     so that picks can be tailored toward the optimal without matching it.
     Ends with what it rests on."""
     lean = six.playstyle
-    scoring = catalog_module.has_scoring_terms(six.catalog)
+    scoring = scores(six.catalog, six.base)
     yours = _yours(six)
     read = _ground(m, side, six.facts, scoring)
     for sentence in (_keeps(six, yours),
@@ -322,7 +323,8 @@ def _keeps(six: Result, yours: Sequence[str]) -> str | None:
 
 def _ground(m: Map | None, side: str, facts: FactSet | None, scoring: bool) -> list[str]:
     """The ground: the map's mode, the terrain its facts stress, and the side;
-    and, where the playbook scores nothing, what the six is instead."""
+    and, where nothing scores (`scoring` false: the default engine off and
+    no scoring strategy), what the six is instead."""
     if m is None:
         return ["No map yet, so this is the meta's best six: what is winning right now, built"
                 " to fit together." if scoring else "No map yet, and the playbook scores"
@@ -364,8 +366,8 @@ def _style_read(
         m: Map | None, lean: str, red_h: Sequence[Hero],
         roles: Mapping[str, int] | None) -> str | None:
     """What to play: the style the map rewards against the six's lean. With
-    `roles`, the six's count per role where the playbook scores nothing, the
-    lean names them and the advice is worded from them."""
+    `roles`, the six's count per role where nothing scores, the lean names
+    them and the advice is worded from them."""
     map_style = m.style_top if m is not None else ""
     shape = " with %s" % _roles_in_words(roles) if roles is not None else ""
     if map_style and lean == map_style:
@@ -431,8 +433,8 @@ def _them(
 
 def _unrevealed(six: Result, scoring: bool) -> str | None:
     """Their likely six while red has revealed nothing: the six searched as
-    its counter says so; blue's own six, or one the playbook did not score,
-    counters nothing, and the plan only names it."""
+    its counter says so; blue's own six, or one nothing scored, counters
+    nothing, and the plan only names it."""
     if not six.red:
         return None
     if scoring and six.kind != "evaluate":
@@ -489,7 +491,7 @@ def _above_all(blue_r: Result, lean: str) -> str | None:
     """What the six is built for: its four heaviest scoring terms - not the
     shape every legal six pays, nor a rule named for another style ("Dive the
     pocket" on a poke six); a rule on the map's style is about the map."""
-    titles = {h.id: h.name for h in blue_r.catalog}
+    titles = {h.id: h.name for h in blue_r.catalog} | base.TITLES
     skip = {h.id for h in blue_r.catalog
             if (h.kind == "constraint" and h.category == "shape")
             or (h.name.split()[0].lower() in STYLE_PLAY and h.name.split()[0].lower() != lean

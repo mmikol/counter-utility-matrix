@@ -12,8 +12,9 @@ boards with bans back in once they are proven again (it is 1, holding them
 out, by default).
 
 The fixture records the digest of the playbook in force (COUNTRIX_STRATEGIES
-selects another), and the gate refuses boards proved under a different one, so
-that playbook must be the one the enumeration ran under.
+selects another) and the default engine's stamp (inference.base.stamp), and
+the gate refuses boards proved under a different objective, so that playbook
+and that engine must be the ones the enumeration ran under.
 """
 import json
 import os
@@ -21,7 +22,7 @@ from collections.abc import Sequence
 from typing import TypedDict
 
 from db import ROOT
-from inference import catalog
+from inference import base, catalog
 
 OUT = os.path.join(ROOT, "tests", "fixtures", "optimal.json")
 
@@ -110,10 +111,12 @@ def main() -> int:
                          "vacuous - the search could be deleted and it would still pass")
     playbook = catalog.playbook_digest()
     with open(OUT, "w", encoding="utf-8") as handle:
-        json.dump({"playbook": playbook, "boards": kept}, handle, indent=1)
+        json.dump({"playbook": playbook, "base": base.stamp(base.DEFAULT), "boards": kept},
+                  handle, indent=1)
     print(
-        "recorded %d proven boards over %d maps under playbook %s; %d of them need a hero"
-        " the pool cut" % (len(kept), len({r["board"]["map"] for r in kept}), playbook[:12], hard))
+        "recorded %d proven boards over %d maps under playbook %s and the default engine; %d"
+        " of them need a hero the pool cut"
+        % (len(kept), len({r["board"]["map"] for r in kept}), playbook[:12], hard))
     return 0
 
 

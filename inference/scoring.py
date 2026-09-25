@@ -1,12 +1,15 @@
-"""The objective: what one six scores on one board under the playbook.
+"""The objective: what one six scores on one board.
 
+    score(six) = base(six) + STRATEGIES(six)
     STRATEGIES = CONSTRAINTS ∪ HEURISTICS ∪ ASSUMPTIONS
 
-Limits prune (soft ones charge), heuristics normalise and weigh, scored
-constraints add; assumptions are the agent's. A `when` reading only the
-enemy, the map and the world is settled once per board, not once per
-candidate. A heuristic guarded on the six's own state is a need: see
-Objective.score(). The legal shapes live in inference.shapes.
+The default engine's three terms come first (inference.base), unless the
+board's BaseWeights are OFF; then the playbook's: limits prune (soft ones
+charge), heuristics normalise and weigh, scored constraints add;
+assumptions are the agent's. A `when` reading only the enemy, the map and
+the world is settled once per board, not once per candidate. A heuristic
+guarded on the six's own state is a need: see Objective.score(). The legal
+shapes live in inference.shapes.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -15,6 +18,7 @@ from typing import Literal, NamedTuple, NotRequired, TypedDict
 from facts import compute
 from facts.model import Hero, Map, World
 from facts.team import NUMBER_TYPES, MetricBag, MetricValue, number, team_metrics
+from inference.base import COUNTERS, RATES, READS, SYNERGY, Base, BaseWeights, Terms
 from inference.expr import Expr, Scope, Value, scope
 from inference.strategy import Strategy, settled_by_board
 
@@ -123,17 +127,23 @@ def _certainty(scale: Interval, scale_raw: float) -> float:
 
 
 class Contribution(TypedDict):
-    """One strategy's term in a six's score: the `contributions` array of the
-    public payload. Every term carries the required keys; the rest belong to
-    the form that has them, and no term is padded with the others."""
+    """One term in a six's score, the default engine's or a strategy's: the
+    `contributions` array of the public payload. Every term carries the
+    required keys; the rest belong to the form that has them, and no term is
+    padded with the others."""
     id: str
-    kind: Literal["constraint", "heuristic"]
-    form: Literal["limit", "heuristic", "scored"]
+    kind: Literal["base", "constraint", "heuristic"]
+    form: Literal["base", "limit", "heuristic", "scored"]
     applies: bool
     weighted: float
-    metric: str | None                 # a heuristic's metric, a constraint's expressions
+    metric: str | None                 # what the term reads: a metric, expressions, a source
     ok: NotRequired[bool]              # a limit: whether its require holds
-    raw: NotRequired[float | None]     # a heuristic
+    raw: NotRequired[float | None]     # a heuristic, and a base term
+    weight: NotRequired[float]         # a base term
+    against: NotRequired[list[str]]    # the counter term: the other side it read,
+    likely: NotRequired[bool]          # whether that is the side's likely six,
+    answers: NotRequired[int]          # and the edges each way
+    exposures: NotRequired[int]
     norm: NotRequired[float]
     when: NotRequired[str | None]      # a heuristic, and a scored constraint
     spread: NotRequired[bool]          # an applying heuristic
@@ -153,8 +163,8 @@ type SixKey = tuple[int, ...]
 
 class Candidate:
     """One six on its way through the search: its heroes, and once prepared
-    and scored its namespace, limit breaches, raw values, score, tie-break and
-    breakdown. A slim one keeps only the verdict."""
+    and scored its namespace, limit breaches, raw values, base terms, score,
+    tie-break and breakdown. A slim one keeps only the verdict."""
 
     __slots__ = (
         "confidence",
@@ -165,6 +175,7 @@ class Candidate:
         "raw",
         "scope",
         "score",
+        "terms",
         "tiebreak",
         "violations",
     )
@@ -182,25 +193,47 @@ class Candidate:
         # metric where it names one, else None; empty on a slim candidate
         self.raw: Sequence[float | None] = []
         self.confidence: Sequence[float | None] = []
+        self.terms: Terms | None = None       # the default engine's, where it is on
 
     @property
     def names(self) -> list[str]:
         return [h.name for h in self.heroes]
 
 
+def _score_base(base: Base, cand: Candidate, out: list[Contribution] | None) -> float:
+    """The default engine's value; with `out`, a breakdown term per part, the
+    counter term naming the side it read and the edges each way."""
+    terms = cand.terms
+    if terms is None:
+        raise RuntimeError("score() takes a prepared candidate: its base terms are unset")
+    if out is not None:
+        w = base.weights
+        for key, weight, raw in ((RATES, w.rate, terms.rates), (SYNERGY, w.synergy, terms.synergy),
+                                 (COUNTERS, w.counter, float(terms.counters))):
+            out.append({"id": key, "kind": "base", "form": "base", "applies": bool(weight),
+                        "raw": raw, "weight": weight, "weighted": weight * raw,
+                        "metric": READS[key]})
+        out[-1].update({"against": [h.name for h in base.opponent.heroes],
+                        "likely": base.opponent.likely, "answers": terms.answers,
+                        "exposures": terms.exposures})
+    return base.value(terms)
+
+
 class Objective:
-    """The part of a board's search that scores a six: the playbook's
-    objective against this enemy, on this map, side and bans, with every
-    `when` the board settles read once and each heuristic's bounds, once
-    frozen, turned into the norms the scoring loop reads."""
+    """The part of a board's search that scores a six: the default engine and
+    the playbook's objective against this enemy, on this map, side and bans,
+    with every `when` the board settles read once and each heuristic's bounds,
+    once frozen, turned into the norms the scoring loop reads."""
 
     def __init__(self, world: World, m: Map | None, *, red: Sequence[Hero],
                  banned: Sequence[Hero] = (), side: str = "",
-                 catalog: list[Strategy]) -> None:
+                 catalog: list[Strategy], base: BaseWeights) -> None:
         self.world, self.m, self.red = world, m, list(red)
         self.banned = {h.id for h in banned}
         self.side = side
         self.catalog = catalog
+        # the default engine on this board; None while it is off
+        self.base = Base(world, m, red=self.red, banned=banned, weights=base) if base.on else None
         self.limits = [h for h in catalog if h.form == "limit"]
         self.heuristics = [h for h in catalog if h.form == "heuristic"]
         self.scored_constraints = [h for h in catalog if h.form == "scored"]
@@ -306,6 +339,8 @@ class Objective:
                 keep(None)
         cand.raw = raw
         cand.confidence = self._confidence_values(ns, raw)
+        if self.base is not None:
+            cand.terms = self.base.terms(cand.heroes, number(ns["team"]["synergy_score"]))
         cand.tiebreak = number(ns["team"]["map_win_mean"])
         return cand
 
@@ -331,6 +366,7 @@ class Objective:
         hydrated again before they are shown."""
         cand.ns = cand.scope = None
         cand.raw = cand.confidence = ()
+        cand.terms = None
         cand.contributions = []
         return cand
 
@@ -366,7 +402,8 @@ class Objective:
     def score(self, cand: Candidate, detail: bool = True) -> Candidate:
         """Score with the frozen bounds; with detail, fill the breakdown too.
 
-        A heuristic with no guard, or a guard on the board (enemy, map), adds
+        The default engine's value comes first, where it is on; it reads no
+        scale. A heuristic with no guard, or a guard on the board (enemy, map), adds
         weight x norm. A heuristic guarded on the six's own state (team.*,
         matchup.*) is a need - "a solo healer needs an escape" - and adds
         weight x (norm - 1): met in full it costs nothing, unmet it costs the
@@ -381,7 +418,8 @@ class Objective:
         held: list[bool | None] = [None] * self.gate_slots
         contributions: list[Contribution] = []
         out = contributions if detail else None
-        total = self._score_limits(sc, held, 0.0, out)
+        total = 0.0 if self.base is None else _score_base(self.base, cand, out)
+        total = self._score_limits(sc, held, total, out)
         total = self._score_heuristics(cand, total, out)
         total = self._score_scored(sc, held, total, out)
         cand.score = total

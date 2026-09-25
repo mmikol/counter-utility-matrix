@@ -16,6 +16,7 @@ from facts.compute import matchup_metrics
 from facts.matches import Match
 from facts.team import numbers, team_metrics
 from inference import catalog, engine, predict, rescore, validate
+from inference.base import OFF
 from inference.report import rendered
 from tests import matches
 from tests.inference import ASSUMPTIONS_ONLY, FIXTURE_PLAYBOOK
@@ -212,6 +213,8 @@ def test_a_draw_is_judged_but_never_decided(world):
 
 
 def test_the_rescore_is_the_engines_evaluate_from_both_seats(world):
+    """The playbook's evaluate alone, the default engine off: what is judged
+    is what the playbook adds, and no term of the engine rides the score."""
     playbook = catalog.load(FIXTURE_PLAYBOOK)
     good = _match(1, 1, matches.DIGEST)._replace(map_name="Harbor Gate", side="attack")
     unknown = _match(2, 1, matches.DIGEST)._replace(blue=("Nobody",) * 6)
@@ -220,9 +223,10 @@ def test_the_rescore_is_the_engines_evaluate_from_both_seats(world):
     assert done.refused == [rescore.Refused(2, "unknown heroes: " + ", ".join(("Nobody",) * 6))]
     blue_seat, red_seat = rescore.seats(good)
     assert red_seat.side == "defense" and red_seat.blue == good.red
-    blue = engine.evaluate(world, blue_seat, catalog=playbook)
-    red = engine.evaluate(world, red_seat, catalog=playbook)
+    blue = engine.evaluate(world, blue_seat, catalog=playbook, base=OFF)
+    red = engine.evaluate(world, red_seat, catalog=playbook, base=OFF)
     assert (row.blue_score, row.red_score) == (blue.score, red.score)
+    assert not any(key.startswith("base.") for key in (*row.blue_terms, *row.red_terms))
     assert sum(row.blue_terms.values()) == pytest.approx(row.blue_score)
     assert sum(row.red_terms.values()) == pytest.approx(row.red_score)
     m, red_h, blue_h, _ = world.resolve(good.map_name, good.red, good.blue)

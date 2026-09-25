@@ -17,7 +17,11 @@
                   and documents them; AUTHORED, the `sources` row the
                   mirror and the recorded matches carry
     expr          the safe expression language the frontmatter uses
-    scoring       the objective: what one six scores on one board
+    base          the default engine, always on: a six's win rates on the map,
+                  the wiki's synergies and its counters against the other
+                  side, the terms the playbook's sit on top of
+    scoring       the objective: what one six scores on one board, the
+                  default engine's terms and then the playbook's
     shapes        the legal shapes: the role counts a six may take around the
                   locked picks
     scale         the board's one scale: the seeded reference sample and field
@@ -40,9 +44,9 @@
     report        what validate answers: its records, JSON the door serves and
                   the page draws, and the same report as text
     rescore       the recorded maps a playbook is judged on - from its digest's
-                  first map - each through evaluate from both seats, and the
-                  playbook's scoring strategies in the families an ablation
-                  drops
+                  first map - each through evaluate from both seats with the
+                  default engine off, and the playbook's scoring strategies in
+                  the families an ablation drops
     predict       the models validate scores, M0 a coin flip to M4 the heroes
                   plus the playbook score, the splits it scores them on, and
                   each model's log loss and Brier with their intervals

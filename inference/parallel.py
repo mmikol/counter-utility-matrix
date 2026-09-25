@@ -45,6 +45,7 @@ from typing import Concatenate, NamedTuple
 from facts.draft import Draft
 from facts.model import World
 from inference import catalog as catalog_module
+from inference.base import BaseWeights
 from inference.scale import Standing, Tally, reference_bounds, reference_standing
 from inference.scoring import Bounds, Candidate, Interval
 from inference.solver import Solved, Solver, Swept
@@ -248,10 +249,11 @@ def _revive(world: World, verdict: Verdict) -> Candidate:
 
 class Spec(NamedTuple):
     """The board one worker solves: the seat's draft, from the seat's own
-    perspective and its side normalised by board(), and the candidates per
-    role."""
+    perspective and its side normalised by board(), the candidates per
+    role, and the default engine's weights the board is scored under."""
     draft: Draft
     pool_size: int
+    base: BaseWeights
 
 
 def _solver(world: World, catalog: list[Strategy], spec: Spec) -> Solver:
@@ -259,7 +261,7 @@ def _solver(world: World, catalog: list[Strategy], spec: Spec) -> Solver:
     seat = spec.draft
     m, red_h, locked_h, bans_h = world.resolve(seat.map_name, seat.red, seat.blue, seat.bans)
     return Solver(world, m, red=red_h, locked=locked_h, banned=bans_h, side=seat.side,
-                  catalog=catalog, pool_size=spec.pool_size)
+                  catalog=catalog, base=spec.base, pool_size=spec.pool_size)
 
 
 def _worker_solver(
