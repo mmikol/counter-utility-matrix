@@ -17,6 +17,7 @@ def test_roster_endpoint_carries_portraits_and_maps(db):
     assert {h["role"] for h in data["heroes"]} == {"tank", "damage", "support"}
     assert all(h["status"] in ("released", "announced") for h in data["heroes"])
     assert all(h["portrait"] for h in data["heroes"] if h["status"] == "released")
+    assert all(h["pool"] > 0 for h in data["heroes"])     # the door's roster, pool and all
     assert any(m["name"] == "King's Row" for m in data["maps"])
     for h in data["heroes"]:                          # an announced hero rides in its role, dated
         if h["status"] == "announced":

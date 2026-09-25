@@ -4,49 +4,28 @@ database the context points at, and neither tool writes.
 """
 
 import json
-from typing import TypedDict
 
 from door.mcp.boards import board_tool
 from door.mcp.registry import Context, tool
 from door.mcp.schema import ToolReply
 from facts import board_facts, tables
 from facts.draft import Draft
-
-
-class RosterHero(TypedDict):
-    """A hero as roster lists it."""
-    name: str
-    role: str
-    subrole: str
-    pool: int
-    portrait: str | None
-    status: str
-    release_date: str | None
-
-
-class RosterMap(TypedDict):
-    """A map as roster lists it."""
-    name: str
-    mode: str | None
+from facts.roster import RosterHero, RosterMap, roster_of
 
 
 @tool(
     "roster", "Every hero with role, subrole, health pool, portrait and status"
     " (released, or announced with its release day - shown, never picked), plus"
-    " the map pool with modes - the vocabulary the board tools accept.")
+    " the map pool with each map's mode, the style it rewards most and whether it"
+    " has an attacking and a defending side - the vocabulary the board tools accept.")
 def roster(ctx: Context) -> ToolReply:
     with ctx.connect() as cx:
         world = tables.load(cx)
-    heroes = [
-        RosterHero(name=h.name, role=h.role, subrole=h.subrole, pool=h.pool,
-                   portrait=h.portrait, status=h.status,
-                   release_date=str(h.release_date) if h.release_date else None)
-        for h in world.heroes_by_role()]
-    maps = [RosterMap(name=m.name, mode=m.mode) for m in world.maps_sorted()]
+    listed = roster_of(world)
     text = "\n".join("%-9s %-14s %s%s" % (h["role"], h["subrole"], h["name"], _announced(h))
-                     for h in heroes) + "\n\nmaps: " + ", ".join(
-        "%s (%s)" % (m["name"], m["mode"]) for m in maps)
-    return ToolReply(text, {"heroes": heroes, "maps": maps})
+                     for h in listed["heroes"]) + "\n\nmaps: " + ", ".join(
+        _described(m) for m in listed["maps"])
+    return ToolReply(text, listed)
 
 
 def _announced(hero: RosterHero) -> str:
@@ -56,6 +35,14 @@ def _announced(hero: RosterHero) -> str:
         return ""
     day = hero["release_date"]
     return "  (announced%s)" % (", releases " + day if day else "")
+
+
+def _described(m: RosterMap) -> str:
+    """A map as roster's text lists it: the name, then in parentheses its
+    mode, the style it rewards most and "sided" when it has an attacking and
+    a defending side, each only where the map has one."""
+    parts = [x for x in (m["mode"], m["style"], "sided" if m["sided"] else None) if x]
+    return "%s (%s)" % (m["name"], ", ".join(parts)) if parts else m["name"]
 
 
 @board_tool(

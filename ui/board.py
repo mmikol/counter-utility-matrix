@@ -37,7 +37,8 @@ from psycopg.rows import TupleRow
 from db import psql, web
 from door.mcp import tools
 from facts import board_facts, tables
-from facts.draft import Query, is_sided, parse_board
+from facts.draft import Query, parse_board
+from facts.roster import roster_of
 from inference import catalog as catalog_module
 from inference import parallel, serve
 from inference.strategy import finite_number
@@ -118,14 +119,12 @@ def remote(
 # --- JSON endpoints ---------------------------------------------------------
 
 def api_roster(cx: psycopg.Connection[TupleRow]) -> web.Reply:
+    """The roster the door's roster tool lists, with the role icons and the
+    patches newer than the rates the page draws beside it."""
     world = tables.load(cx)
-    heroes = [
-        {"name": h.name, "role": h.role, "subrole": h.subrole, "portrait": h.portrait,
-            "status": h.status, "release_date": str(h.release_date) if h.release_date else None}
-        for h in world.heroes_by_role()]
-    maps = [{"name": m.name, "mode": m.mode, "style": m.style_top, "sided": is_sided(m)}
-            for m in world.maps_sorted()]
-    return web.Reply({"heroes": heroes, "maps": maps, "role_icons": world.role_icons,
+    listed = roster_of(world)
+    return web.Reply({"heroes": listed["heroes"], "maps": listed["maps"],
+                      "role_icons": world.role_icons,
                       "newer_patches": world.newer_patches}, 200)
 
 

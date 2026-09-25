@@ -14,6 +14,8 @@ imports only db.
     draft           the board's vocabulary - the lobby's limits, the sides -
                     and the Draft, the board at one stage of the pick-and-ban
                     draft
+    roster          every hero and map the board tools accept, as the board's
+                    /api/roster and the door's roster tool list them
     team            the team metrics and the typed bag every metric section
                     comes in
     compute         the matchup, map and world metrics and registry(), which

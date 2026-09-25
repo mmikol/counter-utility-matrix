@@ -28,6 +28,7 @@ facts/
   kit.py           a kit piece's stat rows and the combat numbers read off them
   records.py       the typed records a Hero, a Map and the World hand on
   draft.py         the board's vocabulary and the Draft record the doors read
+  roster.py        the roster: every hero and map the board tools accept
   team.py          the team metrics and the typed bag every metric section comes in
   compute.py       the matchup, map and world metrics, and the registry of them all
   factset.py       the FactSet: a board's facts, numbered and filed by metric
@@ -131,6 +132,17 @@ board runs through `serve.handle_board`. Both take `Query` from here. The
 module imports only the model and `db.Refusal`, so the metrics can take
 its names without a cycle.
 
+### `roster.py` - the roster
+
+Every hero and map the board tools accept, built once for both readers:
+the board's `/api/roster` and the door's `roster` tool. `roster_of(world)`
+returns a `Roster` - the heroes as `RosterHero` records in role order
+(role, subrole, health pool, portrait, status, and the release day of an
+announced hero), the maps as `RosterMap` records in name order (mode, the
+style it rewards most, `Map.style_top`, and whether it is sided, from
+`is_sided`). The page reads the maps' styles and sides and ignores the
+pool; the tool's text lists each map with its mode, style and side.
+
 ### `team.py` - the team metrics
 
 Pure functions over a World, and the one place a team's number is
@@ -218,7 +230,7 @@ reach recorder, all through the same functions:
 
 | reader | what it imports from `facts/` |
 | --- | --- |
-| the board (`ui/board.py`, `ui/pages.py`) | `tables`, `board_facts`, `draft` |
+| the board (`ui/board.py`, `ui/pages.py`) | `tables`, `board_facts`, `draft`, `roster` |
 | the objective and the scale (`inference/scoring.py`, `inference/scale.py`) | `compute`, `team`, `model` |
 | the shapes (`inference/shapes.py`) | `draft` |
 | the search (`inference/solver.py`) | `model` |
@@ -227,6 +239,6 @@ reach recorder, all through the same functions:
 | the pool and reach (`inference/parallel.py`, `inference/reach.py`) | `model`, `draft` |
 | the catalog's checks and the deriver (`inference/strategy.py`, `inference/catalog.py`, `inference/derive.py`) | `compute` - the metric vocabulary |
 | the inference service (`inference/serve.py`) | `tables`, `draft` |
-| the door's `roster`, `facts`, `infer`, `evaluate`, `reach` and `board` tools (`door/mcp/facts.py`, `door/mcp/solver.py`, `door/mcp/boards.py`) | `tables`, `board_facts`, `draft` |
+| the door's `roster`, `facts`, `infer`, `evaluate`, `reach` and `board` tools (`door/mcp/facts.py`, `door/mcp/solver.py`, `door/mcp/boards.py`) | `tables`, `board_facts`, `draft`, `roster` |
 | the door's `metrics` tool (`door/mcp/playbook.py`) | `compute` - the metric vocabulary |
 | the reach recorder (`scripts/reach.py`) | `tables` |

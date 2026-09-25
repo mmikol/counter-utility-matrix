@@ -56,9 +56,12 @@ def test_db_status_and_roster(ctx):
     assert status["state"] == "current" and "state: current" in text
     assert status["counts"]["counters"] >= 100
     assert {s["source"] for s in status["snapshots"]} == {"blizzard"}
-    _, roster = ctx.call("roster")
+    text, roster = ctx.call("roster")
     assert any(h["name"] == "Ana" and h["portrait"] for h in roster["heroes"])
     assert any(m["name"] == "King's Row" and m["mode"] == "Hybrid" for m in roster["maps"])
+    assert all(h["pool"] > 0 for h in roster["heroes"])
+    kings_row = next(m for m in roster["maps"] if m["name"] == "King's Row")
+    assert kings_row["sided"] and "King's Row (Hybrid, " in text and "sided)" in text
 
 
 @pytest.mark.invariant
