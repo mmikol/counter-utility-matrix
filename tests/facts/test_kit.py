@@ -227,8 +227,8 @@ def test_a_row_is_on_the_hero_itself_when_one_part_of_its_condition_says_self():
     for condition in ("self", "splash, self, min", "per pulse, self", "bonus self-knockback"):
         assert on_self(condition), condition
     # an enemy and the hero together is not the hero alone
-    for condition in (None, "", "enemy", "splash, enemy & self"):
-        assert not on_self(condition), condition
+    for other in (None, "", "enemy", "splash, enemy & self"):
+        assert not on_self(other), other
     # a knockback on the hero itself shoves no one; one on an enemy and the hero does
     recoil = _kit(KIND_ABILITY, (
         "kbspeed", 12.3, "meters", "seconds", 1, "bonus self-knockback", "12.3"))
