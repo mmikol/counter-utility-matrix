@@ -209,8 +209,8 @@ def test_the_wikis_counters_and_partners_are_told_whoever_else_is_picked(synthet
         "Gale answers, in the wiki's match-up advice: Anvil"]
     # the stronger pair first
     assert _texts(fs, "hero.partner", "Gale") == [
-        "Gale + Kite (2/3): both take the fight to the air",
-        "Gale + Sorrel (1/3): the field covers a dive"]
+        "Gale + Kite (2/2): both take the fight to the air",
+        "Gale + Sorrel (1/2): the field covers a dive"]
 
 
 def test_on_a_map_a_hero_reads_its_rates_there_against_its_own(synthetic_world):
@@ -252,7 +252,7 @@ def test_against_the_opponents_and_beside_the_teammates(synthetic_world):
     assert _texts(anvil, "hero.vs_answers", "Anvil") == ["blue Anvil answers red Mortar"]
     assert anvil.find("hero.vs_answers", "Anvil")[0].value == ["Mortar"]
     assert _texts(anvil, "hero.with_ally", "Anvil") == [
-        "blue Anvil + Balm (2/3): the charm keeps the hammer swinging"]
+        "blue Anvil + Balm (2/2): the charm keeps the hammer swinging"]
     # an opponent is no ally, whatever the wiki pairs
     assert not _facts(w, "Anvil", team="blue", red=("Balm",)).find("hero.with_ally")
 

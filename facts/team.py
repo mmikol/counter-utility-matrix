@@ -142,7 +142,8 @@ TEAM_METRICS = OrderedDict([
 
 class SynergyPair(NamedTuple):
     """A wiki synergy pair among the picks: its two heroes in pick order, and
-    its score out of 3 (0 where the wiki gives none)."""
+    its score, 1 when one article claims the pair and 2 when both (0 where
+    the wiki gives none)."""
     first: str
     second: str
     score: int

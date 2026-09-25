@@ -287,7 +287,7 @@ def _hero_relations(fs: FactSet, world: World, h: Hero, team: str) -> None:
             % (name, ", ".join(answers)), value=answers, source="counters", team=team)
     for other, (score, note) in sorted(world.partners.get(h.id, {}).items(),
             key=lambda kv: -(kv[1][0] or 0)):
-        fs.add("hero", name, "hero.partner", "%s + %s (%s/3): %s"
+        fs.add("hero", name, "hero.partner", "%s + %s (%s/2): %s"
             % (name, world.heroes[other].name, score if score is not None else "?",
                 note or "no note"), value=world.heroes[other].name,
             source="synergies", team=team)
@@ -345,7 +345,7 @@ def _hero_versus(
     for mate in teammates:
         edge = world.synergy(h.id, mate.id)
         if edge:
-            fs.add("hero", name, "hero.with_ally", "%s %s + %s (%s/3): %s"
+            fs.add("hero", name, "hero.with_ally", "%s %s + %s (%s/2): %s"
                 % (team, name, mate.name, edge.score if edge.score is not None else "?",
                     edge.note or "no note"), value=mate.name, source="synergies",
                 team=team)

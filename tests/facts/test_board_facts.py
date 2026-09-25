@@ -64,7 +64,7 @@ def test_board_context_facts_warn_and_cite(synthetic_world):
         "WARNING: blue Mortar is answered by red Anvil"]
     fs = board_facts.generate(w, Draft("Harbor Gate", (), ("Balm", "Anvil")))
     assert [f.text for f in fs.find("hero.with_ally", "Balm")] == [
-        "blue Balm + Anvil (2/3): the charm keeps the hammer swinging"]
+        "blue Balm + Anvil (2/2): the charm keeps the hammer swinging"]
     assert [f.text for f in fs.find("hero.map_win", "Balm")] == [
         "Balm on Harbor Gate (this map): wins 52.0%, picked 10.0%, banned 10.0%"]
 

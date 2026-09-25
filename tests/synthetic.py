@@ -42,7 +42,7 @@ MAP_IDS = (HARBOR, EMBER, SALT)
 COUNTERS = (
     ("Mortar", "Anvil"), ("Gale", "Needle"), ("Gale", "Flint"), ("Anvil", "Gale"),
     ("Needle", "Kite"), ("Balm", "Rook"))
-# (a, b, score out of 3, note): pairs the wiki says play well together
+# (a, b, score 1 or 2, note): pairs the wiki says play well together
 SYNERGIES = (
     ("Anvil", "Balm", 2, "the charm keeps the hammer swinging"),
     ("Kite", "Gale", 2, "both take the fight to the air"),

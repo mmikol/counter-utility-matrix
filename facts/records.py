@@ -54,7 +54,8 @@ class StyleScore(NamedTuple):
 # --- the World's ---------------------------------------------------------
 
 class Synergy(NamedTuple):
-    """A pair the wiki says plays well together: its score out of 3, and its note."""
+    """A pair the wiki says plays well together: its score, 1 when one article
+    claims the pair and 2 when both, and its note."""
     score: int | None
     note: str | None
 
