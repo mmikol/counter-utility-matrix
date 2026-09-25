@@ -1,6 +1,6 @@
 ---
 name: maps
-description: Add or update maps in Countrix's database - a new map, a mode change, the stages and their terrain, the per-map rates, and the style a map rewards, derived from those rates. Use when the user names a new map, says "add the new map", "is X in the pool", "update the maps", or a map shows no rewarded style.
+description: Add or update maps in Countrix's database - a new map, a mode change, the stages and their terrain, the per-map rates, and the style a map rewards, derived from those rates and the terrain. Use when the user names a new map, says "add the new map", "is X in the pool", "update the maps", or a map shows no rewarded style.
 ---
 
 Bring the map pool up to date. Work through the
@@ -23,14 +23,15 @@ Bring the map pool up to date. Work through the
    `load_authored` mirrors the strategy files and nothing else. A map's
    styles are derived when the facts load - for each of the wiki's
    playstyles, how much better the heroes tagged with it win on this map
-   than overall, against the other maps. `facts` with `map: "<name>"`
-   states each style's figure and the rewarded one. A map with no per-map
-   rates has no style: it is outside the rotation, or `pull_rates` has not
-   run since it joined. If the hero tags look stale, `pull_playstyles`
-   with `refresh: true`.
+   than overall, against the other maps, plus how far the map's terrain
+   leans toward it. `facts` with `map: "<name>"` states each style's
+   figure and the rewarded one. A map with no per-map rates (outside the
+   rotation, or `pull_rates` has not run since it joined) is styled by its
+   terrain alone; a map with neither rates nor terrain text has no style.
+   If the hero tags look stale, `pull_playstyles` with `refresh: true`.
 5. Then `db_docs` and `export_csv`.
 6. **Report**, in under ten lines: maps added or changed, stages, each new
-   map's rewarded style or that it has no rates yet, and the capture date
+   map's rewarded style and whether it has rates yet, and the capture date
    now. Never edit a file by hand.
 
 ## What is data

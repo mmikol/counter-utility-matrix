@@ -14,15 +14,17 @@ health, and prints a verdict. A first build scrapes the sources once
 
 1. Read the verdict. `READY` means: the data layer answers with no pending
    migrations and a populated database, the inference engine sees the
-   strategies, the board serves the roster. Report the URLs it prints
-   (board http://localhost:8017, inference http://localhost:8019, MCP over
-   HTTP http://localhost:8020/mcp) and the line "rates captured YYYY-MM-DD".
+   strategies and solves one board, the board serves the roster. Report
+   the URLs it prints (board http://localhost:8017, inference
+   http://localhost:8019, MCP over HTTP http://localhost:8020/mcp) and the
+   line "rates captured YYYY-MM-DD".
 2. `NOT READY` names the problem. The usual fixes, in order: a stale bind
    mount after moving directories -> `docker compose up -d --force-recreate`
    (the script already tries this once); a schema behind the migrations ->
    the `data` container rebuilds on its own, wait and run
    `.venv/bin/python orchestrator.py status` again; the database never
-   became reachable -> `docker compose logs db`.
+   became reachable -> `docker compose logs db`; a board did not solve ->
+   `docker compose logs inference`.
 3. If the rates capture date is not today and the user is about to play,
    offer `.venv/bin/python orchestrator.py refresh` (or the `sync_all` tool
    with `refresh: true` on the `countrix-docker` MCP server). The
