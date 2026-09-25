@@ -20,12 +20,6 @@ from db import KIND_ABILITY, KIND_PASSIVE, KIND_ULTIMATE, KIND_WEAPON
 from db.data.wiki import markup
 
 
-class StatValue(NamedTuple):
-    """A stat's value: its clean text, and the wiki's raw markup it was read from."""
-    text: str
-    raw: str
-
-
 class KitEntry(TypedDict):
     """What every Cargo row reads into: a weapon's firing mode, an ability or
     a perk."""
@@ -34,7 +28,7 @@ class KitEntry(TypedDict):
     input_key: str | None
     keywords: str
     description: str
-    stats: dict[str, StatValue]
+    stats: dict[str, str]       # stat code -> its value's clean text
 
 
 class PerkEntry(KitEntry):
@@ -111,15 +105,15 @@ def ability_kind(base_type: str) -> str:
     return KIND_ABILITY
 
 
-def _stats(fields: Mapping[str, str]) -> dict[str, StatValue]:
-    """Every measuring column a row fills, by stat code."""
-    stats: dict[str, StatValue] = {}
+def _stats(fields: Mapping[str, str]) -> dict[str, str]:
+    """Every measuring column a row fills, by stat code: its clean text."""
+    stats: dict[str, str] = {}
     for key, raw in fields.items():
         if key in NON_STAT_FIELDS or not raw:
             continue
         value = markup.html_to_text(raw)
         if value:
-            stats[STAT_ALIASES.get(key, key)] = StatValue(text=value, raw=raw)
+            stats[STAT_ALIASES.get(key, key)] = value
     return stats
 
 

@@ -15,15 +15,13 @@ from db.data.wiki import WIKI, cargo_query
 
 CARGO_TABLE = "Patches"
 # Cargo refuses bare underscore fields; _pageName must be aliased.
-CARGO_FIELDS = ("_pageName=name", "date", "platform", "source")
+CARGO_FIELDS = ("_pageName=name", "date")
 
 
 class Patch(NamedTuple):
     """A patches row as the pull writes it."""
     name: str
     released: str
-    platform: str | None
-    url: str | None
 
 
 def dated_patches(rows: list[dict[str, str]]) -> tuple[list[Patch], int]:
@@ -36,9 +34,7 @@ def dated_patches(rows: list[dict[str, str]]) -> tuple[list[Patch], int]:
         if not name or not released:
             skipped += 1
             continue
-        patches.append(Patch(name=name, released=released,
-                             platform=row.get("platform") or None,
-                             url=row.get("source") or None))
+        patches.append(Patch(name=name, released=released))
     return patches, skipped
 
 
@@ -57,10 +53,8 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> PatchesSumma
     source_id = psql.register_source(cursor, WIKI, psql.now())
     for patch in patches:
         cursor.execute(
-            "INSERT INTO patches (name, released, platform, url, source_id)"
-            " VALUES (%s, %s, %s, %s, %s)"
+            "INSERT INTO patches (name, released, source_id) VALUES (%s, %s, %s)"
             " ON CONFLICT (name) DO UPDATE SET released = EXCLUDED.released,"
-            " platform = EXCLUDED.platform, url = EXCLUDED.url,"
             " source_id = EXCLUDED.source_id, cao = now()",
             (*patch, source_id),
         )

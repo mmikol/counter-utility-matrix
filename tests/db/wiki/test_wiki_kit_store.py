@@ -7,30 +7,26 @@ alters, and an announced hero's perks. No database."""
 from db import KIND_ABILITY, KIND_PASSIVE
 from db.data.wiki.kits import kit_store
 from db.data.wiki.kits.hero_articles import HeroProfile
-from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, StatValue, WeaponEntry
+from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, WeaponEntry
 from tests.db.recording import RecordingCursor
 
 SOURCE = 50
 KINDS = [("weapon", 1), ("ability", 2), ("ultimate", 3), ("passive", 4)]
 
 
-def _stats(**values):
-    return {code: StatValue(text, text) for code, text in values.items()}
-
-
 def _ability(name, kind=KIND_ABILITY, description="", **stats):
     return AbilityEntry(name=name, mode=None, input_key=None, keywords="",
-                        description=description, stats=_stats(**stats), kind=kind)
+                        description=description, stats=stats, kind=kind)
 
 
 def _weapon(name, **stats):
     return WeaponEntry(name=name, mode=None, input_key=None, keywords="melee", description="",
-                       stats=_stats(**stats), display_name=name, weapon_type="melee")
+                       stats=stats, display_name=name, weapon_type="melee")
 
 
 def _perk(name, tier="minor", description="", **stats):
     return PerkEntry(name=name, mode=None, input_key=None, keywords="",
-                     description=description, stats=_stats(**stats), tier=tier)
+                     description=description, stats=stats, tier=tier)
 
 
 def test_the_store_reloads_the_kit_tables_and_fills_what_blizzard_loaded():
@@ -63,12 +59,10 @@ def test_the_store_reloads_the_kit_tables_and_fills_what_blizzard_loaded():
     # the reloaded tables go first, dependents before what they hang on
     assert [text for text, _ in cursor.statements[:7]] == [
         'DELETE FROM "%s"' % table for table in kit_store.RELOADED]
-    # every code any kit carries, sorted, with its unit
+    # every code any kit carries, sorted
     assert cursor.written("INSERT INTO stat_keys") == [
-        ("barrier_health", "barrier health", "hp", SOURCE),
-        ("cooldown", "cooldown", "seconds", SOURCE),
-        ("damage", "damage", "hp", SOURCE),
-        ("damage_red", "damage red", "percent", SOURCE)]
+        ("barrier_health", SOURCE), ("cooldown", SOURCE), ("damage", SOURCE),
+        ("damage_red", SOURCE)]
     assert cursor.written("UPDATE heroes") == [(400, 0, 300, 1)]
     # the ids the upserts read back: stat keys 1-4, the weapon 5, its config 6
     assert cursor.written("INSERT INTO weapons") == [(1, "Rocket Hammer", 0, SOURCE)]

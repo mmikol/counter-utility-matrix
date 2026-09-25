@@ -1,5 +1,5 @@
-"""Unit tests: the roster page and a hero page read into subroles, icons,
-hero cards, abilities and perks, and the pull over them. No database, no
+"""Unit tests: the roster page and a hero page read into subroles, role
+icons, hero cards, abilities and perks, and the pull over them. No database, no
 network: the pages are inline HTML."""
 
 import pytest
@@ -11,7 +11,6 @@ from db.data.blizzard import heroes as blizzard_heroes
 from db.data.blizzard.heroes import (
     AbilityText,
     HeroCard,
-    RoleIcons,
     Subrole,
     node_text,
     parse_abilities,
@@ -47,11 +46,11 @@ FILTERS = """
 <select>
     <option class="role" data-role="all-heroes" style="background-image:url(all.svg)">All</option>
     <option class="role" data-role="tank" style="background-image:url(tank.svg)">Tank</option>
+    <option class="role" data-role="tank">Tank</option>
     <option class="role" data-role="damage"
             style="background-image:url('damage.svg')">Damage</option>
-    <option class="subrole" data-subrole="flanker"
-            style="background-image:url(&quot;flanker.png&quot;)">Flanker</option>
-    <option class="subrole" data-subrole="tactician">Tactician</option>
+    <option class="role" data-role="support"
+            style="background-image:url(&quot;support.png&quot;)">Support</option>
 </select>
 """
 
@@ -95,12 +94,11 @@ def test_a_roster_with_no_subroles_is_refused():
 
 def test_a_filter_icon_beats_the_card_icon():
     # bare, single- and double-quoted url() all read; all-heroes is no role,
-    # a styleless option draws nothing, and a role with no filter icon falls
-    # back to its cards' icon
-    assert parse_icons(soup(ROSTER)) == RoleIcons(
-        roles={"tank": "tank.svg", "damage": "damage.svg", "support": "support.svg"},
-        subroles={"flanker": "flanker.png"},
-    )
+    # and a styleless option draws nothing
+    assert parse_icons(soup(ROSTER)) == {
+        "tank": "tank.svg", "damage": "damage.svg", "support": "support.png"}
+    # a role with no filter icon falls back to its cards' icon
+    assert parse_icons(soup(CARDS)) == {"support": "support.svg", "damage": "card-damage.svg"}
 
 
 def test_a_hero_card_gives_the_slug_its_link_ends_in():

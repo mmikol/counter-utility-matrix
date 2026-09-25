@@ -130,7 +130,7 @@ def test_supplement_reads_heal_and_skips_a_retired_block():
     assert profile is None
     # "(old)" shares the live block's key and comes last: it overwrote it once
     assert set(extra) == {"healing kasa"}
-    stats = {code: value for code, (value, _raw) in extra["healing kasa"].items()}
+    stats = extra["healing kasa"]
     assert stats == {"heal": "90 (1st bounce); 30 (self)", "aoe": "3 meters"}
     rows = parse_measurements(stats["heal"], "hp")
     assert [(m[0], m[1], m[4]) for m in rows] == [

@@ -70,7 +70,7 @@ locked across a fetch.
 
 | package | module | stores |
 | --- | --- | --- |
-| `blizzard/` | `heroes.py` | the roster: heroes, roles, subroles, portraits and icons, ability and perk text. Runs first; everything links to heroes. Blizzard publishes prose and no numbers. A hero page that will not fetch is listed under `missing`, and that hero keeps the text it had. A hero whose page parses for the first time - one the wiki announced - loses the wiki's abilities and perks, their stats and links with them, for Blizzard's; `pull_kits`, run after, adds back what Blizzard omits. |
+| `blizzard/` | `heroes.py` | the roster: heroes, roles, subroles, portraits and role icons, ability and perk text. Runs first; everything links to heroes. Blizzard publishes prose and no numbers. A hero page that will not fetch is listed under `missing`, and that hero keeps the text it had. A hero whose page parses for the first time - one the wiki announced - loses the wiki's abilities and perks, their stats and links with them, for Blizzard's; `pull_kits`, run after, adds back what Blizzard omits. |
 | | `meta.py` | win, pick and ban rates as a dated snapshot, sliced by skill tier and by map. Competitive Role Queue (the page offers no Open Queue), console, Americas - all recorded on the snapshot. When a page came from the stale cache the pull stamps no snapshot and writes nothing, and its reply reads `pull_rates: nothing stored`. |
 | `wiki/` | `heroes.py` | hero kits from the Cargo Abilities table: weapons and their firing configs, abilities, perks, keywords, and every stat as a measurement, through `kits/`. Also the announced heroes: a Cargo hero the roster lacks whose article is marked upcoming gets a row (role, subrole, health, release day, status `announced`) so its kit loads ahead of release; Blizzard listing it later flips the status to released. Runs after `blizzard.heroes`. |
 | | `maps.py` | maps, game modes and stages from the Maps article's Standard Play section. |
@@ -95,7 +95,7 @@ locked across a fetch.
 | --- | --- |
 | `__init__.py` | Where the database is: `default_dsn` resolves `DATABASE_URL`, or the embedded cluster at `db/psql/cluster` once one is built, and never creates one; `boot`, which only `db_init` and `db_rebuild` call, creates it; with neither, `NoDatabaseError` (a host without pgserver must set `DATABASE_URL`); how a source registers the `sources` row its rows carry; `lookup_ids`, a column's values to their ids as stored (a source's name goes through `data/names.py`); what a capture is stamped with (now, the current patch and season) and `SEASON_ON_DATE`, the season live on a date, by which `pull_seasons` also restamps every snapshot; the CSV export and its `EXPORT.json` mark naming the database it came from. Knows no particular source or table. |
 | `schema.py` | Applies migrations and records them in the `schema_migrations` ledger; `pending` says which files the database has not seen; `state` says how ready the database is - empty, stale, unfilled or current - for every reader of readiness, and `python -m db.psql.schema` prints it for the container entrypoint; `rebuild` drops everything and reapplies; `generate_docs` writes the ER diagrams and the data dictionary at the end of this document from the live schema, each table described by the `--` block directly above its `CREATE TABLE` (`table_prose`) or a later `COMMENT ON TABLE`. |
-| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment, `018` `map_playstyle` and `comp_archetypes` dropped, `seasons` and `synergies` pulled from the wiki, `019` `map_strategy` and the third source's rates, snapshots and `sources` row dropped, `counters` pulled from the wiki, `020` `map_terrain`, the terrain features each map's wiki article names, `021` `stage_terrain`, with every Hybrid map's two phases and an Escort map's named stretches stored as stages, `022` the `strategies.playbook` comment under the Countrix name. A statement in an applied migration is never edited; a change is a new file, and a populated database catches up with `db_migrate`. The `--` prose is documentation - the data dictionary reads the block above each `CREATE TABLE` - and is kept current. |
+| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment, `018` `map_playstyle` and `comp_archetypes` dropped, `seasons` and `synergies` pulled from the wiki, `019` `map_strategy` and the third source's rates, snapshots and `sources` row dropped, `counters` pulled from the wiki, `020` `map_terrain`, the terrain features each map's wiki article names, `021` `stage_terrain`, with every Hybrid map's two phases and an Escort map's named stretches stored as stages, `022` the `strategies.playbook` comment under the Countrix name, `023` the columns nothing read dropped - `raw_value` on the three stat tables, `patches.platform` and `url`, `subroles.icon_url`, `stat_keys.label` and `unit`, `roles.name`. A statement in an applied migration is never edited; a change is a new file, and a populated database catches up with `db_migrate`. The `--` prose is documentation - the data dictionary reads the block above each `CREATE TABLE` - and is kept current. |
 | `cluster/` | The embedded Postgres cluster `db_init` or `db_rebuild` creates through pgserver (gitignored); a reader starts it on first touch and never creates it. The compose stack uses its own `postgres` container instead, reachable from the host through `./docker-db`. |
 
 ### `raw/` - the mirror
@@ -462,7 +462,7 @@ affects names the quantity scaled, so a query can find every effect on outgoing 
 
 *HEROES · `002_heroes.sql`*
 
-One row per measurement, not per stat. A wiki value like "0.67 shots/s (max charge); 3.33 shots/s (min charge)" becomes two rows sharing a stat_key, separated by `condition`. Units are split into the unit on top and the unit underneath, so nothing has to parse a "/" to know what a number means. denominator_value carries the magnitude underneath - 1 for a plain rate, or the window a burst spans: "125 m/s"              -> 125,  meters  / seconds,  denominator_value 1 "1.25 shots/s"         -> 1.25, shots   / seconds,  denominator_value 1 "75 over 0.59 seconds" -> 75,   hp      / seconds,  denominator_value 0.59 "14 seconds"           -> 14,   seconds / NULL A rate is therefore always value / denominator_value per unit_denominator. value is NULL where the measurement is not numeric (shot types, "partial"). value_text and raw_value always keep the source strings, so anything the parser misreads stays recoverable.
+One row per measurement, not per stat. A wiki value like "0.67 shots/s (max charge); 3.33 shots/s (min charge)" becomes two rows sharing a stat_key, separated by condition. Units are split into the unit on top and the unit underneath, so nothing has to parse a "/" to know what a number means. denominator_value carries the magnitude underneath - 1 for a plain rate, or the window a burst spans: "125 m/s" is 125 meters / seconds over 1, "1.25 shots/s" 1.25 shots / seconds over 1, "75 over 0.59 seconds" 75 hp / seconds over 0.59, and "14 seconds" 14 seconds with no unit underneath. A rate is therefore always value / denominator_value per unit_denominator. value is NULL where the measurement is not numeric (shot types, "partial"). value_text keeps the text each measurement was read from, so anything the parser misreads stays recoverable; the wiki markup behind it stays in the page cache. weapon_stats and perk_stats hold the same measurements for a weapon's firing config and for a perk.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -475,7 +475,6 @@ One row per measurement, not per stat. A wiki value like "0.67 shots/s (max char
 | `denominator_value` | numeric | yes |  |
 | `condition` | text | yes |  |
 | `value_text` | text | no |  |
-| `raw_value` | text | no |  |
 
 #### `competitive_tiers`
 
@@ -638,8 +637,6 @@ The game versions the meta moves with. A win rate is true of a patch, so a snaps
 | `patch_id` | integer | no |  |
 | `name` | text | no |  |
 | `released` | date | no |  |
-| `platform` | text | yes |  |
-| `url` | text | yes |  |
 
 #### `perk_ability_effects`
 
@@ -665,7 +662,6 @@ The game versions the meta moves with. A win rate is true of a patch, so a snaps
 | `denominator_value` | numeric | yes |  |
 | `condition` | text | yes |  |
 | `value_text` | text | no |  |
-| `raw_value` | text | no |  |
 
 #### `perk_tiers`
 
@@ -720,7 +716,6 @@ Which playstyle a hero belongs to, straight from the wiki's team composition pag
 | --- | --- | --- | --- |
 | `role_id` | integer | no |  |
 | `code` | text | no |  |
-| `name` | text | no |  |
 | `icon_url` | text | yes |  |
 
 #### `schema_migrations`
@@ -772,14 +767,12 @@ A stage's terrain, counted in the map's wiki article (pull_terrain) with map_ter
 
 *HEROES · `002_heroes.sql`*
 
-The stat vocabulary. `unit` is the canonical unit for the stat, used when a value carries no unit of its own ("damage = 90" is 90 hp).
+The stat vocabulary: one row per stat code a kit carries, added by pull_kits and never reloaded. A value with no unit of its own is read in its stat's unit from STAT_UNITS in db/data/wiki/kits/kit_store.py ("damage = 90" is 90 hp), stored as the measurement's unit_numerator.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
 | `stat_key_id` | integer | no |  |
 | `code` | text | no |  |
-| `label` | text | no |  |
-| `unit` | text | yes |  |
 
 #### `strategies`
 
@@ -814,7 +807,6 @@ The ten subroles, each belonging to exactly one role, each carrying the passive 
 | `code` | text | no |  |
 | `name` | text | no |  |
 | `passive_description` | text | no |  |
-| `icon_url` | text | yes |  |
 
 #### `synergies`
 
@@ -869,7 +861,6 @@ weapon_type lives here rather than on the weapon because it varies by config: An
 | `denominator_value` | numeric | yes |  |
 | `condition` | text | yes |  |
 | `value_text` | text | no |  |
-| `raw_value` | text | no |  |
 
 #### `weapons`
 

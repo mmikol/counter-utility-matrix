@@ -5,8 +5,8 @@ Wiki stat values are rarely a single number. They carry conditions
 ("10 - 20 meters"), durations ("75 over 0.59 seconds") and yes/no glyphs.
 
 Each measurement becomes one row, so `value` and `unit` are genuinely
-queryable and no variant is thrown away. The original string is always kept
-alongside, so anything this misreads stays recoverable.
+queryable and no variant is thrown away. Each row keeps the text it was
+read from, so anything this misreads stays recoverable.
 """
 
 import re

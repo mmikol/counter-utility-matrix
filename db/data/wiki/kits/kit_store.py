@@ -20,7 +20,7 @@ from db import KIND_WEAPON, PERK_TIERS, psql
 from db.data.names import ability_key, name_key
 from db.data.wiki.kits import modifiers
 from db.data.wiki.kits.hero_articles import HeroProfile
-from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, StatValue, WeaponEntry
+from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, WeaponEntry
 from db.data.wiki.kits.measurements import parse_measurements
 from db.data.wiki.kits.weapons import group_weapons, slot_id
 
@@ -83,7 +83,7 @@ def _insert_modifiers(store_pass: _StorePass, ability_id: int, entry: AbilityEnt
     """Store the buffs and debuffs an ability applies to someone's numbers."""
     cursor = store_pass.cursor
     keywords = entry["keywords"]
-    for code, (value_text, _) in entry["stats"].items():
+    for code, value_text in entry["stats"].items():
         affects = modifiers.affected_quantity(code, value_text, keywords)
         if affects is None:
             continue                # not a modifier stat, or the wording settles nothing
@@ -105,15 +105,16 @@ def _insert_modifiers(store_pass: _StorePass, ability_id: int, entry: AbilityEnt
 
 def _register_stat_keys(
         cursor: psycopg.Cursor, codes: Iterable[str], source_id: int) -> dict[str, int]:
-    """Upsert the stat keys and return {code: stat_key_id}."""
+    """Upsert the stat keys and return {code: stat_key_id}. A code already on
+    file keeps its row: the update changes nothing and lets RETURNING give
+    its id."""
     ids: dict[str, int] = {}
     for code in sorted(codes):
         cursor.execute(
-            "INSERT INTO stat_keys (code, label, unit, source_id)"
-            " VALUES (%s, %s, %s, %s)"
-            " ON CONFLICT (code) DO UPDATE SET label = EXCLUDED.label,"
-            " unit = EXCLUDED.unit RETURNING stat_key_id",
-            (code, code.replace("_", " "), STAT_UNITS.get(code), source_id),
+            "INSERT INTO stat_keys (code, source_id) VALUES (%s, %s)"
+            " ON CONFLICT (code) DO UPDATE SET code = EXCLUDED.code"
+            " RETURNING stat_key_id",
+            (code, source_id),
         )
         ids[code] = psql.scalar(cursor)
     return ids
@@ -121,19 +122,18 @@ def _register_stat_keys(
 
 def _insert_stats(
         store_pass: _StorePass, table: str, owner_column: str, owner_id: int,
-        stats: Mapping[str, StatValue]) -> None:
+        stats: Mapping[str, str]) -> None:
     """Write one row per measurement, each counted into the tally's stats."""
     cursor = store_pass.cursor
     insert = SQL(
         "INSERT INTO {table} ({owner}, stat_key_id, value, unit_numerator,"
-        " unit_denominator, denominator_value, condition, value_text,"
-        " raw_value, source_id)"
-        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        " unit_denominator, denominator_value, condition, value_text, source_id)"
+        " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
         " ON CONFLICT ({owner}, stat_key_id, value, unit_numerator,"
         " unit_denominator, denominator_value, condition, value_text)"
         " DO NOTHING").format(table=psql.identifier(table),
                               owner=psql.identifier(owner_column))
-    for code, (value_text, raw) in stats.items():
+    for code, value_text in stats.items():
         default_unit = STAT_UNITS.get(code)
         implied = STAT_DEFAULT_DENOMINATOR.get(code)
         for value, numerator, denominator, window, condition, text in (
@@ -144,7 +144,7 @@ def _insert_stats(
             cursor.execute(
                 insert,
                 (owner_id, store_pass.key_ids[code], value, numerator, denominator, window,
-                 condition, text, raw, store_pass.source_id),
+                 condition, text, store_pass.source_id),
             )
             store_pass.tally["stats"] += cursor.rowcount
 

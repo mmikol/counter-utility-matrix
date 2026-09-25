@@ -379,7 +379,9 @@ def test_a_listed_hero_matches_the_roster_whatever_its_spelling(tmp_path):
 
 def test_the_patches_pull_upserts_every_dated_patch_and_names_the_latest(tmp_path):
     """The Cargo rows as the cache holds them; the page without a date anchors
-    nothing and is counted."""
+    nothing and is counted. A cache written when the pull also asked for the
+    platform and the source still reads: the pull keeps the name and the
+    date."""
     rows = [{"name": "Patch A", "date": "2026-01-10", "platform": "PC", "source": "https://a"},
             {"name": "Patch Undated", "date": ""},
             {"name": "Patch B", "date": "2026-03-01", "platform": "", "source": ""}]
@@ -391,8 +393,7 @@ def test_the_patches_pull_upserts_every_dated_patch_and_names_the_latest(tmp_pat
     [cursor] = connection.cursors
     source_id = 1
     assert cursor.written("INSERT INTO patches") == [
-        ("Patch A", "2026-01-10", "PC", "https://a", source_id),
-        ("Patch B", "2026-03-01", None, None, source_id)]
+        ("Patch A", "2026-01-10", source_id), ("Patch B", "2026-03-01", source_id)]
     assert summary == {"patches": 2, "skipped": 1, "latest": "Patch B (2026-03-01)",
                        "tables": ["patches"]}
     assert connection.commits == 1 and pull.session.calls == 0

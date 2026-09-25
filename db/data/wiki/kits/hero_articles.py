@@ -16,7 +16,7 @@ from db import ROLES
 from db.data.fetch import PullContext
 from db.data.names import ability_key
 from db.data.wiki import Articles, fetch_articles, markup
-from db.data.wiki.kits.kit_rows import HeroKit, StatValue
+from db.data.wiki.kits.kit_rows import HeroKit
 
 
 class HeroProfile(NamedTuple):
@@ -36,7 +36,7 @@ class Announcement(NamedTuple):
 
 
 # {ability key: {stat code: value}} - what an article adds to the Cargo kit.
-type ExtraStats = dict[str, dict[str, StatValue]]
+type ExtraStats = dict[str, dict[str, str]]
 
 
 def parse_hero_profile(text: str) -> HeroProfile | None:
@@ -110,12 +110,12 @@ def supplement_from_wikitext(text: str) -> tuple[ExtraStats, HeroProfile | None]
         name = markup.wikitext_to_text(params.get("ability_name", ""))
         if not name or RETIRED_BLOCK_RE.search(name):
             continue
-        stats: dict[str, StatValue] = {}
+        stats: dict[str, str] = {}
         for code in SUPPLEMENT_FIELDS:
             # a citation is not part of the value
             value = markup.wikitext_to_text(markup.REF_RE.sub("", params.get(code, "")))
             if value:
-                stats[code] = StatValue(text=value, raw=params[code])
+                stats[code] = value
         if stats:
             extra[ability_key(name)] = stats
     return extra, parse_hero_profile(text)

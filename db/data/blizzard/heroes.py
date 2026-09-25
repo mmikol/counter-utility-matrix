@@ -1,13 +1,12 @@
 """Pull + clean + store: overwatch.blizzard.com - the roster.
 
 The roster page carries every hero's role, subrole and portrait, and the
-role and subrole filter icons; each hero page carries an abilities carousel
-and a perks section. Blizzard publishes prose only - no
-numbers, no map data - and omits some abilities outright, so weapons,
-stats, the missing abilities and the maps come from the wiki. A hero the
-wiki announced holds the wiki's kit until its page parses here; then
-Blizzard's rows replace it, and pull_kits, run after, adds back what
-Blizzard omits.
+role filter's icons; each hero page carries an abilities carousel and a
+perks section. Blizzard publishes prose only - no numbers, no map data -
+and omits some abilities outright, so weapons, stats, the missing
+abilities and the maps come from the wiki. A hero the wiki announced holds
+the wiki's kit until its page parses here; then Blizzard's rows replace
+it, and pull_kits, run after, adds back what Blizzard omits.
 """
 
 import re
@@ -36,12 +35,6 @@ class Subrole(NamedTuple):
     role_code: str
     name: str
     passive_description: str
-
-
-class RoleIcons(NamedTuple):
-    """The icons the site's role and subrole filters draw."""
-    roles: dict[str, str]           # code -> icon url
-    subroles: dict[str, str]
 
 
 class HeroCard(NamedTuple):
@@ -110,24 +103,20 @@ def parse_subroles(soup: BeautifulSoup) -> dict[str, Subrole]:
     return subroles
 
 
-def parse_icons(soup: BeautifulSoup) -> RoleIcons:
-    """RoleIcons(roles={code: url}, subroles={code: url}) - the icons the
-    site's own role and subrole filters draw. The board draws the role ones."""
+def parse_icons(soup: BeautifulSoup) -> dict[str, str]:
+    """{role code: icon url}: the icon the site's own role filter draws for
+    each role, and the board beside it. A role the filter gives no icon
+    takes its hero cards' icon."""
     roles: dict[str, str] = {}
-    subroles: dict[str, str] = {}
     for option in soup.select("option.role[data-role]"):
         url = _style_url(option)
         if url and attr(option, "data-role") != "all-heroes":
             roles[attr(option, "data-role")] = url
-    for option in soup.select("option.subrole[data-subrole]"):
-        url = _style_url(option)
-        if url:
-            subroles[attr(option, "data-subrole")] = url
     for card in soup.select("a.hero-card"):
         icon = card.find("blz-card")
         if isinstance(icon, Tag) and icon.get("icon") and card.get("data-role"):
             roles.setdefault(attr(card, "data-role"), attr(icon, "icon"))
-    return RoleIcons(roles=roles, subroles=subroles)
+    return roles
 
 
 def parse_roster(soup: BeautifulSoup) -> list[HeroCard]:
@@ -224,9 +213,6 @@ def parse_perks(soup: BeautifulSoup, slug: str) -> list[PerkText]:
 
 # --- store ---------------------------------------------------------------------
 
-ROLE_NAMES = {"tank": "Tank", "damage": "Damage", "support": "Support"}
-
-
 def _clear_wiki_kits(
         cursor: psycopg.Cursor, abilities_by_slug: Mapping[str, list[AbilityText]],
         perks_by_slug: Mapping[str, list[PerkText]], source_id: int) -> None:
@@ -249,21 +235,21 @@ def _clear_wiki_kits(
 def _store(
         cursor: psycopg.Cursor, subroles: dict[str, Subrole], heroes: list[HeroCard],
         abilities_by_slug: dict[str, list[AbilityText]], perks_by_slug: dict[str, list[PerkText]],
-        icons: RoleIcons, cao: datetime) -> None:
-    """Upsert the roles, subroles, heroes and each hero's abilities and
-    perks, the wiki's kit of a newly described hero cleared first."""
+        role_icons: Mapping[str, str], cao: datetime) -> None:
+    """Upsert the roles with their icons, the subroles, the heroes and each
+    hero's abilities and perks, the wiki's kit of a newly described hero
+    cleared first."""
     source_id = psql.register_source(cursor, BLIZZARD, cao)
 
     role_ids: dict[str, int] = {}
     for code in ROLES:
         cursor.execute(
-            "INSERT INTO roles (code, name, icon_url, source_id)"
-            " VALUES (%s, %s, %s, %s)"
-            " ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name,"
+            "INSERT INTO roles (code, icon_url, source_id) VALUES (%s, %s, %s)"
+            " ON CONFLICT (code) DO UPDATE SET"
             " icon_url = coalesce(EXCLUDED.icon_url, roles.icon_url),"
             " source_id = EXCLUDED.source_id, cao = now()"
             " RETURNING role_id",
-            (code, ROLE_NAMES[code], icons.roles.get(code), source_id),
+            (code, role_icons.get(code), source_id),
         )
         role_ids[code] = psql.scalar(cursor)
 
@@ -271,11 +257,10 @@ def _store(
     for subrole in sorted(subroles.values(), key=lambda s: (s.role_code, s.code)):
         cursor.execute(
             "INSERT INTO subroles (role_id, code, name, passive_description,"
-            " icon_url, source_id) VALUES (%s, %s, %s, %s, %s, %s)"
+            " source_id) VALUES (%s, %s, %s, %s, %s)"
             " ON CONFLICT (code) DO UPDATE SET role_id = EXCLUDED.role_id,"
             " name = EXCLUDED.name,"
             " passive_description = EXCLUDED.passive_description,"
-            " icon_url = coalesce(EXCLUDED.icon_url, subroles.icon_url),"
             " source_id = EXCLUDED.source_id, cao = now()"
             " RETURNING subrole_id",
             (
@@ -283,7 +268,6 @@ def _store(
                 subrole.code,
                 subrole.name,
                 subrole.passive_description,
-                icons.subroles.get(subrole.code),
                 source_id,
             ),
         )
@@ -358,7 +342,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummar
         "html.parser")
     subroles = parse_subroles(roster_soup)
     heroes = parse_roster(roster_soup)
-    icons = parse_icons(roster_soup)
+    role_icons = parse_icons(roster_soup)
     pull.log("roster: %d heroes, %d subroles" % (len(heroes), len(subroles)))
 
     abilities_by_slug: dict[str, list[AbilityText]] = {}
@@ -383,7 +367,7 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> HeroesSummar
             len(abilities_by_slug[slug]), len(perks_by_slug[slug])))
 
     cursor = connection.cursor()
-    _store(cursor, subroles, heroes, abilities_by_slug, perks_by_slug, icons, psql.now())
+    _store(cursor, subroles, heroes, abilities_by_slug, perks_by_slug, role_icons, psql.now())
     connection.commit()
     return {
         "heroes": len(heroes),

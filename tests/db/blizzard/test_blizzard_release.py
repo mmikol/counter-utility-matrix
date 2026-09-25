@@ -6,10 +6,10 @@ import pytest
 
 from db import KIND_ABILITY, KIND_ULTIMATE, psql
 from db.data.blizzard import heroes as blizzard_heroes
-from db.data.blizzard.heroes import AbilityText, HeroCard, PerkText, RoleIcons, Subrole
+from db.data.blizzard.heroes import AbilityText, HeroCard, PerkText, Subrole
 from db.data.names import name_key, slug
 from db.data.wiki.kits import kit_store
-from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, StatValue
+from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry
 
 pytestmark = pytest.mark.invariant
 
@@ -19,13 +19,13 @@ HERALD, WARDEN = "Test Herald", "Test Warden"
 def _ability(name, kind=KIND_ABILITY, **stats):
     return AbilityEntry(
         name=name, mode=None, input_key=None, keywords="", description="%s." % name,
-        stats={code: StatValue(text, text) for code, text in stats.items()}, kind=kind)
+        stats=stats, kind=kind)
 
 
 def _perk(name, tier, description="", **stats):
     return PerkEntry(
         name=name, mode=None, input_key=None, keywords="", description=description or name,
-        stats={code: StatValue(text, text) for code, text in stats.items()}, tier=tier)
+        stats=stats, tier=tier)
 
 
 def _announce(cursor, name, subrole, wiki_id):
@@ -98,7 +98,7 @@ def test_a_listed_hero_trades_the_wikis_kit_for_blizzards_carousel(sandbox):
         HeroCard(slug(name), name, "support", subrole.code, None) for name in (HERALD, WARDEN)]
     blizzard_heroes._store(
         cursor, {subrole.code: subrole}, roster, {slug(HERALD): carousel},
-        {slug(HERALD): perk_texts}, RoleIcons({}, {}), psql.now())
+        {slug(HERALD): perk_texts}, {}, psql.now())
 
     abilities, perks = _kit(cursor, herald)
     assert abilities == [
