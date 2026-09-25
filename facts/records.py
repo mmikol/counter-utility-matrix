@@ -36,6 +36,29 @@ class MapRate(NamedTuple):
     pick: float | None
 
 
+class KitLine(NamedTuple):
+    """One line of the wiki's 6v6 kit for a hero, as kit_6v6 stores it: the
+    piece it changes, the stat it names and the figures it moves from and to
+    (None where the line names none), and its words."""
+    piece: str
+    stat: str | None
+    before: float | None
+    after: float | None
+    text: str
+
+
+class KitChange(NamedTuple):
+    """What the format in force did with one 6v6 figure: the piece (empty
+    for the hero's pool), the stat, the figures, whether it moved a number
+    the kit holds, and the wiki's words."""
+    piece: str
+    stat: str | None
+    before: float | None
+    after: float | None
+    applied: bool
+    text: str
+
+
 # --- a map's -------------------------------------------------------------
 
 class StageTerrain(NamedTuple):

@@ -135,6 +135,10 @@ db <- facts <- inference <- door <- ui.
   alone, byte for byte the engine before it had a base: a test that pins
   the reference playbook's sixes or scores passes it, and the validation's
   rescore runs under it.
+- **The kit is read in 6v6.** `facts.draft.KIT_FORMAT` names the format;
+  `tables.load` lays the wiki's 6v6 pools and lines (`heroes.*_6v6`,
+  `kit_6v6`) over the 5v5 rows before `derive_scalars` (`facts/kit_format.py`).
+  The 5v5 figures stay stored; `tables.load(cx, FIVE_V_FIVE)` reads them.
 - **The solver is deterministic.** `engine.board()` returns a Board of up to
   seven Results (blue, red, current, red_current, fill, countered, expected);
   fill is None unless one to five blue picks are locked, countered is None

@@ -78,9 +78,10 @@ def test_the_weapon_a_hero_fights_with_sets_its_kind_and_reach(world):
     assert torb.self_heal == 0 and torb.self_hps == 0
     assert ramattra.melee and ramattra.pierces_barrier and ramattra.dps == 100
     assert ramattra.max_range == 0 and world.hero("Anran").max_range == 0
-    # Nemesis Form's 275 armor for 8 s of every 16: the form's, not the base row's.
-    # An ultimate's armor (Rally) stays out
-    assert ramattra.form_armor == 137.5 and ramattra.armor == 100 and ramattra.pool == 375
+    # Nemesis Form's armor for 8 s of every 16: the form's, not the base row's - 225
+    # in 6v6, the kit's format, where 5v5 gives 275. An ultimate's armor (Rally)
+    # stays out. 6v6's health is 350, 5v5's 275
+    assert ramattra.form_armor == 112.5 and ramattra.armor == 100 and ramattra.pool == 450
     assert [h.name for h in world.heroes.values() if h.form_armor] == ["Ramattra"]
     assert world.hero("Mei").max_range == 12 and world.hero("Sojourn").max_range == 60
     dmon, dva = world.hero("D.Mon"), world.hero("D.Va")

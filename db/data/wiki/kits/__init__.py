@@ -7,6 +7,9 @@ it.
                     perk entry of one hero's kit
     hero_articles   a hero's article -> the stats Cargo lacks, the
                     health pool, an announcement
+    six_a_side      a hero's article -> its 6v6 kit: the infobox's 6v6
+                    pools and each 6v6_details line, a malformed value
+                    rejected
     kit_store       the kits into the tables
     measurements    a stat value -> value, unit, window, condition
     weapons         firing modes put in firing order and grouped into

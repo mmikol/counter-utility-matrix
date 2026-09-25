@@ -3,7 +3,7 @@ the facts layer always reads what the data layer stored.
 
     world = tables.load(cx)
 
-Loading is 27 queries and a few thousand rows; cheap enough to do per
+Loading is 29 queries and a few thousand rows; cheap enough to do per
 click, and it is what lets the inference layer's solver evaluate thousands
 of candidate compositions without a query each. Each read step fills one
 part of the World from its tables, and load runs them in the order each
@@ -21,9 +21,12 @@ from psycopg.rows import TupleRow
 
 from db import KIND_WEAPON
 from db.data.names import name_key
+from facts import kit_format as kit_format_module
+from facts.draft import KIT_FORMAT
 from facts.kit import KitPiece, Stat
 from facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
 from facts.records import (
+    KitLine,
     MapRate,
     Modifier,
     Patch,
@@ -247,6 +250,23 @@ def _read_perks(cx: Connection, w: World) -> None:
         w.heroes[hid].perk_effects.append(PerkEffect(perk=perk, ability=ability))
 
 
+def _read_kit_6v6(cx: Connection, w: World) -> None:
+    """Each hero's 6v6 kit as stored: the pools the wiki gives a 6v6 figure
+    for, and its 6v6 lines, in the order the pull stored them."""
+    for hid, health, shield, armor in _rows(cx, """
+            select hero_id, health_6v6, shield_6v6, armor_6v6 from heroes
+            where num_nonnulls(health_6v6, shield_6v6, armor_6v6) > 0"""):
+        w.heroes[hid].six_pools = {
+            pool: value for pool, value in (("health", health), ("shield", shield),
+                                            ("armor", armor)) if value is not None}
+    for hid, piece, stat, before, after, text in _rows(cx, """
+            select k.hero_id, k.piece, s.code, k.from_value, k.to_value, k.value_text
+            from kit_6v6 k left join stat_keys s using(stat_key_id)
+            order by k.kit_6v6_id"""):
+        w.heroes[hid].six_lines.append(KitLine(
+            piece=piece, stat=stat, before=_rate(before), after=_rate(after), text=text))
+
+
 def _rate(value: SupportsFloat | None) -> float | None:
     """A stored rate as a float; None where the capture publishes none."""
     return float(value) if value is not None else None
@@ -383,17 +403,20 @@ def _benches(w: World) -> None:
         hero.cap_ult(w.ult_cap)
 
 
-def load(cx: Connection) -> World:
-    """The whole database -> World. `cx` is an open psycopg connection; this
-    module never opens one of its own. The steps run in the order each relies
-    on: the kit before derive_scalars, the rates before derive_rates,
-    best_maps and map_styles, the terrain before map_styles, and the benches
-    over the derived roster."""
+def load(cx: Connection, kit_format: str = KIT_FORMAT) -> World:
+    """The whole database -> World, its kit read in `kit_format`. `cx` is an
+    open psycopg connection; this module never opens one of its own. The
+    steps run in the order each relies on: the kit, and the format laid over
+    it, before derive_scalars, the rates before derive_rates, best_maps and
+    map_styles, the terrain before map_styles, and the benches over the
+    derived roster."""
     w = World()
     _read_heroes(cx, w)
     _read_abilities(cx, w)
     _read_weapons(cx, w)
     _read_perks(cx, w)
+    _read_kit_6v6(cx, w)
+    kit_format_module.apply(w, kit_format)
     _read_rates(cx, w)
     _read_maps(cx, w)
     _read_map_rates(cx, w)

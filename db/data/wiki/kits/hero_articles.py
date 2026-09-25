@@ -5,11 +5,13 @@ fields - the interaction flags among them - so they are read off the
 article wikitext and merged into the kit where Cargo left them empty. The
 same article's infobox carries the hero's health pool, which Blizzard does
 not publish, and for a hero marked {{Upcoming}}, its role, subrole and
-release day.
+release day. Its 6v6 kit is six_a_side's, read off the same fetch.
 """
 
 import datetime
 import re
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import NamedTuple
 
 from db import ROLES
@@ -17,6 +19,7 @@ from db.data.fetch import PullContext
 from db.data.names import ability_key
 from db.data.wiki import Articles, fetch_articles, markup
 from db.data.wiki.kits.kit_rows import HeroKit
+from db.data.wiki.kits.six_a_side import SixKit, parse_six_a_side, with_stats
 
 
 class HeroProfile(NamedTuple):
@@ -123,20 +126,24 @@ def supplement_from_wikitext(text: str) -> tuple[ExtraStats, HeroProfile | None]
 
 class Supplement(NamedTuple):
     """What the hero articles added: each hero's pools, the stats merged into
-    the kits, and the articles read - each hero's wikitext, and 'hero: error'
-    for each that would not fetch."""
+    the kits, the articles read - each hero's wikitext, and 'hero: error'
+    for each that would not fetch - and each hero's 6v6 kit, where its
+    article states one."""
     profiles: dict[str, HeroProfile]
     stats: int
     articles: Articles
+    six: Mapping[str, SixKit] = MappingProxyType({})
 
 
 def supplement_kits(pull: PullContext, by_hero: dict[str, HeroKit]) -> Supplement:
     """Read every hero's article, merge the stats it adds into the kit in
-    place where Cargo left them empty, and keep the hero's pools and the
-    articles. A hero whose article will not fetch keeps its Cargo kit and is
-    recorded as missing."""
+    place where Cargo left them empty, and keep the hero's pools, its 6v6
+    kit with each line's stat named from the merged rows, and the articles.
+    A hero whose article will not fetch keeps its Cargo kit and is recorded
+    as missing."""
     articles = fetch_articles(pull, sorted(by_hero))
     profiles: dict[str, HeroProfile] = {}
+    six: dict[str, SixKit] = {}
     stats = 0
     for hero_name, text in articles.found.items():
         extra, profile = supplement_from_wikitext(text)
@@ -147,4 +154,9 @@ def supplement_kits(pull: PullContext, by_hero: dict[str, HeroKit]) -> Supplemen
                 if code not in entry["stats"]:
                     entry["stats"][code] = value
                     stats += 1
-    return Supplement(profiles, stats, articles)
+        said = parse_six_a_side(text)
+        if said.pools or said.lines or said.rejected:
+            pieces = {ability_key(entry["name"]): entry["stats"]
+                      for entry in by_hero[hero_name].entries()}
+            six[hero_name] = with_stats(said, pieces)
+    return Supplement(profiles, stats, articles, six)

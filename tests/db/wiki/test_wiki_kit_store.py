@@ -2,12 +2,14 @@
 recording cursor: the tables it reloads, the stat keys, the pools a profile
 sets, weapons and their configs, the abilities it classifies and adds, a
 modifier read off an ability's wording, perk stats and the abilities a perk
-alters, and an announced hero's perks. No database."""
+alters, an announced hero's perks, and the 6v6 kit beside the 5v5 one. No
+database."""
 
 from db import KIND_ABILITY, KIND_PASSIVE
 from db.data.wiki.kits import kit_store
 from db.data.wiki.kits.hero_articles import HeroProfile
 from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, WeaponEntry
+from db.data.wiki.kits.six_a_side import SixKit, SixLine
 from tests.db.recording import RecordingCursor
 
 SOURCE = 50
@@ -55,15 +57,16 @@ def test_the_store_reloads_the_kit_tables_and_fills_what_blizzard_loaded():
     assert tally == {
         "weapons": 1, "configs": 1, "stats": 4, "classified": 2, "added": 1,
         "abilities_with_stats": 2, "modifiers": 1, "perks_announced": 0,
-        "perks_with_stats": 1, "perk_links": 1, "health": 1}
+        "perks_with_stats": 1, "perk_links": 1, "health": 1, "six_pools": 0, "six_lines": 0}
     # the reloaded tables go first, dependents before what they hang on
-    assert [text for text, _ in cursor.statements[:7]] == [
+    assert [text for text, _ in cursor.statements[:8]] == [
         'DELETE FROM "%s"' % table for table in kit_store.RELOADED]
     # every code any kit carries, sorted
     assert cursor.written("INSERT INTO stat_keys") == [
         ("barrier_health", SOURCE), ("cooldown", SOURCE), ("damage", SOURCE),
         ("damage_red", SOURCE)]
-    assert cursor.written("UPDATE heroes") == [(400, 0, 300, 1)]
+    # no 6v6 kit: the 6v6 pools are NULL, the 5v5 ones stand
+    assert cursor.written("UPDATE heroes") == [(400, 0, 300, None, None, None, 1)]
     # the ids the upserts read back: stat keys 1-4, the weapon 5, its config 6
     assert cursor.written("INSERT INTO weapons") == [(1, "Rocket Hammer", 0, SOURCE)]
     assert cursor.written("INSERT INTO weapon_configs") == [
@@ -121,3 +124,30 @@ def test_a_hero_blizzard_has_perks_for_keeps_them():
     assert tally["perks_announced"] == 0 and tally["perks_with_stats"] == 1
     assert not cursor.written("SELECT status FROM heroes") and not cursor.written(
         "INSERT INTO perks")
+
+
+def test_the_6v6_kit_lands_beside_the_5v5_one():
+    """Anvil's article gives a 6v6 health and two 6v6 lines: the pool goes on
+    the hero's row beside the 5v5 one, and each line into kit_6v6 with the
+    stat its words name, or none for a line with no figure."""
+    kit = HeroKit([], [_ability("Barrier Field", barrier_health="1500")], [])
+    six = SixKit(pools={"health": 325}, rejected=[], lines=[
+        SixLine("Barrier Field", "barrier_health", 1500.0, 1800.0,
+                "Shield health increased from 1500 to 1800"),
+        SixLine("Barrier Field", None, None, None, "No longer shares a cooldown")])
+    cursor = RecordingCursor(reads=[
+        ('SELECT "code", "kind_id" FROM "ability_kinds"', KINDS),
+        ("SELECT name, ability_id FROM abilities", [("Barrier Field", 11)]),
+        ("SELECT coalesce(max(position), -1) + 1 FROM abilities", [(1,)]),
+        ("SELECT name FROM abilities", [("Barrier Field",)]),
+        ("SELECT name, perk_id FROM perks", [])])
+    profiles = {"Anvil": HeroProfile(health=250, shield=None, armor=300)}
+    tally, _ = kit_store.store(cursor, {"Anvil": kit}, profiles, {"anvil": 1}, SOURCE,
+                               {"Anvil": six})
+    assert (tally["six_pools"], tally["six_lines"]) == (1, 2)
+    assert cursor.written("UPDATE heroes") == [(250, None, 300, 325, None, None, 1)]
+    # barrier_health is stat key 1, the only code the kit and the lines carry
+    shield = "Shield health increased from 1500 to 1800"
+    assert cursor.written("INSERT INTO kit_6v6") == [
+        (1, "Barrier Field", 1, 1500.0, 1800.0, shield, SOURCE),
+        (1, "Barrier Field", None, None, None, "No longer shares a cooldown", SOURCE)]

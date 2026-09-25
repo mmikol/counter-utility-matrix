@@ -125,11 +125,14 @@ def test_the_pull_reads_each_article_once_and_stores_every_kit_in_one_transactio
     assert {"heroes", "abilities", "perks"} <= set(summary["tables"])
     assert lines[:2] == ["cargo rows: 5   heroes named: 4",
                          "supplemented stats: 3  (fields Cargo does not expose)"]
+    assert lines[-1] == "6v6 kit: 0 heroes' pools, 0 lines; 0 values rejected"
+    assert summary["rejected_6v6"] == []
     (cursor,) = connection.cursors
     assert cursor.written("INSERT INTO sources")[0][0] == "wiki"
     assert [params[1] for params in cursor.written("INSERT INTO heroes")] == ["Doctrine"]
     # the pools come from the profiles alone, Doctrine's onto the id its row read back
-    assert cursor.written("UPDATE heroes") == [(400, 0, 300, 1), (250, None, None, 2)]
+    assert cursor.written("UPDATE heroes") == [
+        (400, 0, 300, None, None, None, 1), (250, None, None, None, None, None, 2)]
 
 
 def test_a_hero_the_roster_spells_another_way_is_matched_by_its_name_key(monkeypatch):
@@ -151,5 +154,5 @@ def test_a_hero_the_roster_spells_another_way_is_matched_by_its_name_key(monkeyp
     assert summary["unknown_heroes"] == [] and summary["announced"] == []
     (cursor,) = connection.cursors
     assert not cursor.written("INSERT INTO heroes")
-    assert cursor.written("UPDATE heroes") == [(225, 0, 0, 3)]
+    assert cursor.written("UPDATE heroes") == [(225, 0, 0, None, None, None, 3)]
     assert [params[0] for params in cursor.written("INSERT INTO abilities")] == [3, 2]

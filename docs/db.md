@@ -54,7 +54,7 @@ db/
 | module | writes | runs after |
 | --- | --- | --- |
 | `blizzard/heroes.py` - `pull_heroes` | `roles`, `subroles`, `heroes`, `abilities`, `perks` | nothing: it runs first |
-| `wiki/heroes.py` - `pull_kits` | `abilities`, `ability_stats`, `ability_modifiers`, `weapons`, `weapon_configs`, `weapon_stats`, `perks`, `perk_stats`, `perk_ability_effects`, `stat_keys`, `heroes` | `pull_heroes` |
+| `wiki/heroes.py` - `pull_kits` | `abilities`, `ability_stats`, `ability_modifiers`, `weapons`, `weapon_configs`, `weapon_stats`, `perks`, `perk_stats`, `perk_ability_effects`, `stat_keys`, `heroes`, `kit_6v6` | `pull_heroes` |
 | `wiki/maps.py` - `pull_maps` | `game_modes`, `maps`, `map_modes`, `map_stages` | - |
 | `wiki/terrain.py` - `pull_terrain` | `map_terrain`, `stage_terrain` | `pull_maps` |
 | `wiki/patches.py` - `pull_patches` | `patches` | - |
@@ -75,7 +75,7 @@ says what it reads.
 | --- | --- |
 | `__init__.py` | where the database is: `default_dsn` resolves `DATABASE_URL`, else the embedded cluster at `db/psql/cluster` once one is built, and never creates one; `boot`, for `db_init` and `db_rebuild` alone, creates it; with neither, `NoDatabaseError`. Its docstring maps the helpers every writer needs |
 | `schema.py` | the migrations and the `schema_migrations` ledger; `state` (empty, stale, unfilled or current), which `python -m db.psql.schema` prints for the container entrypoint; `rebuild`; `generate_docs`, the two sections at the end of this document, each table described by the `--` block above its `CREATE TABLE` or a later `COMMENT ON TABLE` |
-| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment, `018` `map_playstyle` and `comp_archetypes` dropped, `seasons` and `synergies` pulled from the wiki, `019` `map_strategy` and the third source's rates, snapshots and `sources` row dropped, `counters` pulled from the wiki, `020` `map_terrain`, the terrain features each map's wiki article names, `021` `stage_terrain`, with every Hybrid map's two phases and an Escort map's named stretches stored as stages, `022` the `strategies.playbook` comment under the Countrix name, `023` the columns nothing read dropped - `raw_value` on the three stat tables, `patches.platform` and `url`, `subroles.icon_url`, `stat_keys.label` and `unit`, `roles.name`, `024` `matches` and `match_picks`, the owner's recorded games, one row a map with both sixes and the bans, under the `user` source. A statement in an applied migration is never edited; a change is a new file, and a populated database catches up with `db_migrate`. The `--` prose above each `CREATE TABLE` is the data dictionary's text, and is kept current. |
+| `migrations/` | The schema as a sequence, one file per step: `001` sources and the foundation, `002` heroes, `003` maps, `004` meta, `005` playbook, `006` inference, `007` the three layers, `008` the ledger, `009` and `014` the tables that recorded matches, added and dropped again, `010` constraints and heuristics (the `strategies` table), `011` and `012` the `matrix_reader` login the `query` tool connects as, with the dynamic-SQL functions withdrawn from `PUBLIC`, `013` the assumption kind, `015` announced heroes, `016` the playbook each `strategies` row was mirrored from, `017` that column's comment, `018` `map_playstyle` and `comp_archetypes` dropped, `seasons` and `synergies` pulled from the wiki, `019` `map_strategy` and the third source's rates, snapshots and `sources` row dropped, `counters` pulled from the wiki, `020` `map_terrain`, the terrain features each map's wiki article names, `021` `stage_terrain`, with every Hybrid map's two phases and an Escort map's named stretches stored as stages, `022` the `strategies.playbook` comment under the Countrix name, `023` the columns nothing read dropped - `raw_value` on the three stat tables, `patches.platform` and `url`, `subroles.icon_url`, `stat_keys.label` and `unit`, `roles.name`, `024` `matches` and `match_picks`, the owner's recorded games, one row a map with both sixes and the bans, under the `user` source, `025` the 6v6 kit beside the 5v5 one: `heroes.health_6v6`, `shield_6v6` and `armor_6v6`, and `kit_6v6`, each 6v6 line of a hero's article. A statement in an applied migration is never edited; a change is a new file, and a populated database catches up with `db_migrate`. The `--` prose above each `CREATE TABLE` is the data dictionary's text, and is kept current. |
 | `cluster/` | the embedded Postgres `db_init` or `db_rebuild` creates through pgserver (gitignored); a reader starts it on first touch and never creates it. The compose stack runs its own Postgres, the `db` service, which the host reaches through `./docker-db` |
 
 ### `raw/` - the mirror
@@ -229,7 +229,7 @@ COMP        = ARGMAX[ STRATEGIES( FACTS ) ]
 
 Every table but `sources` and `schema_migrations` also carries
 `source_id` -> `sources` and a `cao` timestamp. Those edges are left off -
-they would connect `sources` to 35 tables and obscure everything else.
+they would connect `sources` to 36 tables and obscure everything else.
 
 #### HEROES
 
@@ -240,6 +240,7 @@ erDiagram
     abilities ||--o{ perk_ability_effects : "ability_id"
     ability_kinds ||--o{ abilities : "kind_id"
     heroes ||--o{ abilities : "hero_id"
+    heroes ||--o{ kit_6v6 : "hero_id"
     heroes ||--o{ perks : "hero_id"
     heroes ||--o{ weapons : "hero_id"
     perk_tiers ||--o{ perks : "tier_id"
@@ -249,6 +250,7 @@ erDiagram
     roles ||--o{ subroles : "role_id"
     stat_keys ||--o{ ability_modifiers : "stat_key_id"
     stat_keys ||--o{ ability_stats : "stat_key_id"
+    stat_keys ||--o{ kit_6v6 : "stat_key_id"
     stat_keys ||--o{ perk_stats : "stat_key_id"
     stat_keys ||--o{ weapon_stats : "stat_key_id"
     subroles ||--o{ heroes : "role_id"
@@ -328,6 +330,7 @@ erDiagram
     heroes ||--o{ counters : "countered_by_id"
     heroes ||--o{ counters : "hero_id"
     heroes ||--o{ hero_meta : "hero_id"
+    heroes ||--o{ kit_6v6 : "hero_id"
     heroes ||--o{ map_meta : "hero_id"
     heroes ||--o{ match_picks : "hero_id"
     heroes ||--o{ perks : "hero_id"
@@ -356,6 +359,7 @@ erDiagram
     seasons ||--o{ meta_snapshots : "season_id"
     stat_keys ||--o{ ability_modifiers : "stat_key_id"
     stat_keys ||--o{ ability_stats : "stat_key_id"
+    stat_keys ||--o{ kit_6v6 : "stat_key_id"
     stat_keys ||--o{ perk_stats : "stat_key_id"
     stat_keys ||--o{ weapon_stats : "stat_key_id"
     subroles ||--o{ heroes : "role_id"
@@ -379,7 +383,7 @@ was read. Every table but `sources` and `schema_migrations` carries both;
 | domain | tables |
 | --- | --- |
 | **foundation** | `schema_migrations` · `sources` |
-| **HEROES** | `abilities` · `ability_kinds` · `ability_modifiers` · `ability_stats` · `heroes` · `perk_ability_effects` · `perk_stats` · `perk_tiers` · `perks` · `roles` · `stat_keys` · `subroles` · `weapon_config_slots` · `weapon_configs` · `weapon_stats` · `weapons` |
+| **HEROES** | `abilities` · `ability_kinds` · `ability_modifiers` · `ability_stats` · `heroes` · `kit_6v6` · `perk_ability_effects` · `perk_stats` · `perk_tiers` · `perks` · `roles` · `stat_keys` · `subroles` · `weapon_config_slots` · `weapon_configs` · `weapon_stats` · `weapons` |
 | **MAPS** | `game_modes` · `map_modes` · `map_stages` · `map_terrain` · `maps` · `stage_terrain` |
 | **META** | `competitive_tiers` · `hero_meta` · `map_meta` · `meta_snapshots` · `patches` · `regions` · `seasons` |
 | **PLAYBOOK** | `counters` · `playstyle` · `synergies` |
@@ -501,7 +505,7 @@ Rates by region and tier. All rates are percentages as published (47.9 means 47.
 
 *HEROES · `002_heroes.sql`*
 
-The composite foreign key makes it impossible to pair a hero with a subrole belonging to a different role than the hero's own. health, shield and armor are the hero's own pool, all in hp. Blizzard publishes none of them, so pull_kits fills them in; a hero with no shield or armor leaves those NULL rather than storing a zero the source never states.
+The composite foreign key makes it impossible to pair a hero with a subrole belonging to a different role than the hero's own. health, shield and armor are the hero's own pool in 5v5, all in hp. Blizzard publishes none of them, so pull_kits fills them in; a hero with no shield or armor leaves those NULL rather than storing a zero the source never states. health_6v6, shield_6v6 and armor_6v6 are the same pool in 6v6 where the article's infobox gives one, NULL where it gives none and the 5v5 figure stands; a value that is not a whole number is rejected, never stored.
 
 | column | type | null | references |
 | --- | --- | --- | --- |
@@ -516,6 +520,25 @@ The composite foreign key makes it impossible to pair a hero with a subrole belo
 | `portrait_url` | text | yes |  |
 | `status` | text | no |  |
 | `release_date` | date | yes |  |
+| `health_6v6` | smallint | yes |  |
+| `shield_6v6` | smallint | yes |  |
+| `armor_6v6` | smallint | yes |  |
+
+#### `kit_6v6`
+
+*HEROES · `025_kit_6v6.sql`*
+
+The 6v6 lines of each hero's kit: one row per line of the 6v6_details field an Ability_details block carries (pull_kits). piece is the block's ability name as the wiki writes it - an ability, a weapon or a perk of the hero. A line that says a stat increased or was reduced from A to B carries the stat its words name (stat_key_id, NULL where the pull maps none), from_value A and to_value B, a multiplier the wiki writes 2.5x held as the kit holds it, a percent (250). Any other line carries its words alone. A line whose figures do not parse is rejected, never stored. The 5v5 rows are left as they are; facts/kit_format.py moves a stat row from A to B when the format in force is 6v6. Reloaded whole with the kits.
+
+| column | type | null | references |
+| --- | --- | --- | --- |
+| `kit_6v6_id` | integer | no |  |
+| `hero_id` | integer | no | `heroes.hero_id` |
+| `piece` | text | no |  |
+| `stat_key_id` | integer | yes | `stat_keys.stat_key_id` |
+| `from_value` | numeric | yes |  |
+| `to_value` | numeric | yes |  |
+| `value_text` | text | no |  |
 
 #### `map_meta`
 

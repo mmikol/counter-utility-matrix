@@ -10,6 +10,8 @@ imports only db.
                     time
     kit             a kit piece's stat rows and the combat numbers read off
                     them; the one reader of the wiki's prose
+    kit_format      the kit in the format in force: the wiki's 6v6 figures
+                    laid over the 5v5 rows, and what moved
     records         the typed records a Hero, a Map and the World hand on
     draft           the board's vocabulary - the lobby's limits, the sides -
                     and the Draft, the board at one stage of the pick-and-ban

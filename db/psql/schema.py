@@ -43,7 +43,7 @@ DOC_DOMAIN = {
     "008_schema_migrations.sql": "foundation",
     "010_constraints_and_heuristics.sql": "INFERENCE",
     "020_map_terrain.sql": "MAPS", "021_stage_terrain.sql": "MAPS",
-    "024_matches.sql": "MATCHES"}
+    "024_matches.sql": "MATCHES", "025_kit_6v6.sql": "HEROES"}
 # The domains in the order the diagrams and the dictionary list them.
 DOMAINS = ("HEROES", "MAPS", "META", "PLAYBOOK", "INFERENCE", "MATCHES")
 

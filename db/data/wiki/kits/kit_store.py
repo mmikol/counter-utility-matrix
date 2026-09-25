@@ -3,14 +3,16 @@
 Loads weapons and their firing configs, classifies every ability, adds the
 abilities Blizzard does not publish, stores each ability's keywords, and
 attaches stat measurements to abilities, weapons and perks, with the
-modifiers an ability applies and the abilities a perk alters. The weapon,
-stat and modifier tables are reloaded whole; the hero, ability and perk rows
-blizzard.heroes owns are filled in, never replaced.
+modifiers an ability applies and the abilities a perk alters, then the 6v6
+kit beside the 5v5 one: the pools on the hero's row, the lines in kit_6v6.
+The weapon, stat, modifier and 6v6 tables are reloaded whole; the hero,
+ability and perk rows blizzard.heroes owns are filled in, never replaced.
 """
 
 import dataclasses
 import re
 from collections.abc import Iterable, Mapping
+from types import MappingProxyType
 from typing import NamedTuple, TypedDict
 
 import psycopg
@@ -22,6 +24,7 @@ from db.data.wiki.kits import modifiers
 from db.data.wiki.kits.hero_articles import HeroProfile
 from db.data.wiki.kits.kit_rows import AbilityEntry, HeroKit, PerkEntry, WeaponEntry
 from db.data.wiki.kits.measurements import parse_measurements
+from db.data.wiki.kits.six_a_side import SixKit
 from db.data.wiki.kits.weapons import group_weapons, slot_id
 
 # The unit a stat is measured in when its value carries none of its own
@@ -53,7 +56,8 @@ STAT_DEFAULT_DENOMINATOR = {"dps": "seconds", "hps": "seconds"}
 
 class KitCounts(TypedDict):
     """What the store wrote, counted as it writes: rows, or heroes for
-    health. The pull's summary reports every count."""
+    health and for six_pools, the heroes given a 6v6 pool. The pull's
+    summary reports every count."""
     weapons: int
     configs: int
     stats: int
@@ -65,6 +69,8 @@ class KitCounts(TypedDict):
     perks_with_stats: int
     perk_links: int
     health: int
+    six_pools: int
+    six_lines: int
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -315,7 +321,7 @@ def _load_perks(store_pass: _StorePass, hero_id: int, perks: list[PerkEntry]) ->
 
 
 # Every table the store reloads whole, dependents first.
-RELOADED = ("ability_modifiers", "perk_ability_effects", "perk_stats",
+RELOADED = ("kit_6v6", "ability_modifiers", "perk_ability_effects", "perk_stats",
             "weapon_stats", "ability_stats", "weapon_configs", "weapons")
 
 
@@ -325,35 +331,54 @@ class Stored(NamedTuple):
     unknown_heroes: list[str]
 
 
+def _load_six(store_pass: _StorePass, hero_id: int, six: SixKit) -> None:
+    """A hero's 6v6 lines, each with the stat its words name where they name
+    one; the pools are set with the 5v5 ones."""
+    for line in six.lines:
+        store_pass.cursor.execute(
+            "INSERT INTO kit_6v6 (hero_id, piece, stat_key_id, from_value, to_value,"
+            " value_text, source_id) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+            " ON CONFLICT (hero_id, piece, value_text) DO NOTHING",
+            (hero_id, line.piece, store_pass.key_ids[line.stat] if line.stat else None,
+                line.before, line.after, line.text, store_pass.source_id))
+        store_pass.tally["six_lines"] += store_pass.cursor.rowcount
+
+
 def store(
         cursor: psycopg.Cursor, by_hero: Mapping[str, HeroKit],
         profiles: Mapping[str, HeroProfile], hero_ids: Mapping[str, int],
-        source_id: int) -> Stored:
-    """Reload the kit tables from `by_hero` and set each profiled hero's
-    pools. hero_ids is {name_key: hero_id}, as names.index builds it; a
-    hero it lacks is skipped and named in the result."""
+        source_id: int, six: Mapping[str, SixKit] = MappingProxyType({})) -> Stored:
+    """Reload the kit tables from `by_hero` and `six` and set each profiled
+    hero's pools, its 5v5 ones and the 6v6 ones its article gives (NULL
+    where it gives none). hero_ids is {name_key: hero_id}, as names.index
+    builds it; a hero it lacks is skipped and named in the result."""
     for table in RELOADED:
         cursor.execute(SQL("DELETE FROM {}").format(psql.identifier(table)))
     all_codes: set[str] = set()
     for kit in by_hero.values():
         for entry in kit.entries():
             all_codes.update(entry["stats"])
+    all_codes.update(line.stat for said in six.values() for line in said.lines if line.stat)
     key_ids = _register_stat_keys(cursor, all_codes, source_id)
     kind_ids = psql.lookup_ids(cursor, "ability_kinds", "code", "kind_id")
     store_pass = _StorePass(cursor, key_ids, kind_ids, source_id, KitCounts(
         weapons=0, configs=0, stats=0, classified=0, added=0, abilities_with_stats=0,
-        modifiers=0, perks_announced=0, perks_with_stats=0, perk_links=0, health=0))
+        modifiers=0, perks_announced=0, perks_with_stats=0, perk_links=0, health=0,
+        six_pools=0, six_lines=0))
 
     for hero_name, profile in profiles.items():
         hero_id = hero_ids.get(name_key(hero_name))
         if hero_id is None:
             continue
+        pools = six[hero_name].pools if hero_name in six else {}
         cursor.execute(
-            "UPDATE heroes SET health = %s, shield = %s, armor = %s"
-            " WHERE hero_id = %s",
-            (profile.health, profile.shield, profile.armor, hero_id),
+            "UPDATE heroes SET health = %s, shield = %s, armor = %s, health_6v6 = %s,"
+            " shield_6v6 = %s, armor_6v6 = %s WHERE hero_id = %s",
+            (profile.health, profile.shield, profile.armor, pools.get("health"),
+                pools.get("shield"), pools.get("armor"), hero_id),
         )
         store_pass.tally["health"] += cursor.rowcount
+        store_pass.tally["six_pools"] += cursor.rowcount if pools else 0
 
     unknown_heroes: list[str] = []
     for hero_name, kit in sorted(by_hero.items()):
@@ -364,4 +389,6 @@ def store(
         _load_weapons(store_pass, hero_id, kit.weapons)
         _load_abilities(store_pass, hero_id, kit.weapons, kit.abilities)
         _load_perks(store_pass, hero_id, kit.perks)
+        if hero_name in six:
+            _load_six(store_pass, hero_id, six[hero_name])
     return Stored(store_pass.tally, sorted(unknown_heroes))

@@ -135,7 +135,9 @@ def pull_heroes(connection: psycopg.Connection, pull: fetch.PullContext) -> Pull
 @pull_tool(
     "pull_kits", "The wiki's Cargo ability table and hero articles: weapons"
     " and firing configs, every published number, ability kinds and"
-    " keywords, hero health pools. Run after pull_heroes.",
+    " keywords, hero health pools, and the 6v6 kit beside the 5v5 one - each"
+    " article's 6v6 pools and 6v6_details lines, a malformed value rejected."
+    " Run after pull_heroes.",
     source="wiki", stored="kit numbers stored")
 def pull_kits(connection: psycopg.Connection, pull: fetch.PullContext) -> PullSummary:
     return wiki_heroes.run(connection, pull)

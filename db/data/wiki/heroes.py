@@ -2,8 +2,8 @@
 
 The wiki stores its ability data in a Cargo table with one row per ability;
 kits/kit_rows.py reads the rows into each hero's kit. Each hero's article
-adds what Cargo does not register - the interaction flags, the health pool -
-and kits/hero_articles.py reads it. A hero the Cargo table names that the
+adds what Cargo does not register - the interaction flags, the health pool,
+the 6v6 kit - and kits/hero_articles.py reads it. A hero the Cargo table names that the
 roster lacks gets a row here when its article is marked upcoming, so its kit
 loads ahead of release. kits/kit_store.py writes the kits. Runs after blizzard.heroes,
 which owns the hero, ability and perk rows this fills in.
@@ -76,12 +76,13 @@ def _announce_heroes(
 
 class KitsSummary(KitCounts, ArticlePullSummary):
     """The store's counts, every one present, and what the pull read: the
-    Cargo rows, the stats the articles added, the heroes it skipped and the
-    ones it announced."""
+    Cargo rows, the stats the articles added, the heroes it skipped, the
+    ones it announced and the 6v6 values it rejected, 'hero field: value'."""
     cargo_rows: int
     supplemented: int
     unknown_heroes: list[str]
     announced: list[str]
+    rejected_6v6: list[str]
 
 
 def run(connection: psycopg.Connection, pull: fetch.PullContext) -> KitsSummary:
@@ -102,13 +103,19 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> KitsSummary:
                 if name_key(name) not in hero_ids}
     source_id = psql.register_source(cursor, WIKI, psql.now())
     announced = _announce_heroes(cursor, pull, unlisted, hero_ids, source_id)
-    stored = kit_store.store(cursor, by_hero, supplement.profiles, hero_ids, source_id)
+    stored = kit_store.store(cursor, by_hero, supplement.profiles, hero_ids, source_id,
+                             supplement.six)
     connection.commit()
+    rejected = ["%s %s" % (hero, value) for hero, said in sorted(supplement.six.items())
+                for value in said.rejected]
+    pull.log("6v6 kit: %d heroes' pools, %d lines; %d values rejected%s" % (
+        stored.tally["six_pools"], stored.tally["six_lines"], len(rejected),
+        "".join("\n  rejected: %s" % value for value in rejected)))
 
     return KitsSummary(
         **stored.tally, cargo_rows=len(rows), supplemented=supplement.stats,
         missing=supplement.articles.missing, unknown_heroes=stored.unknown_heroes,
-        announced=announced,
+        announced=announced, rejected_6v6=rejected,
         tables=["abilities", "ability_stats", "ability_modifiers", "weapons",
                 "weapon_configs", "weapon_stats", "perks", "perk_stats",
-                "perk_ability_effects", "stat_keys", "heroes"])
+                "perk_ability_effects", "stat_keys", "heroes", "kit_6v6"])

@@ -1,8 +1,9 @@
 """A named hero's facts: first what the hero is wherever it plays - who it is,
-the traits its kit's numbers and keywords carry, its abilities, weapons and
-perks, its rates, and the wiki's counters and partners - then what only
-this board has: on this map, against these opponents, beside these
-teammates. facts.board_facts calls write() once per pick, red first.
+what the kit's format changes, the traits its kit's numbers and keywords
+carry, its abilities, weapons and perks, its rates, and the wiki's counters
+and partners - then what only this board has: on this map, against these
+opponents, beside these teammates. facts.board_facts calls write() once per
+pick, red first.
 """
 
 from facts.compute import TREND_POINTS
@@ -27,6 +28,7 @@ def write(fs: FactSet, world: World, board: Resolved, hero: Hero, team: str) -> 
     own, opponents = (board.red, board.blue) if team == "red" else (board.blue, board.red)
     teammates = [x for x in own if x is not hero]
     _hero_identity(fs, world, hero, team)
+    _hero_kit_format(fs, world, hero, team)
     _hero_traits(fs, hero, team)
     _hero_abilities(fs, hero, team)
     _hero_weapons(fs, hero, team)
@@ -71,6 +73,29 @@ def _hero_identity(fs: FactSet, world: World, h: Hero, team: str) -> None:
         fs.add("hero", name, "hero.passive", "%s's %s passive: %s"
             % (name, h.subrole, _trim(passive, 100)), value=h.subrole,
             source="subroles", team=team)
+
+
+def _figure(value: float | None) -> str:
+    return "%g" % value if value is not None else "?"
+
+
+def _hero_kit_format(fs: FactSet, world: World, h: Hero, team: str) -> None:
+    """What the format in force changed in the hero's kit, as the wiki words
+    it: the numbers that moved, then the lines that moved none."""
+    name = h.name
+    moved = [c for c in h.kit_changes if c.applied]
+    if moved:
+        fs.add("hero", name, "hero.kit_format", "%s in %s: %s" % (
+            name, world.kit_format, ", ".join(
+                "%s%s %s -> %s" % (c.piece + " " if c.piece else "",
+                                   (c.stat or "").replace("_", " "), _figure(c.before),
+                                   _figure(c.after)) for c in moved)),
+            value=len(moved), source="kit_6v6", team=team)
+    unread = [c.text for c in h.kit_changes if not c.applied]
+    if unread:
+        fs.add("hero", name, "hero.kit_format_notes", "%s in %s, no number moved: %s"
+            % (name, world.kit_format, "; ".join(unread)), value=unread,
+            source="kit_6v6", team=team)
 
 
 # --- traits read off the kit's own numbers and keywords -----------------------

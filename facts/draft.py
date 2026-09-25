@@ -2,17 +2,18 @@
 them, the sides of a sided map, and the Draft - the board at one stage of
 the pick-and-ban draft, which refuses a board no lobby holds - with
 parse_board, the one reader of a board off the wire, shared by the page and
-the service because the page's board runs through serve.handle_board. A
-playbook draft - a strategy awaiting its frontmatter - is another thing. A
-leaf: it imports only the model and db's Refusal, so every other module in
-the package can take these names from it.
+the service because the page's board runs through serve.handle_board, and
+the format the kit is read in, KIT_FORMAT. A playbook draft - a strategy
+awaiting its frontmatter - is another thing. A leaf: it imports only the
+model and db's Refusal, so every other module in the package can take
+these names from it.
 """
 
 from collections.abc import Iterable, Mapping, Sequence, Sized
 from dataclasses import dataclass
 
 from db import Refusal
-from facts.model import Hero, Map
+from facts.model import FIVE_V_FIVE, SIX_V_SIX, Hero, Map
 
 TEAM_SIZE = 6             # 6v6 Open Queue
 MAX_TANKS = 2             # the queue's own limit, whatever the playbook holds
@@ -20,6 +21,13 @@ MAX_BANS = 5              # each team's two and the lobby's
 SIDED_MODES = ("Escort", "Hybrid")   # modes with an attacking and a defending side
 SIDES = ("attack", "defense")
 EXPECTED_SHAPE = {"tank": 2, "damage": 2, "support": 2}   # what a lobby fields: two of each
+# The format the kit is read in. The shipped playbook's open-queue-ranked
+# assumption makes 6v6 Open Queue the target, so the load lays the wiki's 6v6
+# figures over the 5v5 ones the kit tables hold (facts.kit_format). FIVE_V_FIVE
+# reads the kit as stored: the 5v5 figures stay in the database for a 5v5
+# profile, which is an open question.
+FORMATS = (SIX_V_SIX, FIVE_V_FIVE)
+KIT_FORMAT = SIX_V_SIX
 
 
 def check_team_size(picks: Sized, seat: str) -> None:

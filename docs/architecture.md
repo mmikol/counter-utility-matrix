@@ -213,9 +213,15 @@ holds the whole playbook; [mcp.md](mcp.md) has the servers and every tool.
 ## The scope
 
 6v6 Open Queue Competitive is the target: six picks a side in any mix of
-roles, at most two tanks. No source publishes Open Queue rates, so META
-is Competitive Role Queue on console (Americas), and every snapshot fact
-says so. Rates carry the patch and season they were captured under, and
+roles, at most two tanks. The kit is read in 6v6 too
+(`facts.draft.KIT_FORMAT`): the wiki's hero articles give 6v6 pools and
+6v6 lines ("Cooldown increased from 7 to 10 seconds"), which `pull_kits`
+stores beside the 5v5 figures the Cargo table publishes, and the load lays
+over them; a line whose 5v5 figure has moved since the wiki wrote it is
+left unapplied and named on the board. The 5v5 figures stay stored, so a
+5v5 reading of the kit is one constant away. No source publishes Open
+Queue rates, so META is Competitive Role Queue on console (Americas), and
+every snapshot fact says so. Rates carry the patch and season they were captured under, and
 the board warns when patches shipped since. Judgements (counters,
 synergies, playstyles) are tier- and region-agnostic by design, and a
 table is a table: every row carries its source, and that is the only
