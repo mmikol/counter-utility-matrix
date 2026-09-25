@@ -20,6 +20,8 @@
                         upsert's RETURNING
     now, current_patch, current_season
                         what a capture is stamped with
+    SEASON_ON_DATE      the season live on a date: the one rule
+                        current_season and pull_seasons' restamp share
     export              the CSV mirror under db/raw, and its mark (ExportMark)
 
     schema              the migrations applied and recorded in the ledger,
@@ -179,12 +181,17 @@ def current_patch(cursor: psycopg.Cursor) -> int | None:
     return row[0] if row else None
 
 
+# The season live on a date: the latest started by then, the later id on a
+# tie. The date is SQL text - CURRENT_DATE, or a snapshot's
+# ms.captured_at::date inside an UPDATE of meta_snapshots ms.
+SEASON_ON_DATE = SQL(
+    "SELECT season_id FROM seasons WHERE started <= {}"
+    " ORDER BY started DESC, season_id DESC LIMIT 1")
+
+
 def current_season(cursor: psycopg.Cursor) -> int | None:
-    """The season live today, by latest start date. NULL until pull_seasons."""
-    row = cursor.execute(
-        "SELECT season_id FROM seasons WHERE started <= CURRENT_DATE"
-        " ORDER BY started DESC, season_id DESC LIMIT 1"
-    ).fetchone()
+    """The season live today (SEASON_ON_DATE). NULL until pull_seasons."""
+    row = cursor.execute(SEASON_ON_DATE.format(SQL("CURRENT_DATE"))).fetchone()
     return row[0] if row else None
 
 

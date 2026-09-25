@@ -17,6 +17,7 @@ import re
 from datetime import date
 
 import psycopg
+from psycopg.sql import SQL
 
 from db import psql
 from db.data import PullSummary, fetch
@@ -111,11 +112,8 @@ def run(connection: psycopg.Connection, pull: fetch.PullContext) -> SeasonsSumma
         cursor.execute(
             "INSERT INTO seasons (name, started, note, source_id)"
             " VALUES (%s, %s, %s, %s)", (name, start, page, source_id))
-    cursor.execute(
-        "UPDATE meta_snapshots ms SET season_id ="
-        " (SELECT season_id FROM seasons s"
-        "  WHERE s.started <= ms.captured_at::date"
-        "  ORDER BY s.started DESC, s.season_id DESC LIMIT 1)")
+    cursor.execute(SQL("UPDATE meta_snapshots ms SET season_id = ({})").format(
+        psql.SEASON_ON_DATE.format(SQL("ms.captured_at::date"))))
     stamped = cursor.rowcount
     connection.commit()
     pull.log("  seasons    %d, latest %s (%s); %d snapshots stamped" % (
