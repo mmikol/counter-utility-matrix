@@ -5,7 +5,7 @@ Context, Log, NoSuchToolError and StrategyResources. An in-process call is
 ctx.call(name, **arguments).
 """
 
-from db.data.fetch import Log
+from db import Log
 
 # each family declares its tools into REGISTRY as it imports
 from door.mcp import facts, lifecycle, playbook, pulls, solver  # noqa: F401

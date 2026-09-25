@@ -30,14 +30,14 @@ import dataclasses
 import os
 import random
 import re
-import sys
 import time
 from collections.abc import Callable, Mapping
 
 import requests
 
+from db import SECONDS_PER_HOUR, Log, to_stderr
+
 MAX_BACKOFF = 60.0
-SECONDS_PER_HOUR = 3600.0
 
 
 class FetchError(Exception):
@@ -77,16 +77,6 @@ def session() -> requests.Session:
     s = requests.Session()
     s.headers.update({"User-Agent": USER_AGENT})
     return s
-
-
-# Where a progress line goes - a pull's, a tool's, the sentry's: to_stderr
-# below, print, a list's append.
-type Log = Callable[[str], None]
-
-
-def to_stderr(line: str) -> None:
-    """A progress line on stderr: over stdio, stdout is the MCP wire."""
-    sys.stderr.write(line + "\n")
 
 
 @dataclasses.dataclass(frozen=True)

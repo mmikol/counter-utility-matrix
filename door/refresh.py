@@ -32,8 +32,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple, NoReturn
 
-from db import CACHE_DIRS
-from db.data.fetch import SECONDS_PER_HOUR
+from db import CACHE_DIRS, SECONDS_PER_HOUR
 from door.mcp import tools
 
 # The clock when the environment names none: COUNTRIX_REFRESH_AT,

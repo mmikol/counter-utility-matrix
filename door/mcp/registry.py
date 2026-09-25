@@ -35,9 +35,7 @@ from typing import ClassVar, Self
 
 import psycopg
 
-from db import CACHE_DIRS, ROOT, embed, psql
-from db.data import fetch
-from db.data.fetch import Log
+from db import CACHE_DIRS, ROOT, Log, embed, psql, to_stderr
 from door.mcp.audit import audited
 from door.mcp.schema import (
     Properties,
@@ -225,7 +223,7 @@ class Context:
             log: Log | None = None, *, client: str) -> None:
         self._dsn = dsn
         self.caches: dict[str, str] = dict(CACHE_DIRS, **(caches or {}))
-        self.log: Log = log or fetch.to_stderr
+        self.log: Log = log or to_stderr
         self.client = client
 
     def nested(self, tool: str) -> Self:

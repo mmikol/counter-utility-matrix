@@ -10,12 +10,11 @@ Logs go to stderr unless the server is told otherwise - over stdio, stdout
 is the wire.
 """
 
-import sys
 import traceback
 from collections.abc import Callable, Iterable, Mapping
 from typing import NotRequired, Protocol, TypedDict
 
-from db import Refusal
+from db import Log, Refusal, to_stderr
 from door.mcp.audit import Transport, audited
 from door.mcp.schema import Tool
 
@@ -124,10 +123,10 @@ class Server:
 
     def __init__(
             self, tools: Iterable[Tool], resources: Resources | None = None, *,
-            log: Callable[[str], object] | None = None, audit_path: str | None = None) -> None:
+            log: Log | None = None, audit_path: str | None = None) -> None:
         self.tools = {t.name: t for t in tools}
         self.resources = resources
-        self.log = log or (lambda msg: sys.stderr.write(msg + "\n"))
+        self.log: Log = log or to_stderr
         self.transport: Transport = "stdio"
         self.audit_path = audit_path
 

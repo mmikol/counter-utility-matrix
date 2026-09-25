@@ -24,8 +24,10 @@ and the paths under it), the shape of a `sources` row (Source), the ability
 and perk vocabularies the migrations seed (ABILITY_KINDS, PERK_TIERS), the
 scope every rates snapshot is pinned to, the one error a caller can fix
 (Refusal), which every layer raises and every door answers as the caller's,
-and embed, which rewrites one generated section of a markdown file for every
-layer that generates docs.
+where a progress line goes (Log) and the stderr writer a pull, a Context
+and the MCP server default to (to_stderr), the hour every age is read in
+(SECONDS_PER_HOUR), and embed, which rewrites one generated section of a
+markdown file for every layer that generates docs.
 docs/db.md walks the tree.
 
 Every row carries a source_id, and that is the only distinction drawn
@@ -35,6 +37,8 @@ source.
 """
 
 import os
+import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -50,6 +54,18 @@ CACHE_DIRS = {
     "blizzard": os.path.join(ROOT, ".cache-blizzard"),
     "wiki": os.path.join(ROOT, ".cache-wiki"),
 }
+
+# A page's age and the refresher's clock are read in hours.
+SECONDS_PER_HOUR = 3600.0
+
+# Where a progress line goes - a pull's, a tool's, the sentry's: to_stderr
+# below, print, a list's append.
+type Log = Callable[[str], None]
+
+
+def to_stderr(line: str) -> None:
+    """A progress line on stderr: over stdio, stdout is the MCP wire."""
+    sys.stderr.write(line + "\n")
 
 
 class Refusal(ValueError):  # noqa: N818  # named for the answer every door gives it

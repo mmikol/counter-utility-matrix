@@ -43,8 +43,7 @@ from typing import NamedTuple, NoReturn, TypedDict
 import psycopg
 from psycopg.sql import SQL
 
-from db import RAW_DIR, psql
-from db.data.fetch import Log
+from db import RAW_DIR, Log, psql
 from door.mcp.audit import default_audit_path  # the door's own, one definition
 from door.mcp.http import RATE_LIMIT  # the door's own, one definition
 from inference import catalog as catalog_module

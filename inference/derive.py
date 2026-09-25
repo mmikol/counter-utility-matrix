@@ -33,7 +33,7 @@ import tempfile
 from collections.abc import Callable, Collection, Iterable
 from typing import TypedDict
 
-from db import Refusal
+from db import Log, Refusal
 from facts import compute
 from inference import catalog as catalog_module
 from inference import tune
@@ -237,7 +237,7 @@ def _pending(catalog: Iterable[Strategy], ids: Collection[str] | None) -> list[S
 def derive(
         ids: Collection[str] | None = None, directory: str | None = None,
         runner: Callable[[str], str] = run_cli,
-        log: Callable[[str], object] = print) -> DeriveResult:
+        log: Log = print) -> DeriveResult:
     """Complete every draft (or the named ones), at most MAX_PER_RUN a run.
     derived holds each draft completed, with its form and fields; failed each
     draft refused twice, with the last objection; skipped why the run stopped
