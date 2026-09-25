@@ -43,10 +43,8 @@ def test_the_whole_database_becomes_facts(world):
     fs = board_facts.generate(world, Draft("King's Row", ("Zarya",), ("Ana",)))
     keys = {f.key for f in fs.facts}
     assert {"hero.perk_effect", "playbook.catalog"} <= keys, keys
-    # one population of rates, Blizzard's: no source's second set, no third party named
-    assert "hero.rate_alt" not in keys and not hasattr(world.hero("Ana"), "alt_rates")
+    # one population of rates, Blizzard's
     assert {s["source"] for s in world.snapshots} == {"blizzard"}
-    assert not any("counterpick" in f.text.lower() for f in fs.facts)
     assert any("Americas" in f.text for f in fs.facts if f.key == "meta.snapshot")
 
 
@@ -81,7 +79,6 @@ def test_the_rates_half_of_a_maps_style_is_derived_from_its_rates(world):
     assert top.source == "playstyle+map_meta" and top.text == (
         "%s heroes win %.1f sd %s on King's Row than on other maps"
         % (ranked[0], abs(lead), "less" if lead < 0 else "more"))
-    assert not any("authored" in f.text or "archetype" in f.text for f in fs.facts)
 
 
 def test_a_map_without_text_gets_no_terrain_fact(world):

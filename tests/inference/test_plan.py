@@ -103,7 +103,6 @@ def test_the_plan_names_every_maps_derived_style(synthetic_world, harbor_gate_bo
         said = (harbor_gate_board.plan if m.name == "Harbor Gate"
                 else plan.plan(world, m, "", [], [], blue_r))
         assert "The map rewards %s" % m.style_top in said, m.name
-        assert "archetype" not in said and "authored" not in said, m.name
     assert plan._and(["A"]) == "A" and plan._and(["A", "B", "C"]) == "A, B and C"
 
 

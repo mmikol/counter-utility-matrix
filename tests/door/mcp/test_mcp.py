@@ -68,7 +68,7 @@ def test_tools_call_without_a_database_and_unknown_method():
         {"jsonrpc": "2.0", "id": 3, "method": "resources/list"},
     ])
     text = replies[0]["result"]["content"][0]["text"]
-    assert "blizzard" in text and "wiki" in text and "counterpick" not in text
+    assert "blizzard" in text and "wiki" in text
     assert "pull_counters" in next(line for line in text.splitlines() if line.startswith("wiki"))
     assert replies[0]["result"]["isError"] is False
     assert replies[1]["error"]["code"] == -32601

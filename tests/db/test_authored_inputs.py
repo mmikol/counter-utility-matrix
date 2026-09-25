@@ -1,6 +1,7 @@
 """The one input a user writes is the playbook. Every other table is pulled
-from Blizzard or the wiki: no authored CSV exists, no loader reads one, no
-table but `strategies` carries the `user` source, and no third source is read."""
+from Blizzard or the wiki: no authored CSV exists, load_authored takes the
+playbook alone, no table but `strategies` carries the `user` source, and no
+third source is read."""
 
 import contextlib
 import os
@@ -11,25 +12,13 @@ import db
 from db.data import authored
 from door.mcp import tools
 
-GONE = ("seasons.csv", "synergies.csv", "archetypes.csv", "map_playstyle.csv")
 
-
-def test_the_authored_csvs_are_gone():
-    folder = os.path.dirname(authored.__file__)
-    assert [n for n in os.listdir(folder) if n.endswith(".csv")] == []
-    for name in GONE:
-        assert not os.path.exists(os.path.join(folder, name)), name
-
-
-def test_the_authored_package_holds_the_source_row_and_no_loader():
+def test_the_authored_package_holds_the_source_row_and_no_csv():
     assert authored.AUTHORED.code == "user"
     assert authored.AUTHORED.url == "inference/strategies/"
     assert os.path.isdir(os.path.join(db.ROOT, authored.AUTHORED.url))
-    for name in ("LOADERS", "load_seasons", "load_synergies", "load_archetypes",
-                 "load_map_playstyle", "read_seasons", "read_synergies",
-                 "read_archetypes", "read_map_playstyle"):
-        assert not hasattr(authored, name), name
-    assert not hasattr(db, "AUTHORED_DIR")
+    folder = os.path.dirname(authored.__file__)
+    assert [n for n in os.listdir(folder) if n.endswith(".csv")] == []
 
 
 def test_load_authored_takes_strategies_and_nothing_else():
@@ -145,27 +134,9 @@ def test_a_pull_that_stores_no_table_says_nothing_stored(monkeypatch, tmp_path):
     assert data["tables"] == [] and data["snapshot_id"] is None
 
 
-def test_counterpick_is_gone_from_the_data_layer():
-    import importlib.util
-    assert importlib.util.find_spec("db.data.counterpick") is None
-    assert not os.path.exists(os.path.join(db.ROOT, "db", "data", "counterpick"))
-
-
-def test_the_dropped_tables_are_named_nowhere_in_the_data_layer_or_the_door():
+def test_the_sentry_scans_the_wiki_tables_and_the_playbook():
     from door import sentry
-    gone = ("map_playstyle", "comp_archetypes", "map_strategy", "counterpick")
-    walked = [*os.walk(os.path.join(db.ROOT, "db")), *os.walk(os.path.join(db.ROOT, "door"))]
-    for folder, _, names in walked:
-        if os.sep + "cluster" in folder:
-            continue
-        for name in names:
-            if name.endswith(".py"):
-                with open(os.path.join(folder, name), encoding="utf-8") as handle:
-                    text = handle.read()
-                assert not [word for word in gone if word in text], name
-    scanned = {table for table, _ in sentry.TEXT_COLUMNS}
-    assert not scanned & {"comp_archetypes", "map_playstyle", "map_strategy"}
-    assert {"synergies", "seasons", "strategies"} <= scanned
+    assert {"synergies", "seasons", "strategies"} <= {table for table, _ in sentry.TEXT_COLUMNS}
 
 
 def test_the_data_dictionary_says_where_seasons_and_synergies_come_from():

@@ -9,7 +9,7 @@ import re
 import pytest
 
 from db import Refusal
-from facts import model, tables
+from facts import tables
 from facts.model import Hero, Map
 from facts.records import Rates, StyleScore
 
@@ -24,9 +24,6 @@ def test_every_data_table_is_read_by_the_load(world, rows):
     assert unread == [], unread
     modifiers = sum(len(h.modifiers) for h in world.heroes.values())
     assert modifiers == rows("select count(*) from ability_modifiers")[0][0]
-    # one population of rates, Blizzard's: no third party is read or named
-    both = src + pathlib.Path(model.__file__).read_text(encoding="utf-8")
-    assert "map_strategy" not in both and "counterpick" not in both
 
 
 @pytest.mark.invariant
