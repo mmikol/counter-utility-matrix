@@ -37,9 +37,10 @@ DROPPED_HEADING_RE = re.compile(
 # wherever it sits ("Development" > "Season 13 rework").
 REWORK_HEADING_RE = re.compile(r"\brework\b(?! images)|design changes", re.I)
 
-# Dropped whole before the markup is stripped, beside markup's citations,
-# tables (quote and voice-line lists) and files with their captions:
-# galleries, and templates (ability and hero names, infoboxes, stub notices).
+# Dropped whole before the markup is stripped: citations, galleries, tables
+# (quote and voice-line lists), files with their captions, templates (ability
+# and hero names, infoboxes, stub notices). The citation, table and file
+# patterns are markup's.
 GALLERY_RE = re.compile(r"<gallery[^>]*>.*?</gallery>", re.S | re.I)
 INNER_TEMPLATE_RE = re.compile(r"\{\{[^{}]*\}\}")
 # The placeholder an empty section carries.
