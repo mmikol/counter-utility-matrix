@@ -21,8 +21,8 @@ from scripts import reach as recorder
 from tests.inference import FIXTURE_PLAYBOOK, in_force, recorded
 
 # named, not waived - see the test
-UNSEATED = {"Cassidy", "Domina", "Emre", "Freja", "Hazard", "Kiriko", "Ramattra", "Shion",
-            "Sierra", "Sojourn", "Venture"}
+UNSEATED = {"Cassidy", "Domina", "Emre", "Freja", "Hazard", "Ramattra", "Shion", "Sierra",
+            "Sojourn", "Venture", "Zarya"}
 
 
 @pytest.mark.invariant
@@ -54,7 +54,8 @@ def test_every_hero_reach_finds_a_board_for_is_still_seated_and_none_is_newly_lo
     # with five of them banned; the playbook's rules are what can answer it. They are
     # not searched again on every run - eleven searches are a quarter hour, more under
     # coverage - so one that comes to seat leaves UNSEATED when scripts.reach
-    # re-records. The healing floor seated Illari and Lifeweaver and unseated Cassidy.
+    # re-records. The healing floor seated Illari and Lifeweaver and unseated Cassidy;
+    # summed healing seated Kiriko and unseated Zarya.
     assert not UNSEATED - released, "not a released hero: %s" % ", ".join(UNSEATED - released)
     lost = [name for name in sorted((released - on_file - UNSEATED) | set(fell))
             if not reach.search(world, name)["seated"]]

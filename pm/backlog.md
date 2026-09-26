@@ -21,14 +21,13 @@ keeps it current.
   migration, the tool's `map` argument, the layering, the tab, the facts
   line that names the set - and a test that the same six scores
   differently under two maps' sets.
-- **The healing figures the floor reads.** `heal-rate` is only as good as
-  `Hero.hps`, and two errors in it do not cancel. A beam healer's rate
-  ignores its resource: Illari reads 115 a second against about 51.5
-  under the energy rule the wiki states, Moira 80 against 44, Wuyang 55
-  against 37. An area heal counts one target, so Lucio, Brigitte and
-  Mizuki pairs miss the floor 78-100% of the time and the engine answers
-  with a third support. The beam rule is sourced; the area target count
-  has no source yet. Cost: a day for the beams, the area count open.
+- **What the healing figures leave out.** `Hero.hps` now sums every
+  piece over the teammates it reaches and holds a beam to its resource
+  (docs/inference.md, Sustained healing). Three limits stand: the bench
+  sits on Illari, Mizuki and Moira within 0.7 hp/s, each on a judgement;
+  overheal is out, which favours an untargeted area heal; Brigitte's
+  98.36 holds the Flail in contact throughout, 61.7 at half. The sources
+  give no overheal share and no fight size. Cost: open until one does.
 - **The fact engine's dependent variables.** The equation is stated per
   domain (a selection's own row, then its joins) and the math page says
   so; the joins the data can still yield are listed under "Fact engine"

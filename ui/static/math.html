@@ -3,6 +3,7 @@
 <a href='#equation'>the counter utility matrix</a>
 <a href='#function'>the function</a>
 <a class='sub' href='#default-engine'>the default engine</a>
+<a class='sub' href='#sustained-healing'>sustained healing</a>
 <a class='sub' href='#healing-floor'>the healing floor</a>
 <a class='sub' href='#what-100-means'>what 100 means</a>
 <a class='sub' href='#fight-odds'>fight odds</a>
@@ -107,10 +108,23 @@ by its weight at most, since its norm is 0..1, and a base term has no such bound
 median board a heuristic at weight 1 moves a six less than any base term spreads the sixes, at
 3 about as far as the synergy or counter term, and at the slider's 10 further than the three
 together.</p>
+<p id='sustained-healing'><b>Sustained healing.</b> A hero's <code>hps</code> is what it lands
+on teammates a second, summed over every piece that runs beside its weapon and over every
+teammate each piece reaches; its own healing is out. A beam that spends energy counts what the
+energy sustains: fire, wait out the regen delay, regenerate, at the cycle that heals most. An
+area heal counts the teammates it reaches. The six stand spread uniformly over a disk of radius
+R = %(FORMATION_RADIUS)g m, the shortest single-target heal range among the supports, and p(r)
+is the chance two of them stand within r:</p>
+<pre class='eq'>p(r)       = 1 + (2/&pi;)(s&sup2; &minus; 1) acos(s/2) &minus; (s/2&pi;)(1 + s&sup2;/2) &radic;(4 &minus; s&sup2;)      s = r / R &lt; 2, else 1
+reach      = %(TEAMMATES)d &middot; p(r)          around the caster
+           = 1 + %(TEAMMATES_BUT_ONE)d &middot; p(r)      on an aimed teammate
+hps        = &Sigma; over the counted pieces of heal &middot; reach / cycle
+cycle      the cooldown, and the duration too where the effect is held</pre>
 <p id='healing-floor'><b>The healing floor.</b> The shipped playbook's one scored rule,
 <code>heal-rate</code>, charges a six that heals less than the other side's rate. It comes
 from a race. A six has a pool P (health, shield, armor), damage D and sustained healing onto
-teammates H; each side's damage lays the same anti-heal k on the other's healing, so each loses
+teammates H, an area heal over the teammates it reaches and a beam at what its resource
+sustains; each side's damage lays the same anti-heal k on the other's healing, so each loses
 (D &minus; k H) / P of its pool a second, and the one that loses the smaller share outlasts the
 other. The margin splits into a damage half and a healing half, and the healing half breaks even
 when blue heals the same share of its own pool as red heals of its own, whatever k is. The need is
@@ -131,9 +145,11 @@ in the kit in force. A six must then heal that share of its own pool a second, a
 than <code>world.hps_bench</code>. Everything in
 the threshold is kit data. The sources give no absolute bar - no fight length, no ultimate charge
 - so the rule asks for parity with the other side's healing and no more; past it the race is
-the damage half's. The bar inherits the kit's healing figures: an area heal counts one target,
-so Lucio, Brigitte and Mizuki pairs read under it most of the time, and a beam healer reads
-above what its resource sustains.</p>
+the damage half's. The bar inherits three limits. The bench is a step: Illari, Mizuki and
+Moira sit inside 0.7 hp/s of each other at the median, each on a judgement, and one of them past
+Kiriko lifts the bench to about 151. Overheal is out, so an untargeted area heal, which lands on
+full-health teammates too, reads above what it heals. Brigitte holds her Flail in contact
+throughout; at half contact she reads 61.7 in place of 98.4.</p>
 <p id='what-100-means'><b>What 100 means.</b> Each seat's best six on this board is its
 optimal, 100. The badge above a picker is that seat's picks as a share of its optimal under
 the default engine and this playbook, not a win probability; the rate term's zero is a coin

@@ -16,7 +16,7 @@ import os
 from typing import NamedTuple
 
 from door.mcp.matches import NOTE_LIMIT, RESULTS
-from facts import compute, counters
+from facts import compute, counters, scalars
 from facts.draft import MAX_BANS, TEAM_SIZE
 from inference import base, scale, scoring, solver
 
@@ -205,7 +205,10 @@ def view_math() -> str:
         "PARTNER_POINTS": solver.PARTNER_POINTS,
         "SEEDS": solver.SEEDS,
         "SHAPE_REACH": solver.SHAPE_REACH,
-        "RESTARTS": solver.RESTARTS})
+        "RESTARTS": solver.RESTARTS,
+        "FORMATION_RADIUS": scalars.FORMATION_RADIUS,
+        "TEAMMATES": scalars.TEAMMATES,
+        "TEAMMATES_BUT_ONE": scalars.TEAMMATES - 1})
 
 
 def view_tests() -> str:

@@ -177,6 +177,98 @@ through the catalog before it writes and logged with its reason in
 `strategies/tuning-log.md`; a slider's *store* is a `tune` call, which
 the board offers only with `COUNTRIX_READ_ONLY=0`.
 
+## Sustained healing
+
+`hero.hps` is the healing a hero lands on teammates a second, summed over
+every teammate each piece reaches and over every piece that runs beside
+the others. The caster's own healing is out. `facts/scalars.py` derives
+it from the kit rows at load and keeps each piece's share in
+`hero.hps_pieces`; `team.hps_floor` sums `hps` over a six.
+
+- **R1 The weapon.** The best healing weapon at its published rate, the
+  reload in, onto one target. A beam's heal row sets its rate before the
+  hps field (Mercy: 55, where the field says 60).
+- **R2 A cast.** Heal per cast x teammates reached / cycle. The cycle is
+  the cooldown, and the cooldown plus the duration where the effect is
+  held or deployed and the page does not say the cooldown starts on use
+  (`HELD`). Of two instant figures under different conditions the smaller
+  counts: the larger is conditional (120 at low health).
+- **R3 A resource.** A beam that spends energy fires until x% is spent,
+  waits out the regen delay and regenerates, at the x that heals most
+  (`energy_duty`). A heal that lingers after the beam counts in the off
+  time; a refund of the energy is more beam time.
+- **R4 Reach.** An area heal counts the teammates the formation puts in
+  its radius, at most five.
+- **R5 Beside the weapon.** A piece the weapon cannot run beside is out
+  (Lifeline ends on primary fire). A channel that holds the weapon takes
+  its time off the weapon (the Pulsar Torpedoes lock).
+- **R6 Out.** Ultimates, perks, self-healing, overhealth, healing
+  amplification (`hero.heal_amp` carries it) and saves with no heal
+  figure (Immortality Field, Resurrect).
+- **R7 The tick.** Where a heal row's tick disagrees with its per-second
+  figure, the tick sets the rate: Wuyang's stream ticks 25 and 50 where
+  its rows read 20 and 55.
+
+**The formation.** The six stand spread uniformly over a disk of radius
+R = `FORMATION_RADIUS`. With s = r / R, the chance two of them stand
+within r of each other is the disk's distance distribution:
+
+```
+p(r) = 1 + (2/pi)(s^2 - 1) acos(s/2) - (s/(2 pi))(1 + s^2/2) sqrt(4 - s^2)    s < 2, else 1
+around the caster      reach = 5 p(r)
+on an aimed teammate   reach = 1 + 4 p(r)
+hps                    = sum over the counted pieces of heal x reach / cycle
+```
+
+At R = 15, p(12) = 0.426: Crossfade's 18/s on a 12 m radius heals 2.13
+teammates, 38.36 hp/s.
+
+**The constants.** Every radius, cooldown, duration and energy rate is
+the wiki's. The judgements sit in `facts/scalars.py` beside their pages:
+
+| Constant | Value | Its page and reason |
+|---|---|---|
+| `FORMATION_RADIUS` | 15 m | the shortest single-target heal range among the supports (Caduceus Staff, Biotic Grasp, Healing Pylon); the wiki gives no fight size. Two teammates stand 13.6 m apart on average |
+| `PYLON_UPTIME` | 1/3 | Illari: the pylon lives one 7 s cooldown, then the 14 s destroyed one |
+| `TORPEDO_VIEW` | 0.5 | Juno: no target cap; half the teammates past the aimed one stand in front of her |
+| `LOCK_NEAR` | 5 m | Juno: the lock takes 0.35 s at 5 m, 1 s at the 40 m targeting range |
+| `SPRAY_TARGETS` | 1 | Moira: "all allies in front", width unpublished |
+| `FLAIL_CONTACT` | 1 | Brigitte: the Flail lands throughout, as `hero.dps` holds every weapon on |
+| `INSPIRE_LOCKOUT` | 1.25 s | Brigitte: Inspire fires on every third 0.6 s swing, once each 1.8 s |
+| `EMPTY_WAIT` | 0.4 s | Illari: an emptied bar waits before it recharges |
+| `TICK_RATES` | 25 + 50 | Wuyang: the stream's tooltip ticks, the passive one free |
+| `ENERGY_REFUND` | 33% | Wuyang: Guardian Wave refunds the stream's resource |
+
+`HELD`, `CASTER`, `AIMED`, `NOT_BESIDE`, `OWN_HEALS` and `BOOSTS` name the
+pieces the wiki has no field for. Mauga's Cardiac Overdrive heals the
+teammates 50% of the damage they deal: `facts/tables.py` reads that at
+the 2-2-2 role-median dps of his five teammates, 94.29, once the roster's
+dps is known.
+
+The 6v6 kit as of 2026-09-26:
+
+| Hero | hps | The pieces |
+|---|---|---|
+| Baptiste | 111.76 | Biotic Launcher splash 94.00, Regenerative Burst 17.76 |
+| Juno | 107.59 | Mediblaster 75.28, Pulsar Torpedoes 32.31 |
+| Jetpack Cat | 99.18 | Biotic Pawjectiles 87.18, Purr 12.00 |
+| Brigitte | 98.36 | Inspire 73.36, Repair Pack 25.00 |
+| Ana | 92.72 | Biotic Rifle 83.33, Biotic Grenade 9.39 |
+| Kiriko | 81.50 | Healing Ofuda 74.34, Protection Suzu 7.16 |
+| Illari | 70.07 | Solar Rifle beam 53.41, Healing Pylon 16.67 |
+| Mizuki | 69.79 | Remedy Aura 38.36, Healing Kasa 31.43 |
+| Moira | 69.40 | Biotic Grasp 49.40, Biotic Orb 20.00 |
+| Lifeweaver | 60.35 | Healing Blossom 56.18, Life Grip 4.17 |
+| Mercy | 60.00 | Caduceus Staff 55.00, Flash Heal 5.00 |
+| Lúcio | 54.56 | Crossfade 38.36, Amp It Up 16.20 |
+| Wuyang | 48.07 | Restorative Stream 41.41 (the wave's refund 3.54 in), Guardian Wave 6.67 |
+| Zenyatta | 35.00 | Orb of Harmony 35.00 |
+| Mauga | 16.32 | Cardiac Overdrive 16.32 |
+| Soldier: 76 | 4.77 | Biotic Field 4.77 |
+
+Every other released hero heals no teammate. `world.hps_bench`, twice
+the median support, is 139.87: Illari and Mizuki.
+
 ## The healing floor
 
 `heal-rate`, the shipped playbook's one scored rule, holds a six to a
@@ -186,8 +278,10 @@ healing threshold set by the kit. It reads `matchup.heal_shortfall`;
 
 The model is a race. A six has a pool P (`team.pool_total`: health,
 shield, armor and a form's armor), damage D (`team.dps_floor`) and
-healing onto teammates H (`team.hps_floor`, sustained, reloads in). Each
-side's damage lays the same anti-heal k on the other's healing, so blue
+healing onto teammates H (`team.hps_floor`, reloads in): an area heal
+counts the teammates it reaches and a beam what its resource sustains
+([Sustained healing](#sustained-healing)). Each side's damage lays the
+same anti-heal k on the other's healing, so blue
 loses (D_r - k H_b) / P_b of its pool a second and red
 (D_b - k H_r) / P_r. Blue wins the race when red loses the larger share,
 and the margin splits in two:
@@ -230,9 +324,9 @@ share of a third. A complete red that heals nothing needs nothing. The
 likely six is not read: it rests on pick rates.
 
 **The threshold.** With red empty, red is the 2-2-2 of role-median
-heroes: H_r = `world.hps_bench` = 134.34 hp/s and P_r = `world.pool_ref`
-= 2 x (525 + 250 + 237.5) = 2025, the 6v6 kit as of 2026-09-25. A six
-must heal 6.63% of its own pool a second, and never less than 134.34
+heroes: H_r = `world.hps_bench` = 139.87 hp/s and P_r = `world.pool_ref`
+= 2 x (525 + 250 + 237.5) = 2025, the 6v6 kit as of 2026-09-26. A six
+must heal 6.91% of its own pool a second, and never less than 139.87
 hp/s. Everything in it is kit data; no rate enters. The sources hold no
 absolute winning threshold - no fight length, no ultimate charge - so
 the rule promises parity with the other side's healing and nothing more.
@@ -246,13 +340,25 @@ which a count would miss. The weight, 2, sets a six at full shortfall
 beside the synergy and counter terms, which each spread a typical board's
 sixes about 2.1 points (`inference/base.py`).
 
-**What it inherits.** The bar is only as good as `hps`. The World counts
-an area heal at one target, so pairs with Lucio, Brigitte or Mizuki fall
-under the bar 78-100% of the time and the engine answers with a third or
-fourth support; a beam healer's `hps` (Illari, Moira, Wuyang) sits above
-what its resource sustains. Perks, ultimates, self-healing and health
-packs are out, on both sides alike. A World-wide error cancels, since
-the bench moves with it; an error on one hero does not.
+**What it inherits.** The bar is only as good as `hps`, and a
+World-wide error cancels, since the bench moves with it; an error on one
+hero does not. Three limits stand:
+
+- *The bench is a step.* Its median pair, Illari 70.07 and Mizuki 69.79,
+  sits with Moira 69.40 inside 0.7 hp/s, each set by a different
+  judgement (the pylon's uptime; R and the full aura; the spray's
+  reach). One of them past Kiriko lifts the bench to about 151.
+- *Overheal is out.* An untargeted area heal lands on full-health
+  teammates too, where a single-target healer picks a hurt one; the
+  sources give no overheal share, so the rule favours the area heal by
+  that margin.
+- *Brigitte rests on the Flail.* Her 98.36 holds the Flail in contact
+  throughout; at half contact Inspire gives 36.68 and she reads 61.7.
+
+Perks, ultimates, self-healing and health packs are out, on both sides
+alike. Over 126,900 uniform random sixes against random reds, a
+six with one support is under the floor 90% of the time, with two 39%,
+with three 7%.
 
 ## How the playbook is judged
 
@@ -470,7 +576,7 @@ the `team.*` metrics computed for the red side.
 | `team.range_max` | the longest range on the team |
 | `team.range_min` | the shortest longest-range |
 | `team.dmg_amp` | picks that amplify someone's damage |
-| `team.hps_floor` | summed sustained healing onto teammates, hp per second, reloads in |
+| `team.hps_floor` | summed sustained healing onto teammates, hp per second over every teammate reached, reloads in |
 | `team.heal_peak_total` | summed biggest single heal per pick, its own self-heal included |
 | `team.heal_peak_supports` | summed biggest single heal (one cast, hp) across the supports |
 | `team.heal_peak_max` | the biggest single heal a teammate can receive |

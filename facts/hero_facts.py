@@ -111,7 +111,7 @@ def _output_traits(h: Hero) -> list[TraitRow]:
         if h.burst else None,
         ("hero.heal_peak", "%s's biggest single heal: %g" % (name, h.peak_heal),
             h.peak_heal, "hp") if h.peak_heal else None,
-        ("hero.hps", "%s sustains %g healing per second on teammates" % (name, h.hps),
+        ("hero.hps", "%s sustains %g healing per second on teammates" % (name, round(h.hps, 1)),
             h.hps, "hp/s") if h.hps else None,
         ("hero.self_heal", "%s heals itself: %s" % (name, ", ".join(
             text % n for text, n in (("%g a cast", h.self_heal), ("%g per second", h.self_hps))

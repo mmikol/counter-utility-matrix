@@ -3,8 +3,8 @@ kit numbers, each read in its own units - an ultimate's numbers its own, a
 percent not hit points, a sum not one hit - the weapon a hero fights with,
 the tools counted once, the roster-wide benches and role-median pools, and no
 hole in a released hero's core numbers. The scrape is the point: every
-figure is the wiki's. The derivation's rules are tests/facts/test_scalars.py's
-and test_kit.py's."""
+figure is the wiki's. The derivation's rules are tests/facts/test_scalars.py's,
+test_scalars_healing.py's and test_kit.py's."""
 
 import statistics
 
@@ -69,8 +69,46 @@ def test_kit_rows_are_read_in_their_own_units(world):
     assert world.hero("Mauga").hitscan_range == 40
     assert world.hero("Wuyang").dps == pytest.approx(128.21)
     assert world.hero("Vendetta").dps == pytest.approx(53.1)
+    # the gun heals at its damage's rate, and Purr adds 12.0 on top
     cat = world.hero("Jetpack Cat")
-    assert cat.dps == pytest.approx(87.18, abs=0.01) and cat.hps == pytest.approx(cat.dps)
+    assert cat.dps == pytest.approx(87.18, abs=0.01)
+    assert cat.hps_pieces["Biotic Pawjectiles"] == pytest.approx(cat.dps)
+    assert cat.hps == pytest.approx(99.18, abs=0.005)
+
+
+# hero.hps at FORMATION_RADIUS 15 on the 6v6 kit: every piece that runs beside
+# the others, summed over the teammates it reaches (facts/scalars.py)
+SUSTAINED_HEALING = {
+    "Baptiste": 111.76, "Juno": 107.59, "Jetpack Cat": 99.18, "Brigitte": 98.36,
+    "Ana": 92.72, "Kiriko": 81.50, "Illari": 70.07, "Mizuki": 69.79, "Moira": 69.40,
+    "Lifeweaver": 60.35, "Mercy": 60.00, "Lúcio": 54.56, "Wuyang": 48.07, "Zenyatta": 35.00,
+    "Mauga": 16.32, "Soldier: 76": 4.77}
+
+
+def test_sustained_healing_sums_the_pieces_over_the_teammates_they_reach(world):
+    """Each healer's hps on the built World, and nobody else's. The bench,
+    twice the median support, sits on Illari, Mizuki and Moira, within 0.7
+    hp/s of each other: a judgement that moves one of them past Kiriko moves
+    the bench, and these pins show it."""
+    released = [h for h in world.heroes.values() if h.released]
+    got = {h.name: h.hps for h in released if h.hps}
+    assert got == pytest.approx(SUSTAINED_HEALING, abs=0.005)
+    for hero in released:
+        assert hero.hps == pytest.approx(sum(hero.hps_pieces.values()))
+    assert world.hps_bench == pytest.approx(139.87, abs=0.005)
+    assert world.hps_bench / compute.pool_ref(world) == pytest.approx(0.0691, abs=0.00005)
+    cluster = [world.hero(n).hps for n in ("Illari", "Mizuki", "Moira")]
+    assert max(cluster) - min(cluster) < 0.7 < world.hero("Kiriko").hps - max(cluster)
+    # a beam at what its energy sustains; Wuyang's wave refunds 33% of the stream
+    illari, moira = world.hero("Illari"), world.hero("Moira")
+    assert illari.hps_pieces["Solar Rifle Alt Fire"] == pytest.approx(53.41, abs=0.01)
+    assert moira.hps_pieces["Biotic Grasp"] == pytest.approx(49.40, abs=0.01)
+    assert world.hero("Wuyang").hps_pieces == pytest.approx(
+        {"Restorative Stream": 41.41, "Guardian Wave": 6.67}, abs=0.01)
+    # an area heal counts the teammates it reaches: Crossfade 18/s on 2.13 of them
+    assert world.hero("Lúcio").hps_pieces["Crossfade"] == pytest.approx(38.36, abs=0.01)
+    assert world.hero("Brigitte").hps_pieces == pytest.approx(
+        {"Repair Pack": 25.0, "Inspire": 73.36}, abs=0.01)
 
 
 def test_the_weapon_a_hero_fights_with_sets_its_kind_and_reach(world):

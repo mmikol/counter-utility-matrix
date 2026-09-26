@@ -33,7 +33,7 @@ def test_facts_endpoint_returns_the_board(db):
     keys = {f["key"] for f in data["facts"]}
     assert "team.coverage" in keys and "matchup.net_edges" in keys
     # UNDER-HEALED reads the supports' sustained healing, as the strategies do, not one cast
-    data, code = board.api_facts(db, {"blue": ["Mercy", "Brigitte"], "red": ["Ana", "Moira"]})
+    data, code = board.api_facts(db, {"blue": ["Zenyatta", "Wuyang"], "red": ["Ana", "Moira"]})
     text = {(f["team"], f["key"]): f["text"] for f in data["facts"]}
     assert text["blue", "team.hps_supports"].endswith(" - UNDER-HEALED")
     assert "UNDER-HEALED" not in text["red", "team.hps_supports"]

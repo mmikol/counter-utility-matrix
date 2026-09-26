@@ -81,6 +81,7 @@ class Hero:
     dps: float = 0.0
     burst: float = 0.0
     hps: float = 0.0
+    hps_pieces: dict[str, float] = field(default_factory=dict)     # piece -> its hps
     peak_heal: float = 0.0
     self_hps: float = 0.0
     self_heal: float = 0.0

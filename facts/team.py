@@ -86,7 +86,8 @@ TEAM_METRICS = OrderedDict([
     ("range_max", "the longest range on the team"), ("range_min", "the shortest longest-range"),
     ("dmg_amp", "picks that amplify someone's damage"),
     # sustain
-    ("hps_floor", "summed sustained healing onto teammates, hp per second, reloads in"),
+    ("hps_floor", "summed sustained healing onto teammates, hp per second over every teammate"
+                  " reached, reloads in"),
     ("heal_peak_total", "summed biggest single heal per pick, its own self-heal included"),
     ("heal_peak_supports", "summed biggest single heal (one cast, hp) across the supports"),
     ("heal_peak_max", "the biggest single heal a teammate can receive"),

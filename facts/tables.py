@@ -23,7 +23,7 @@ from db import KIND_WEAPON
 from db.data.names import name_key
 from facts import counters
 from facts import kit_format as kit_format_module
-from facts.draft import KIT_FORMAT
+from facts.draft import EXPECTED_SHAPE, KIT_FORMAT
 from facts.kit import KitPiece, Stat
 from facts.model import ROLES, TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
 from facts.records import (
@@ -38,7 +38,7 @@ from facts.records import (
     StyleScore,
     Synergy,
 )
-from facts.scalars import derive_scalars
+from facts.scalars import ally_lifesteal, derive_scalars
 
 type Connection = psycopg.Connection[TupleRow]
 
@@ -388,6 +388,20 @@ def _read_provenance(cx: Connection, w: World) -> None:
         w.playbook = named[0] if len(named) == 1 and named[0] != "inference/strategies" else ""
 
 
+def _ally_lifesteal(w: World) -> None:
+    """A heal that rides the teammates' damage (Cardiac Overdrive) at what the
+    caster's five teammates of a 2-2-2 deal: each role's median dps over the
+    released heroes, the caster's own seat taken out."""
+    released = [h for h in w.heroes.values() if h.released]
+    medians = {
+        role: statistics.median(h.dps for h in released if h.role == role)
+        for role in ROLES if any(h.role == role for h in released)}
+    for hero in w.heroes.values():
+        seats = {role: n - (role == hero.role) for role, n in EXPECTED_SHAPE.items()}
+        ally = sum(n * medians.get(role, 0.0) for role, n in seats.items()) / sum(seats.values())
+        ally_lifesteal(hero, ally)
+
+
 def _benches(w: World) -> None:
     """The roster's healing benches, each role's median pool and the ultimate
     cap, over the released heroes' derived numbers: an announced hero sets
@@ -418,9 +432,9 @@ def load(cx: Connection, kit_format: str = KIT_FORMAT) -> World:
     open psycopg connection; this module never opens one of its own. The
     steps run in the order each relies on: the kit, and the format laid over
     it, before derive_scalars, the rates before derive_rates, best_maps and
-    map_styles, the terrain before map_styles, the benches over the derived
-    roster, and the counter matrix over the derived kit and the wiki's
-    counters, last."""
+    map_styles, the terrain before map_styles, the teammates' lifesteal and
+    the benches over the derived roster, and the counter matrix over the
+    derived kit and the wiki's counters, last."""
     w = World()
     _read_heroes(cx, w)
     _read_abilities(cx, w)
@@ -437,6 +451,7 @@ def load(cx: Connection, kit_format: str = KIT_FORMAT) -> World:
     map_styles(w)
     for hero in w.heroes.values():
         derive_scalars(hero)
+    _ally_lifesteal(w)
     _benches(w)
     counters.derive(w)
     return w

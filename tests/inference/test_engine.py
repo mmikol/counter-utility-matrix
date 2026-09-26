@@ -325,7 +325,7 @@ def test_the_healing_floor_scores_on_top_of_the_engine_and_off_leaves_it_alone(
 def test_the_healing_floor_takes_kings_row_off_one_support(world, tmp_path):
     """King's Row attack, red empty: the default engine alone fields one
     support, Zenyatta on Reinhardt, Genji, Hanzo, Vendetta and Widowmaker,
-    0.74 under the floor. The shipped floor (HEAL_RATE, written to a folder of
+    0.75 under the floor. The shipped floor (HEAL_RATE, written to a folder of
     its own) seats a second support and leaves the six under 0.15."""
     from inference import engine
     draft = Draft("King's Row", side="attack")
