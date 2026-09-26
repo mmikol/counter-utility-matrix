@@ -10,8 +10,8 @@ there, and re-solving that board shows it. A board not found is not a proof of t
 opposite - the search tries a few maps and a few reds, and a board it never visits could
 seat the hero. A hero it finds nothing for is one worth looking at: a wrong number, a
 tool no metric reads, a rule that charges it for what it is not, or a board this search
-does not reach. Under the shipped playbook, where the default engine alone scores,
-forty-four of the fifty-three released heroes have a board and nine do not
+does not reach. Under the shipped playbook, the default engine and the healing floor,
+forty-two of the fifty-three released heroes have a board and eleven do not
 (tests/inference/test_reach.py names them). The `reach` tool runs the search;
 `.venv/bin/python -m scripts.reach` records a board per released hero in
 tests/fixtures/reach.json beside the objective it ran under, and the suite checks none

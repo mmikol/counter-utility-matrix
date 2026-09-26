@@ -21,14 +21,14 @@ from scripts import reach as recorder
 from tests.inference import FIXTURE_PLAYBOOK, in_force, recorded
 
 # named, not waived - see the test
-UNSEATED = {"Domina", "Emre", "Freja", "Hazard", "Illari", "Kiriko", "Lifeweaver", "Ramattra",
-            "Shion", "Sierra", "Sojourn", "Venture"}
+UNSEATED = {"Cassidy", "Domina", "Emre", "Freja", "Hazard", "Kiriko", "Ramattra", "Shion",
+            "Sierra", "Sojourn", "Venture"}
 
 
 @pytest.mark.invariant
 def test_every_hero_reach_finds_a_board_for_is_still_seated_and_none_is_newly_lost(world):
-    # reach.json is recorded under the shipped playbook's assumptions and the default
-    # engine, which alone scores there. With nothing scoring every six ties and the
+    # reach.json is recorded under the shipped playbook - its assumptions and the healing
+    # floor - on top of the default engine. With nothing scoring every six ties and the
     # tie-break alone seats heroes; a board that no longer seats its hero is searched
     # for anew.
     if not scores(catalog.load(), base.DEFAULT):
@@ -45,15 +45,16 @@ def test_every_hero_reach_finds_a_board_for_is_still_seated_and_none_is_newly_lo
         else " - recorded under a different objective")
     assert len(fell) <= len(boards) // 5, "the recorded boards have gone stale%s: %s" % (
         stale, fell)
-    # Twelve heroes the recorder's search found no board for. That is not a proof none
+    # Eleven heroes the recorder's search found no board for. That is not a proof none
     # exists - the search tries four maps and a few reds per hero, so a board it
     # never visits could seat any of them - but it is what the search establishes,
-    # and they are named rather than waived: a thirteenth fails here. The default engine
-    # alone scores the shipped playbook's boards, and on the boards the search tries
-    # it values none of the twelve above its rivals for the seat, even with five of
-    # them banned; the playbook's rules are what can answer it. They are not searched
-    # again on every run - twelve searches are a quarter hour, more under coverage - so
-    # one that comes to seat leaves UNSEATED when scripts.reach re-records.
+    # and they are named rather than waived: a twelfth fails here. The default engine
+    # and the healing floor score the shipped playbook's boards, and on the boards the
+    # search tries they value none of the eleven above its rivals for the seat, even
+    # with five of them banned; the playbook's rules are what can answer it. They are
+    # not searched again on every run - eleven searches are a quarter hour, more under
+    # coverage - so one that comes to seat leaves UNSEATED when scripts.reach
+    # re-records. The healing floor seated Illari and Lifeweaver and unseated Cassidy.
     assert not UNSEATED - released, "not a released hero: %s" % ", ".join(UNSEATED - released)
     lost = [name for name in sorted((released - on_file - UNSEATED) | set(fell))
             if not reach.search(world, name)["seated"]]
