@@ -205,7 +205,7 @@ def rescored(
         blue_terms={c["id"]: c["weighted"] for c in blue.contributions},
         red_terms={c["id"]: c["weighted"] for c in red.contributions},
         blue_team=numbers(blue_team), red_team=numbers(red_team),
-        matchup=numbers(matchup_metrics(blue_team, red_team)))
+        matchup=numbers(matchup_metrics(world, blue_team, red_team)))
 
 
 def rescore(world: World, matches: Sequence[Match], catalog: list[Strategy], *,

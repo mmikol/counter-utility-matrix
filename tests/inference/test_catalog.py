@@ -15,7 +15,7 @@ from facts import compute
 from inference import catalog, tune
 from inference.frontmatter import Parsed, parse_frontmatter
 from inference.strategy import KINDS, CatalogError, Strategy, settled_by_board
-from tests.inference import FIXTURE_PLAYBOOK
+from tests.inference import FIXTURE_PLAYBOOK, HEAL_RATE
 
 
 def _fights(strategies: Iterable[Strategy]) -> list[str]:
@@ -187,6 +187,22 @@ def test_the_reference_and_the_live_playbooks_are_valid_and_reference_real_metri
             for name in (e.names if e else []):
                 assert name in registry or name[7:] in h.params, (h.id, name)
     assert any(h.id == "open-queue-tanks" for h in cat)
+
+
+def test_the_shipped_healing_floor_is_a_scored_constraint_at_weight_two():
+    """inference/strategies/heal-rate.md, the shipped playbook's one scored
+    rule: a constraint that charges its weight times matchup.heal_shortfall
+    on every board, unguarded. HEAL_RATE holds the same fields, so the
+    solver tests that stand it in for the file prove this rule."""
+    shipped = catalog.load(catalog.SHIPPED_DIR)
+    heal = next(h for h in shipped if h.id == "heal-rate")
+    assert (heal.kind, heal.form, heal.category, heal.weight) == (
+        "constraint", "scored", "sustain", 2.0)
+    assert heal.penalty is not None and heal.penalty.source == "matchup.heal_shortfall"
+    assert heal.when is None and heal.bonus is None and heal.require is None
+    assert {k: heal.to_dict()[k] for k in HEAL_RATE} == HEAL_RATE
+    assert catalog.has_scoring_terms(shipped)
+    assert [h.id for h in shipped if h.kind != "assumption"] == ["heal-rate"]
 
 
 def test_catalog_rejects_a_goal_on_an_unknown_metric(tmp_path):

@@ -312,7 +312,7 @@ class Objective:
         team = team_metrics(self.world, heroes, self.m, self.red, lean=True)
         ns = dict(self.static)
         ns["team"] = team
-        ns["matchup"] = compute.matchup_metrics(team, self.red_t)
+        ns["matchup"] = compute.matchup_metrics(self.world, team, self.red_t)
         return ns
 
     def prepare(self, cand: Candidate) -> Candidate:

@@ -37,7 +37,10 @@ def _count(n: float, word: str = "pick") -> str:
 
 def write(fs: FactSet, world: World, board: Resolved) -> None:
     """Each side's team facts, red first, once the side has picks; the matchup
-    once both sides have them."""
+    once both sides have them; and blue's healing floor once blue has picks,
+    against red as revealed, its open slots read as the 2-2-2's missing roles
+    - the floor needs no red pick, so it is written last, after every fact
+    the board wrote before it."""
     red_t = team_metrics(world, board.red, board.map, board.blue) if board.red else None
     blue_t = team_metrics(world, board.blue, board.map, board.red) if board.blue else None
     if red_t:
@@ -47,9 +50,11 @@ def write(fs: FactSet, world: World, board: Resolved) -> None:
         _write_side(fs, world, team="blue", heroes=board.blue, metrics=blue_t, m=board.map,
             enemies=board.red)
     if red_t and blue_t:
-        matchup = compute.matchup_metrics(blue_t, red_t)
+        matchup = compute.matchup_metrics(world, blue_t, red_t)
         _matchup_trades(fs, matchup, blue_t, red_t)
         _matchup_threats(fs, matchup, blue_t, red_t)
+    if blue_t:
+        _heal_floor(fs, world, blue_t, red_t or team_metrics(world, (), board.map, board.blue))
 
 
 # --- one side -----------------------------------------------------------------
@@ -391,6 +396,34 @@ def _matchup_trades(fs: FactSet, matchup: MetricBag, blue_t: MetricBag, red_t: M
         "blue outranges; open fights at distance" if matchup_n["range_diff"] > 0 else
         "red outranges; close fast or trade cover" if matchup_n["range_diff"] < 0 else
         "even reach"), "m")
+
+
+def _heal_floor(fs: FactSet, world: World, blue_t: MetricBag, red_t: MetricBag) -> None:
+    """Blue's healing against the floor matchup.heal_need sets: blue's
+    healing and pool, red's healing and pool as the floor reads them, the
+    share of its pool red heals a second, the need and the shortfall. Red's
+    damage, once red has picks, is named and not counted: the anti-heal
+    damage lays on cuts both sides' healing alike, so it cancels at parity."""
+    read = compute.heal_read(world, red_t)
+    blue_n, red_n = numbers(blue_t), numbers(red_t)
+    need = compute.heal_need(read, blue_n["pool_total"])
+    shortfall = compute.heal_shortfall(need, blue_n["hps_floor"])
+    red = "red"
+    if read.filled:
+        red = "red, %s read as the 2-2-2's missing roles at their medians," % _count(
+            read.filled, "open slot")
+    share = ""
+    if read.pool:
+        share = " - %.2f%% of its pool a second" % (100 * read.healing / read.pool)
+    damage = ("Red's %.1f/s of incoming damage and blue's %.1f/s lay" % (
+        red_n["dps_floor"], blue_n["dps_floor"]) if red_n["size"] else "Each side's damage lays")
+    fs.add("matchup", "blue vs red", "matchup.heal_shortfall",
+        "healing floor: blue heals %.1f/s on a %d pool; %s heals %.1f/s on %d%s; blue needs"
+        " %.1f/s, the larger of red's healing and that share of blue's pool - %s. %s the same"
+        " anti-heal on the other side's healing, so it cancels"
+        % (blue_n["hps_floor"], blue_n["pool_total"], red, read.healing, read.pool, share,
+            need, "%.0f%% short" % (100 * shortfall) if shortfall else "met", damage),
+        value=shortfall, source="derived:matchup.heal_shortfall", also=("matchup.heal_need",))
 
 
 def _matchup_threats(fs: FactSet, matchup: MetricBag, blue_t: MetricBag, red_t: MetricBag) -> None:

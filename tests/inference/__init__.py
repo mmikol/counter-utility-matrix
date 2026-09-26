@@ -1,6 +1,8 @@
 """The inference layer's tests, the reference playbook they prove the solver against, its
 assumptions alone (ASSUMPTIONS_ONLY) for a test that needs a playbook that scores nothing,
-the recorded fixture, read with the objective it was recorded under and compared with the
+the shipped healing floor's fields (HEAL_RATE) and heal_rate(), a playbook of that rule
+alone written where a test says, so no solver test reads inference/strategies/, the
+recorded fixture, read with the objective it was recorded under and compared with the
 one in force, and timeless(), a board's payload less the seconds each result took, for
 comparing two solves."""
 
@@ -13,6 +15,7 @@ import pytest
 
 from db import ROOT
 from inference import base, catalog
+from inference.strategy import Strategy
 
 FIXTURES = os.path.join(ROOT, "tests", "fixtures")
 # the former shipped playbook - every kind and every form - kept as the reference the
@@ -23,6 +26,21 @@ FIXTURE_PLAYBOOK = os.path.join(FIXTURES, "playbook")
 # reach heuristics alone, so the shared list is never weighted in place
 ASSUMPTIONS_ONLY = [s for s in catalog.load(FIXTURE_PLAYBOOK) if s.kind == "assumption"]
 DIGEST_RE = re.compile(r"[0-9a-f]{64}\Z")
+# the frontmatter of inference/strategies/heal-rate.md, which test_catalog holds
+# the shipped file to
+HEAL_RATE = {
+    "kind": "constraint", "category": "sustain", "weight": 2.0,
+    "penalty": "matchup.heal_shortfall"}
+
+
+def heal_rate(directory: str) -> list[Strategy]:
+    """The shipped healing floor as a playbook of its own, in `directory`: a
+    file with HEAL_RATE's fields, read back through the catalog."""
+    fields = "".join("%s: %s\n" % (k, v) for k, v in HEAL_RATE.items())
+    with open(os.path.join(directory, "heal-rate.md"), "w", encoding="utf-8") as handle:
+        handle.write("---\nname: Heal at the other side's rate\n%s---\n# Heal at the other"
+                     " side's rate\n\nThe healing floor.\n" % fields)
+    return catalog.load(directory)
 
 
 class Recorded(TypedDict):

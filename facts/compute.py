@@ -39,6 +39,10 @@ MATCHUP_METRICS = OrderedDict([
     ("range_diff", "blue median reach minus red's"),
     ("exposure_share", "share of blue answered by red"),
     ("ult_answers", "blue invulnerabilities plus cleanses"),
+    ("heal_need", "hp/s blue must heal: red's healing per pool times blue's pool, at least"
+                  " red's healing; red's open slots read as the 2-2-2's missing roles"),
+    ("heal_shortfall", "share of heal_need blue's healing floor leaves unhealed, 0..1"
+                       " (0 when nothing is needed)"),
 ])
 
 MAP_METRICS = OrderedDict([
@@ -71,6 +75,8 @@ MAP_METRICS.update((f, "%s: the wiki article's mentions per thousand words, in s
 WORLD_METRICS = OrderedDict([
     ("heal_bench", "2 x the median peak heal across the released supports"),
     ("hps_bench", "2 x the median sustained healing across the released supports"),
+    ("pool_ref", "the pool of a 2-2-2 of role-median heroes: 2 x each role's median pool,"
+                 " a form's armor in, summed"),
     ("roster_size", "heroes in the roster"),
 ])
 
@@ -147,8 +153,68 @@ def _pick_reason(value: float | None, on_map: bool, m: Map | None,
     return why
 
 
-def matchup_metrics(blue_t: MetricBag, red_t: MetricBag) -> MetricBag:
-    """MATCHUP_METRICS from blue's seat, given both teams' metrics.
+# the team metric that counts each role, as EXPECTED_SHAPE names the roles
+ROLE_COUNTS = {"tank": "tanks", "damage": "damage", "support": "supports"}
+
+
+class HealRead(NamedTuple):
+    """The other side as the healing floor reads it: its healing floor and
+    its pool, each open slot filled with a role the 2-2-2 still misses at
+    that role's median, and how many slots were filled."""
+    healing: float
+    pool: float
+    filled: int
+
+
+def pool_ref(world: World) -> float:
+    """The pool of a 2-2-2 of role-median heroes: what an unrevealed side
+    brings, from the kit alone."""
+    return sum(n * world.pool_medians.get(role, 0.0) for role, n in EXPECTED_SHAPE.items())
+
+
+def heal_read(world: World, red_t: MetricBag) -> HealRead:
+    """The other side's healing and pool, its open slots filled by role.
+
+    d_r = max(0, EXPECTED_SHAPE[r] - its count in r) is what the 2-2-2 still
+    misses; the open slots are spread over those roles in proportion,
+    f = open / sum(d_r) a missing seat (0 when nothing is missing), each at
+    its role's median pool and a missing support at half hps_bench, the
+    median support's healing. Filling by role, not by a sixth of the
+    reference six a slot, keeps a side that has shown its two supports from
+    reading as holding a third."""
+    missing = {
+        role: max(0, n - int(number(red_t[ROLE_COUNTS[role]])))
+        for role, n in EXPECTED_SHAPE.items()}
+    open_slots = int(number(red_t["open_slots"]))
+    total = sum(missing.values())
+    f = open_slots / total if total else 0.0
+    healing = number(red_t["hps_floor"]) + (
+        f * missing["support"] * world.hps_bench / EXPECTED_SHAPE["support"])
+    pool = number(red_t["pool_total"]) + f * sum(
+        d * world.pool_medians.get(role, 0.0) for role, d in missing.items())
+    return HealRead(healing=healing, pool=pool, filled=open_slots if total else 0)
+
+
+def heal_need(read: HealRead, blue_pool: float) -> float:
+    """The healing blue needs a second: the other side's healing per pool,
+    times blue's own pool, and never less than the other side's healing in
+    full. The healing half of the race between two sixes is
+    k (H_b / P_b - H_r / P_r) with k the anti-heal both sides' damage
+    applies, so k cancels at parity; the floor at H_r keeps a smaller six
+    from being asked less, which the race does not reward."""
+    if read.pool <= 0:
+        return read.healing
+    return max(read.healing, read.healing / read.pool * blue_pool)
+
+
+def heal_shortfall(need: float, healing: float) -> float:
+    """The share of the need left unhealed, 0..1; 0 when nothing is needed."""
+    return max(0.0, need - healing) / need if need > 0 else 0.0
+
+
+def matchup_metrics(world: World, blue_t: MetricBag, red_t: MetricBag) -> MetricBag:
+    """MATCHUP_METRICS from blue's seat, given both teams' metrics and the
+    World, whose role medians fill red's open slots for the healing floor.
 
     Only what reading both sides produces. A number that is already a team
     metric, blue's or red's, is not restated here under a second name: two
@@ -173,6 +239,9 @@ def matchup_metrics(blue_t: MetricBag, red_t: MetricBag) -> MetricBag:
     matchup["range_diff"] = number(blue_t["range_median"]) - number(red_t["range_median"])
     matchup["exposure_share"] = number(blue_t["exposed_count"]) / size if size else 0.0
     matchup["ult_answers"] = number(blue_t["invuln"]) + number(blue_t["cleanse"])
+    need = heal_need(heal_read(world, red_t), blue_pool)
+    matchup["heal_need"] = need
+    matchup["heal_shortfall"] = heal_shortfall(need, number(blue_t["hps_floor"]))
     return matchup
 
 
@@ -218,7 +287,7 @@ def map_metrics(m: Map | None, side: str = "", *, ban_count: int) -> MetricBag:
 
 def world_metrics(world: World) -> MetricBag:
     return {"heal_bench": world.heal_bench, "hps_bench": world.hps_bench,
-            "roster_size": len(world.heroes)}
+            "pool_ref": pool_ref(world), "roster_size": len(world.heroes)}
 
 
 def namespace(
@@ -229,7 +298,7 @@ def namespace(
     blue_t = team_metrics(world, blue, m, red)
     red_t = team_metrics(world, red, m, blue)
     return {"team": blue_t, "enemy": red_t,
-            "matchup": matchup_metrics(blue_t, red_t),
+            "matchup": matchup_metrics(world, blue_t, red_t),
             "map": map_metrics(m, side, ban_count=ban_count), "world": world_metrics(world)}
 
 

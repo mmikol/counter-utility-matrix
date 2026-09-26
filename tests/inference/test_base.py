@@ -241,9 +241,10 @@ def test_every_base_term_cites_a_fact_the_result_carries(synthetic_world):
 
 def test_a_playbook_of_assumptions_scores_by_the_engine_and_its_best_six_is_the_maximum(
         synthetic_world):
-    """The shipped playbook's case: assumptions alone. Every seat scores, no
-    badge reads unscored, and blue's optimal is the best of every legal six
-    by the engine's terms, the tie-break after them, found by enumeration."""
+    """A playbook of assumptions alone, as the shipped one was before its
+    first rule. Every seat scores, no badge reads unscored, and blue's
+    optimal is the best of every legal six by the engine's terms, the
+    tie-break after them, found by enumeration."""
     w = synthetic_world
     draft = Draft("Ember Ruins", ("Mortar",), side="")
     b = engine.board(w, draft, catalog=ASSUMPTIONS_ONLY)

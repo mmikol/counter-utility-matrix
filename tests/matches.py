@@ -45,7 +45,7 @@ def rescored(world, match, blue_score=0.0, red_score=0.0, blue_terms=None, red_t
         match=match, blue_score=blue_score, red_score=red_score,
         blue_terms=blue_terms or {}, red_terms=red_terms or {},
         blue_team=numbers(blue_team), red_team=numbers(red_team),
-        matchup=numbers(matchup_metrics(blue_team, red_team)))
+        matchup=numbers(matchup_metrics(world, blue_team, red_team)))
 
 
 def rows(world, count, plant, *, seed, digest=DIGEST, per_session=PER_SESSION):

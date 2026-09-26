@@ -1,9 +1,10 @@
 """board(): both seats on opposite sides, the weights it is given, the fight
 odds, the shapes and the queue's tank limit, an empty catalog kept as the
 caller's, the likely six, a full six on control, every seat of a board on the
-synthetic World, and the page's boards superseding one another. Every board is
-the synthetic World's: no database. test_board_gate holds the lobby's limits
-on every door."""
+synthetic World, the page's boards superseding one another, and the healing
+floor on top of the default engine. Every board is the synthetic World's but
+the last, King's Row on the built database. test_board_gate holds the lobby's
+limits on every door."""
 
 import pytest
 
@@ -11,8 +12,11 @@ from db import Refusal
 from facts import compute
 from facts.draft import MAX_TANKS, Draft
 from facts.records import MapRate
+from facts.team import team_metrics
 from inference import catalog
-from tests.inference import ASSUMPTIONS_ONLY, FIXTURE_PLAYBOOK
+from inference.base import DEFAULT, OFF
+from inference.result import scores
+from tests.inference import ASSUMPTIONS_ONLY, FIXTURE_PLAYBOOK, heal_rate
 
 
 def test_board_solves_both_seats_on_opposite_sides_and_scores_the_current(synthetic_world):
@@ -277,3 +281,59 @@ def test_a_newer_board_from_the_same_client_supersedes_the_older_one(
     with pytest.raises(supersede.Superseded):
         engine.board(synthetic_world, Draft("Harbor Gate", ("Anvil",), ("Balm",)),
                      catalog=scratch_playbook, brief=engine.Brief(superseded=first))
+
+
+def _shortfall(world, result):
+    """matchup.heal_shortfall of a result's six against its red, as scored."""
+    six = [world.hero(n) for n in result.blue]
+    red = [world.hero(n) for n in result.red]
+    return compute.matchup_metrics(world, team_metrics(world, six, None, red),
+                                   team_metrics(world, red, None, ()))["heal_shortfall"]
+
+
+def test_the_healing_floor_scores_on_top_of_the_engine_and_off_leaves_it_alone(
+        synthetic_world, tmp_path):
+    """The floor is a playbook term, not the engine's: under DEFAULT it sits
+    on the three base terms, and under OFF it scores alone, the base terms
+    gone and the rule's charge the whole score. Its bar cites the board's
+    healing-floor fact. With the rule the optimal clears the floor; the
+    engine alone does not see it, and OFF with the assumptions alone scores
+    nothing."""
+    from inference import engine
+    w = synthetic_world
+    heal = heal_rate(str(tmp_path))
+    draft = Draft("Harbor Gate", side="attack")
+    plain = engine.infer(w, draft, catalog=ASSUMPTIONS_ONLY)
+    floored = engine.infer(w, draft, catalog=heal)
+    terms = {c["id"]: c for c in floored.contributions}
+    assert set(terms) == {"base.rates", "base.synergy", "base.counters", "heal-rate"}
+    rule = terms["heal-rate"]
+    assert rule["form"] == "scored" and rule["weighted"] == -2.0 * _shortfall(w, floored)
+    assert rule["text"].startswith("healing floor: blue heals ")
+    # the engine alone fields Kite and Anvil, Balm and Tansy: 115 a second on
+    # 2325 against a need of 134.3; the floor trades Kite and Tansy for Mortar
+    # and Myrrh and clears it
+    assert _shortfall(w, plain) > 0.1 and _shortfall(w, floored) == 0.0
+    alone = engine.infer(w, draft, catalog=heal, base=OFF)
+    assert [c["id"] for c in alone.contributions] == ["heal-rate"]
+    assert alone.score == -2.0 * _shortfall(w, alone) == 0.0
+    assert scores(heal, OFF) and not scores(ASSUMPTIONS_ONLY, OFF)
+    assert DEFAULT.on and not OFF.on
+
+
+@pytest.mark.invariant
+def test_the_healing_floor_takes_kings_row_off_one_support(world, tmp_path):
+    """King's Row attack, red empty: the default engine alone fields one
+    support, Zenyatta on Reinhardt, Genji, Hanzo, Vendetta and Widowmaker,
+    0.74 under the floor. The shipped floor (HEAL_RATE, written to a folder of
+    its own) seats a second support and leaves the six under 0.15."""
+    from inference import engine
+    draft = Draft("King's Row", side="attack")
+    plain = engine.infer(world, draft, catalog=ASSUMPTIONS_ONLY)
+    floored = engine.infer(world, draft, catalog=heal_rate(str(tmp_path)))
+
+    def supports(result):
+        return sum(1 for n in result.blue if world.hero(n).role == "support")
+
+    assert supports(plain) == 1 and _shortfall(world, plain) > 0.5
+    assert supports(floored) >= 2 and _shortfall(world, floored) < 0.15

@@ -120,9 +120,10 @@ database from the sources, about ten minutes at a polite pace; later starts
 reuse the database.
 
 The reference playbook is the one the tests prove the solver against. Leave out
-the `echo` line and the board runs the shipped playbook: six assumptions in
-prose that score nothing while its rules are rebuilt, so the default engine
-alone scores the sixes, on their win rates, synergies and counters.
+the `echo` line and the board runs the shipped playbook while its rules are
+rebuilt: six assumptions in prose and one scored rule, a healing floor set by
+the kit, on top of the default engine, which scores the sixes on their win
+rates, synergies and counters.
 
 | | |
 | --- | --- |

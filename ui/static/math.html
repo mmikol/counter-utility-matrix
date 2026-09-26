@@ -3,6 +3,7 @@
 <a href='#equation'>the counter utility matrix</a>
 <a href='#function'>the function</a>
 <a class='sub' href='#default-engine'>the default engine</a>
+<a class='sub' href='#healing-floor'>the healing floor</a>
 <a class='sub' href='#what-100-means'>what 100 means</a>
 <a class='sub' href='#fight-odds'>fight odds</a>
 <a class='sub' href='#argmax'>the argmax</a>
@@ -106,6 +107,32 @@ by its weight at most, since its norm is 0..1, and a base term has no such bound
 median board a heuristic at weight 1 moves a six less than any base term spreads the sixes, at
 3 about as far as the synergy or counter term, and at the slider's 10 further than the three
 together.</p>
+<p id='healing-floor'><b>The healing floor.</b> The shipped playbook's one scored rule,
+<code>heal-rate</code>, charges a six that heals less than the other side's rate. It comes
+from a race. A six has a pool P (health, shield, armor), damage D and sustained healing onto
+teammates H; each side's damage lays the same anti-heal k on the other's healing, so each loses
+(D &minus; k H) / P of its pool a second, and the one that loses the smaller share outlasts the
+other. The margin splits into a damage half and a healing half, and the healing half breaks even
+when blue heals the same share of its own pool as red heals of its own, whatever k is. The need is
+that share of blue's pool, and never less than red's healing in full, since the race never rewards
+a smaller pool.</p>
+<pre class='eq'>need(x)      = max( H_r, H_r / P_r &middot; P_x )
+shortfall(x) = max( 0, need(x) &minus; H_x ) / need(x)      0 when need(x) is 0
+charge(x)    = 2 &middot; shortfall(x)
+
+H_x, P_x     x's summed sustained healing onto teammates and its pool, a form's armor in
+H_r          red's healing  + f &middot; d_support &middot; hps_bench / 2
+P_r          red's pool     + f &middot; &Sigma;_r d_r &middot; median pool of role r
+d_r          max( 0, 2 &minus; red's picks in role r ): what the two-two-two still misses
+f            red's open slots / &Sigma;_r d_r, 0 when nothing is missing</pre>
+<p>With red empty it is a two-two-two of role-median heroes: it heals 134.34 hp/s, twice the
+median support, on a pool of 2025, twice 525 + 250 + 237.5 (the 6v6 kit, September 2026). A six
+must then heal 6.63%% of its own pool a second, and never less than 134.34 hp/s. Everything in
+the threshold is kit data. The sources give no absolute bar - no fight length, no ultimate charge
+- so the rule asks for parity with the other side's healing and no more; past it the race is
+the damage half's. The bar inherits the kit's healing figures: an area heal counts one target,
+so Lucio, Brigitte and Mizuki pairs read under it most of the time, and a beam healer reads
+above what its resource sustains.</p>
 <p id='what-100-means'><b>What 100 means.</b> Each seat's best six on this board is its
 optimal, 100. The badge above a picker is that seat's picks as a share of its optimal under
 the default engine and this playbook, not a win probability; the rate term's zero is a coin

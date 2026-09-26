@@ -1,13 +1,16 @@
 """The heroes the load builds from the database: the whole roster with its
 kit numbers, each read in its own units - an ultimate's numbers its own, a
 percent not hit points, a sum not one hit - the weapon a hero fights with,
-the tools counted once, the roster-wide benches and no hole in a released
-hero's core numbers. The scrape is the point: every figure is the wiki's.
-The derivation's rules are tests/facts/test_scalars.py's and test_kit.py's."""
+the tools counted once, the roster-wide benches and role-median pools, and no
+hole in a released hero's core numbers. The scrape is the point: every
+figure is the wiki's. The derivation's rules are tests/facts/test_scalars.py's
+and test_kit.py's."""
 
 import statistics
 
 import pytest
+
+from facts import compute
 
 pytestmark = pytest.mark.invariant
 
@@ -146,6 +149,20 @@ def test_an_announced_hero_sets_no_roster_wide_figure(world):
     assert world.heal_bench == 2 * statistics.median(h.peak_heal for h in out if h.peak_heal)
     assert world.hps_bench == 2 * statistics.median(h.hps for h in out if h.hps)
     assert world.ult_cap == max(h.ult_damage for h in world.heroes.values() if h.released)
+
+
+def test_the_role_median_pools_count_a_forms_armor_and_set_the_reference_pool(world):
+    """Each role's median pool is read as team.pool_total reads a pool, a
+    form's armor in, over the released heroes; the 6v6 kit gives 525, 250 and
+    237.5, and a 2-2-2 of them, pool_ref, is 2025. Ramattra's form moves the
+    tanks' median: without it the median is 500."""
+    released = [h for h in world.heroes.values() if h.released]
+    for role in ("tank", "damage", "support"):
+        assert world.pool_medians[role] == statistics.median(
+            h.pool + h.form_armor for h in released if h.role == role), role
+    assert world.pool_medians == {"tank": 525.0, "damage": 250.0, "support": 237.5}
+    assert compute.pool_ref(world) == 2 * sum(world.pool_medians.values()) == 2025.0
+    assert statistics.median(h.pool for h in released if h.role == "tank") == 500.0
 
 
 def test_no_released_hero_is_missing_a_core_kit_number(world):

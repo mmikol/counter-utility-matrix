@@ -1,10 +1,11 @@
 """The metrics of facts/compute.py and the sides of facts/draft.py on
 the synthetic World: the namespace a strategy reads, the matchup, the map
-metrics and the other side's likely six, every expected value worked by
-hand from tests/synthetic.py. The team metrics are tests/facts/test_team.py's.
-No database."""
+metrics, the other side's likely six and the healing floor, every expected
+value worked by hand from tests/synthetic.py. The team metrics are
+tests/facts/test_team.py's. No database."""
 
 import inspect
+import itertools
 from collections import Counter
 
 import pytest
@@ -36,7 +37,8 @@ def test_metrics_cover_the_registry_exactly(synthetic_world):
     assert compute.registry()["enemy.light_flyers"] == TEAM_METRICS["light_flyers"]
     assert ns["team"]["coverage"] == 1                    # Anvil answers Mortar
     # the benches are the builder's inputs; the roster counts the announced hero
-    assert ns["world"] == {"heal_bench": 145.0, "hps_bench": 130.0, "roster_size": 13}
+    assert ns["world"] == {"heal_bench": 145.0, "hps_bench": 130.0, "pool_ref": 2250.0,
+                           "roster_size": 13}
     # a text metric is exactly a registry key whose value is not a number
     values = {
         "%s.%s" % (section, key): value
@@ -78,17 +80,22 @@ def test_metrics_without_a_map_fall_back_honestly(synthetic_world):
 
 def test_the_matchup_reads_both_sides(synthetic_world):
     """Blue Anvil and Balm: 925 pool, 135 damage a second, a 300 swing, a 70
-    heal. Red Mortar and Gale: 762.5 pool with the form's armor, 220 a second,
-    a 260 swing, no heal."""
+    heal, 60 a second. Red Mortar and Gale: 762.5 pool with the form's armor,
+    220 a second, a 260 swing, no heal; its four open slots are the tank, the
+    damage hero and the two supports the 2-2-2 misses, so it heals the bench's
+    130 on 762.5 + 650 + 237.5 + 2 x 237.5 = 2125, and blue's smaller pool
+    needs the 130 in full."""
     w = synthetic_world
     blue, red = [w.hero("Anvil"), w.hero("Balm")], [w.hero("Mortar"), w.hero("Gale")]
     blue_t, red_t = team_metrics(w, blue, None, red), team_metrics(w, red, None, blue)
-    matchup = compute.matchup_metrics(blue_t, red_t)
+    matchup = compute.matchup_metrics(w, blue_t, red_t)
     assert matchup == {
         "pool_diff": 162.5, "dps_diff": -85.0, "hps_diff": 60.0,
         "burst_vs_heal": 300.0, "heal_vs_burst": -190.0,
         "chew_time_ours": pytest.approx(762.5 / 135), "chew_time_theirs": pytest.approx(925 / 220),
-        "tempo_diff": -1.0, "range_diff": -25.0, "exposure_share": 0.5, "ult_answers": 2}
+        "tempo_diff": -1.0, "range_diff": -25.0, "exposure_share": 0.5, "ult_answers": 2,
+        "heal_need": 130.0, "heal_shortfall": pytest.approx(70 / 130)}
+    assert compute.heal_read(w, red_t) == compute.HealRead(healing=130.0, pool=2125.0, filled=4)
 
 
 def test_no_matchup_metric_restates_a_team_metric(synthetic_world):
@@ -101,13 +108,13 @@ def test_no_matchup_metric_restates_a_team_metric(synthetic_world):
     m = w.map("Harbor Gate")
     blue_t = team_metrics(w, blue, m, red)
     red_t = team_metrics(w, red, m, blue)
-    matchup = compute.matchup_metrics(blue_t, red_t)
+    matchup = compute.matchup_metrics(w, blue_t, red_t)
 
     # a matchup key that equals blue's own is only proof of a copy if it also
     # moves when blue does and red does not: compare a second blue on one red
     other = [w.hero(n) for n in ("Anvil", "Mortar", "Needle", "Rook", "Balm", "Sorrel")]
     other_t = team_metrics(w, other, m, red)
-    other_matchup = compute.matchup_metrics(other_t, red_t)
+    other_matchup = compute.matchup_metrics(w, other_t, red_t)
 
     copies = [
         key for key, value in matchup.items()
@@ -252,7 +259,7 @@ def test_the_world_metrics_and_the_registry_the_catalog_validates_against(synthe
     on both sides but the versus keys on red's, which the solver would read as
     zero."""
     assert compute.world_metrics(synthetic_world) == {
-        "heal_bench": 145.0, "hps_bench": 130.0, "roster_size": 13}
+        "heal_bench": 145.0, "hps_bench": 130.0, "pool_ref": 2250.0, "roster_size": 13}
     reg = compute.registry()
     assert len(reg) == (2 * len(TEAM_METRICS) - len(compute.VERSUS_KEYS)
                         + len(compute.MATCHUP_METRICS) + len(compute.MAP_METRICS)
@@ -261,3 +268,121 @@ def test_the_world_metrics_and_the_registry_the_catalog_validates_against(synthe
         assert "team." + key in reg and "enemy." + key not in reg, key
     assert reg["team.coverage"] == TEAM_METRICS["coverage"]
     assert all("map.%s" % f in reg for f in TERRAIN_FEATURES)
+
+
+# --- the healing floor --------------------------------------------------------
+
+def _heal(w, blue, red=()):
+    """matchup.heal_need and heal_shortfall for blue against red, red's bag
+    built facing no one, as the solver builds it."""
+    blue_h, red_h = [w.hero(n) for n in blue], [w.hero(n) for n in red]
+    matchup = compute.matchup_metrics(
+        w, team_metrics(w, blue_h, None, red_h), team_metrics(w, red_h, None, ()))
+    return matchup["heal_need"], matchup["heal_shortfall"]
+
+
+def test_an_unrevealed_side_is_a_two_two_two_of_role_medians(synthetic_world):
+    """Red empty reads as the bench's 130 a second on pool_ref, 2 x (650 +
+    237.5 + 237.5) = 2250, all six slots filled. A bigger six needs 130 /
+    2250 of its own pool, a smaller one the 130 in full, and a six on exactly
+    that pool, healing exactly the bench, is at parity and pays nothing."""
+    w = synthetic_world
+    assert compute.pool_ref(w) == 2250.0
+    assert compute.heal_read(w, team_metrics(w, [])) == compute.HealRead(
+        healing=130.0, pool=2250.0, filled=6)
+    # 650 + 650 + 200 + 300 + 250 + 250 = 2300 pool, 80 + 70 = 150 a second
+    need, short = _heal(w, ("Kite", "Quarry", "Needle", "Rook", "Myrrh", "Sorrel"))
+    assert need == pytest.approx(130.0 / 2250.0 * 2300.0) and short == 0.0
+    # 700 + 650 + 300 + 200 + 250 + 225 = 2325, Balm's 60 a second
+    need, short = _heal(w, ("Anvil", "Kite", "Rook", "Needle", "Gale", "Balm"))
+    assert need == pytest.approx(130.0 / 2250.0 * 2325.0)
+    assert short == pytest.approx(1 - 60.0 / need)
+    # 700 + 225 + 250 + 250 = 1425: under 2250, so the need is red's 130
+    assert _heal(w, ("Anvil", "Balm", "Myrrh", "Sorrel")) == (130.0, 0.0)
+    # Kite and Quarry are the median tanks; the rest are set to the medians
+    for name in ("Needle", "Flint", "Balm", "Tansy"):
+        w.hero(name).pool = 237.5
+    for name in ("Balm", "Tansy"):
+        w.hero(name).hps = 65.0
+    assert _heal(w, ("Kite", "Quarry", "Needle", "Flint", "Balm", "Tansy")) == (130.0, 0.0)
+
+
+def test_the_shortfall_is_one_unhealed_zero_at_the_need_and_never_outside_the_unit(
+        synthetic_world):
+    """No healing is the whole need unmet; the need met or passed is nothing;
+    no need is nothing, not a division by zero. Over every six of the roster
+    the shortfall stays in [0, 1]."""
+    assert compute.heal_shortfall(130.0, 0.0) == 1.0
+    assert compute.heal_shortfall(130.0, 130.0) == 0.0
+    assert compute.heal_shortfall(130.0, 200.0) == 0.0
+    assert compute.heal_shortfall(0.0, 0.0) == 0.0
+    w = synthetic_world
+    assert _heal(w, ("Anvil", "Kite", "Rook", "Needle", "Gale", "Flint"))[1] == 1.0
+    released = sorted(h.name for h in w.heroes.values() if h.released)
+    for six in itertools.combinations(released, TEAM_SIZE):
+        for red in ((), ("Balm", "Myrrh"), ("Anvil", "Rook", "Tansy")):
+            need, short = _heal(w, six, red)
+            assert need > 0 and 0.0 <= short <= 1.0, (six, red)
+
+
+def test_a_complete_side_that_heals_nothing_needs_nothing(synthetic_world):
+    """Six revealed picks and no healing among them: no open slot to fill, a
+    need of 0 and a shortfall of 0, even for a six that heals nothing."""
+    w = synthetic_world
+    healless = ("Anvil", "Kite", "Rook", "Needle", "Gale", "Flint")
+    assert compute.heal_read(w, team_metrics(w, [w.hero(n) for n in healless])) == (
+        compute.HealRead(healing=0.0, pool=2325.0, filled=0))
+    assert _heal(w, ("Mortar", "Quarry", "Needle", "Rook", "Gale", "Flint"), healless) == (
+        0.0, 0.0)
+
+
+def test_the_open_slots_are_the_roles_the_two_two_two_still_misses(synthetic_world):
+    """Two supports shown: the four open slots are two tanks and two damage
+    heroes, so red heals its own 140 and no more. Two tanks shown: two of the
+    slots are supports at half the bench each. Three supports and a tank: the
+    two open slots spread over the tank and the two damage heroes it misses,
+    two thirds of a seat each."""
+    w = synthetic_world
+
+    def read(red):
+        return compute.heal_read(w, team_metrics(w, [w.hero(n) for n in red]))
+
+    supports = read(("Balm", "Myrrh"))
+    assert supports == compute.HealRead(healing=140.0, pool=475.0 + 2 * 650 + 2 * 237.5,
+                                        filled=4)
+    tanks = read(("Anvil", "Kite"))
+    assert tanks == compute.HealRead(healing=0.0 + 130.0, pool=1350.0 + 4 * 237.5, filled=4)
+    heavy = read(("Balm", "Myrrh", "Sorrel", "Anvil"))
+    assert heavy.healing == 60.0 + 80.0 + 70.0 and heavy.filled == 2
+    assert heavy.pool == pytest.approx(1425.0 + 2 / 3 * (650.0 + 2 * 237.5))
+    # a partial red heals per pool what its picks and its fill heal together
+    need, _ = _heal(w, ("Anvil", "Kite", "Quarry", "Needle", "Balm", "Tansy"), ("Balm", "Myrrh"))
+    assert need == pytest.approx(140.0 / 2250.0 * 2650.0)      # 700 + 2 x 650 + 200 + 2 x 225
+
+
+def test_below_the_other_sides_pool_the_need_is_its_healing_and_above_it_grows_with_the_pool():
+    """The floor at red's healing binds under red's pool; over it the need is
+    red's healing per pool times blue's pool, linear in that pool."""
+    read = compute.HealRead(healing=130.0, pool=2250.0, filled=6)
+    assert compute.heal_need(read, 1000.0) == compute.heal_need(read, 2250.0) == 130.0
+    assert compute.heal_need(read, 3375.0) == pytest.approx(195.0)
+    assert compute.heal_need(read, 4500.0) == pytest.approx(260.0)
+    # a red of no pool at all: its healing is the need
+    assert compute.heal_need(compute.HealRead(healing=50.0, pool=0.0, filled=0), 2000.0) == 50.0
+
+
+def test_scaling_every_heal_and_the_bench_alike_leaves_the_shortfall_unchanged(
+        synthetic_world):
+    """An error that scales every hero's healing scales the bench with it, so
+    the shortfall against an unrevealed side does not move."""
+    w = synthetic_world
+    sixes = [
+        ("Anvil", "Kite", "Rook", "Needle", "Balm", "Tansy"),
+        ("Mortar", "Rook", "Gale", "Flint", "Balm", "Sorrel"),
+        ("Anvil", "Quarry", "Needle", "Myrrh", "Sorrel", "Tansy")]
+    before = [_heal(w, six)[1] for six in sixes]
+    for hero in w.heroes.values():
+        hero.hps *= 1.5
+    w.hps_bench *= 1.5
+    assert [_heal(w, six)[1] for six in sixes] == pytest.approx(before)
+    assert any(0.0 < short < 1.0 for short in before)       # a six the scale could move

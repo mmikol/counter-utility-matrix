@@ -25,7 +25,7 @@ from facts import counters
 from facts import kit_format as kit_format_module
 from facts.draft import KIT_FORMAT
 from facts.kit import KitPiece, Stat
-from facts.model import TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
+from facts.model import ROLES, TERRAIN_FEATURES, TERRAIN_LEAN, Hero, Map, World
 from facts.records import (
     KitLine,
     MapRate,
@@ -389,14 +389,20 @@ def _read_provenance(cx: Connection, w: World) -> None:
 
 
 def _benches(w: World) -> None:
-    """The roster's healing benches and the ultimate cap, over the released
-    heroes' derived numbers: an announced hero sets nothing."""
+    """The roster's healing benches, each role's median pool and the ultimate
+    cap, over the released heroes' derived numbers: an announced hero sets
+    nothing."""
     supports = [
         h.peak_heal for h in w.heroes.values()
         if h.role == "support" and h.released and h.peak_heal]
     w.heal_bench = 2 * statistics.median(supports) if supports else 0.0
     rates = [h.hps for h in w.heroes.values() if h.role == "support" and h.released and h.hps]
     w.hps_bench = 2 * statistics.median(rates) if rates else 0.0
+    # a pool as team.pool_total reads it: a form's armor on top of the spawn pool
+    released = [h for h in w.heroes.values() if h.released]
+    w.pool_medians = {
+        role: statistics.median(h.pool + h.form_armor for h in released if h.role == role)
+        for role in ROLES if any(h.role == role for h in released)}
     # one ultimate's damage is worth, at most, the largest single figure one
     # publishes: a beam held for twenty seconds is not seven Self-Destructs
     flat_ults = [

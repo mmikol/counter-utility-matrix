@@ -1,8 +1,11 @@
 """A team's facts and the matchup's from facts/team_facts.py, written
 straight from a board on the synthetic World: one fact per team metric,
 worded around the number the solver scores, each side's versus facts once
-the other side has picks, and the matchup once both do. Every sentence is
-worked from tests/synthetic.py. No database."""
+the other side has picks, the matchup once both do, and the healing floor
+once blue does. Every sentence is worked from tests/synthetic.py. No
+database."""
+
+import pytest
 
 from facts import team_facts
 from facts.draft import Draft
@@ -81,9 +84,10 @@ def test_a_side_is_worded_metric_by_metric(synthetic_world):
     assert said["team.map_specialists"] == (
         "blue team map fit on Harbor Gate: 1 specialist, 0 off-map, 2 with this map among"
         " their three best by rate")
-    # no heal, no shields, no enemy: none of their facts, and no matchup
+    # no heal, no shields, no enemy: none of their facts, and of the matchup
+    # only the healing floor, which needs no red pick
     assert "team.hps_supports" not in said and "team.shield_share" not in said
-    assert "team.coverage" not in said and not _said(fs)
+    assert "team.coverage" not in said and list(_said(fs)) == ["matchup.heal_shortfall"]
 
 
 def test_every_team_fact_carries_the_number_the_solver_scores(synthetic_world):
@@ -176,10 +180,43 @@ def test_the_matchup_is_worded_once_both_sides_have_picks(synthetic_world):
         "matchup.flyers": "vertical threat: 1 flyer on red against 0 hitscan picks on blue",
         "matchup.ult_threat": "ult threat: red's damage ultimates total 600 against 2"
             " invulnerability or cleanse answers on blue",
-        "matchup.style_lean_red": "style war: red leans nothing yet, blue leans brawl"}
+        "matchup.style_lean_red": "style war: red leans nothing yet, blue leans brawl",
+        "matchup.heal_shortfall": "healing floor: blue heals 60.0/s on a 925 pool; red, 4"
+            " open slots read as the 2-2-2's missing roles at their medians, heals 130.0/s on"
+            " 2125 - 6.12% of its pool a second; blue needs 130.0/s, the larger of red's"
+            " healing and that share of blue's pool - 54% short. Red's 220.0/s of incoming"
+            " damage and blue's 135.0/s lay the same anti-heal on the other side's healing,"
+            " so it cancels"}
     # a threat is red's own number: its sentence carries the enemy.* key
     assert [(f.key, f.value) for f in fs.find("enemy.light_flyers", "blue vs red")] == [
         ("matchup.flyers", 1)]
+
+
+def test_the_healing_floor_is_worded_with_every_number_it_reads(synthetic_world):
+    """The floor needs no red pick: against an empty red it reads the 2-2-2
+    of role medians, 130 a second on 2250, and states the need, blue's
+    healing and the shortfall; against a complete red it names the damage
+    it leaves out. Its value is matchup.heal_shortfall, found by either key."""
+    w = synthetic_world
+    fs = _facts(w, None, (), ("Anvil", "Kite", "Rook", "Needle", "Gale", "Balm"))
+    [fact] = fs.find("matchup.heal_need", "blue vs red")
+    assert fact.key == "matchup.heal_shortfall" and fs.find("matchup.heal_shortfall") == [fact]
+    assert fact.text == (
+        "healing floor: blue heals 60.0/s on a 2325 pool; red, 6 open slots read as the"
+        " 2-2-2's missing roles at their medians, heals 130.0/s on 2250 - 5.78% of its pool a"
+        " second; blue needs 134.3/s, the larger of red's healing and that share of blue's"
+        " pool - 55% short. Each side's damage lays the same anti-heal on the other side's"
+        " healing, so it cancels")
+    assert fact.value == pytest.approx(1 - 60.0 / (130.0 / 2250.0 * 2325.0))
+    assert fact is fs.facts[-1]                  # written last: no earlier id moves
+    healers = ("Balm", "Myrrh", "Sorrel", "Tansy", "Anvil", "Kite")
+    met = _said(_facts(w, None, ("Anvil", "Kite", "Rook", "Needle", "Gale", "Flint"), healers))
+    assert met["matchup.heal_shortfall"] == (
+        "healing floor: blue heals 265.0/s on a 2300 pool; red heals 0.0/s on 2325 - 0.00% of"
+        " its pool a second; blue needs 0.0/s, the larger of red's healing and that share of"
+        " blue's pool - met. Red's 695.0/s of incoming damage and blue's 455.0/s lay the same"
+        " anti-heal on the other side's healing, so it cancels")
+    assert not _said(_facts(w, None, ("Balm",), ()))          # no blue six, no floor
 
 
 def test_the_matchup_names_each_side_of_every_trade(synthetic_world):

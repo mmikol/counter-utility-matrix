@@ -232,6 +232,9 @@ class World:
         self.tier_names: dict[str, str] = {}        # rank tier code -> its name, up the ladder
         self.heal_bench = 0.0
         self.hps_bench = 0.0         # 2 x the median sustained healing across the supports
+        # each role's median pool, a form's armor counted as team.pool_total counts it,
+        # across the released heroes: what an unrevealed slot of that role brings
+        self.pool_medians: dict[str, float] = {}
         self.ult_cap = 0.0           # the largest single figure an ultimate publishes
         self.catalog_counts: dict[str, int] = {}     # the strategies mirror: kind -> count
         self.kit_format = FIVE_V_FIVE    # as the kit tables hold it, until the load reads 6v6

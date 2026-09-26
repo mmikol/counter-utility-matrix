@@ -25,10 +25,11 @@ reads, and the owner's recorded matches, one map each, which the door's
 `record_match` stores and `facts.matches` reads back as `Match` records. A
 pull tool fills every other table. The matches judge the playbook
 ([How the playbook is judged](#how-the-playbook-is-judged)) and never
-change it. The shipped playbook is six assumptions that score nothing
-while it is rebuilt from the citations in
-[inference/README.md](../inference/README.md), and the default engine
-scores every board meanwhile ([The objective](#the-objective)). The
+change it. The shipped playbook is six assumptions and one scored rule,
+`heal-rate` ([The healing floor](#the-healing-floor)), while it is
+rebuilt from the citations in
+[inference/README.md](../inference/README.md); the default engine scores
+every board beneath it ([The objective](#the-objective)). The
 solver tests run on the reference playbook in
 [tests/fixtures/playbook/](../tests/fixtures/playbook/), which holds a
 file of every form but the draft. The package's map is the
@@ -177,6 +178,88 @@ through the catalog before it writes and logged with its reason in
 `strategies/tuning-log.md`; a slider's *store* is a `tune` call, which
 the board offers only with `COUNTRIX_READ_ONLY=0`.
 
+## The healing floor
+
+`heal-rate`, the shipped playbook's one scored rule, holds a six to a
+healing threshold set by the kit. It reads `matchup.heal_shortfall`;
+`facts/compute.py` computes it and `matchup.heal_need` (`heal_read`,
+`heal_need`, `heal_shortfall`), and the board words both in one fact.
+
+The model is a race. A six has a pool P (`team.pool_total`: health,
+shield, armor and a form's armor), damage D (`team.dps_floor`) and
+healing onto teammates H (`team.hps_floor`, sustained, reloads in). Each
+side's damage lays the same anti-heal k on the other's healing, so blue
+loses (D_r - k H_b) / P_b of its pool a second and red
+(D_b - k H_r) / P_r. Blue wins the race when red loses the larger share,
+and the margin splits in two:
+
+```
+margin = [D_b / P_r - D_r / P_b]  +  k [H_b / P_b - H_r / P_r]
+          the damage half             the healing half
+```
+
+The damage half is 1/`chew_time_ours` - 1/`chew_time_theirs`. The healing
+half breaks even when blue heals the same share of its own pool a second
+as red heals of its own, and k cancels there. That share times blue's
+pool is the need, floored at red's healing in full:
+
+```
+need      = max(H_r, H_r / P_r x P_b)
+shortfall = max(0, need - H_b) / need         0 when need is 0
+charge    = 2 x shortfall                     heal-rate's weight
+```
+
+The floor is there because parity alone asks less healing of a smaller
+six, and the race never rewards a smaller pool: its margin rises with
+P_b. Under parity alone the engine drops a tank to slip under the bar -
+on 48 audit boards two-tank picks fell from 39 to 25 - and with the floor
+it keeps 35. The margin also rises with every support added, so a rule
+that maximised healing would drive toward five supports; a floor does not.
+
+**Red as read.** Red's locked picks, and each open slot a role the 2-2-2
+(`EXPECTED_SHAPE`) still misses: d_r = max(0, 2 - red's count in r),
+spread over the open slots as f = open / sum(d_r), each missing seat at
+its role's median pool (`World.pool_medians`, a form's armor in) and a
+missing support at half `world.hps_bench`, the median support's healing:
+
+```
+H_r = enemy.hps_floor  + f x d_support x hps_bench / 2
+P_r = enemy.pool_total + f x sum over r of d_r x pool_medians[r]
+```
+
+A red that has shown its two supports reads as two, not as two and a
+share of a third. A complete red that heals nothing needs nothing. The
+likely six is not read: it rests on pick rates, and as the opponent it
+would put most two-support sixes under the bar.
+
+**The threshold.** With red empty, red is the 2-2-2 of role-median
+heroes: H_r = `world.hps_bench` = 134.34 hp/s and P_r = `world.pool_ref`
+= 2 x (525 + 250 + 237.5) = 2025, the 6v6 kit as of 2026-09-25. A six
+must heal 6.63% of its own pool a second, and never less than 134.34
+hp/s. Everything in it is kit data; no rate enters. The sources hold no
+absolute winning threshold - no fight length, no ultimate charge - so
+the rule promises parity with the other side's healing and nothing more.
+At parity the race is the damage half's, which no shipped rule prices.
+
+**What it moves.** On the 48 audit boards the default engine alone
+picked a one-support six on 28; under the rule it picks one on 1, King's
+Row defense against a complete red that heals 35 hp/s, where one
+Zenyatta is parity. King's Row with red empty goes from Reinhardt,
+Genji, Hanzo, Vendetta, Widowmaker and Zenyatta (shortfall 0.74) to
+Reinhardt, Genji, Hanzo, Widowmaker, Baptiste and Zenyatta (0.10, a
+charge of 0.20). Within a board the shortfall follows the support count
+(Spearman -0.84; the count explains 74% of its variance) and the rest is
+how much the pair heals, which a count would miss. Its correlation with
+the default engine's score is +0.03, so the term is new to the objective.
+
+**What it inherits.** The bar is only as good as `hps`. The World counts
+an area heal at one target, so pairs with Lucio, Brigitte or Mizuki fall
+under the bar 78-100% of the time and the engine answers with a third or
+fourth support; a beam healer's `hps` (Illari, Moira, Wuyang) sits above
+what its resource sustains. Perks, ultimates, self-healing and health
+packs are out, on both sides alike. A World-wide error cancels, since
+the bench moves with it; an error on one hero does not.
+
 ## How the playbook is judged
 
 The owner plays on console, so a match is entered by hand after the
@@ -295,7 +378,15 @@ gitignored, and nothing public shows them.
 ## The catalog
 
 <!-- generated:catalog -->
-6 files in `inference/strategies/`: 0 constraints (0 limits, 0 scored), 0 heuristics and 6 assumptions. Regenerated by `.venv/bin/python -m door.mcp call db_docs`.
+7 files in `inference/strategies/`: 1 constraints (0 limits, 1 scored), 0 heuristics and 6 assumptions. Regenerated by `.venv/bin/python -m door.mcp call db_docs`.
+
+#### Constraints
+
+##### Heal at the other side's rate (`heal-rate`, sustain, scored)
+
+weight 2; penalty `matchup.heal_shortfall`
+
+A six heals at least the share of its total health that the other side heals of its own each second, and never less than the other side's healing in full; an unrevealed slot on that side is the 2-2-2 shape's missing role at the role's median pool and healing. With damage anti-heal on both sides, the healing half of the race between the two sixes breaks even at that share, and nothing in the kit sets a higher bar. The charge is 2 x the share of the need left unhealed, so a six at 90% of it pays 0.2 and a lone Zenyatta against an unrevealed side pays 1.48.
 
 #### Assumptions
 
@@ -453,6 +544,8 @@ the `team.*` metrics computed for the red side.
 | `matchup.range_diff` | blue median reach minus red's |
 | `matchup.exposure_share` | share of blue answered by red |
 | `matchup.ult_answers` | blue invulnerabilities plus cleanses |
+| `matchup.heal_need` | hp/s blue must heal: red's healing per pool times blue's pool, at least red's healing; red's open slots read as the 2-2-2's missing roles |
+| `matchup.heal_shortfall` | share of heal_need blue's healing floor leaves unhealed, 0..1 (0 when nothing is needed) |
 | `map.known` | 1 if a map is set |
 | `map.sided` | 1 if the mode has an attacking and a defending side (Escort, Hybrid) |
 | `map.side` (text) | this seat's side on a sided map: attack, defense, or empty |
@@ -472,5 +565,6 @@ the `team.*` metrics computed for the red side.
 | `map.cover` | cover: the wiki article's mentions per thousand words, in sd from the mean of the maps with text (0 with no text) |
 | `world.heal_bench` | 2 x the median peak heal across the released supports |
 | `world.hps_bench` | 2 x the median sustained healing across the released supports |
+| `world.pool_ref` | the pool of a 2-2-2 of role-median heroes: 2 x each role's median pool, a form's armor in, summed |
 | `world.roster_size` | heroes in the roster |
 <!-- /generated:catalog -->

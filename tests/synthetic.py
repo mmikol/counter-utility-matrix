@@ -20,10 +20,10 @@ across Harbor Gate, Ember Ruins and Salt Flats reads brawl +2, 0, -2; dive
 in each.
 
 world() fills the World the way tables.load's reads do, sets heal_bench,
-hps_bench and ult_cap as inputs, then runs what load runs after its reads,
-in its order: derive_rates, best_maps, the terrain, the stages' terrain, the
-styles and the ultimate cap. derive_scalars does not run: there are no kit
-rows, so a hero's kit numbers are given whole.
+hps_bench, pool_medians and ult_cap as inputs, then runs what load runs after
+its reads, in its order: derive_rates, best_maps, the terrain, the stages'
+terrain, the styles and the ultimate cap. derive_scalars does not run: there
+are no kit rows, so a hero's kit numbers are given whole.
 """
 
 import datetime
@@ -246,6 +246,11 @@ def world() -> World:
     # 55, 60, 70 and 80: twice each median. The cap is the largest flat
     # figure an ultimate publishes, which needs kit rows: given here
     w.heal_bench, w.hps_bench, w.ult_cap = 145.0, 130.0, 600.0
+    # each role's median pool, a form's armor in: tanks 512.5 (Mortar's form),
+    # 650, 650 and 700; damage 200, 225, 250 and 300; supports 225, 225, 250 and
+    # 250. The load sets them over the released heroes; given here as the
+    # benches are, so a test can move one alone
+    w.pool_medians = {"tank": 650.0, "damage": 237.5, "support": 237.5}
     for hero in w.heroes.values():
         hero.derive_rates()
     tables.best_maps(w)

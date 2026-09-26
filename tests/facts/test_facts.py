@@ -1,10 +1,11 @@
 """A board's facts from the built database: the wording on real maps and
 heroes, the terrain and stage facts, the map-rate and best-map facts and the
-provenance. The values here are the scrape's, pinned on purpose; the
-arithmetic behind them runs on the synthetic World in test_team.py,
-test_metrics.py, test_tables.py, test_board_facts.py, test_hero_facts.py and
-test_team_facts.py, and what the load itself reads is test_world.py's,
-test_world_kits.py's and test_world_maps.py's."""
+provenance, and the healing floor's figures on the 6v6 kit. The values here
+are the scrape's, pinned on purpose; the arithmetic behind them runs on the
+synthetic World in test_team.py, test_metrics.py, test_tables.py,
+test_board_facts.py, test_hero_facts.py and test_team_facts.py, and what the
+load itself reads is test_world.py's, test_world_kits.py's and
+test_world_maps.py's."""
 
 import statistics
 
@@ -13,6 +14,7 @@ import pytest
 from facts import board_facts, compute, model
 from facts.compute import STAGE_FEATURES, STAGE_MENTIONS, TERRAIN_STANDOUT
 from facts.draft import Draft
+from facts.team import team_metrics
 from inference.result import _cited_fact
 
 pytestmark = pytest.mark.invariant
@@ -225,3 +227,49 @@ def test_the_map_fact_carries_this_maps_ban_rate(world):
     fact = fs.find("hero.map_win", "Sombra")[0]
     if world.hero("Sombra").map_ban(world.map("King's Row").id) is not None:
         assert ", banned " in fact.text
+
+
+KINGS_ROW_SIX = ("Reinhardt", "Genji", "Hanzo", "Vendetta", "Widowmaker", "Zenyatta")
+
+
+def _heal(world, blue, red=()):
+    """matchup.heal_need and heal_shortfall on the built World, red's bag
+    facing no one, as the solver builds it."""
+    blue_h, red_h = [world.hero(n) for n in blue], [world.hero(n) for n in red]
+    matchup = compute.matchup_metrics(
+        world, team_metrics(world, blue_h, None, red_h), team_metrics(world, red_h, None, ()))
+    return matchup["heal_need"], matchup["heal_shortfall"]
+
+
+@pytest.mark.parametrize(("blue", "red", "need", "shortfall"), [
+    # the default engine's King's Row six: Zenyatta's 35 on an 1800 pool
+    (KINGS_ROW_SIX, (), 134.34, 0.7395),
+    # what the rule picks there: Baptiste and Zenyatta's 120.64 on 1775
+    (("Reinhardt", "Genji", "Hanzo", "Widowmaker", "Baptiste", "Zenyatta"), (), 134.34, 0.1020),
+    # a second tank lifts the pool to 2100, over pool_ref: the need grows with it
+    (("Reinhardt", "D.Va", "Genji", "Hanzo", "Baptiste", "Zenyatta"), (), 139.32, 0.1341),
+    # Ana and Kiriko revealed heal 157.67; the four open slots are tanks and damage
+    (KINGS_ROW_SIX, ("Ana", "Kiriko"), 157.67, 0.7780),
+    # a complete red with no healer needs nothing
+    (KINGS_ROW_SIX, ("Reinhardt", "D.Va", "Genji", "Hanzo", "Widowmaker", "Tracer"), 0.0, 0.0),
+], ids=["kings-row-default", "kings-row-rule", "two-tanks", "ana-kiriko", "healless-red"])
+def test_the_healing_floor_on_the_6v6_kit(world, blue, red, need, shortfall):
+    """The research's figures from the built World: hps_bench 134.34 and
+    pool_ref 2025 set the bar with red empty, 6.63% of a six's pool a
+    second and never less than 134.34."""
+    got_need, got_shortfall = _heal(world, blue, red)
+    assert got_need == pytest.approx(need, abs=0.005)
+    assert got_shortfall == pytest.approx(shortfall, abs=0.00005)
+
+
+def test_the_healing_floor_fact_states_the_threshold_on_kings_row(world):
+    """The board words the rule's numbers for the default engine's six: its
+    healing and pool, the unrevealed red's 134.3 on 2025, the 6.63% share,
+    the need and the shortfall."""
+    fs = board_facts.generate(world, Draft("King's Row", (), KINGS_ROW_SIX, side="attack"))
+    [fact] = fs.find("matchup.heal_shortfall", "blue vs red")
+    assert fact.text.startswith(
+        "healing floor: blue heals 35.0/s on a 1800 pool; red, 6 open slots read as the"
+        " 2-2-2's missing roles at their medians, heals 134.3/s on 2025 - 6.63% of its pool a"
+        " second; blue needs 134.3/s")
+    assert "74% short" in fact.text and fact.value == pytest.approx(0.7395, abs=0.00005)

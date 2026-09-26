@@ -1,11 +1,11 @@
 # The playbook's sources
 
 **The playbook was emptied on purpose.** `strategies/` now holds six
-assumptions and no scored rule. This file is the record of the 245 entries it
-held, with the citation behind each, and it is the source the playbook is being
-rebuilt from by hand - so it describes more than the folder does, and is meant
-to. `docs/inference.md` is generated from the folder and says what is in force
-today.
+assumptions and one scored rule, `heal-rate`. This file is the record of the
+245 entries it held and the one rule added since, with the citation behind
+each, and it is the source the playbook is being rebuilt from by hand - so it
+describes more than the folder does, and is meant to. `docs/inference.md` is
+generated from the folder and says what is in force today.
 
 One entry per strategy the playbook has held: the community's rules, the
 queue's limit and the user's assumptions. The rules come from
@@ -386,6 +386,7 @@ the catalog is `docs/inference.md`.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/naye5a/how_to_play_winston/
   - https://www.reddit.com/r/OverwatchUniversity/comments/9oo9zv/3_dps_exists_because_dps_are_largely_easy_to/
   - https://www.reddit.com/r/OverwatchUniversity/comments/1w9epk0/has_2_tanks_4_supports_ever_been_a_viable_6v6_comp/
+- `heal-rate` - Heal at the other side's rate (constraint). The owner's request of 2026-09-25 for a healing threshold in the six's total health, read from the healer data; the model and the threshold are docs/inference.md's The healing floor.
 - `healing-beyond-supports` - Healing beyond the supports (heuristic). applies on 6/6 boards, spreads on 6.
   - https://www.reddit.com/r/Competitiveoverwatch/comments/10pwudc/guide_to_competitive_ctf/
   - https://www.reddit.com/r/Competitiveoverwatch/comments/123f346/guide_to_competitive_mystery_heroes/
