@@ -54,9 +54,8 @@ three terms favour, scored and explained:
   with no map, or no row for it there - as points over 50, times
   `p / (p + RATE_PICK_HALF)` for its pick rate `p` on the same footing,
   averaged over the six. A rarely picked hero's rate rests on few
-  matches, so its edge is pulled toward a coin flip; `RATE_PICK_HALF` sits
-  at the tenth percentile of the released heroes' pick rates, so only the
-  rarest tenth lose more than half their edge. The term is centred on 50
+  matches, so its edge is pulled toward a coin flip; `RATE_PICK_HALF` is set
+  so that only the rarest heroes lose more than half their edge. The term is centred on 50
   and not on the reference sample's mean: the zero is the same on every
   board and needs no sample, and a comp's share of the optimal is its
   share of the optimal's edge over a coin flip.
@@ -211,9 +210,8 @@ charge    = 2 x shortfall                     heal-rate's weight
 
 The floor is there because parity alone asks less healing of a smaller
 six, and the race never rewards a smaller pool: its margin rises with
-P_b. Under parity alone the engine drops a tank to slip under the bar -
-on 48 audit boards two-tank picks fell from 39 to 25 - and with the floor
-it keeps 35. The margin also rises with every support added, so a rule
+P_b. Under parity alone the engine drops a tank to slip under the bar;
+the floor stops that. The margin also rises with every support added, so a rule
 that maximised healing would drive toward five supports; a floor does not.
 
 **Red as read.** Red's locked picks, and each open slot a role the 2-2-2
@@ -229,8 +227,7 @@ P_r = enemy.pool_total + f x sum over r of d_r x pool_medians[r]
 
 A red that has shown its two supports reads as two, not as two and a
 share of a third. A complete red that heals nothing needs nothing. The
-likely six is not read: it rests on pick rates, and as the opponent it
-would put most two-support sixes under the bar.
+likely six is not read: it rests on pick rates.
 
 **The threshold.** With red empty, red is the 2-2-2 of role-median
 heroes: H_r = `world.hps_bench` = 134.34 hp/s and P_r = `world.pool_ref`
@@ -241,16 +238,13 @@ absolute winning threshold - no fight length, no ultimate charge - so
 the rule promises parity with the other side's healing and nothing more.
 At parity the race is the damage half's, which no shipped rule prices.
 
-**What it moves.** On the 48 audit boards the default engine alone
-picked a one-support six on 28; under the rule it picks one on 1, King's
-Row defense against a complete red that heals 35 hp/s, where one
-Zenyatta is parity. King's Row with red empty goes from Reinhardt,
-Genji, Hanzo, Vendetta, Widowmaker and Zenyatta (shortfall 0.74) to
-Reinhardt, Genji, Hanzo, Widowmaker, Baptiste and Zenyatta (0.10, a
-charge of 0.20). Within a board the shortfall follows the support count
-(Spearman -0.84; the count explains 74% of its variance) and the rest is
-how much the pair heals, which a count would miss. Its correlation with
-the default engine's score is +0.03, so the term is new to the objective.
+**What it moves.** A six with one support falls under the bar against
+any red that heals, so the engine answers with a second support and keeps
+a third only where the pair heals little. Within a board the shortfall
+mostly follows the support count; the rest is how much the pair heals,
+which a count would miss. The weight, 2, sets a six at full shortfall
+beside the synergy and counter terms, which each spread a typical board's
+sixes about 2.1 points (`inference/base.py`).
 
 **What it inherits.** The bar is only as good as `hps`. The World counts
 an area heal at one target, so pairs with Lucio, Brigitte or Mizuki fall
@@ -386,7 +380,7 @@ gitignored, and nothing public shows them.
 
 weight 2; penalty `matchup.heal_shortfall`
 
-A six heals at least the share of its total health that the other side heals of its own each second, and never less than the other side's healing in full; an unrevealed slot on that side is the 2-2-2 shape's missing role at the role's median pool and healing. With damage anti-heal on both sides, the healing half of the race between the two sixes breaks even at that share, and nothing in the kit sets a higher bar. The charge is 2 x the share of the need left unhealed, so a six at 90% of it pays 0.2 and a lone Zenyatta against an unrevealed side pays 1.48.
+A six heals at least the share of its total health that the other side heals of its own each second, and never less than the other side's healing in full; an unrevealed slot on that side is the 2-2-2 shape's missing role at the role's median pool and healing. With damage anti-heal on both sides, the healing half of the race between the two sixes breaks even at that share, and nothing in the kit sets a higher bar. The charge is the weight times the share of the need left unhealed.
 
 #### Assumptions
 

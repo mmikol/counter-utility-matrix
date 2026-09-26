@@ -41,20 +41,15 @@ the optimal reads as its share of the optimal's edge over a coin flip.
 The weights. W_RATE is 1: the rate term is in win-rate points. The other two
 are set so that each term's median range within one board is about half the
 rate term's, measured over the reference sample (inference.scale.sample,
-1,200 legal sixes a board) on each of the 30 maps of the database's capture
-of September 2026, each board's other side its likely six, the side the
-term reads until one is revealed. The rate term's median range was 4.56
-points (map_win_mean's, unpulled, 6.29), the synergy score's 21 and the
-counter graph's 42.5 - the wiki's edges, its Match-Up column's and its
-Strategy sections', at 2 and the kit's fill at 1; with two red picks
-revealed the graph's was 24. Half the rate term's range is 0.109 of the
-synergy score's and 0.054 of the counter graph's, rounded to 0.1 and 0.05:
-at the median a board's sixes spread about 4.6 points on rates, 2.1 on
-synergy and 2.1 on counters. (Before the graph weighed a wiki edge 2 and
-took the kit's fill, the same measure gave the wiki's Match-Up edges alone
-a range of 17.5 and W_COUNTER 0.15.) These are defaults, which recorded
-match outcomes will refit. OFF zeroes all three, and a board scored under
-it is the playbook's alone, exactly as before the engine had a base.
+1,200 legal sixes a board) on each of the 30 maps, each board's other side
+its likely six, the side the term reads until one is revealed. The synergy
+score's median range is 21 and the counter graph's 42.5 - the wiki's edges
+at 2 and the kit's fill at 1 - so each term spreads a typical board's sixes
+about 2.1 points. The rate term's own range reads Blizzard's rates, which
+are licensed for personal use, so its figures stay out of the repo. These
+are defaults, which recorded match outcomes will refit. OFF zeroes all
+three, and a board scored under it is the playbook's alone, exactly as
+before the engine had a base.
 """
 
 import math
@@ -73,11 +68,9 @@ W_COUNTER = 0.05        # per net point of the counter graph: a wiki edge 2, a d
 COIN_FLIP = 50.0        # the win rate the rate term is centred on
 # The pick rate at which a hero's edge is trusted by half: trust = p / (p +
 # RATE_PICK_HALF). A rarely picked hero's rate is read off few matches and
-# swings, so its edge is pulled toward 50. Set to the tenth percentile of the
-# released heroes' pick rates, all ranks and per map alike, at the capture of
-# September 2026, rounded to a whole point: only the rarest tenth lose more
-# than half their edge, and a hero picked at the median keeps about three
-# quarters of it.
+# swings, so its edge is pulled toward 50. A default in pick-rate points,
+# chosen so that only the rarest heroes lose more than half their edge; the
+# calibration read the personal-use rates and stays out of the repo.
 RATE_PICK_HALF = 3.0
 
 # the three terms' ids in a six's breakdown: a strategy's id is lowercase

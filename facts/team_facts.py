@@ -415,10 +415,11 @@ def _heal_floor(fs: FactSet, world: World, blue_t: MetricBag, red_t: MetricBag) 
     share = ""
     if read.pool:
         share = " - %.2f%% of its pool a second" % (100 * read.healing / read.pool)
-    damage = ("Red's %.1f/s of incoming damage and blue's %.1f/s lay" % (
-        red_n["dps_floor"], blue_n["dps_floor"]) if red_n["size"] else "Each side's damage lays")
+    damage = ("Red's %.1f/s of incoming damage%s and blue's %.1f/s lay" % (
+        red_n["dps_floor"], " from its revealed picks" if read.filled else "",
+        blue_n["dps_floor"]) if red_n["size"] else "Each side's damage lays")
     fs.add("matchup", "blue vs red", "matchup.heal_shortfall",
-        "healing floor: blue heals %.1f/s on a %d pool; %s heals %.1f/s on %d%s; blue needs"
+        "healing floor: blue heals %.1f/s on a %.0f pool; %s heals %.1f/s on %.0f%s; blue needs"
         " %.1f/s, the larger of red's healing and that share of blue's pool - %s. %s the same"
         " anti-heal on the other side's healing, so it cancels"
         % (blue_n["hps_floor"], blue_n["pool_total"], red, read.healing, read.pool, share,

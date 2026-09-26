@@ -185,7 +185,8 @@ def test_the_matchup_is_worded_once_both_sides_have_picks(synthetic_world):
             " open slots read as the 2-2-2's missing roles at their medians, heals 130.0/s on"
             " 2125 - 6.12% of its pool a second; blue needs 130.0/s, the larger of red's"
             " healing and that share of blue's pool - 54% short. Red's 220.0/s of incoming"
-            " damage and blue's 135.0/s lay the same anti-heal on the other side's healing,"
+            " damage from its revealed picks and blue's 135.0/s lay the same anti-heal on"
+            " the other side's healing,"
             " so it cancels"}
     # a threat is red's own number: its sentence carries the enemy.* key
     assert [(f.key, f.value) for f in fs.find("enemy.light_flyers", "blue vs red")] == [
